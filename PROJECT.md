@@ -81,7 +81,3 @@ Dieses Repository ist für v0.1.0 selbstbeschreibend. Für Beiträge gelten:
 - Workspace-Zugriffe bleiben explizit, begrenzt und pfadgeschützt.
 - Remote-Provider dürfen nicht als offline oder lokal dargestellt werden.
 - Tests, Packaging und relevante Dokumentation gehören zur Definition of Done.
-
-Weiterführende allgemeine Regeln können extern gepflegt sein, sind für die
-lokale Arbeit an Conclave v0.1.0 aber nicht erforderlich:
-[`governance/RULES.md`](https://github.com/laszlo-pinter/governance/blob/main/RULES.md).
