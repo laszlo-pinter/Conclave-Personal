@@ -36,6 +36,11 @@ class TestDevelopmentBootOpen:
         errors = validate_production_config(config)
         assert errors == []
 
+    def test_dev_mode_blocks_lan_bind_without_api_key(self):
+        config = ConclaveConfig(mode="development", host="0.0.0.0", api_key="")
+        errors = validate_production_config(config)
+        assert any("CONCLAVE_API_KEY" in e for e in errors)
+
     def test_dev_mode_is_default(self):
         config = ConclaveConfig()
         assert config.mode == "development"

@@ -94,3 +94,18 @@ class TestCorsAllowedOrigins:
             headers={"Origin": "http://localhost"},
         )
         assert resp.headers.get("Access-Control-Allow-Origin") == "http://localhost"
+
+    def test_null_origin_is_not_allowed_by_default(self, client_default):
+        resp = client_default.get(
+            "/conversations",
+            headers={"Origin": "null"},
+        )
+        assert "Access-Control-Allow-Origin" not in resp.headers
+
+    def test_null_origin_can_be_allowed_explicitly(self, handler, monkeypatch):
+        monkeypatch.setenv("CONCLAVE_ALLOWED_ORIGINS", "null")
+        app = create_app(handler)
+        app.config["TESTING"] = True
+        with app.test_client() as client:
+            resp = client.get("/conversations", headers={"Origin": "null"})
+        assert resp.headers.get("Access-Control-Allow-Origin") == "null"

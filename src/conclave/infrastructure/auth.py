@@ -1,5 +1,7 @@
 # src/conclave/infrastructure/auth.py
 
+import hmac
+
 
 class StaticKeyAuthService:
     """Validiert Requests gegen einen konfigurierten API-Key."""
@@ -10,7 +12,7 @@ class StaticKeyAuthService:
     def validate_token(self, token: str | None) -> bool:
         if not self._api_key or not token:
             return False
-        return token == self._api_key
+        return hmac.compare_digest(token, self._api_key)
 
     def get_role(self, token: str | None) -> str | None:
         if self.validate_token(token):
@@ -60,12 +62,15 @@ class RoleBasedAuthService:
     def validate_token(self, token: str | None) -> bool:
         if not token:
             return False
-        return token in self._key_role_map
+        return any(hmac.compare_digest(token, key) for key in self._key_role_map)
 
     def get_role(self, token: str | None) -> str | None:
         if not token:
             return None
-        return self._key_role_map.get(token)
+        for key, role in self._key_role_map.items():
+            if hmac.compare_digest(token, key):
+                return role
+        return None
 
     def check_permission(self, role: str, method: str, path: str) -> bool:
         perms = _ROLE_PERMISSIONS.get(role)

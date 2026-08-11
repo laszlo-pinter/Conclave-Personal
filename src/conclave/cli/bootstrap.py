@@ -1,6 +1,7 @@
 # src/conclave/cli/bootstrap.py
 
 import os
+import ipaddress
 import sqlite3
 from pathlib import Path
 
@@ -38,12 +39,25 @@ def _secret_key_available(key_path: Path | None = None) -> bool:
     return (key_path or _default_key_path()).exists()
 
 
+def _is_loopback_host(host: str) -> bool:
+    host = (host or "").strip().lower()
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def validate_production_config(config: ConclaveConfig) -> list[str]:
     """Gibt Fehlerliste zurueck. Leer = Production-Boot erlaubt."""
-    if config.mode != "production":
-        return []
-
     errors: list[str] = []
+    if not _is_loopback_host(config.host) and not config.api_key:
+        errors.append("CONCLAVE_API_KEY ist erforderlich wenn CONCLAVE_HOST nicht loopback ist")
+
+    if config.mode != "production":
+        return errors
+
     if not config.api_key:
         errors.append("CONCLAVE_API_KEY ist erforderlich im Production-Modus")
     if not _secret_key_available():

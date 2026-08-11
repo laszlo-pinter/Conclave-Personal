@@ -101,13 +101,13 @@ def create_app(handler: CLIHandler, auth_service=None,
         return response
 
     # CORS-Allowlist aus Env-Var (Default: localhost/127.0.0.1-Varianten fuer lokale Entwicklung).
-    # 'null' deckt file://-Origins fuer Swagger-UI-Lokaltests; 127.0.0.1 deckt den Fall ab,
-    # dass UI/Swagger-UI ueber die IP statt ueber localhost angesprochen wird.
+    # file://-Origins ("null") sind nicht standardmaessig erlaubt. Wer eine
+    # lokale Datei-UI bewusst nutzt, muss "null" explizit konfigurieren.
     _cors_allowed = {
         o.strip()
         for o in os.environ.get(
             "CONCLAVE_ALLOWED_ORIGINS",
-            "http://localhost,http://localhost:8000,http://127.0.0.1,http://127.0.0.1:8000,null"
+            "http://localhost,http://localhost:8000,http://127.0.0.1,http://127.0.0.1:8000"
         ).split(",")
         if o.strip()
     }

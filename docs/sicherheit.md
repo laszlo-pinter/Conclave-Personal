@@ -7,11 +7,14 @@ Interface.
 ## Lokale API
 
 - Standard-Host ist `127.0.0.1`.
-- Die API sollte nicht an `0.0.0.0` gebunden werden, solange sie nicht bewusst
-  hinter einem eigenen Schutzmechanismus betrieben wird.
+- Bindung an Nicht-Loopback-Adressen wie `0.0.0.0` ist nur mit
+  `CONCLAVE_API_KEY` erlaubt.
 - Im `production`-Modus muss `CONCLAVE_API_KEY` gesetzt sein.
 - Browser-Clients senden den API-Key als Bearer-Token.
 - CORS wird über `CONCLAVE_ALLOWED_ORIGINS` begrenzt.
+- `Origin: null` ist nicht Teil der Default-CORS-Allowlist und muss bewusst
+  konfiguriert werden.
+- API-Key-Vergleiche laufen konstantzeitnah über `hmac.compare_digest`.
 
 Empfohlene lokale Produktion:
 
@@ -47,6 +50,10 @@ conclave desktop
   und Key konfiguriert ist.
 - Tests und CI verwenden Mocks, Fakes oder lokale In-Memory-Komponenten.
 - Lokale Ollama-Modelle können ohne API-Key betrieben werden.
+- Custom-Provider-URLs werden gegen SSRF-Risiken geprüft. Private,
+  reservierte, Loopback- und Link-Local-Ziele werden blockiert; DNS-Auflösung
+  auf solche Ziele wird ebenfalls abgelehnt. Localhost ist nur für explizite
+  lokale Provider wie Ollama erlaubt.
 
 ## Release-Artefakte
 

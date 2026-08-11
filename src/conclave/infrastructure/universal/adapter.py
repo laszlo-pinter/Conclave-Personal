@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import os
 import re
+import socket
 from collections.abc import Iterator
 from typing import Any
 
@@ -226,12 +227,41 @@ def _build_system_prompt(
     return "\n\n".join(parts) if parts else None
 
 
-def _validate_url(url: str) -> None:
-    """Blockt SSRF-gefaehrdete URLs (private IPs, localhost, file://)."""
+def _is_private_target(host: str) -> bool:
+    """Prueft Host/IP auf SSRF-gefaehrdete interne Zielbereiche."""
+    import ipaddress
+
+    def _blocked(value: str) -> bool:
+        ip = ipaddress.ip_address(value.split("%", 1)[0])
+        return ip.is_private or ip.is_reserved or ip.is_loopback or ip.is_link_local
+
+    try:
+        return _blocked(host)
+    except ValueError:
+        pass
+
+    try:
+        infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    except OSError:
+        return False
+    for info in infos:
+        address = info[4][0]
+        try:
+            if _blocked(address):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def _validate_url(url: str, *, allow_localhost: bool = False) -> None:
+    """Blockt SSRF-gefaehrdete URLs.
+
+    Lokale Ziele sind nur fuer explizite lokale Provider wie Ollama erlaubt.
+    """
     if not url:
         return
     from urllib.parse import urlparse
-    import ipaddress
     parsed = urlparse(url)
     scheme = parsed.scheme.lower()
     if scheme not in ("http", "https"):
@@ -241,23 +271,14 @@ def _validate_url(url: str) -> None:
     allowed_hosts = {
         "api.openai.com", "api.anthropic.com",
         "generativelanguage.googleapis.com", "api.mistral.ai",
+        "api.deepseek.com", "dashscope-intl.aliyuncs.com",
     }
     if host in allowed_hosts:
         return
-    # Localhost erlauben (fuer Ollama etc.)
-    if host in ("localhost", "127.0.0.1", "::1"):
+    if allow_localhost and host in ("localhost", "127.0.0.1", "::1"):
         return
-    # Private/Reserved IPs blocken
-    try:
-        ip = ipaddress.ip_address(host)
-        if ip.is_private or ip.is_reserved or ip.is_loopback or ip.is_link_local:
-            raise ValueError(f"Private/reservierte IP '{host}' nicht erlaubt")
-    except ValueError as e:
-        if "nicht erlaubt" in str(e):
-            raise
-        # host ist ein Hostname, kein IP — DNS-Aufloesung koennte private IP liefern,
-        # aber das blocken wir hier nicht (zu restriktiv fuer Custom-Provider)
-        pass
+    if _is_private_target(host):
+        raise ValueError(f"Private/reservierte IP oder Host '{host}' nicht erlaubt")
 
 
 # ── Adapter ───────────────────────────────────────────────────────────────
@@ -310,7 +331,7 @@ class UniversalAdapter:
         self._profile: ProviderProfile = get_profile(profile_key)
 
         self._api_url = api_url
-        _validate_url(api_url)
+        _validate_url(api_url, allow_localhost=(provider_name == "ollama"))
         self._api_key = api_key
         self._model = model
         self._response_path = response_path

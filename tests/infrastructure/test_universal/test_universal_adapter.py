@@ -191,6 +191,7 @@ class TestComplete:
             usage_path="",
             usage_input_key="prompt_eval_count",
             usage_output_key="eval_count",
+            provider_name="ollama",
         )
         result = adapter.complete(_conversation(), _participant())
         assert result == "Llama sagt Hallo"
@@ -264,6 +265,7 @@ class TestComplete:
             api_key="",
             model="llama3",
             response_path="message.content",
+            provider_name="ollama",
         )
         adapter.complete(_conversation(), _participant())
         call_args = mock_httpx.post.call_args
@@ -424,3 +426,31 @@ class TestReasoningContent:
         assert UniversalAdapter._extract_reasoning(data) == "abc"
         assert UniversalAdapter._extract_reasoning({}) == ""
         assert UniversalAdapter._extract_reasoning({"choices": [{"message": {"reasoning_content": None}}]}) == ""
+
+
+class TestUrlValidation:
+    def test_blocks_file_scheme(self):
+        from conclave.infrastructure.universal.adapter import _validate_url
+        with pytest.raises(ValueError):
+            _validate_url("file:///etc/passwd")
+
+    def test_blocks_localhost_for_custom_provider(self):
+        from conclave.infrastructure.universal.adapter import _validate_url
+        with pytest.raises(ValueError):
+            _validate_url("http://localhost:11434/api/chat")
+
+    def test_allows_localhost_when_explicitly_allowed(self):
+        from conclave.infrastructure.universal.adapter import _validate_url
+        _validate_url("http://localhost:11434/api/chat", allow_localhost=True)
+
+    def test_blocks_private_ip_literal(self):
+        from conclave.infrastructure.universal.adapter import _validate_url
+        with pytest.raises(ValueError):
+            _validate_url("http://169.254.169.254/latest/meta-data")
+
+    @patch("conclave.infrastructure.universal.adapter.socket.getaddrinfo")
+    def test_blocks_hostname_resolving_to_private_ip(self, getaddrinfo):
+        from conclave.infrastructure.universal.adapter import _validate_url
+        getaddrinfo.return_value = [(None, None, None, "", ("10.0.0.5", 443))]
+        with pytest.raises(ValueError):
+            _validate_url("https://internal.example.test/v1")
