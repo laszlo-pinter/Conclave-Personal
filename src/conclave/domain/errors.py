@@ -88,6 +88,16 @@ class NoFloorGranted(ConclaveError):
         )
 
 
+class EmptyConversation(ConclaveError):
+    """Conversation hat noch keinen Prompt, der an ein Modell gesendet werden kann."""
+    def __init__(self, conversation_id: str):
+        self.conversation_id = conversation_id
+        super().__init__(
+            f"Conversation '{conversation_id}' enthält noch keine Nachricht. "
+            "Bitte zuerst eine Nachricht schreiben."
+        )
+
+
 # ── Provider-Fehler (Resilience) ─────────────────────────────────────────
 
 class ProviderError(ConclaveError):

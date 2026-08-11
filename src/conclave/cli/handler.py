@@ -25,6 +25,7 @@ from conclave.domain.errors import (
     AgentAlreadyExists,
     AgentNotFound,
     ConversationNotFound,
+    EmptyConversation,
     ParticipantAlreadyRegistered,
 )
 from conclave.domain.participant import ParticipantType
@@ -274,6 +275,12 @@ class CLIHandler:
             return CLIResult(success=False, message=f"Conversation '{conversation_id}' nicht gefunden.")
         except NoFloorGranted:
             return CLIResult(success=False, message="Kein Participant hat aktuell das Rederecht.")
+        except EmptyConversation as e:
+            return CLIResult(
+                success=False,
+                message=str(e),
+                data={"type": "EmptyConversation", "status": 400},
+            )
         except AdapterNotFound as e:
             return CLIResult(success=False, message=f"Kein Adapter für '{e.participant_id}' registriert.")
         message = updated.messages[-1]
@@ -419,6 +426,12 @@ class CLIHandler:
                 success=False,
                 message=f"Kein Adapter für Participant '{participant_id}' registriert.",
             )
+        except EmptyConversation as e:
+            return CLIResult(
+                success=False,
+                message=str(e),
+                data={"type": "EmptyConversation", "status": 400},
+            )
 
         message = updated.messages[-1]
         return CLIResult(
@@ -546,7 +559,11 @@ class CLIHandler:
         result = orchestrator.run(conversation_id=conversation_id, sequence=sequence)
 
         if not result.success:
-            return CLIResult(success=False, message=result.error)
+            return CLIResult(
+                success=False,
+                message=result.error,
+                data={"type": result.error_type, "status": result.status},
+            )
 
         return CLIResult(
             success=True,
@@ -573,7 +590,11 @@ class CLIHandler:
         )
 
         if not result.success:
-            return CLIResult(success=False, message=result.error)
+            return CLIResult(
+                success=False,
+                message=result.error,
+                data={"type": result.error_type, "status": result.status},
+            )
 
         return CLIResult(
             success=True,

@@ -5,6 +5,7 @@ const _state = {
   api: localStorage.getItem('conclave_api_url') || window.location.origin,
   apiKey: localStorage.getItem('conclave_api_key') || '',
   currentConvId: null,
+  currentMessages: [],
   conversations: [],
   participants: [],
   agents: [],

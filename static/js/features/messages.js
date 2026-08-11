@@ -2,6 +2,8 @@
 
 // ── Messages ──────────────────────────────────────────────────────────────
 function renderMessages(msgs){
+  msgs = msgs || [];
+  AppState.setState({currentMessages: msgs});
   const el=document.getElementById('messages');el.innerHTML='';msgs.forEach(m=>el.appendChild(buildMsg(m)));scrollBottom();
 }
 
@@ -43,6 +45,7 @@ async function sendMsg(){
 
 async function invokeP(){
   const pid=document.getElementById('pSel').value;if(!pid){toast('Bitte Participant waehlen','err');return;}
+  if(!AppState.getState('currentMessages').length){toast('Bitte zuerst eine Nachricht schreiben.','err');return;}
   const btn=document.getElementById('btnInvoke');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';
   try{await req('POST',`/conversations/${currentConvId}/participants/${pid}/invoke`);const d=await req('GET',`/conversations/${currentConvId}`);renderMessages(d.messages||[]);toast('Antwort erhalten','ok');}
   catch(e){toast(e.message,'err');}
@@ -51,6 +54,7 @@ async function invokeP(){
 
 async function streamP(){
   const pid=document.getElementById('pSel').value;if(!pid){toast('Bitte Participant waehlen','err');return;}
+  if(!AppState.getState('currentMessages').length){toast('Bitte zuerst eine Nachricht schreiben.','err');return;}
   const btn=document.getElementById('btnStream');btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Stream';
   const el=document.getElementById('messages');
   const c=colorFor(pid),pName=participants.find(p=>p.id===pid)?.name||pid;
@@ -93,6 +97,7 @@ async function runOrch(){
   const seq=document.getElementById('orchSeq').value.split(',').map(s=>s.trim()).filter(Boolean);
   const parallel=document.getElementById('orchParallel').checked;
   if(!seq.length){toast('Bitte IDs eingeben','err');return;}
+  if(!AppState.getState('currentMessages').length){toast('Bitte zuerst eine Nachricht schreiben.','err');return;}
   closeOverlay('overlayOrch');
   const btn=document.getElementById('btnOrch');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';
   try{

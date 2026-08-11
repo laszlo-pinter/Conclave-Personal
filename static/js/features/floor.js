@@ -36,6 +36,7 @@ async function revokeFloor(){
 
 async function invokeWithFloor(){
   if(!currentFloor){toast('Kein Participant hat das Wort','err');return;}
+  if(!AppState.getState('currentMessages').length){toast('Bitte zuerst eine Nachricht schreiben.','err');return;}
   const btn=document.getElementById('btnFloorInvoke');
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Antwortet…';
   try{

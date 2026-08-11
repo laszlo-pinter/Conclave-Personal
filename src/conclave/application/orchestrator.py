@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from conclave.application.conversation_flow import ConversationFlowService
 from conclave.domain.conversation import Conversation
-from conclave.domain.errors import AdapterNotFound, ConversationNotFound
+from conclave.domain.errors import AdapterNotFound, ConversationNotFound, EmptyConversation
 from conclave.infrastructure.log import get_logger
 
 logger = get_logger("application.orchestrator")
@@ -24,6 +24,8 @@ class OrchestratorResult:
     success: bool
     responses: list[ParticipantResponse] = field(default_factory=list)
     error: str = ""
+    error_type: str = ""
+    status: int = 502
 
 
 class Orchestrator:
@@ -62,6 +64,15 @@ class Orchestrator:
                     success=False,
                     responses=responses,
                     error=f"Kein Adapter für Participant '{participant_id}' registriert.",
+                    error_type="AdapterNotFound",
+                )
+            except EmptyConversation as exc:
+                return OrchestratorResult(
+                    success=False,
+                    responses=responses,
+                    error=str(exc),
+                    error_type="EmptyConversation",
+                    status=400,
                 )
 
             last_message = updated.messages[-1]
@@ -113,10 +124,19 @@ class ParallelOrchestrator:
 
             has_error = False
             error_msg = ""
+            error_type = ""
+            status = 502
             for pid, result in zip(group, results):
                 if isinstance(result, Exception):
                     has_error = True
-                    error_msg = f"Fehler bei Participant '{pid}': {result}"
+                    if isinstance(result, EmptyConversation):
+                        error_msg = str(result)
+                        error_type = "EmptyConversation"
+                        status = 400
+                    else:
+                        error_msg = f"Fehler bei Participant '{pid}': {result}"
+                        error_type = type(result).__name__
+                        status = 502
                     logger.error(error_msg, extra={"conversation_id": conversation_id})
                 else:
                     updated = self._service.add_model_message(
@@ -138,6 +158,8 @@ class ParallelOrchestrator:
                     success=False,
                     responses=responses,
                     error=error_msg,
+                    error_type=error_type,
+                    status=status,
                 )
 
         return OrchestratorResult(success=True, responses=responses)

@@ -8,11 +8,13 @@ pytest.importorskip("flask")
 from unittest.mock import MagicMock
 
 from conclave.api.app import create_app
+from conclave.cli.handler import CLIResult
 from conclave.domain.errors import (
     AdapterNotFound,
     AgentAlreadyExists,
     AgentNotFound,
     ConversationNotFound,
+    EmptyConversation,
     FloorNotGranted,
     NoFloorGranted,
     ParticipantAlreadyRegistered,
@@ -125,6 +127,26 @@ class TestNoFloorGranted:
         assert resp.status_code == 409
         body = json.loads(resp.data)
         assert body["type"] == "NoFloorGranted"
+
+
+class TestEmptyConversation:
+    def test_returns_400(self, handler, client):
+        handler.invoke_participant.side_effect = EmptyConversation("conv-1")
+        resp = client.post("/conversations/conv-1/participants/p1/invoke")
+        assert resp.status_code == 400
+        body = json.loads(resp.data)
+        assert body["type"] == "EmptyConversation"
+
+    def test_cli_result_returns_400(self, handler, client):
+        handler.invoke_participant.return_value = CLIResult(
+            success=False,
+            message="Bitte zuerst eine Nachricht schreiben.",
+            data={"type": "EmptyConversation", "status": 400},
+        )
+        resp = client.post("/conversations/conv-1/participants/p1/invoke")
+        assert resp.status_code == 400
+        body = json.loads(resp.data)
+        assert body["type"] == "EmptyConversation"
 
 
 class TestFloorNotGranted:

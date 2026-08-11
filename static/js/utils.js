@@ -51,6 +51,7 @@ function toast(msg,type='ok'){
 }
 
 function showEmpty(){
+  AppState.setState({currentMessages: []});
   document.getElementById('topbar').style.display='none';document.getElementById('inputbar').style.display='none';
   document.getElementById('floorbar').classList.remove('visible');document.getElementById('floorPanel').classList.remove('visible');
   document.getElementById('btnExport').disabled=true;

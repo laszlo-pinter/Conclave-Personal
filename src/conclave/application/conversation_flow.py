@@ -23,7 +23,13 @@ from conclave.application.workspace_security import (
 )
 from conclave.domain.audit import AuditEntry
 from conclave.domain.conversation import Conversation
-from conclave.domain.errors import AdapterNotFound, ConversationNotFound, NoFloorGranted, ParticipantNotRegistered
+from conclave.domain.errors import (
+    AdapterNotFound,
+    ConversationNotFound,
+    EmptyConversation,
+    NoFloorGranted,
+    ParticipantNotRegistered,
+)
 from conclave.domain.participant import ParticipantType
 from conclave.domain.run import Run, UsageRecord
 from conclave.infrastructure.log import get_logger, request_logger
@@ -54,6 +60,11 @@ class ConversationFlowService:
 
     def set_run_repository(self, run_repo: RunRepository) -> None:
         self._run_repo = run_repo
+
+    @staticmethod
+    def _ensure_has_messages(conversation: Conversation) -> None:
+        if not conversation.messages:
+            raise EmptyConversation(conversation.id)
 
     def _audit(
         self,
@@ -281,6 +292,7 @@ class ConversationFlowService:
         )
         if participant is None:
             raise ParticipantNotRegistered(participant_id, conversation_id)
+        self._ensure_has_messages(conversation)
 
         snapshot = dataclasses.replace(conversation, messages=list(conversation.messages))
         snapshot = self._expand_workspace_refs(snapshot)
@@ -409,6 +421,7 @@ class ConversationFlowService:
             if self._registry is None:
                 raise AdapterNotFound(participant_id)
             adapter = self._registry.get_for(participant_id)
+        self._ensure_has_messages(conversation)
 
         snapshot = dataclasses.replace(conversation, messages=list(conversation.messages))
         snapshot = self._expand_workspace_refs(snapshot)
@@ -471,6 +484,7 @@ class ConversationFlowService:
             if self._registry is None:
                 raise AdapterNotFound(participant_id)
             adapter = self._registry.get_for(participant_id)
+        self._ensure_has_messages(conversation)
 
         snapshot = dataclasses.replace(conversation, messages=list(conversation.messages))
         snapshot = self._expand_workspace_refs(snapshot)
@@ -570,6 +584,7 @@ class ConversationFlowService:
             if self._registry is None:
                 raise AdapterNotFound(participant_id)
             adapter = self._registry.get_for(participant_id)
+        self._ensure_has_messages(conversation)
 
         if snapshot is None:
             snapshot = dataclasses.replace(conversation, messages=list(conversation.messages))
@@ -630,6 +645,7 @@ class ConversationFlowService:
             if self._registry is None:
                 raise AdapterNotFound(participant_id)
             adapter = self._registry.get_for(participant_id)
+        self._ensure_has_messages(conversation)
 
         snapshot = dataclasses.replace(conversation, messages=list(conversation.messages))
         snapshot = self._expand_workspace_refs(snapshot)

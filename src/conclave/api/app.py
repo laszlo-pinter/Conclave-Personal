@@ -20,6 +20,7 @@ from conclave.domain.errors import (
     AgentNotFound,
     AuthenticationError,
     ConversationNotFound,
+    EmptyConversation,
     FloorNotGranted,
     NoFloorGranted,
     ParticipantAlreadyRegistered,
@@ -218,6 +219,14 @@ def create_app(handler: CLIHandler, auth_service=None,
     def _error_json(e: Exception, status: int):
         return jsonify({"error": str(e), "type": type(e).__name__}), status
 
+    def _cli_error_json(result: CLIResult, default_status: int):
+        data = result.data or {}
+        status = int(data.get("status", default_status))
+        payload = {"error": result.message}
+        if data.get("type"):
+            payload["type"] = data["type"]
+        return jsonify(payload), status
+
     @app.errorhandler(AuthenticationError)
     def _handle_authentication_error(e):
         return _error_json(e, 401)
@@ -245,6 +254,10 @@ def create_app(handler: CLIHandler, auth_service=None,
     @app.errorhandler(NoFloorGranted)
     def _handle_no_floor_granted(e):
         return _error_json(e, 409)
+
+    @app.errorhandler(EmptyConversation)
+    def _handle_empty_conversation(e):
+        return _error_json(e, 400)
 
     @app.errorhandler(FloorNotGranted)
     def _handle_floor_not_granted(e):
@@ -480,7 +493,7 @@ def create_app(handler: CLIHandler, auth_service=None,
     def invoke_with_floor(conversation_id: str):
         result = handler.invoke_with_floor(conversation_id)
         if not result.success:
-            return jsonify({"error": result.message}), 409
+            return _cli_error_json(result, 409)
         return jsonify(result.data), 200
 
     # ── GET /conversations/<id> ──────────────────────────────────────────
@@ -558,7 +571,7 @@ def create_app(handler: CLIHandler, auth_service=None,
 
         result = handler.invoke_participant(conversation_id, participant_id)
         if not result.success:
-            return jsonify({"error": result.message}), 502
+            return _cli_error_json(result, 502)
         return jsonify(result.data), 200
 
     # ── POST /conversations/<id>/orchestrate ─────────────────────────────
@@ -572,7 +585,7 @@ def create_app(handler: CLIHandler, auth_service=None,
 
         result = handler.orchestrate(conversation_id, sequence)
         if not result.success:
-            return jsonify({"error": result.message}), 502
+            return _cli_error_json(result, 502)
         return jsonify(result.data), 200
 
     # ── POST /conversations/<id>/orchestrate-parallel ─────────────────────
@@ -586,7 +599,7 @@ def create_app(handler: CLIHandler, auth_service=None,
 
         result = handler.orchestrate_parallel(conversation_id, groups)
         if not result.success:
-            return jsonify({"error": result.message}), 502
+            return _cli_error_json(result, 502)
         return jsonify(result.data), 200
 
     # ── GET /conversations/<id>/participants/<pid>/stream ────────────────

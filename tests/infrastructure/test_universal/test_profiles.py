@@ -73,6 +73,18 @@ class TestAnthropicProfile:
         assert "system" not in body
         assert body["max_tokens"] == 4096
 
+    def test_extract_response_skips_non_text_blocks(self):
+        profile = AnthropicProfile()
+        data = {
+            "content": [
+                {"type": "thinking", "thinking": "", "signature": "sig"},
+                {"type": "text", "text": "Hallo"},
+                {"type": "text", "text": "Welt"},
+            ]
+        }
+
+        assert profile.extract_response(data, "content[0].text") == "Hallo\nWelt"
+
 
 class TestOpenAIResponsesProfile:
     def test_build_body_uses_input_not_messages(self):

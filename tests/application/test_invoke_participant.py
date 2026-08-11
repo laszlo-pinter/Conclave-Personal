@@ -105,6 +105,28 @@ def test_invoke_participant_raises_for_unknown_participant(service):
         )
 
 
+def test_invoke_participant_raises_for_empty_conversation(service):
+    from conclave.domain.errors import EmptyConversation
+
+    conversation = service.create_conversation()
+    service.register_participant(
+        conversation_id=conversation.id,
+        participant_id="model-a",
+        participant_type=ParticipantType.MODEL,
+        name="Model A",
+    )
+    adapter = FakeModelAdapter("x")
+
+    with pytest.raises(EmptyConversation):
+        service.invoke_participant(
+            conversation_id=conversation.id,
+            participant_id="model-a",
+            adapter=adapter,
+        )
+
+    assert adapter.calls == []
+
+
 def test_fake_adapter_satisfies_protocol():
     adapter = FakeModelAdapter("test")
     assert isinstance(adapter, ModelAdapter)

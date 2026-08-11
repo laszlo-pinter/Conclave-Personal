@@ -121,7 +121,22 @@ class AnthropicProfile:
         return body
 
     def extract_response(self, data: dict, response_path: str) -> str | None:
-        return _extract_path(data, response_path)
+        value = _extract_path(data, response_path)
+        if value is not None:
+            return value
+
+        content = data.get("content")
+        if not isinstance(content, list):
+            return None
+
+        texts = [
+            str(block.get("text", ""))
+            for block in content
+            if isinstance(block, dict)
+            and block.get("type") == "text"
+            and block.get("text")
+        ]
+        return "\n".join(texts) if texts else None
 
 
 class OpenAIResponsesProfile:
