@@ -48,6 +48,8 @@ Studio ist der primäre Arbeitsraum für aktive Conversations.
 
 ## 2. Agents
 
+![Conclave Agents](assets/screenshots/conclave-agents-desktop.png)
+
 ### Zweck
 
 Agents ist der Verwaltungsraum für wiederverwendbare KI-Teilnehmer.
@@ -94,7 +96,7 @@ Workspace ist der lokale Datenraum für Kontext, Notizen und Outputs.
 
 - Agenten dürfen nicht aus dem Workspace ausbrechen.
 - Versteckte Ordner sind für Agenten unsichtbar.
-- Grosse Dateien brauchen Limits oder explizite Bestätigung.
+- Große Dateien brauchen Limits oder explizite Bestätigung.
 - Kontext wird nicht automatisch vollständig geladen.
 
 ## 4. Runs

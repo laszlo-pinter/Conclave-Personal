@@ -10,8 +10,7 @@ conclave web [--url http://127.0.0.1:8000]
 conclave desktop [--host 127.0.0.1] [--port 8000] [--debug]
 ```
 
-`desktop` startet aktuell den lokalen Server und oeffnet die Web-UI im Browser.
-Ein natives Desktopfenster folgt in der Multiplattform-Runtime.
+`desktop` startet den lokalen Server und öffnet die Web-UI im Browser.
 Wenn der bevorzugte Port belegt ist, wählt `desktop` automatisch einen freien
 Port.
 

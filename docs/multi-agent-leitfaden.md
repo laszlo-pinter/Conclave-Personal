@@ -102,7 +102,7 @@ AI-Moderator → Claude + GPT + Gemini (Hypothesen, parallel)
    Ergebnisse als Dokumente übergeben
 2. Parallele Hypothesen: Kein Agent sieht den anderen → kein
    Anker-Effekt, kein Harmonietrichter
-3. Verifikation durch Tool-Use-Agent: Oeffnet Dateien, prüft
+3. Verifikation durch Tool-Use-Agent: Öffnet Dateien, prüft
    Behauptungen, liefert Fakten mit Zeilennummern
 4. Diskussion auf Faktenbasis: Erst nach Verifikation diskutieren
    die Agents — und widersprechen sich erstmals produktiv

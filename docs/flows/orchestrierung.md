@@ -1,4 +1,4 @@
-# Flow: Orchestrierung — Sequentiell, Parallel, Auto-Loop
+# Flow: Orchestrierung - Sequentiell, Parallel, Auto-Loop
 
 **Auslöser:** POST /conversations/{id}/orchestrate, /orchestrate-parallel, /auto-loop
 
@@ -57,7 +57,10 @@ Orchestrator.run / ParallelOrchestrator.run / Generator
 ConversationFlowService.invoke_participant (pro Agent)
     |
     v
-ComplianceGate -> AdapterRegistry -> ResilientAdapter -> Provider
+Workspace-Refs -> AdapterRegistry -> ResilientAdapter -> Provider
+    |
+    v
+MessageRepository + RunRepository + AuditRepository
 ```
 
 **Fehlerfall:**
@@ -70,4 +73,4 @@ ComplianceGate -> AdapterRegistry -> ResilientAdapter -> Provider
 - `src/conclave/cli/handler.py:auto_loop()` — Generator
 - `src/conclave/api/app.py` — 3 Endpoints
 
-**Zuletzt verifiziert:** 05.04.2026 durch CC
+**Zuletzt verifiziert:** 2026-08-11 im Personal-Multiplattform-Schnitt

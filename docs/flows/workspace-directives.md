@@ -1,8 +1,11 @@
-# Flow: Workspace-Directives — @workspace, @read, @save
+# Flow: Workspace-Directives - @workspace, @read, @save
 
 **Auslöser:** User-Message mit @workspace/datei oder Agent-Antwort mit @read()/@save()
 
-**Vorbedingung:** CONCLAVE_WORKSPACE Env-Var gesetzt (Default: /workspace), Dateisystem-Zugriff
+**Vorbedingung:** Ein lokaler Workspace ist konfiguriert. Ohne
+`CONCLAVE_WORKSPACE` nutzt Conclave die Plattformdefaults aus
+`src/conclave/runtime/paths.py`: unter Windows `%USERPROFILE%\Conclave\workspace`,
+unter Linux `~/Conclave/workspace`.
 
 ## 1. @workspace/datei — User referenziert Dateien
 
@@ -10,8 +13,9 @@
 - **Trigger:** Vor jedem Provider-Call (im Snapshot, nicht in der DB)
 - **Regex:** `@work(?:space|place)/([\w./-]+)` — matcht @workspace/ und @workplace/
 - **Aktion:** Dateiinhalt wird inline eingefügt als Markdown-Codeblock
-- **Security:** `os.path.normpath(os.path.join(workspace, filepath))` + `startswith(os.path.abspath(workspace) + os.sep)` — blockt absolute Pfade und Traversal
-- **Fehler:** `[FEHLER: Pfad nicht erlaubt]`, `[FEHLER: datei nicht gefunden]`, `[FEHLER: datei nicht lesbar]`
+- **Security:** `application/workspace_security.py:resolve_workspace_path()` blockt absolute Pfade und Traversal. `is_agent_visible()` blendet versteckte Pfadkomponenten aus.
+- **Limits:** `CONCLAVE_WORKSPACE_AGENT_READ_LIMIT_BYTES`, Default `524288`
+- **Fehler:** Pfad nicht erlaubt, Datei nicht gefunden, Dateigröße überschreitet das Limit, Datei nicht lesbar
 - **Test:** `tests/application/test_workspace_directives.py:TestExpandWorkspaceRefsPathTraversal`
 
 ## 2. @read(pfad) — Agent liest Dateien
@@ -20,8 +24,9 @@
 - **Trigger:** Nach Agent-Antwort, vor Message-Persistierung
 - **Regex:** `@read\(([^)]+)\)`
 - **Aktion:** Ersetzt @read(pfad) durch Dateiinhalt als Markdown-Codeblock
-- **Security:** Gleiche abspath-Prüfung wie @workspace
+- **Security:** Gleiche `resolve_workspace_path()`-/Hidden-Path-Prüfung wie `@workspace`
 - **Scope:** Gesamter Workspace (lesend)
+- **Limits:** `CONCLAVE_WORKSPACE_AGENT_READ_LIMIT_BYTES`, Default `524288`
 - **Test:** `tests/application/test_workspace_directives.py:TestProcessAgentDirectivesReadPathTraversal`
 
 ## 3. @save(datei)...@endsave — Agent schreibt Dateien
@@ -30,8 +35,9 @@
 - **Trigger:** Nach Agent-Antwort, vor Message-Persistierung
 - **Regex:** `@save\(([^)]+)\)\s*\n(.*?)(?:@endsave|$)` (DOTALL)
 - **Aktion:** Schreibt Content zwischen @save und @endsave in workspace/output/
-- **Security:** Gleiche abspath-Prüfung, aber gegen output_dir (nicht gesamter Workspace)
+- **Security:** `resolve_output_path()` begrenzt Schreibzugriffe auf `workspace/output/`
 - **Scope:** Nur workspace/output/ (schreibend) — Rest ist schreibgeschützt
+- **Limits:** `CONCLAVE_WORKSPACE_WRITE_LIMIT_BYTES`, Default `524288`
 - **Ersetzung:** `[Datei gespeichert: @workspace/output/dateiname]` im Chat
 - **Test:** `tests/application/test_workspace_directives.py:TestProcessAgentDirectivesSavePathTraversal`
 
@@ -41,7 +47,8 @@
 - **GET /workspace/pfad** — Liest Dateiinhalt (UTF-8, 415 bei Binär)
 - **POST /workspace/pfad** — Schreibt Datei (Body: {content})
 - **DELETE /workspace/pfad** — Löscht Datei
-- **Security:** `_safe_workspace_path()` in `api/app.py` — gleiche abspath-Prüfung
+- **Security:** `resolve_workspace_path()` und `is_hidden_workspace_path()` in `application/workspace_security.py`
+- **Limits:** Lesen über UI/API: `CONCLAVE_WORKSPACE_UI_READ_LIMIT_BYTES`, Schreiben: `CONCLAVE_WORKSPACE_WRITE_LIMIT_BYTES`
 - **Test:** `tests/api/test_workspace_api.py`
 
 ## 5. Workspace-Info im System-Prompt
@@ -74,8 +81,9 @@ _process_agent_directives() → Datei in workspace/output/ geschrieben
 **Code-Referenzen:**
 - Lesen/Expandieren: `src/conclave/application/conversation_flow.py:_expand_workspace_refs()`
 - Agent-Direktiven: `src/conclave/application/conversation_flow.py:_process_agent_directives()`
-- API: `src/conclave/api/app.py:_safe_workspace_path()` + 4 Endpoints
+- Security: `src/conclave/application/workspace_security.py`
+- API: `src/conclave/api/app.py` Workspace-Endpunkte
 - System-Prompt: `src/conclave/infrastructure/universal/adapter.py:_build_workspace_info()`
 - Tests: `tests/application/test_workspace_directives.py`, `tests/api/test_workspace_api.py`
 
-**Zuletzt verifiziert:** 05.04.2026 durch CC
+**Zuletzt verifiziert:** 2026-08-11 im Personal-Multiplattform-Schnitt

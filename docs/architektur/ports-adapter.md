@@ -1,55 +1,63 @@
 # Ports & Adapter
 
-## Ports (Interfaces)
+## Ports
 
-Definiert in `src/conclave/application/ports.py` als `typing.Protocol` mit `@runtime_checkable`.
+Definiert in `src/conclave/application/ports.py` als `typing.Protocol` mit
+`@runtime_checkable`. Infrastructure-Adapter implementieren diese Protocols
+implizit über strukturelles Subtyping.
 
-| Protocol | Methoden | Implementierungen |
-|----------|----------|-------------------|
-| ConversationRepository | save, load, list_all, delete | SQLiteConversationRepository, PostgresConversationRepository |
-| MessageRepository | save, list_by_conversation_id | SQLiteMessageRepository, PostgresMessageRepository |
-| ParticipantRepository | save, list_by_conversation_id, delete_by_conversation | SQLiteParticipantRepository, PostgresParticipantRepository |
-| AgentRepository | save, get, list_all, delete | SQLiteAgentRepository, PostgresAgentRepository |
-| AuditRepository | save, list_by_conversation, list_by_date_range | SQLiteAuditRepository, PostgresAuditRepository |
-| ModelAdapter | provider, complete() | UniversalAdapter, AnthropicAdapter, OpenAIAdapter |
-| StreamingModelAdapter | + stream() | UniversalAdapter, AnthropicAdapter, OpenAIAdapter |
-| UnitOfWork | conversations, messages, participants, __enter__, __exit__ | SQLiteUnitOfWork, PostgresUnitOfWork |
+| Protocol | Zweck | Implementierungen |
+|----------|-------|-------------------|
+| ConversationRepository | Conversations speichern, laden, listen, löschen | SQLiteConversationRepository, PostgresConversationRepository |
+| MessageRepository | Messages speichern und je Conversation laden | SQLiteMessageRepository, PostgresMessageRepository |
+| ParticipantRepository | Conversation-Participants speichern, laden, löschen | SQLiteParticipantRepository, PostgresParticipantRepository |
+| AgentRepository | Agent-Konfigurationen speichern, laden, löschen | SQLiteAgentRepository, PostgresAgentRepository |
+| AuditRepository | Technische Provider-Aufrufe und Usage protokollieren | SQLiteAuditRepository, PostgresAuditRepository |
+| RunRepository | Personal-Runs und optionale Usage-Daten persistieren | SQLiteRunRepository, PostgresRunRepository |
+| ModelAdapter | Synchroner Provider-Aufruf | UniversalAdapter, AnthropicAdapter, OpenAIAdapter |
+| StreamingModelAdapter | Synchroner Provider-Aufruf mit Token-Streaming | UniversalAdapter, AnthropicAdapter, OpenAIAdapter |
+| AsyncModelAdapter | Async-Provider-Aufruf für parallele Orchestrierung | AnthropicAsyncAdapter, OpenAIAsyncAdapter, UniversalAdapter über Executor-Fallback |
+| AsyncStreamingModelAdapter | Async-Streaming-Port | Providerabhängig |
+| UnitOfWork | Transaktionsgrenze für Repositories | SQLiteUnitOfWork, PostgresUnitOfWork |
 
 ## Provider-Matrix
 
 | Provider | Preset | ProviderProfile | Auth | Message-Format |
-|----------|--------|----------------|------|----------------|
-| Anthropic | anthropic | AnthropicProfile | x-api-key + anthropic-version | standard (system als Top-Level) |
+|----------|--------|-----------------|------|----------------|
 | OpenAI Chat | openai | StandardProfile | Bearer | standard |
-| OpenAI Responses | openai-responses | OpenAIResponsesProfile | Bearer | openai-responses (input statt messages) |
-| Gemini | gemini | GeminiProfile | Query-Parameter | gemini (contents + systemInstruction) |
-| Mistral | mistral | StandardProfile | Bearer | standard |
+| OpenAI Responses | openai-responses | OpenAIResponsesProfile | Bearer | openai-responses |
+| Anthropic | anthropic | AnthropicProfile | x-api-key + anthropic-version | anthropic |
 | Ollama | ollama | StandardProfile | none | standard |
+| Gemini | gemini | GeminiProfile | Query-Parameter | gemini |
+| Mistral | mistral | StandardProfile | Bearer | standard |
+| Qwen / DashScope | qwen-dashscope, qwen-dashscope-thinking | StandardProfile | Bearer | standard |
+| DeepSeek | deepseek | StandardProfile | Bearer | standard |
 | Custom | custom | StandardProfile | Bearer | standard |
 
 ## ProviderProfiles
 
-Definiert in `infrastructure/universal/profiles.py`. Kapseln Provider-Eigenheiten:
+Definiert in `src/conclave/infrastructure/universal/profiles.py`. Profiles
+kapseln Provider-Eigenheiten:
 
-```
-ProviderProfile (Protocol):
-    build_url(base_url, model, api_key) → (url, query_params)
-    build_headers(api_key) → dict
-    build_body(messages, model, system) → dict
-    extract_response(data, response_path) → str | None
+```python
+ProviderProfile.build_url(base_url, model, api_key)
+ProviderProfile.build_headers(api_key)
+ProviderProfile.build_body(messages, model, system)
+ProviderProfile.extract_response(data, response_path)
 ```
 
-4 Implementierungen: StandardProfile, AnthropicProfile, OpenAIResponsesProfile, GeminiProfile.
+Aktuelle Implementierungen: `StandardProfile`, `AnthropicProfile`,
+`OpenAIResponsesProfile`, `GeminiProfile`.
 
 ## ResilientAdapter
 
-Wrapper in `infrastructure/universal/resilient.py`:
+Wrapper in `src/conclave/infrastructure/universal/resilient.py`:
 
-- Retry bei 429 (Rate Limit) und 5xx (Server Error)
-- Exponentielles Backoff (Default: 2^attempt Sekunden)
-- Retry-After Header + Body-Parsing (Gemini: "retry in Xs")
-- Kein Retry bei 400/401/403 (permanente Fehler)
-- Domain-Errors: ProviderTimeout, ProviderRateLimit, ProviderUnavailable
+- Retry bei 429 und 5xx.
+- Exponentielles Backoff.
+- `Retry-After`-Header und providerabhängige Retry-Hinweise.
+- Kein Retry bei permanenten Client-Fehlern wie 400, 401 oder 403.
+- Domain-Errors: `ProviderTimeout`, `ProviderRateLimit`, `ProviderUnavailable`.
 
 ## Backend-Matrix
 
@@ -57,16 +65,22 @@ Wrapper in `infrastructure/universal/resilient.py`:
 |---------|--------|------------|
 | Conversations | SQLiteConversationRepository | PostgresConversationRepository |
 | Messages | SQLiteMessageRepository | PostgresMessageRepository |
-| Verschlüsselung | Optional (CryptoService) | Optional (CryptoService) |
-| Schema-Migration | migrations.py (SQLite-Modus) | migrations.py (Postgres-Modus) |
-| Autocommit | Nein (explizit commit) | Ja (conn.autocommit=True) |
-| Empfohlen für | Entwicklung, Tests | Production (Docker) |
+| Participants | SQLiteParticipantRepository | PostgresParticipantRepository |
+| Agents | SQLiteAgentRepository | PostgresAgentRepository |
+| Runs | SQLiteRunRepository | PostgresRunRepository |
+| Audit/Usage | SQLiteAuditRepository | PostgresAuditRepository |
+| Verschlüsselung | Optional über CryptoService | Optional über CryptoService |
+| Schema-Migration | migrations.py im SQLite-Modus | migrations.py im Postgres-Modus |
+| Empfohlen für v0.1.0 | Lokaler Personal-Default | Fortgeschrittene/kompatible Setups |
 
 ## Adapter-Registry
 
-`application/adapter_registry.py` — Lazy Builder:
+`src/conclave/application/adapter_registry.py` verbindet Participants mit
+Provider-Adaptern:
 
-1. Beim Start: Alle Agents aus DB → Adapter bauen → Cache
-2. Bei CRUD: `invalidate()` → Cache leeren
-3. Bei Zugriff: `get_for(participant_id)` → Cache oder Builder
-4. Builder: Lädt Agent aus DB → `_build_adapter_for_agent()` → ResilientAdapter
+1. Der Builder lädt die lokale Agent-Konfiguration.
+2. `_build_adapter_for_agent()` erzeugt native oder Universal-Adapter.
+3. Adapter werden pro Agent gecacht.
+4. Agent-CRUD invalidiert den Cache.
+5. `get_for(participant_id)` liefert den Adapter für Invoke, Stream,
+   Orchestrierung, Auto-Loop und Judge-Flows.

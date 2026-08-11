@@ -38,7 +38,7 @@ conclave desktop
 - Pfad-Traversal und absolute Ausbrüche werden blockiert.
 - Versteckte Pfade mit Komponenten wie `.private/` werden nicht gelesen oder
   angezeigt.
-- Dateigrößenlimits verhindern versehentliche Vollimporte grosser Dateien in
+- Dateigrößenlimits verhindern versehentliche Vollimporte großer Dateien in
   Agent-Kontexte.
 
 ## Provider
