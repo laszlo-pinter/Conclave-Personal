@@ -17,7 +17,7 @@ Kontextdaten.
 Im Projektordner bleiben, nicht in `.venv` wechseln:
 
 ```powershell
-cd "C:\Users\Pinter\AppData\Local\01_Code\Conclave Test\Conclave-Personal"
+cd "<pfad-zum-checkout>\Conclave-Personal"
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e .
 ```
