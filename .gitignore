@@ -1,0 +1,84 @@
+# ── Python ────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+wheels/
+
+# ── Virtual environments ───────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.env/
+.python-version
+
+# ── Testing & Coverage ────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+
+# ── Type checkers ─────────────────────────────────────────────────────────
+.mypy_cache/
+.pytype/
+.pyre/
+
+# ── IDEs & Editors ────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.code-workspace
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Environment & Secrets ─────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+
+# ── Conclave runtime data ─────────────────────────────────────────────────
+# Lokale Datenbank – nicht ins Repo
+*.db
+*.db-shm
+*.db-wal
+~/.conclave/
+
+# ── Logs ──────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Build artifacts ───────────────────────────────────────────────────────
+src/*.egg-info/
+
+# ── Docker runtime data ──────────────────────────────────────────────
+backups/
+workspace/output/
+
+# ── Notifications ────────────────────────────────────────────────────
+conclave_notify.json
+Conclave v0.1.0 Release-Vorbereitung.pdf
+
+# ── MCP ──────────────────────────────────────────────────────────────
+mcp-filesystem.cmd

@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - personal-multiplatform
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+        python-version:
+          - "3.11"
+          - "3.12"
+    env:
+      CONCLAVE_MODE: development
+      CONCLAVE_API_KEY: test-ci-local-key
+      CONCLAVE_SECRET_KEY_FILE: ${{ runner.temp }}/conclave-secret.key
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install package and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev-all]"
+
+      - name: Run tests
+        run: python -m pytest
+
+  build:
+    name: Build release artifacts
+    runs-on: ubuntu-latest
+    needs: test
+    env:
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build
+
+      - name: Build sdist and wheel
+        run: python -m build --sdist --wheel
+
+      - name: Inspect artifacts
+        run: |
+          python - <<'PY'
+          import pathlib
+          import tarfile
+          import zipfile
+
+          dist = pathlib.Path("dist")
+          wheel = next(dist.glob("*.whl"))
+          sdist = next(dist.glob("*.tar.gz"))
+
+          wheel_names = set(zipfile.ZipFile(wheel).namelist())
+          entry_points = [
+              name for name in wheel_names
+              if name.endswith(".dist-info/entry_points.txt")
+          ]
+          if len(entry_points) != 1:
+              raise SystemExit(f"Unexpected entry_points files: {entry_points}")
+          package_root = entry_points[0].split(".dist-info/", 1)[0]
+          data_root = f"{package_root}.data/data/share/conclave"
+          required_wheel = {
+              f"{data_root}/conclave-ui.html",
+              f"{data_root}/static/openapi.json",
+              entry_points[0],
+          }
+          missing = sorted(required_wheel - wheel_names)
+          if missing:
+              raise SystemExit(f"Wheel missing required files: {missing}")
+
+          banned = (
+              "workspace/",
+              ".db",
+              ".db-wal",
+              ".db-shm",
+              ".key",
+              ".pem",
+              ".log",
+              "__pycache__",
+              "dsgvo",
+              "docs/legal",
+              "docs/betrieb",
+          )
+
+          wheel_bad = [name for name in wheel_names if any(part in name.lower() for part in banned)]
+          if wheel_bad:
+              raise SystemExit(f"Wheel contains banned files: {wheel_bad[:20]}")
+
+          with tarfile.open(sdist) as archive:
+              sdist_names = archive.getnames()
+          sdist_bad = [name for name in sdist_names if any(part in name.lower() for part in banned)]
+          if sdist_bad:
+              raise SystemExit(f"Sdist contains banned files: {sdist_bad[:20]}")
+          PY
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: conclave-dist
+          path: dist/*

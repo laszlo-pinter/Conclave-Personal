@@ -1,0 +1,22 @@
+/* theme.css — CSS Custom Properties + globale Resets */
+:root{
+  --bg:#07090e;--bg-2:#0c0f18;--bg-3:#121623;--bg-4:#18202e;--bg-5:#1e2838;
+  --border:rgba(255,255,255,.055);--border-mid:rgba(255,255,255,.09);--border-strong:rgba(255,255,255,.14);
+  --text:#ffffff;--text-dim:#b8c2d6;--text-faint:#7d8aa8;
+  --accent:#00d4aa;--accent-bg:rgba(0,212,170,.10);--accent-glow:rgba(0,212,170,.25);
+  --purple:#8b6cf7;--purple-bg:rgba(139,108,247,.12);
+  --danger:#ff4466;--danger-bg:rgba(255,68,102,.10);
+  --floor-color:#f5a623;--floor-bg:rgba(245,166,35,.12);--floor-border:rgba(245,166,35,.4);
+  --font-ui:'DM Sans',sans-serif;--font-hd:'Syne',sans-serif;--font-mono:'Syne Mono',monospace;
+  --r:6px;--r2:10px;--sidebar:290px;--tr:.15s ease;
+}
+*{box-sizing:border-box;margin:0;padding:0}html,body{height:100%;overflow:hidden}
+body{font-family:var(--font-ui);background:var(--bg);color:var(--text);display:flex;font-size:14px;line-height:1.5}
+body::after{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:1000;opacity:.5}
+
+/* Animations */
+@keyframes msgIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+@keyframes tIn{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}

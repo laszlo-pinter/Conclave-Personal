@@ -1,0 +1,12 @@
+[Unit]
+Description=Conclave Personal API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=__CONCLAVE_PROJECT_ROOT__
+ExecStart=/usr/bin/env python -m conclave.cli.main server
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

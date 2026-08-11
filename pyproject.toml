@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "conclave"
+version = "0.1.0"
+description = "Local personal multi-agent workspace for Windows and Linux."
+readme = "README.md"
+license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+keywords = ["multi-agent", "llm", "local-first", "workspace", "cli"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Framework :: Flask",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+]
+dependencies = [
+    "cryptography>=42.0",
+    "flask>=3.0",
+    "flask-limiter>=4.0",
+]
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.40.0"]
+openai = ["openai>=1.0"]
+api = ["flask>=3.0", "flask-limiter>=4.0"]
+crypto = ["cryptography>=42.0"]
+postgres = ["psycopg2-binary>=2.9"]
+mcp = ["mcp>=1.0", "httpx>=0.27"]
+dev     = ["pytest>=9.0"]
+dev-api = ["pytest>=9.0", "flask>=3.0"]
+dev-all = ["pytest>=9.0", "pytest-asyncio>=1.0", "flask>=3.0", "flask-limiter>=4.0", "anthropic>=0.40.0", "openai>=1.0", "cryptography>=42.0", "psycopg2-binary>=2.9"]
+
+[project.scripts]
+conclave = "conclave.cli.main:main"
+conclave-api = "conclave.api.server:main"
+conclave-mcp = "conclave.mcp_server:main"
+conclave-watch = "conclave.cli.watch:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.data-files]
+"share/conclave" = ["conclave-ui.html"]
+"share/conclave/static" = ["static/openapi.json"]
+"share/conclave/static/css" = ["static/css/*.css"]
+"share/conclave/static/js" = ["static/js/*.js"]
+"share/conclave/static/js/features" = ["static/js/features/*.js"]
+"share/conclave/scripts/windows" = ["scripts/windows/*.ps1"]
+"share/conclave/scripts/linux" = ["scripts/linux/*"]
