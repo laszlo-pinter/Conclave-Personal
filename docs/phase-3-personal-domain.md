@@ -6,7 +6,7 @@
 
 ## Ziel
 
-Conclave bekommt eine produktnahe Personal-Domain fuer Arbeitslaeufe. Die alte
+Conclave bekommt eine produktnahe Personal-Domain für Arbeitsläufe. Die alte
 Audit-Technik bleibt vorerst als kompatible Usage-Quelle bestehen, aber neue
 Funktionen orientieren sich an `Run` und `UsageRecord`.
 
@@ -23,9 +23,9 @@ Funktionen orientieren sich an `Run` und `UsageRecord`.
 - Schema erweitert:
   - `runs`
   - `usage_records`
-- Migration ergaenzt:
+- Migration ergänzt:
   - `005_personal_runs`
-- `ConversationFlowService` schreibt Runs fuer:
+- `ConversationFlowService` schreibt Runs für:
   - `invoke_participant`
   - `invoke_with_floor`
   - `stream_participant`
@@ -37,7 +37,7 @@ Funktionen orientieren sich an `Run` und `UsageRecord`.
   - beteiligte Participants
   - Start-/Endzeit
   - Status
-  - Provider-/Modell-/Token-Usage, sofern verfuegbar
+  - Provider-/Modell-/Token-Usage, sofern verfügbar
 - Fehlgeschlagene Runs enthalten:
   - Status `failed`
   - Fehlerklasse im Feld `error`
@@ -78,12 +78,12 @@ Ergebnis:
 
 `AuditEntry` und `audit_log` wurden noch nicht entfernt, weil die bestehende
 Usage-Auswertung darauf basiert und stabil funktioniert. Die neue Run-Schicht
-ist bewusst parallel eingefuehrt. In einer spaeteren Phase kann Usage komplett
+ist bewusst parallel eingeführt. In einer späteren Phase kann Usage komplett
 auf `usage_records` umgestellt und `audit_log` intern umbenannt oder entfernt
 werden.
 
-## Naechster sinnvoller Schritt
+## Nächster sinnvoller Schritt
 
-Phase 4 sollte die Personal-API weiter schaerfen: vorhandene Routen in klare
+Phase 4 sollte die Personal-API weiter schärfen: vorhandene Routen in klare
 Produktbereiche gliedern, `/runs` in der OpenAPI-Spec mit Schemas beschreiben
 und Settings-/Backup-Endpunkte vorbereiten.

@@ -7,7 +7,7 @@
 ## Ziel
 
 Windows und Linux bekommen denselben Anwendungskern und eine zentrale Runtime
-fuer lokale Pfade, Portwahl und Startverhalten.
+für lokale Pfade, Portwahl und Startverhalten.
 
 ## Umgesetzt
 
@@ -19,14 +19,14 @@ fuer lokale Pfade, Portwahl und Startverhalten.
   - `src/conclave/runtime/desktop.py`
 - Plattformpfade zentralisiert:
   - Windows: `%APPDATA%`, `%LOCALAPPDATA%`, `%USERPROFILE%`
-  - Linux: XDG-Defaults fuer Config, Data und State
+  - Linux: XDG-Defaults für Config, Data und State
 - Defaults umgestellt:
   - SQLite-DB liegt nun im plattformkonformen Datenordner.
   - Secret-Key-Datei liegt nun im plattformkonformen Config-Ordner.
-  - Workspace liegt standardmaessig unter `~/Conclave/workspace`.
-- Runtime erstellt benoetigte Ordner beim Start.
+  - Workspace liegt standardmäßig unter `~/Conclave/workspace`.
+- Runtime erstellt benötigte Ordner beim Start.
 - `conclave desktop` nutzt freie Portwahl, falls der bevorzugte Port belegt ist.
-- `conclave web` oeffnet die UI im Browser ueber die Runtime-URL-Hilfen.
+- `conclave web` oeffnet die UI im Browser über die Runtime-URL-Hilfen.
 - Neue Startskripte:
   - `scripts/windows/start_server.ps1`
   - `scripts/windows/start_desktop.ps1`
@@ -62,13 +62,13 @@ Ergebnis:
 
 ## Einordnung
 
-Phase 6 macht die lokale Runtime plattformfaehig, ohne bereits Installer,
+Phase 6 macht die lokale Runtime plattformfähig, ohne bereits Installer,
 AppImage oder ein natives Desktopfenster zu bauen. Die alten Skripte im
 Hauptordner bleiben vorerst bestehen; die neuen Skripte liegen sauber getrennt
 unter `scripts/windows` und `scripts/linux`.
 
-## Naechster sinnvoller Schritt
+## Nächster sinnvoller Schritt
 
 Phase 7 kann jetzt die UI-Struktur weiter umbauen: Studio, Agents, Workspace,
-Runs und Settings als klare Arbeitsraeume statt des aktuellen historisch
+Runs und Settings als klare Arbeitsräume statt des aktuellen historisch
 gewachsenen Monolithen.

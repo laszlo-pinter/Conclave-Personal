@@ -8,7 +8,7 @@
 
 Die HTTP-API wurde auf die Personal-Produktbereiche ausgerichtet. Die API ist
 weiterhin kompatibel mit dem bestehenden Studio, bietet aber neue klare
-Einstiegspunkte fuer Runs, Provider, lokale Settings, Backups und Judge-Laeufe.
+Einstiegspunkte für Runs, Provider, lokale Settings, Backups und Judge-Läufe.
 
 ## Umgesetzt
 
@@ -24,19 +24,19 @@ Einstiegspunkte fuer Runs, Provider, lokale Settings, Backups und Judge-Laeufe.
 - Bestehende Run-Endpunkte bleiben Teil der Personal-API:
   - `GET /runs`
   - `GET /runs/<run_id>`
-- Participant-Loeschung ist jetzt sauber durchgezogen:
+- Participant-Löschung ist jetzt sauber durchgezogen:
   - Application-Service
   - Repository-Port
   - SQLite-Repository
   - Postgres-Repository
   - API
-- Provider-Endpunkt gibt Preset-Informationen und Key-Verfuegbarkeit zurueck,
+- Provider-Endpunkt gibt Preset-Informationen und Key-Verfügbarkeit zurück,
   aber keine Secret-Werte.
-- Settings-Endpunkt gibt lokale Runtime-Settings ohne Secrets zurueck.
-- `PUT /settings` kann den Workspace-Pfad fuer die laufende Session setzen.
+- Settings-Endpunkt gibt lokale Runtime-Settings ohne Secrets zurück.
+- `PUT /settings` kann den Workspace-Pfad für die laufende Session setzen.
 - `POST /backup` erstellt ein lokales ZIP-Backup aus SQLite-DB und Workspace.
 - `POST /restore` validiert ein Backup-Archiv, schreibt aber noch keine lokalen
-  Daten. Restore bleibt damit bewusst nicht-destruktiv bis zur spaeteren
+  Daten. Restore bleibt damit bewusst nicht-destruktiv bis zur späteren
   Migrations-/Restore-Phase.
 - OpenAPI-Schema und API-Referenz wurden neu generiert.
 
@@ -64,6 +64,6 @@ Ergebnis:
 ## Einordnung
 
 Phase 4 schneidet die API produktnah, ohne die UI komplett umzubauen. Die
-naechste groessere Veraenderung liegt auf CLI- und Runtime-Ebene: `conclave
+nächste größere Veränderung liegt auf CLI- und Runtime-Ebene: `conclave
 server`, `conclave web` und `conclave desktop` sollen die lokale Nutzung unter
 Windows und Linux vereinheitlichen.

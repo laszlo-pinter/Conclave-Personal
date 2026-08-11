@@ -7,9 +7,9 @@
 ## Ziel
 
 Bestehende lokale SQLite-Daten sollen explizit und nachvollziehbar in das neue
-Conclave-Personal-Schema uebernommen werden.
+Conclave-Personal-Schema übernommen werden.
 
-Die Migration startet nicht automatisch beim ersten Start. Der Nutzer fuehrt sie
+Die Migration startet nicht automatisch beim ersten Start. Der Nutzer führt sie
 bewusst per CLI aus.
 
 ## Kommando
@@ -29,16 +29,16 @@ conclave --json migrate-personal --from C:\alt\conclave.db --dry-run
 Wenn `--to` fehlt, verwendet Conclave die aktive lokale Personal-Datenbank aus
 der Runtime-Konfiguration.
 
-## Uebernommen
+## Übernommen
 
 - Conversations
 - Messages
 - Participants
 - Agents
 - Audit-/Usage-Daten
-- vorhandene Runs und UsageRecords, falls die Quelle sie bereits enthaelt
+- vorhandene Runs und UsageRecords, falls die Quelle sie bereits enthält
 
-Audit-Eintraege werden zusaetzlich in Personal-Runs uebersetzt:
+Audit-Einträge werden zusätzlich in Personal-Runs übersetzt:
 
 | Audit-Operation | Run-Kind |
 | --- | --- |
@@ -54,27 +54,27 @@ Audit-Eintraege werden zusaetzlich in Personal-Runs uebersetzt:
 - DPA-/AV-Tabellen
 - Transfer-Policy-Tabellen
 
-Diese Daten gehoeren zum alten Enterprise-/Compliance-Modell und werden im
-Personal-Produkt nicht fortgefuehrt.
+Diese Daten gehören zum alten Enterprise-/Compliance-Modell und werden im
+Personal-Produkt nicht fortgeführt.
 
 ## Sicherheitsverhalten
 
-- Quelle und Ziel duerfen nicht dieselbe Datei sein.
+- Quelle und Ziel dürfen nicht dieselbe Datei sein.
 - Existiert die Ziel-DB bereits, wird vor dem Schreiben ein Backup angelegt.
 - Die Migration ist idempotent:
-  - vorhandene IDs werden uebersprungen
-  - doppelte Laeufe erzeugen keine doppelten Conversations oder Messages
+  - vorhandene IDs werden übersprungen
+  - doppelte Läufe erzeugen keine doppelten Conversations oder Messages
 - `--dry-run` erzeugt nur einen Bericht und schreibt keine Ziel-DB.
 
 ## Report
 
-Der Bericht enthaelt:
+Der Bericht enthält:
 
 - Quelle
 - Ziel
 - Backup-Pfad
-- uebernommene Zeilen je Tabelle
-- uebersprungene Zeilen je Tabelle
+- übernommene Zeilen je Tabelle
+- übersprungene Zeilen je Tabelle
 - bewusst ignorierte Tabellen
 - aus Audit erzeugte Runs
 - Hinweise
@@ -88,7 +88,7 @@ Mit `--json` wird der Bericht maschinenlesbar ausgegeben.
 - Kein Workspace-Dateiimport aus beliebigen alten Projektordnern.
 - Kein automatischer First-Start-Migrationsdialog in der UI.
 
-Diese Punkte gehoeren in ein spaeteres Migration-Hardening oder in Phase 13.
+Diese Punkte gehören in ein späteres Migration-Hardening oder in Phase 13.
 
 ## Tests
 
@@ -110,6 +110,6 @@ Verifikation am 2026-08-11:
 
 ## Einordnung
 
-Phase 12 schliesst die groesste Luecke zwischen Umbau und Veroeffentlichung:
-Bestehende lokale Nutzer koennen ihre Kernarbeit uebernehmen, ohne das alte
+Phase 12 schliesst die größte Lücke zwischen Umbau und Veröffentlichung:
+Bestehende lokale Nutzer können ihre Kernarbeit übernehmen, ohne das alte
 Compliance-Modell mitzuschleppen.

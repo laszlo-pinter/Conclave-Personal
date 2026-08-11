@@ -57,10 +57,10 @@ Wrapper in `infrastructure/universal/resilient.py`:
 |---------|--------|------------|
 | Conversations | SQLiteConversationRepository | PostgresConversationRepository |
 | Messages | SQLiteMessageRepository | PostgresMessageRepository |
-| Verschluesselung | Optional (CryptoService) | Optional (CryptoService) |
+| Verschlüsselung | Optional (CryptoService) | Optional (CryptoService) |
 | Schema-Migration | migrations.py (SQLite-Modus) | migrations.py (Postgres-Modus) |
 | Autocommit | Nein (explizit commit) | Ja (conn.autocommit=True) |
-| Empfohlen fuer | Entwicklung, Tests | Production (Docker) |
+| Empfohlen für | Entwicklung, Tests | Production (Docker) |
 
 ## Adapter-Registry
 
@@ -69,4 +69,4 @@ Wrapper in `infrastructure/universal/resilient.py`:
 1. Beim Start: Alle Agents aus DB → Adapter bauen → Cache
 2. Bei CRUD: `invalidate()` → Cache leeren
 3. Bei Zugriff: `get_for(participant_id)` → Cache oder Builder
-4. Builder: Laedt Agent aus DB → `_build_adapter_for_agent()` → ResilientAdapter
+4. Builder: Lädt Agent aus DB → `_build_adapter_for_agent()` → ResilientAdapter

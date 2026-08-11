@@ -4,7 +4,7 @@
 
 ```markdown
 ## Beschreibung
-[Was aendert dieser PR?]
+[Was ändert dieser PR?]
 
 ## Typ
 - [ ] Feature
@@ -13,22 +13,22 @@
 - [ ] Dokumentation
 
 ## Betroffene Flows
-[Welche docs/flows/*.md sind betroffen? Welche muessen aktualisiert werden?]
+[Welche docs/flows/*.md sind betroffen? Welche müssen aktualisiert werden?]
 
 ## Tests
 - [ ] Neue Tests geschrieben
-- [ ] Bestehende Tests gruen (`python -m pytest tests/ -q`)
-- [ ] Testabdeckung fuer den geaenderten Code
+- [ ] Bestehende Tests grün (`python -m pytest tests/ -q`)
+- [ ] Testabdeckung für den geänderten Code
 
 ## Docs-Debt
-- [ ] Keine Doku-Aenderung noetig
+- [ ] Keine Doku-Änderung nötig
 - [ ] docs/ aktualisiert: [welche Dateien?]
 - [ ] API-Referenz regeneriert (`python scripts/gen-api-ref.py`)
-- [ ] Docstrings fuer neue Klassen/Funktionen
+- [ ] Docstrings für neue Klassen/Funktionen
 
 ## Schichtgrenzen
 - [ ] Keine Import-Verletzung (`grep -r "from conclave.infrastructure" src/conclave/domain/`)
-- [ ] Neue Protocols in ports.py fuer neue Interfaces
+- [ ] Neue Protocols in ports.py für neue Interfaces
 
 ## Security
 - [ ] Keine hartcodierten Secrets
@@ -38,7 +38,7 @@
 
 ## Wann ist ein PR mergebar?
 
-1. Alle Tests gruen
+1. Alle Tests grün
 2. Docs-Debt beantwortet (nicht "nein" ankreuzen und ignorieren)
 3. Kein Schichtgrenzen-Verstoss
 4. Mindestens 1 Review
@@ -49,5 +49,5 @@
 Aus dem Dokumentationsplan (Section 6):
 > "Jedes dokumentierte Interface existiert im Code"
 
-Wenn ein PR ein Interface aendert das in docs/ referenziert wird,
+Wenn ein PR ein Interface ändert das in docs/ referenziert wird,
 muss die Doku im gleichen PR aktualisiert werden — nicht als Follow-Up.

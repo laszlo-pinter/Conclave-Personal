@@ -2,21 +2,21 @@ Dieses Projekt wurde ausschließlich von LLM-Modellen erstellt.
 
 # Conclave Personal
 
-Conclave Personal ist ein lokales Multi-Agent-Arbeitswerkzeug fuer einzelne
+Conclave Personal ist ein lokales Multi-Agent-Arbeitswerkzeug für einzelne
 Nutzer. Es bringt mehrere KI-Modelle in eine gemeinsame, strukturierte
-Conversation, gibt ihnen explizite Rollen und macht ihre Zusammenarbeit ueber
+Conversation, gibt ihnen explizite Rollen und macht ihre Zusammenarbeit über
 Runs nachvollziehbar.
 
 Der Nutzer bleibt die Steuerungsinstanz. Agenten sind Teilnehmer, keine
 Controller. Conversations, Workspace-Dateien, Agenten und Usage liegen
-standardmaessig lokal.
+standardmäßig lokal.
 
 > Status: v0.1.0 Alpha. Der Hauptpfad ist lokal, desktop-first und auf einzelne
 > Nutzer unter Windows und Linux ausgerichtet.
 
 ![Conclave Studio](docs/assets/screenshots/conclave-studio-desktop.png)
 
-## Wofuer Conclave da ist
+## Wofür Conclave da ist
 
 Conclave ist nicht einfach eine weitere Chat-UI. Der Kern ist:
 
@@ -30,11 +30,11 @@ Conclave ist nicht einfach eine weitere Chat-UI. Der Kern ist:
 Praktisch heisst das:
 
 - Multi-Agent-Conversations mit Writer, Critic, Reviewer, Planner, Researcher
-  oder Judge fuehren.
+  oder Judge führen.
 - Agenten als Participants in konkrete Conversations einladen.
 - Dateien aus einem lokalen Workspace gezielt als Kontext verwenden.
 - Modelle einzeln, parallel oder in Auto-Loops arbeiten lassen.
-- Judge-/Review-Laeufe fuer gegenseitige Pruefung nutzen.
+- Judge-/Review-Läufe für gegenseitige Prüfung nutzen.
 - Runs, Token-Usage, Fehler und Ergebnisse nachvollziehen.
 - Unter Windows und Linux lokal arbeiten.
 
@@ -47,11 +47,11 @@ Prompt ─┼→ Critic ─→ Judge
 ```
 
 1. Conversation erstellen.
-2. Agents als Participants hinzufuegen.
+2. Agents als Participants hinzufügen.
 3. Rollen vergeben: Writer entwirft, Critic widerspricht, Judge bewertet.
 4. Prompt senden.
 5. Run beobachten.
-6. Ergebnisse vergleichen und die naechste Runde bewusst starten.
+6. Ergebnisse vergleichen und die nächste Runde bewusst starten.
 
 Minimaler CLI-Flow:
 
@@ -62,7 +62,7 @@ conclave agent-new judge --name "Judge" --provider "ollama" --preset "ollama" --
 CONV=$(conclave --json new | python -c "import sys,json; print(json.load(sys.stdin)['conversation_id'])")
 conclave add-participant "$CONV" writer --name "Writer" --type model
 conclave add-participant "$CONV" judge --name "Judge" --type model
-conclave message "$CONV" "Entwirf eine knappe Produktpositionierung und lass sie pruefen."
+conclave message "$CONV" "Entwirf eine knappe Produktpositionierung und lass sie prüfen."
 conclave invoke "$CONV" writer
 conclave invoke "$CONV" judge
 conclave runs "$CONV"
@@ -84,11 +84,11 @@ conclave runs "$CONV"
 - Kein Consent-Management pro Provider.
 - Keine DPA-/AV-Vertragsverwaltung.
 - Keine rollenbasierte Unternehmensadministration.
-- Kein Docker-Zwang fuer Endnutzer.
+- Kein Docker-Zwang für Endnutzer.
 
 ## Plattformziel
 
-Conclave Personal unterstuetzt Windows und Linux. Die CI-Matrix prueft Ubuntu
+Conclave Personal unterstützt Windows und Linux. Die CI-Matrix prüft Ubuntu
 und Windows mit Python 3.11 und 3.12.
 
 Der Anwendungskern bleibt plattformneutral. Betriebssystem-spezifisch sind nur
@@ -100,7 +100,7 @@ Start-, Installations- und Autostart-Adapter:
 
 ## Installation
 
-Nach der PyPI-Veroeffentlichung ist der Zielpfad:
+Nach der PyPI-Veröffentlichung ist der Zielpfad:
 
 ### Windows
 
@@ -116,7 +116,7 @@ pipx install conclave
 conclave desktop
 ```
 
-Vor der PyPI-Veroeffentlichung wird aus dem gebauten Wheel getestet:
+Vor der PyPI-Veröffentlichung wird aus dem gebauten Wheel getestet:
 
 ```bash
 python -m build --sdist --wheel
@@ -134,7 +134,7 @@ python -m pip install -e ".[dev-all]"
 conclave desktop
 ```
 
-Tests fuer Entwicklung:
+Tests für Entwicklung:
 
 ```text
 python -m pytest
@@ -187,7 +187,7 @@ conclave server
 conclave web
 ```
 
-oder fuer direkte CLI-Flows:
+oder für direkte CLI-Flows:
 
 ```bash
 conclave agent-new assistant \
@@ -222,13 +222,13 @@ Ein Agent innerhalb einer konkreten Conversation.
 
 ### Workspace
 
-Ein lokaler Ordner fuer Dateien, Notizen, Kontext und Outputs. Dateien werden
+Ein lokaler Ordner für Dateien, Notizen, Kontext und Outputs. Dateien werden
 nicht automatisch als Kontext geladen. Der Nutzer referenziert sie explizit,
 zum Beispiel mit `@workspace/notizen.md`.
 
 ### Run
 
-Ein ausfuehrbarer Arbeitslauf: Invoke, Stream, Orchestrierung, Auto-Loop oder
+Ein ausführbarer Arbeitslauf: Invoke, Stream, Orchestrierung, Auto-Loop oder
 Judge. Runs machen Status, Fehler, Dauer und Usage sichtbar.
 
 ## Zielarchitektur
@@ -254,7 +254,7 @@ getesteten Hauptpfaden und kompatiblen Presets.
 
 ### First-class / getestet
 
-Diese Pfade sind durch lokale Tests, API-Vertraege oder konkrete Adaptertests
+Diese Pfade sind durch lokale Tests, API-Verträge oder konkrete Adaptertests
 abgesichert:
 
 - OpenAI Responses
@@ -264,7 +264,7 @@ abgesichert:
 
 ### Built-in preset / kompatibel / experimentell
 
-Diese Presets sind eingebaut, koennen aber je nach Provider-API, Modell und
+Diese Presets sind eingebaut, können aber je nach Provider-API, Modell und
 Account variieren:
 
 - Gemini
@@ -273,26 +273,26 @@ Account variieren:
 - Qwen / DashScope
 - Custom/OpenAI-compatible Endpoints
 
-API-Keys bleiben lokal gespeichert und werden bei Agenten verschluesselt in der
+API-Keys bleiben lokal gespeichert und werden bei Agenten verschlüsselt in der
 lokalen Datenbank abgelegt. Ollama kann ohne API-Key funktionieren.
 
 ## Local-first, Nicht Offline-only
 
 Conclave speichert Workspace, Konfiguration, Agenten, Conversations und
 Run-Historie lokal. Wenn ein Remote-Provider wie OpenAI, Anthropic, Gemini,
-Mistral, DeepSeek oder DashScope genutzt wird, werden die fuer den jeweiligen
+Mistral, DeepSeek oder DashScope genutzt wird, werden die für den jeweiligen
 Modellaufruf erforderlichen Prompt-/Kontextdaten an diesen Provider
-uebertragen. Bei Ollama oder lokalen kompatiblen Endpunkten kann die
-Verarbeitung vollstaendig lokal erfolgen.
+übertragen. Bei Ollama oder lokalen kompatiblen Endpunkten kann die
+Verarbeitung vollständig lokal erfolgen.
 
 ## Sicherheit
 
-Conclave bindet die lokale API standardmaessig an `127.0.0.1`. Fuer den
+Conclave bindet die lokale API standardmäßig an `127.0.0.1`. Für den
 `production`-Modus muss ein lokaler API-Key gesetzt sein. Workspace-Zugriffe
 bleiben im konfigurierten Workspace-Root und versteckte Pfade werden nicht als
 Agent-Kontext gelesen.
 
-Mehr Details: [Sicherheit fuer Conclave Personal](docs/sicherheit.md).
+Mehr Details: [Sicherheit für Conclave Personal](docs/sicherheit.md).
 
 ## Dokumentation
 
@@ -307,19 +307,19 @@ Wichtige Dokumente:
 
 ## Known Limitations
 
-v0.1.0 bleibt bewusst Alpha. Bekannte Einschraenkungen:
+v0.1.0 bleibt bewusst Alpha. Bekannte Einschränkungen:
 
 - Backup-Erstellung ist vorhanden; Restore validiert aktuell nur und schreibt
-  noch keine Daten zurueck.
-- Provider-Kompatibilitaet variiert nach API, Modell, Account und Region.
-- Remote-Provider erhalten die fuer den Modellaufruf benoetigten Daten.
+  noch keine Daten zurück.
+- Provider-Kompatibilität variiert nach API, Modell, Account und Region.
+- Remote-Provider erhalten die für den Modellaufruf benötigten Daten.
 - Desktop-Modus startet die lokale Web-Anwendung im Browser.
 - Erweiterte Multi-Agent-Orchestrierung ist in Teilen experimentell.
 - Es gibt noch keinen nativen Windows-Installer, kein AppImage und kein `.deb`.
 
 ## Release-Verifikation
 
-Der v0.1.0-Schnitt wird vor Veroeffentlichung mit diesen lokalen Checks
+Der v0.1.0-Schnitt wird vor Veröffentlichung mit diesen lokalen Checks
 verifiziert:
 
 - `python -m pytest`
@@ -327,7 +327,7 @@ verifiziert:
 - Installation aus dem gebauten Wheel in einer frischen Umgebung.
 - `conclave --help`
 - `conclave desktop`
-- Artefaktpruefung ohne Workspace-Daten, Datenbanken, Keys, Logs und alte
+- Artefaktprüfung ohne Workspace-Daten, Datenbanken, Keys, Logs und alte
   Enterprise-/DSGVO-Pfade.
 
 ## Lizenz

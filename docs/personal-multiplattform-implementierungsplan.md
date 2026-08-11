@@ -3,12 +3,12 @@
 ## Ziel
 
 Conclave wird von einer unternehmens- und DSGVO-orientierten Plattform zu
-einem persoenlichen, lokalen Multi-Agent-Arbeitswerkzeug umgebaut.
+einem persönlichen, lokalen Multi-Agent-Arbeitswerkzeug umgebaut.
 
 Das neue Produkt richtet sich an einzelne Nutzer, nicht an Unternehmen. Es
-laeuft gleichwertig unter Windows und Linux, speichert Daten lokal, bindet
-verschiedene KI-Provider ueber austauschbare Adapter an und bietet eine klare
-Desktop-first Oberflaeche fuer Multi-Agent-Arbeit.
+läuft gleichwertig unter Windows und Linux, speichert Daten lokal, bindet
+verschiedene KI-Provider über austauschbare Adapter an und bietet eine klare
+Desktop-first Oberfläche für Multi-Agent-Arbeit.
 
 ## Nicht-Ziele
 
@@ -16,14 +16,14 @@ Desktop-first Oberflaeche fuer Multi-Agent-Arbeit.
 - Kein Consent-Management pro Provider.
 - Keine DPA-/AV-Vertragsverwaltung.
 - Keine rollenbasierte Unternehmensadministration.
-- Kein serverzentriertes Teamprodukt als primaerer Use Case.
-- Kein Docker-Zwang fuer Endnutzer.
+- Kein serverzentriertes Teamprodukt als primärer Use Case.
+- Kein Docker-Zwang für Endnutzer.
 
 ## Produktprinzipien
 
 1. Der Nutzer ist die einzige Steuerungsinstanz.
 2. Agenten sind Teilnehmer, keine Controller.
-3. Alle Daten liegen standardmaessig lokal.
+3. Alle Daten liegen standardmäßig lokal.
 4. Provider bleiben austauschbar.
 5. Windows und Linux sind gleichwertige Zielplattformen.
 6. Desktop-Betrieb ist der Hauptpfad, Browser/API bleiben technische Modi.
@@ -34,19 +34,19 @@ Desktop-first Oberflaeche fuer Multi-Agent-Arbeit.
 
 ### Hauptbereiche der App
 
-Die neue UI besteht aus fuenf Arbeitsraeumen:
+Die neue UI besteht aus fünf Arbeitsräumen:
 
 | Bereich | Zweck |
 | --- | --- |
-| Studio | Conversations fuehren, Participants steuern, Floor vergeben, Invoke/Stream/Auto-Loop starten |
+| Studio | Conversations führen, Participants steuern, Floor vergeben, Invoke/Stream/Auto-Loop starten |
 | Agents | Agenten, Rollen, Provider, Modelle, Presets und Verbindungstests verwalten |
 | Workspace | Dateien, Notizen, Kontextdokumente und Agent-Outputs verwalten |
-| Runs | Orchestrierungen, Auto-Loops, Judge-Laeufe, Ergebnisse und Laufhistorie einsehen |
+| Runs | Orchestrierungen, Auto-Loops, Judge-Läufe, Ergebnisse und Laufhistorie einsehen |
 | Settings | API-Keys, Datenpfade, Theme, Backup, Import/Export, lokaler Sicherheitsmodus |
 
 ### Backend-Schichten
 
-Die bestehende Schichtung bleibt erhalten, wird aber entschaerft:
+Die bestehende Schichtung bleibt erhalten, wird aber entschärft:
 
 ```text
 api/ + cli/ + desktop/
@@ -65,14 +65,14 @@ Regeln:
 - `infrastructure/` implementiert Ports.
 - `api/`, `cli/` und `desktop/` verdrahten die Anwendung.
 - Logging wird nicht aus `infrastructure.log` direkt in `application/`
-  importiert, sondern ueber einen neutralen Application-Port oder ein kleines
+  importiert, sondern über einen neutralen Application-Port oder ein kleines
   `shared/logging`-Modul.
 
 ### Neues Kernmodell
 
 | Modell | Bedeutung |
 | --- | --- |
-| Conversation | Arbeitsgespraech mit Thema, Regeln, Messages und Participants |
+| Conversation | Arbeitsgespräch mit Thema, Regeln, Messages und Participants |
 | Message | User- oder Agent-Beitrag |
 | Agent | Wiederverwendbare Provider-/Rollen-Konfiguration |
 | Participant | Agent in einer konkreten Conversation |
@@ -82,15 +82,15 @@ Regeln:
 | AppSettings | Lokale Konfiguration, Datenpfade, UI-Optionen |
 
 `AuditEntry` wird entweder in `UsageRecord`/`RunLog` umbenannt oder intern
-weiterverwendet, aber nicht mehr als Compliance-Audit in der Produktoberflaeche
-praesentiert.
+weiterverwendet, aber nicht mehr als Compliance-Audit in der Produktoberfläche
+präsentiert.
 
 ## Phase 0: Stabilisierung und Abzweig
 
 ### Ziel
 
 Den aktuellen Enterprise-/DSGVO-Stand sichern und einen klaren Umbaupfad
-eroeffnen.
+eröffnen.
 
 ### Aufgaben
 
@@ -102,24 +102,24 @@ eroeffnen.
 - Aktuellen Worktree bereinigen:
   - `__pycache__/` aus Git entfernen, falls getrackt
   - `src/conclave.egg-info/` aus Git entfernen, falls getrackt
-  - `migration-extras.tgz` pruefen und vermutlich entfernen oder dokumentieren
+  - `migration-extras.tgz` prüfen und vermutlich entfernen oder dokumentieren
   - `workspace/` als lokale Laufzeitdaten behandeln
 - Testumgebung reparieren:
-  - `cryptography` und Dev-Abhaengigkeiten installieren
-  - `python -m pytest tests/ -q` als Baseline ausfuehren
+  - `cryptography` und Dev-Abhängigkeiten installieren
+  - `python -m pytest tests/ -q` als Baseline ausführen
 
 ### Akzeptanzkriterien
 
 - Alter Stand ist wiederherstellbar.
 - Neuer Branch existiert.
-- Repo enthaelt keine generierten Python-Cache-Artefakte.
+- Repo enthält keine generierten Python-Cache-Artefakte.
 - Baseline-Teststatus ist dokumentiert.
 
 ## Phase 1: Produktziel und Dokumentation neu schneiden
 
 ### Ziel
 
-Das Projekt bekommt eine neue oeffentliche Identitaet als Personal Tool.
+Das Projekt bekommt eine neue öffentliche Identität als Personal Tool.
 
 ### Aufgaben
 
@@ -142,7 +142,7 @@ Das Projekt bekommt eine neue oeffentliche Identitaet als Personal Tool.
   - Provider
   - Workspace
   - Releases
-- UI-Zielarchitektur aus `workspace/ui_architecture.md` uebernehmen und fuer
+- UI-Zielarchitektur aus `workspace/ui_architecture.md` übernehmen und für
   Personal anpassen:
   - Studio
   - Agents
@@ -152,7 +152,7 @@ Das Projekt bekommt eine neue oeffentliche Identitaet als Personal Tool.
 
 ### Akzeptanzkriterien
 
-- README beschreibt nicht mehr primaer DSGVO, DPA oder Unternehmen.
+- README beschreibt nicht mehr primär DSGVO, DPA oder Unternehmen.
 - Dokumentation nennt Windows und Linux als gleichwertige Ziele.
 - Neue UI-Informationsarchitektur ist dokumentiert.
 
@@ -161,7 +161,7 @@ Das Projekt bekommt eine neue oeffentliche Identitaet als Personal Tool.
 ### Ziel
 
 Alle Enterprise-Compliance-Funktionen aus dem Personal-Produkt entfernen,
-ohne den Kernfluss Conversation -> Agent -> Antwort zu beschaedigen.
+ohne den Kernfluss Conversation -> Agent -> Antwort zu beschädigen.
 
 ### Entfernen oder archivieren
 
@@ -181,7 +181,7 @@ Infrastructure:
 
 - Consent-Repositories
 - DPA-Repositories
-- DSGVO-Migrationen, sofern nicht mehr benoetigt
+- DSGVO-Migrationen, sofern nicht mehr benötigt
 
 API:
 
@@ -205,19 +205,19 @@ Tests:
 
 ### Behalten oder umdeuten
 
-- Verschluesselung fuer API-Keys bleibt.
-- Message-Verschluesselung kann als lokale Sicherheitsoption bleiben.
-- Usage/Audit-Daten werden zu persoenlicher Run- und Kostenhistorie.
-- Export bleibt als persoenlicher Backup-/Datenexport, nicht als Art.-15-Flow.
+- Verschlüsselung für API-Keys bleibt.
+- Message-Verschlüsselung kann als lokale Sicherheitsoption bleiben.
+- Usage/Audit-Daten werden zu persönlicher Run- und Kostenhistorie.
+- Export bleibt als persönlicher Backup-/Datenexport, nicht als Art.-15-Flow.
 
 ### Akzeptanzkriterien
 
-- Keine UI-Navigation fuer DSGVO, Consent oder DPA.
-- Keine API-Route fuer Consent/DPA.
+- Keine UI-Navigation für DSGVO, Consent oder DPA.
+- Keine API-Route für Consent/DPA.
 - Keine CLI-Hilfe mit DSGVO-Kommandos.
-- Tests pruefen Personal-Flows statt Compliance-Flows.
+- Tests prüfen Personal-Flows statt Compliance-Flows.
 
-## Phase 3: Personal-Domain einfuehren
+## Phase 3: Personal-Domain einführen
 
 ### Ziel
 
@@ -225,7 +225,7 @@ Die Sprache im Code soll dem neuen Produkt entsprechen.
 
 ### Aufgaben
 
-- Neues Modell `Run` einfuehren:
+- Neues Modell `Run` einführen:
   - `id`
   - `conversation_id`
   - `kind`: `invoke`, `stream`, `orchestrate`, `auto_loop`, `judge`
@@ -241,18 +241,18 @@ Die Sprache im Code soll dem neuen Produkt entsprechen.
 - Bestehendes `AuditRepository` entweder:
   - in `UsageRepository` umbenennen
   - oder intern behalten und nach aussen anders benennen
-- Retention durch einfache lokale Aufraeumregeln ersetzen:
-  - "alte Runs loeschen"
+- Retention durch einfache lokale Aufräumregeln ersetzen:
+  - "alte Runs löschen"
   - "Conversation archivieren"
   - "Workspace output bereinigen"
 
 ### Akzeptanzkriterien
 
 - Jeder Agent-Aufruf erzeugt einen Run- oder Usage-Eintrag.
-- UI kann Runs unabhaengig vom Chatverlauf anzeigen.
+- UI kann Runs unabhängig vom Chatverlauf anzeigen.
 - Fehler in Agent-Aufrufen sind im Run sichtbar.
 
-## Phase 4: API fuer Personal-Produkt neu schneiden
+## Phase 4: API für Personal-Produkt neu schneiden
 
 ### Ziel
 
@@ -320,15 +320,15 @@ Settings und Betrieb:
 
 ### Akzeptanzkriterien
 
-- OpenAPI-Spec enthaelt keine Enterprise-/DSGVO-Endpunkte.
+- OpenAPI-Spec enthält keine Enterprise-/DSGVO-Endpunkte.
 - API-Doku wird aus der Spec generiert.
-- Drift-Test prueft Spec gegen Flask-Routen.
+- Drift-Test prüft Spec gegen Flask-Routen.
 
 ## Phase 5: CLI neu ausrichten
 
 ### Ziel
 
-CLI wird ein persoenliches Steuerungs- und Debug-Werkzeug.
+CLI wird ein persönliches Steuerungs- und Debug-Werkzeug.
 
 ### Ziel-Kommandos
 
@@ -425,7 +425,7 @@ scripts/windows/
   uninstall_service_nssm.ps1
 ```
 
-NSSM bleibt optional. Fuer normale Nutzer ist ein User-Startup oder direkter
+NSSM bleibt optional. Für normale Nutzer ist ein User-Startup oder direkter
 Desktop-Start vorzuziehen.
 
 ### Linux-Integration
@@ -444,9 +444,9 @@ scripts/linux/
 
 Empfehlung:
 
-- `systemd --user` fuer Autostart.
-- `.desktop` Datei fuer App-Menue.
-- Keine root-Pflicht fuer normale Installation.
+- `systemd --user` für Autostart.
+- `.desktop` Datei für App-Menü.
+- Keine root-Pflicht für normale Installation.
 
 ### Akzeptanzkriterien
 
@@ -459,7 +459,7 @@ Empfehlung:
 
 ### Ziel
 
-Die UI bildet die neue Personal-Informationsarchitektur ab und loest den
+Die UI bildet die neue Personal-Informationsarchitektur ab und löst den
 aktuellen Tab-/Panel-Monolithen schrittweise auf.
 
 ### Zielstruktur
@@ -500,27 +500,27 @@ static/js/
 
 ### Umbau-Reihenfolge
 
-1. Globale Navigation einfuehren:
+1. Globale Navigation einführen:
    - Studio
    - Agents
    - Workspace
    - Runs
    - Settings
 2. DSGVO-/Privacy-Panel entfernen.
-3. Agentenverwaltung aus dem Studio herausloesen.
+3. Agentenverwaltung aus dem Studio herauslösen.
 4. Workspace als eigenen Arbeitsraum bauen.
 5. Usage und Auto-Loop/Judge-Historie in Runs verschieben.
 6. API-Key- und Betriebszustand nach Settings verschieben.
 7. Inline-Handler und globale Zustandsvariablen reduzieren.
-8. Gemeinsame UI-Komponenten fuer Tabellen, Listen, Dialoge und Status-Chips
-   einfuehren.
+8. Gemeinsame UI-Komponenten für Tabellen, Listen, Dialoge und Status-Chips
+   einführen.
 
 ### UX-Regeln
 
-- Studio ist immer sofort arbeitsfaehig.
-- Eine primaere Aufgabe pro Screen.
+- Studio ist immer sofort arbeitsfähig.
+- Eine primäre Aufgabe pro Screen.
 - Kein DSGVO-Vokabular in der Personal-UI.
-- Agenten koennen schnell getestet werden.
+- Agenten können schnell getestet werden.
 - Workspace-Dateien sind klar referenzierbar.
 - Runs zeigen Status, Dauer, beteiligte Agenten und Usage.
 
@@ -530,14 +530,14 @@ static/js/
 - Agent-CRUD ist nicht mehr im Chat-Hauptscreen.
 - Workspace ist eigener Bereich.
 - Runs/Usage sind eigener Bereich.
-- Settings enthaelt lokale Pfade und API-Key-Status.
+- Settings enthält lokale Pfade und API-Key-Status.
 
 ## Phase 8: Provider und Agenten
 
 ### Ziel
 
-Provider-Anbindung bleibt eine Kernstaerke, wird aber fuer Einzelnutzer
-einfacher und verstaendlicher.
+Provider-Anbindung bleibt eine Kernstärke, wird aber für Einzelnutzer
+einfacher und verständlicher.
 
 ### Aufgaben
 
@@ -555,7 +555,7 @@ einfacher und verstaendlicher.
   - Endpoint erreichbar
   - Modell antwortet
   - Latenz messen
-- Agent-Rollen einfuehren:
+- Agent-Rollen einführen:
   - Writer
   - Reviewer
   - Critic
@@ -570,31 +570,31 @@ einfacher und verstaendlicher.
 
 - Ein neuer Nutzer kann ohne CLI einen Agenten anlegen und testen.
 - Ollama funktioniert ohne API-Key.
-- Custom Provider bleiben moeglich.
-- Provider-Fehler sind nutzerverstaendlich.
+- Custom Provider bleiben möglich.
+- Provider-Fehler sind nutzerverständlich.
 
 ## Phase 9: Workspace und lokale Sicherheit
 
 ### Ziel
 
-Der Workspace wird zum persoenlichen Arbeitsraum fuer Kontext, Outputs und
+Der Workspace wird zum persönlichen Arbeitsraum für Kontext, Outputs und
 Notizen, ohne unkontrollierte Dateizugriffe.
 
 ### Aufgaben
 
 - Workspace-Pfad in Settings konfigurierbar machen.
-- Versteckte Ordner weiter fuer Agenten unsichtbar halten.
+- Versteckte Ordner weiter für Agenten unsichtbar halten.
 - Workspace-API und Agent-Directives angleichen:
   - Entscheiden, ob UI/API versteckte Dateien sehen darf.
-  - Agenten duerfen sie nicht sehen.
-- Dateigroessenlimit fuer `@workspace` und `@read` einfuehren.
+  - Agenten dürfen sie nicht sehen.
+- Dateigrößenlimit für `@workspace` und `@read` einführen.
 - Optionales Kontext-Budget pro Agent oder Conversation.
-- Output-Ordner fuer `@save` klar anzeigen.
-- Export/Backup fuer Conversations und Workspace anbieten.
+- Output-Ordner für `@save` klar anzeigen.
+- Export/Backup für Conversations und Workspace anbieten.
 
 ### Akzeptanzkriterien
 
-- Agenten koennen nicht aus dem Workspace ausbrechen.
+- Agenten können nicht aus dem Workspace ausbrechen.
 - Grosse Dateien werden nicht versehentlich komplett in Prompts geladen.
 - Nutzer sieht, welche Dateien als Kontext verwendet werden.
 
@@ -602,7 +602,7 @@ Notizen, ohne unkontrollierte Dateizugriffe.
 
 ### Ziel
 
-Conclave kann auf Windows und Linux veroeffentlicht und installiert werden.
+Conclave kann auf Windows und Linux veröffentlicht und installiert werden.
 
 ### Kurzfristige Distribution
 
@@ -616,7 +616,7 @@ Windows:
 
 - Portable ZIP
 - Optional Installer
-- Optional Startmenue-Eintrag
+- Optional Startmenü-Eintrag
 
 Linux:
 
@@ -625,7 +625,7 @@ Linux:
 - Optional AppImage
 - Optional `.deb`
 
-### Packaging-Pruefungen
+### Packaging-Prüfungen
 
 - Keine `.env` im Artefakt.
 - Keine lokalen Workspace-Daten.
@@ -644,7 +644,7 @@ Linux:
 
 ### Ziel
 
-Die Testsuite wird auf das Personal-Produkt ausgerichtet und laeuft unter
+Die Testsuite wird auf das Personal-Produkt ausgerichtet und läuft unter
 Windows und Linux.
 
 ### Testmatrix
@@ -677,11 +677,11 @@ Application:
 Infrastructure:
 
 - SQLite-Schema
-- Verschluesselung
+- Verschlüsselung
 - Provider-Profile
 - UniversalAdapter
 - ResilientAdapter
-- Runtime-Pfade fuer Windows/Linux
+- Runtime-Pfade für Windows/Linux
 
 API:
 
@@ -712,27 +712,27 @@ CLI:
 
 ### Akzeptanzkriterien
 
-- `python -m pytest tests/ -q` laeuft lokal.
-- CI laeuft auf Windows und Linux.
+- `python -m pytest tests/ -q` läuft lokal.
+- CI läuft auf Windows und Linux.
 - Kein Test macht echte Provider-Calls.
 
 ## Phase 12: Migration aus bestehenden Installationen
 
 ### Ziel
 
-Bestehende lokale Daten koennen soweit sinnvoll uebernommen werden.
+Bestehende lokale Daten können soweit sinnvoll übernommen werden.
 
 ### Strategie
 
 - Keine automatische Enterprise-zu-Personal-Migration beim ersten Start ohne
   Backup.
-- Migration explizit ueber Kommando:
+- Migration explizit über Kommando:
 
 ```text
 conclave migrate-personal --from <old-db> --backup
 ```
 
-### Uebernehmen
+### Übernehmen
 
 - Conversations
 - Messages
@@ -741,7 +741,7 @@ conclave migrate-personal --from <old-db> --backup
 - Provider-Konfigurationen
 - Usage/Audit als Run-/Usage-Historie, soweit passend
 
-### Nicht uebernehmen
+### Nicht übernehmen
 
 - Consent
 - DPA
@@ -753,13 +753,13 @@ conclave migrate-personal --from <old-db> --backup
 
 - Migration legt vorher ein Backup an.
 - Migration ist idempotent oder bricht klar ab.
-- Nutzer erhaelt einen Bericht, was uebernommen und was ignoriert wurde.
+- Nutzer erhält einen Bericht, was übernommen und was ignoriert wurde.
 
 ## Phase 13: Release-Vorbereitung
 
 ### Ziel
 
-Das Projekt ist oeffentlich verstaendlich, installierbar und wartbar.
+Das Projekt ist öffentlich verständlich, installierbar und wartbar.
 
 ### Aufgaben
 
@@ -776,14 +776,14 @@ Das Projekt ist oeffentlich verstaendlich, installierbar und wartbar.
   - Text von drei Agenten reviewen lassen
   - Architekturentscheidung diskutieren
   - Datei im Workspace als Kontext nutzen
-  - Judge-Agent zur Qualitaetspruefung verwenden
+  - Judge-Agent zur Qualitätsprüfung verwenden
 - Lizenz festlegen.
-- Security-Hinweise fuer lokale API ergaenzen.
+- Security-Hinweise für lokale API ergänzen.
 - Release-Checkliste erstellen.
 
 ### Release-Checkliste
 
-- Tests gruen auf Windows und Linux.
+- Tests grün auf Windows und Linux.
 - Keine lokalen Secrets.
 - Keine lokalen Workspace-Dateien.
 - Keine generierten Cache-Artefakte.
@@ -807,28 +807,28 @@ Massnahme:
 Massnahme:
 
 - Erst `pipx install` und `conclave desktop`.
-- Installer/AppImage spaeter.
+- Installer/AppImage später.
 
 ### Risiko: Windows- und Linux-Pfade divergieren
 
 Massnahme:
 
-- Zentrales Runtime-Modul fuer Pfade.
-- Tests fuer Pfadlogik mit simulierten Plattformen.
+- Zentrales Runtime-Modul für Pfade.
+- Tests für Pfadlogik mit simulierten Plattformen.
 
-### Risiko: Workspace wird unsicher oder unuebersichtlich
+### Risiko: Workspace wird unsicher oder unübersichtlich
 
 Massnahme:
 
 - Harte Workspace-Grenze.
-- Dateigroessenlimits.
+- Dateigrößenlimits.
 - Sichtbarkeit von Kontextdateien in der UI.
 
 ### Risiko: Entfernen von DSGVO-Code zerbricht Nebeneffekte
 
 Massnahme:
 
-- Erst API-/CLI-Oberflaeche entfernen.
+- Erst API-/CLI-Oberfläche entfernen.
 - Dann Services und Repositories.
 - Danach Schema bereinigen.
 - Tests nach jedem Schritt.
@@ -839,24 +839,24 @@ Massnahme:
 2. Neues Produktziel und README-Entwurf.
 3. DSGVO-Routen und CLI-Kommandos entfernen.
 4. DSGVO-Domain/Application/Repository-Code entfernen.
-5. Run-/Usage-Modell einfuehren.
-6. API-Spec fuer Personal aktualisieren.
-7. Runtime-Pfade Windows/Linux einfuehren.
+5. Run-/Usage-Modell einführen.
+6. API-Spec für Personal aktualisieren.
+7. Runtime-Pfade Windows/Linux einführen.
 8. `conclave desktop/server/web` implementieren.
 9. UI-Navigation auf Studio/Agents/Workspace/Runs/Settings umbauen.
-10. Workspace-Limits und Sichtbarkeitsregeln haerten.
+10. Workspace-Limits und Sichtbarkeitsregeln härten.
 11. CI-Matrix Windows/Linux.
-12. Release-Artefakt und oeffentliche README.
+12. Release-Artefakt und öffentliche README.
 
 ## Minimaler erster Meilenstein
 
-Der erste veroeffentlichbare Personal-Meilenstein ist erreicht, wenn:
+Der erste veröffentlichbare Personal-Meilenstein ist erreicht, wenn:
 
 - Conclave unter Windows und Linux lokal startet.
 - Ein Nutzer Agenten anlegen und testen kann.
-- Eine Conversation mit mehreren Agenten gefuehrt werden kann.
+- Eine Conversation mit mehreren Agenten geführt werden kann.
 - Auto-Loop und Judge funktionieren.
-- Workspace-Dateien als Kontext referenziert werden koennen.
+- Workspace-Dateien als Kontext referenziert werden können.
 - Usage sichtbar ist.
 - Keine DSGVO-/DPA-/Consent-Funktionen mehr in UI, API oder CLI sichtbar sind.
 - Tests unter Windows und Linux laufen.

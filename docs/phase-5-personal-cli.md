@@ -6,7 +6,7 @@
 
 ## Ziel
 
-Die CLI wurde als persoenliches Steuerungs- und Debug-Werkzeug erweitert. Sie
+Die CLI wurde als persönliches Steuerungs- und Debug-Werkzeug erweitert. Sie
 deckt nun Runtime-Start, Conversations, Agents, Workspace, Runs, Usage und
 Backup ab.
 
@@ -30,7 +30,7 @@ Backup ab.
   - `--api-url`
   - `--response-path`
   - `--message-format`
-- Workspace-Handler pruefen Pfade gegen `CONCLAVE_WORKSPACE`.
+- Workspace-Handler prüfen Pfade gegen `CONCLAVE_WORKSPACE`.
 - Backup erstellt ein lokales ZIP mit Workspace-Dateien und optionaler SQLite-DB.
 - CLI-Referenz angelegt:
   - `docs/referenz/cli.md`
@@ -61,8 +61,8 @@ Ergebnis:
 53 passed
 ```
 
-## Naechster sinnvoller Schritt
+## Nächster sinnvoller Schritt
 
-Phase 6 sollte die Multiplattform-Runtime einziehen: zentrale Pfade fuer
+Phase 6 sollte die Multiplattform-Runtime einziehen: zentrale Pfade für
 Windows/Linux, freie Portwahl, Browser-/Desktop-Start, Log-Verzeichnisse und
 plattformgetrennte Startskripte.

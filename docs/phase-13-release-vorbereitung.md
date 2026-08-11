@@ -6,12 +6,12 @@
 
 ## Ziel
 
-Das Projekt soll oeffentlich verstaendlich, installierbar, wartbar und fuer
-einen ersten Personal-Release pruefbar sein.
+Das Projekt soll öffentlich verständlich, installierbar, wartbar und für
+einen ersten Personal-Release prüfbar sein.
 
 ## Umgesetzt
 
-- README um Release-relevante Einstiegspunkte ergaenzt:
+- README um Release-relevante Einstiegspunkte ergänzt:
   - Windows Quickstart
   - Linux Quickstart
   - Provider
@@ -26,13 +26,13 @@ einen ersten Personal-Release pruefbar sein.
   - Text von drei Agenten reviewen lassen
   - Architekturentscheidung diskutieren
   - Datei im Workspace als Kontext nutzen
-  - Judge-Agent zur Qualitaetspruefung verwenden
+  - Judge-Agent zur Qualitätsprüfung verwenden
 - Lizenz festgelegt:
   - PolyForm Noncommercial License 1.0.0
-- Security-Hinweise fuer lokale API, Secrets, Workspace und Artefakte ergaenzt.
-- Release Notes fuer `v0.1.0` vorbereitet.
+- Security-Hinweise für lokale API, Secrets, Workspace und Artefakte ergänzt.
+- Release Notes für `v0.1.0` vorbereitet.
 - Release-Checkliste aktualisiert.
-- Packaging-Guards fuer Lizenz, Release-Doku und Screenshots ergaenzt.
+- Packaging-Guards für Lizenz, Release-Doku und Screenshots ergänzt.
 
 ## Bewusst Noch Nicht Umgesetzt
 
@@ -40,10 +40,10 @@ einen ersten Personal-Release pruefbar sein.
 - Kein Windows-Installer.
 - Kein AppImage oder `.deb`.
 - Keine automatisch erzeugten GIFs.
-- Keine manuell bestaetigten Smoke-Tests auf frischen Windows-/Linux-Systemen.
+- Keine manuell bestätigten Smoke-Tests auf frischen Windows-/Linux-Systemen.
 
 Diese Punkte bleiben als Release-Hardening vor einer breiteren
-Veroeffentlichung offen.
+Veröffentlichung offen.
 
 ## Tests
 
@@ -74,6 +74,6 @@ Verifikation am 2026-08-11:
 
 ## Einordnung
 
-Phase 13 macht aus dem Umbau einen veroeffentlichbaren Schnitt: nicht perfekt
-ausinstalliert, aber erklaerbar, lizenzierbar, testbar und mit klaren
+Phase 13 macht aus dem Umbau einen veröffentlichbaren Schnitt: nicht perfekt
+ausinstalliert, aber erklärbar, lizenzierbar, testbar und mit klaren
 bekannten Grenzen.

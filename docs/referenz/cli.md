@@ -12,7 +12,7 @@ conclave desktop [--host 127.0.0.1] [--port 8000] [--debug]
 
 `desktop` startet aktuell den lokalen Server und oeffnet die Web-UI im Browser.
 Ein natives Desktopfenster folgt in der Multiplattform-Runtime.
-Wenn der bevorzugte Port belegt ist, waehlt `desktop` automatisch einen freien
+Wenn der bevorzugte Port belegt ist, wählt `desktop` automatisch einen freien
 Port.
 
 ## Conversations
@@ -68,10 +68,10 @@ conclave backup [--dir <backup_dir>]
 conclave migrate-personal --from <alte-db> [--to <ziel-db>] [--backup-dir <dir>] [--dry-run]
 ```
 
-Die Migration uebernimmt lokale Conversations, Messages, Participants, Agents
+Die Migration übernimmt lokale Conversations, Messages, Participants, Agents
 und Usage-/Run-Daten. Consent-, DPA- und Transfer-Policy-Daten werden bewusst
 ignoriert. Existiert die Ziel-DB bereits, wird vor dem Schreiben ein Backup
 angelegt.
 
-Alle Kommandos unterstuetzen `--json`, sofern sie strukturierte Ergebnisse
-zurueckgeben.
+Alle Kommandos unterstützen `--json`, sofern sie strukturierte Ergebnisse
+zurückgeben.

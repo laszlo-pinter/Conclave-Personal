@@ -11,19 +11,19 @@ beiden Zielplattformen Windows und Linux laufen.
 
 ## Umgesetzt
 
-- GitHub-Actions-Workflow fuer die Personal-CI angelegt:
+- GitHub-Actions-Workflow für die Personal-CI angelegt:
   - Windows latest
   - Ubuntu latest
   - Python 3.11
   - Python 3.12
 - CI installiert Conclave mit allen Entwicklungs-Extras:
   - `python -m pip install -e ".[dev-all]"`
-- CI fuehrt die komplette lokale Suite aus:
+- CI führt die komplette lokale Suite aus:
   - `python -m pytest`
 - Separater Build-Job erstellt Release-Artefakte:
   - Source Distribution
   - Wheel
-- Build-Job prueft die Artefakte auf Pflichtdateien:
+- Build-Job prüft die Artefakte auf Pflichtdateien:
   - `conclave-ui.html`
   - `static/openapi.json`
   - CLI Entry Points
@@ -58,12 +58,12 @@ python -m build --sdist --wheel
 ```
 
 Danach werden Wheel und Source Distribution auf Pflichtdateien und
-ausgeschlossene Laufzeitdaten geprueft.
+ausgeschlossene Laufzeitdaten geprüft.
 
 ## Keine Echten Provider-Calls
 
 Die Tests verwenden Fakes, Mocks oder In-Memory-Komponenten. Die CI setzt keine
-Provider-Secrets und enthaelt einen Guard-Test, der das versehentliche Einbauen
+Provider-Secrets und enthält einen Guard-Test, der das versehentliche Einbauen
 echter Provider-API-Keys in den Workflow verhindert.
 
 ## Bewusst Noch Nicht Umgesetzt
@@ -72,7 +72,7 @@ echter Provider-API-Keys in den Workflow verhindert.
 - Kein UI-Browser-Smoke-Test mit Playwright.
 - Kein signierter Release aus der CI.
 
-Diese Punkte gehoeren in Phase 13 oder in einen separaten Release-Hardening-
+Diese Punkte gehören in Phase 13 oder in einen separaten Release-Hardening-
 Schnitt.
 
 ## Tests
@@ -101,6 +101,6 @@ Verifikation am 2026-08-11:
 
 ## Einordnung
 
-Phase 11 macht die bestehende Personal-Suite plattformfaehig und release-nah.
-Damit ist der naechste Umbau nicht mehr nur lokal auf einer Maschine abgesichert,
+Phase 11 macht die bestehende Personal-Suite plattformfähig und release-nah.
+Damit ist der nächste Umbau nicht mehr nur lokal auf einer Maschine abgesichert,
 sondern als Windows-/Linux-Matrix reproduzierbar.

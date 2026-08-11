@@ -7,16 +7,16 @@ versehentlich zu verlieren.
 
 ## Leitregel
 
-Geloescht wird nur, was fuer einen der folgenden Zwecke nicht mehr benoetigt
+Gelöscht wird nur, was für einen der folgenden Zwecke nicht mehr benötigt
 wird:
 
-- Ausfuehrung von `conclave desktop`, `conclave server`, `conclave web`
+- Ausführung von `conclave desktop`, `conclave server`, `conclave web`
 - Packaging mit `python -m build --sdist --wheel`
 - Tests mit `python -m pytest`
 - aktueller Personal-Release `v0.1.0`
 
 Lokale Secrets, Backups und Workspace-Dateien werden separat behandelt und erst
-nach expliziter Zusatzfreigabe geloescht.
+nach expliziter Zusatzfreigabe gelöscht.
 
 ## Behalten
 
@@ -59,12 +59,12 @@ nach expliziter Zusatzfreigabe geloescht.
 
 - `tests/`
 
-Tests sind fuer die Ausfuehrung des installierten Programms nicht noetig, aber
-fuer diesen Release-Schnitt noch bewusst Teil des Worktrees.
+Tests sind für die Ausführung des installierten Programms nicht nötig, aber
+für diesen Release-Schnitt noch bewusst Teil des Worktrees.
 
 ## Phase A: Generierte Artefakte Entfernen
 
-Sicher loeschbar, weil jederzeit rekonstruierbar:
+Sicher löschbar, weil jederzeit rekonstruierbar:
 
 - `__pycache__/`
 - `.pytest_cache/`
@@ -82,9 +82,9 @@ python -m pytest
 python -m build --sdist --wheel
 ```
 
-## Phase B: Alte Enterprise-/Docker-/Guard-Oberflaeche Entfernen
+## Phase B: Alte Enterprise-/Docker-/Guard-Oberfläche Entfernen
 
-Diese Dateien gehoeren zum alten Server-/Enterprise-/Guard-Betrieb und sind
+Diese Dateien gehören zum alten Server-/Enterprise-/Guard-Betrieb und sind
 nicht Teil des Personal-Startpfads:
 
 - `conclave_app.py`
@@ -157,8 +157,8 @@ python -m build --sdist --wheel
 
 ## Phase D: Lokale Laufzeitdaten Nur Nach Extra-Freigabe
 
-Diese Dateien/Ordner sind nicht fuer den Quell-Release noetig, koennen aber
-persoenliche Daten oder Secrets enthalten:
+Diese Dateien/Ordner sind nicht für den Quell-Release nötig, können aber
+persönliche Daten oder Secrets enthalten:
 
 - `.env`
 - `workspace/`
@@ -170,15 +170,15 @@ persoenliche Daten oder Secrets enthalten:
 
 Empfehlung:
 
-- `.env` nicht loeschen, sondern ausserhalb des Repo sichern oder als lokale
+- `.env` nicht löschen, sondern ausserhalb des Repo sichern oder als lokale
   Datei behalten.
-- `workspace/` und `backups/` nur loeschen, wenn ihr Inhalt nicht mehr
-  benoetigt wird.
+- `workspace/` und `backups/` nur löschen, wenn ihr Inhalt nicht mehr
+  benötigt wird.
 - `logs/`, `mcp-filesystem.cmd`, `migration-extras.tgz` und
-  `Conclave.code-workspace` sind wahrscheinlich loeschbar, brauchen aber wegen
+  `Conclave.code-workspace` sind wahrscheinlich löschbar, brauchen aber wegen
   Lokalbezug eine explizite Freigabe.
 
-## Phase E: Abschlusspruefung
+## Phase E: Abschlussprüfung
 
 Nach allen freigegebenen Bereinigungsschritten:
 
@@ -188,10 +188,10 @@ python -m build --sdist --wheel
 python -m conclave.cli.main --help
 ```
 
-Artefaktpruefung:
+Artefaktprüfung:
 
-- Wheel enthaelt UI-Assets und CLI Entry Points.
-- Source Distribution enthaelt aktuelle Release-Doku und Screenshots.
+- Wheel enthält UI-Assets und CLI Entry Points.
+- Source Distribution enthält aktuelle Release-Doku und Screenshots.
 - Keine lokalen Workspace-Daten.
 - Keine Datenbanken.
 - Keine Keys.
@@ -202,10 +202,10 @@ Artefaktpruefung:
 
 Empfohlene Reihenfolge:
 
-1. Phase A ausfuehren.
-2. Tests und Build pruefen.
-3. Phase B ausfuehren.
-4. Tests und Build pruefen.
-5. Phase C ausfuehren.
-6. Tests und Build pruefen.
+1. Phase A ausführen.
+2. Tests und Build prüfen.
+3. Phase B ausführen.
+4. Tests und Build prüfen.
+5. Phase C ausführen.
+6. Tests und Build prüfen.
 7. Phase D einzeln entscheiden.

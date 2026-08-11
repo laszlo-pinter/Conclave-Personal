@@ -2,15 +2,15 @@
 
 ## Vor Dem Build
 
-- `python -m pytest` ist gruen.
-- CI-Matrix ist gruen:
+- `python -m pytest` ist grün.
+- CI-Matrix ist grün:
   - Windows latest mit Python 3.11 und 3.12
   - Ubuntu latest mit Python 3.11 und 3.12
 - `static/openapi.json` ist aktuell.
 - README beschreibt `pipx install conclave` und `conclave desktop`.
 - LICENSE ist vorhanden und `pyproject.toml` deklariert `LicenseRef-PolyForm-Noncommercial-1.0.0`.
 - Release Notes sind aktuell.
-- Security-Hinweise fuer lokale API sind aktuell.
+- Security-Hinweise für lokale API sind aktuell.
 - Beispiel-Workflows sind aktuell.
 - Screenshots sind aktuell:
   - `docs/assets/screenshots/conclave-studio-desktop.png`
@@ -51,7 +51,7 @@ conclave --json migrate-personal --from <alte-test-db> --to <temp-ziel-db> --dry
 - UI ist unter `http://127.0.0.1:<port>` erreichbar.
 - Daten liegen unter `%LOCALAPPDATA%\Conclave`.
 - Config und Secret-Key liegen unter `%APPDATA%\Conclave`.
-- Workspace liegt standardmaessig unter `%USERPROFILE%\Conclave\workspace`.
+- Workspace liegt standardmäßig unter `%USERPROFILE%\Conclave\workspace`.
 
 ## Linux
 
@@ -59,24 +59,24 @@ conclave --json migrate-personal --from <alte-test-db> --to <temp-ziel-db> --dry
 - UI ist unter `http://127.0.0.1:<port>` erreichbar.
 - Daten liegen unter `$XDG_DATA_HOME/conclave` oder `~/.local/share/conclave`.
 - Config liegt unter `$XDG_CONFIG_HOME/conclave` oder `~/.config/conclave`.
-- Workspace liegt standardmaessig unter `~/Conclave/workspace`.
+- Workspace liegt standardmäßig unter `~/Conclave/workspace`.
 
 ## Nach Dem Build
 
-- Wheel enthaelt:
+- Wheel enthält:
   - CLI Entry Points
   - `conclave-ui.html`
   - `static/`
   - Windows-/Linux-Skripte
-- Source Distribution enthaelt:
+- Source Distribution enthält:
   - `LICENSE`
   - Release-Doku
   - Screenshots
-- Artefakt enthaelt keine lokalen Workspace-Daten.
-- Artefakt enthaelt keine DSGVO-/Legal-Altpfade.
+- Artefakt enthält keine lokalen Workspace-Daten.
+- Artefakt enthält keine DSGVO-/Legal-Altpfade.
 - `conclave migrate-personal --dry-run` liefert einen Report und schreibt keine Ziel-DB.
-- Release-Notes nennen bekannte Einschraenkungen:
+- Release-Notes nennen bekannte Einschränkungen:
   - kein Installer
   - kein AppImage
-  - Restore ist in v0.1.0 nur Backup-Validierung und schreibt keine Daten zurueck
-  - Migration unterstuetzt aktuell SQLite, nicht Postgres
+  - Restore ist in v0.1.0 nur Backup-Validierung und schreibt keine Daten zurück
+  - Migration unterstützt aktuell SQLite, nicht Postgres

@@ -19,7 +19,7 @@ Getrackte generierte Artefakte wurden aus dem Git-Index entfernt:
 - `src/**/__pycache__/`
 - `tests/**/__pycache__/`
 
-Die Dateien wurden nicht lokal geloescht. Sie bleiben durch `.gitignore`
+Die Dateien wurden nicht lokal gelöscht. Sie bleiben durch `.gitignore`
 aus der Versionskontrolle heraus.
 
 Nicht automatisch bereinigt:
@@ -38,7 +38,7 @@ Aktives Python:
 Python 3.14.6
 ```
 
-Installierte Dev-Abhaengigkeiten:
+Installierte Dev-Abhängigkeiten:
 
 ```text
 python -m pip install -e ".[dev-all]"

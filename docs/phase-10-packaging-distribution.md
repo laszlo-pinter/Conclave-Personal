@@ -11,7 +11,7 @@ Nutzer Docker, Repo-Layout oder manuelle Static-Dateien brauchen.
 
 ## Umgesetzt
 
-- Basispaket enthaelt Runtime-Abhaengigkeiten:
+- Basispaket enthält Runtime-Abhängigkeiten:
   - `cryptography`
   - `flask`
   - `flask-limiter`
@@ -20,11 +20,11 @@ Nutzer Docker, Repo-Layout oder manuelle Static-Dateien brauchen.
   - `openai`
   - `postgres`
   - `mcp`
-- UI-Assets werden distributionsfaehig gefunden:
+- UI-Assets werden distributionsfähig gefunden:
   - Source-Checkout: Repo-Root
   - installierte Distribution: `share/conclave`
   - Override: `CONCLAVE_ASSET_DIR`
-- Release-Dateien werden ueber `pyproject.toml` und `MANIFEST.in`
+- Release-Dateien werden über `pyproject.toml` und `MANIFEST.in`
   aufgenommen:
   - `conclave-ui.html`
   - `static/`
@@ -86,7 +86,7 @@ Danach liegen Artefakte unter `dist/`.
 - Keine signierten Artefakte.
 - Keine automatische Release-Pipeline.
 
-Diese Punkte gehoeren in Phase 13 oder einen separaten Release-Schnitt.
+Diese Punkte gehören in Phase 13 oder einen separaten Release-Schnitt.
 
 ## Tests
 
@@ -105,5 +105,5 @@ python -m pytest tests\runtime\test_assets.py tests\packaging\test_distribution_
 
 Phase 10 macht Conclave installierbar und verhindert, dass die lokale Web-UI
 beim Wechsel vom Source-Checkout zum Wheel verschwindet. Der eigentliche
-Release-Prozess bleibt absichtlich leicht: Build, pruefen, Artefakt
-veroeffentlichen.
+Release-Prozess bleibt absichtlich leicht: Build, prüfen, Artefakt
+veröffentlichen.

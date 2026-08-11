@@ -2,11 +2,11 @@
 
 ## Ziel
 
-Die Conclave-UI wird fuer ein persoenliches Multi-Agent-Arbeitswerkzeug neu
+Die Conclave-UI wird für ein persönliches Multi-Agent-Arbeitswerkzeug neu
 geschnitten. Der bisherige Ansatz mit vielen Funktionen in einem Bedienraum
-wird durch fuenf fachliche Arbeitsraeume ersetzt.
+wird durch fünf fachliche Arbeitsräume ersetzt.
 
-Die UI ist keine Enterprise-Konsole. Sie ist ein lokales Arbeitsstudio fuer
+Die UI ist keine Enterprise-Konsole. Sie ist ein lokales Arbeitsstudio für
 einzelne Nutzer.
 
 ## Globale Navigation
@@ -17,14 +17,14 @@ einzelne Nutzer.
 - Runs
 - Settings
 
-Globale Navigation trennt Arbeitsraeume. Lokale Navigation strukturiert nur
+Globale Navigation trennt Arbeitsräume. Lokale Navigation strukturiert nur
 innerhalb eines Arbeitsraums.
 
 ## 1. Studio
 
 ### Zweck
 
-Studio ist der primaere Arbeitsraum fuer aktive Conversations.
+Studio ist der primäre Arbeitsraum für aktive Conversations.
 
 ### Inhalte
 
@@ -50,12 +50,12 @@ Studio ist der primaere Arbeitsraum fuer aktive Conversations.
 
 ### Zweck
 
-Agents ist der Verwaltungsraum fuer wiederverwendbare KI-Teilnehmer.
+Agents ist der Verwaltungsraum für wiederverwendbare KI-Teilnehmer.
 
 ### Inhalte
 
 - Agentenliste
-- Agent anlegen, bearbeiten, loeschen
+- Agent anlegen, bearbeiten, löschen
 - Rolle/System-Prompt
 - Provider
 - Modell
@@ -79,37 +79,37 @@ Startrollen:
 
 ### Zweck
 
-Workspace ist der lokale Datenraum fuer Kontext, Notizen und Outputs.
+Workspace ist der lokale Datenraum für Kontext, Notizen und Outputs.
 
 ### Inhalte
 
-- Dateiuebersicht
+- Dateiübersicht
 - Textdateien lesen
 - Datei hochladen oder Text ablegen
-- `@workspace/...` Referenzen kopieren/einfuegen
+- `@workspace/...` Referenzen kopieren/einfügen
 - Output-Ordner anzeigen
-- Sichtbarkeit fuer Agenten erklaeren
+- Sichtbarkeit für Agenten erklären
 
 ### Sicherheitsregeln
 
-- Agenten duerfen nicht aus dem Workspace ausbrechen.
-- Versteckte Ordner sind fuer Agenten unsichtbar.
-- Grosse Dateien brauchen Limits oder explizite Bestaetigung.
-- Kontext wird nicht automatisch vollstaendig geladen.
+- Agenten dürfen nicht aus dem Workspace ausbrechen.
+- Versteckte Ordner sind für Agenten unsichtbar.
+- Grosse Dateien brauchen Limits oder explizite Bestätigung.
+- Kontext wird nicht automatisch vollständig geladen.
 
 ## 4. Runs
 
 ### Zweck
 
-Runs macht Arbeitsschritte sichtbar, die ueber einzelne Chat-Messages
+Runs macht Arbeitsschritte sichtbar, die über einzelne Chat-Messages
 hinausgehen.
 
 ### Inhalte
 
 - Invoke-Historie
-- Orchestrierungslaeufe
+- Orchestrierungsläufe
 - Auto-Loops
-- Judge-Laeufe
+- Judge-Läufe
 - Status
 - Dauer
 - beteiligte Agenten
@@ -118,14 +118,14 @@ hinausgehen.
 
 ### Ziel
 
-Der Nutzer soll sehen koennen, was gelaufen ist, was es gekostet hat und wo
+Der Nutzer soll sehen können, was gelaufen ist, was es gekostet hat und wo
 ein Lauf fehlgeschlagen ist.
 
 ## 5. Settings
 
 ### Zweck
 
-Settings buendelt lokale App-Konfiguration.
+Settings bündelt lokale App-Konfiguration.
 
 ### Inhalte
 
@@ -176,18 +176,18 @@ static/js/
 
 ## Migrationsreihenfolge
 
-1. Globale Navigation auf die fuenf Personal-Bereiche umstellen.
+1. Globale Navigation auf die fünf Personal-Bereiche umstellen.
 2. Privacy-/DSGVO-Panel entfernen.
-3. Agentenverwaltung aus dem Studio herausloesen.
+3. Agentenverwaltung aus dem Studio herauslösen.
 4. Workspace als eigenen Bereich bauen.
 5. Usage, Judge und Auto-Loop-Historie in Runs sammeln.
 6. API-Key-Status, Datenpfade und Backup nach Settings verschieben.
-7. Inline-Handler und globale UI-Zustaende schrittweise reduzieren.
+7. Inline-Handler und globale UI-Zustände schrittweise reduzieren.
 
 ## UX-Regeln
 
 - Erste Ansicht ist Studio.
-- Eine primaere Aufgabe pro Screen.
+- Eine primäre Aufgabe pro Screen.
 - Keine DSGVO-Begriffe in der Personal-UI.
 - Agenten sind schnell testbar.
 - Workspace-Referenzen sind sichtbar und kopierbar.

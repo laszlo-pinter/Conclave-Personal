@@ -1,7 +1,7 @@
-# Sicherheit Fuer Conclave Personal
+# Sicherheit Für Conclave Personal
 
-Conclave Personal ist als lokales Werkzeug fuer einzelne Nutzer gedacht. Die
-lokale API ist ein technischer Betriebsmodus, kein oeffentliches Internet-
+Conclave Personal ist als lokales Werkzeug für einzelne Nutzer gedacht. Die
+lokale API ist ein technischer Betriebsmodus, kein öffentliches Internet-
 Interface.
 
 ## Lokale API
@@ -11,7 +11,7 @@ Interface.
   hinter einem eigenen Schutzmechanismus betrieben wird.
 - Im `production`-Modus muss `CONCLAVE_API_KEY` gesetzt sein.
 - Browser-Clients senden den API-Key als Bearer-Token.
-- CORS wird ueber `CONCLAVE_ALLOWED_ORIGINS` begrenzt.
+- CORS wird über `CONCLAVE_ALLOWED_ORIGINS` begrenzt.
 
 Empfohlene lokale Produktion:
 
@@ -23,22 +23,22 @@ conclave desktop
 
 ## Secrets
 
-- Provider-API-Keys gehoeren nicht in Git.
+- Provider-API-Keys gehören nicht in Git.
 - `.env`, `*.key`, `*.pem`, lokale DBs und Logs sind aus Git und den Release-
   Artefakten ausgeschlossen.
-- Agent-Keys werden lokal verschluesselt gespeichert, wenn sie in der DB
+- Agent-Keys werden lokal verschlüsselt gespeichert, wenn sie in der DB
   abgelegt werden.
 - `CONCLAVE_SECRET_KEY` oder `CONCLAVE_SECRET_KEY_FILE` nach der Erstanlage
-  nicht ohne Backup wechseln, sonst koennen verschluesselte Werte unlesbar
+  nicht ohne Backup wechseln, sonst können verschlüsselte Werte unlesbar
   werden.
 
 ## Workspace
 
 - Workspace-Zugriffe bleiben innerhalb des konfigurierten Workspace-Roots.
-- Pfad-Traversal und absolute Ausbrueche werden blockiert.
+- Pfad-Traversal und absolute Ausbrüche werden blockiert.
 - Versteckte Pfade mit Komponenten wie `.private/` werden nicht gelesen oder
   angezeigt.
-- Dateigroessenlimits verhindern versehentliche Vollimporte grosser Dateien in
+- Dateigrößenlimits verhindern versehentliche Vollimporte grosser Dateien in
   Agent-Kontexte.
 
 ## Provider
@@ -46,12 +46,12 @@ conclave desktop
 - Echte Provider-Calls laufen nur, wenn ein Agent mit passendem Provider, Modell
   und Key konfiguriert ist.
 - Tests und CI verwenden Mocks, Fakes oder lokale In-Memory-Komponenten.
-- Lokale Ollama-Modelle koennen ohne API-Key betrieben werden.
+- Lokale Ollama-Modelle können ohne API-Key betrieben werden.
 
 ## Release-Artefakte
 
 Vor einem Release werden Wheel und Source Distribution auf verbotene Inhalte
-geprueft:
+geprüft:
 
 - keine Workspace-Daten
 - keine Datenbanken

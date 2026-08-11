@@ -7,12 +7,12 @@
 ## Ziel
 
 Die Web-UI bildet die Personal-Informationsarchitektur sichtbar ab:
-Studio, Agents, Workspace, Runs und Settings sind eigenstaendige
-Arbeitsraeume. Die UI zeigt kein DSGVO-/Enterprise-Produkt mehr.
+Studio, Agents, Workspace, Runs und Settings sind eigenständige
+Arbeitsräume. Die UI zeigt kein DSGVO-/Enterprise-Produkt mehr.
 
 ## Umgesetzt
 
-- Globale Navigation auf fuenf Personal-Bereiche umgestellt:
+- Globale Navigation auf fünf Personal-Bereiche umgestellt:
   - Studio
   - Agents
   - Files
@@ -21,16 +21,16 @@ Arbeitsraeume. Die UI zeigt kein DSGVO-/Enterprise-Produkt mehr.
 - Der separate Usage-Tab wurde entfernt.
 - Usage ist jetzt Teil des Runs-Arbeitsraums.
 - `Registry` wurde in der UI zu `Agents`.
-- Agents hat eine eigene Hauptflaeche mit:
+- Agents hat eine eigene Hauptfläche mit:
   - Agentenliste
   - Agent-Erstellen-Aktion
   - Provider-Status
-  - Modelluebersicht
-- Workspace hat eine eigene Hauptflaeche mit:
-  - Dateiuebersicht
+  - Modellübersicht
+- Workspace hat eine eigene Hauptfläche mit:
+  - Dateiübersicht
   - Upload
   - Text ablegen
-- Settings hat eine eigene Hauptflaeche mit:
+- Settings hat eine eigene Hauptfläche mit:
   - Runtime-Modus
   - Host und Port
   - DB-Provider und DB-Pfad
@@ -39,7 +39,7 @@ Arbeitsraeume. Die UI zeigt kein DSGVO-/Enterprise-Produkt mehr.
   - Backup-Erstellung
 - Neues UI-Modul:
   - `static/js/features/settings.js`
-- Bestehende Tab-Logik wurde auf die Personal-Arbeitsraeume angepasst.
+- Bestehende Tab-Logik wurde auf die Personal-Arbeitsräume angepasst.
 - Ein bestehender Scope-Fehler in `static/js/features/agents.js` wurde
   beseitigt, sodass `testAgent()` wieder global erreichbar ist.
 
@@ -67,5 +67,5 @@ python -m pytest tests\ui tests\api\test_personal_operations_api.py tests\api\te
 ## Einordnung
 
 Phase 7 ist der erste sichtbare Produktschnitt. Sie ersetzt noch nicht die
-gesamte Frontend-Architektur, schafft aber die Arbeitsraeume, auf denen die
-naechsten Phasen sauber aufbauen koennen.
+gesamte Frontend-Architektur, schafft aber die Arbeitsräume, auf denen die
+nächsten Phasen sauber aufbauen können.
