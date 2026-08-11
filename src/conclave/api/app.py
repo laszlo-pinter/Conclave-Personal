@@ -13,7 +13,7 @@ except ImportError:
         "Bitte installieren mit: pip install conclave[api]"
     )
 
-from conclave.cli.handler import CLIHandler
+from conclave.cli.handler import CLIHandler, CLIResult
 from conclave.domain.errors import (
     AdapterNotFound,
     AgentAlreadyExists,
