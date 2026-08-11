@@ -60,4 +60,4 @@ geprüft:
 - keine Python-Caches
 - keine alten DSGVO-/Legal-Pfade
 
-Siehe auch: [Release-Checkliste](release-checkliste.md).
+Siehe auch: [Release Notes v0.1.0](release-notes-v0.1.0.md).

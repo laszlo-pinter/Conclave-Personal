@@ -18,7 +18,7 @@ def test_release_docs_exist():
         "docs/sicherheit.md",
         "docs/beispiel-workflows.md",
         "docs/release-notes-v0.1.0.md",
-        "docs/phase-13-release-vorbereitung.md",
+        "docs/index.md",
     ]
 
     for relative in required:

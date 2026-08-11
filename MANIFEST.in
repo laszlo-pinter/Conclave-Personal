@@ -9,10 +9,7 @@ recursive-include docs/assets/screenshots *.png
 include docs/index.md
 include docs/beispiel-workflows.md
 include docs/multi-agent-leitfaden.md
-include docs/personal-multiplattform-implementierungsplan.md
 include docs/personal-ui-architektur.md
-include docs/phase-*.md
-include docs/release-checkliste.md
 include docs/release-notes-v0.1.0.md
 include docs/sicherheit.md
 include docs/architektur/ports-adapter.md
@@ -20,7 +17,6 @@ include docs/flows/api-request.md
 include docs/flows/orchestrierung.md
 include docs/flows/workspace-directives.md
 recursive-include docs/referenz *.md
-include docs/contributor/pr-template.md
 recursive-exclude workspace *
 recursive-exclude .claude *
 recursive-exclude tests __pycache__ *.pyc
