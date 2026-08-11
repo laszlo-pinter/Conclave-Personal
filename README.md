@@ -1,3 +1,5 @@
+Dieses Projekt wurde ausschließlich von LLM-Modellen erstellt.
+
 # Conclave Personal
 
 Conclave Personal ist ein lokales Multi-Agent-Arbeitswerkzeug fuer einzelne
