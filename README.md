@@ -172,6 +172,9 @@ conclave agent-new local-judge \
   --role "Judge"
 ```
 
+Einen reproduzierbaren End-to-End-Test mit Claude, Gemini und GPT beschreibt
+der [Provider-Smoke-Test](docs/provider-smoke-test.md).
+
 ## Lokaler Schnellstart
 
 Der empfohlene Personal-CLI-Pfad ist:

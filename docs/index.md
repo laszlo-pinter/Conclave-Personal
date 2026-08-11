@@ -10,6 +10,7 @@
 
 ### Workflows
 - [Beispiel-Workflows](beispiel-workflows.md) — Review, Architektur, Workspace-Kontext und Judge
+- [Provider-Smoke-Test](provider-smoke-test.md) — Claude, Gemini und GPT lokal prüfen
 
 ### Product UI
 - [Personal UI Architektur](personal-ui-architektur.md) — Studio, Agents, Workspace, Runs, Settings
