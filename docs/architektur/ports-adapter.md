@@ -71,7 +71,7 @@ Wrapper in `src/conclave/infrastructure/universal/resilient.py`:
 | Audit/Usage | SQLiteAuditRepository | PostgresAuditRepository |
 | Verschlüsselung | Optional über CryptoService | Optional über CryptoService |
 | Schema-Migration | migrations.py im SQLite-Modus | migrations.py im Postgres-Modus |
-| Empfohlen für v0.1.0 | Lokaler Personal-Default | Fortgeschrittene/kompatible Setups |
+| Empfohlen für v0.1.x | Lokaler Personal-Default | Fortgeschrittene/kompatible Setups |
 
 ## Adapter-Registry
 

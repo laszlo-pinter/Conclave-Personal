@@ -72,7 +72,7 @@ vorbereitet.
 
 ## Regeln
 
-Dieses Repository ist für v0.1.0 selbstbeschreibend. Für Beiträge gelten:
+Dieses Repository ist für v0.1.1 selbstbeschreibend. Für Beiträge gelten:
 
 - Personal-first: keine Enterprise-/DSGVO-Oberflächen wieder einführen.
 - Keine Feature-Ausweitung während Release-Stabilisierung ohne konkreten

@@ -30,4 +30,5 @@
 - [Ports & Adapter](architektur/ports-adapter.md) — Interfaces, ProviderProfiles, ResilientAdapter
 
 ### Release
+- [Release Notes v0.1.1](release-notes-v0.1.1.md) — PyPI-Metadaten und Projektlinks
 - [Release Notes v0.1.0](release-notes-v0.1.0.md) — Erster Personal-Multiplattform-Schnitt

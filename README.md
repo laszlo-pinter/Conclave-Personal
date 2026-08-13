@@ -11,7 +11,7 @@ Der Nutzer bleibt die Steuerungsinstanz. Agenten sind Teilnehmer, keine
 Controller. Conversations, Workspace-Dateien, Agenten und Usage liegen
 standardmäßig lokal.
 
-> Status: v0.1.0 Alpha. Der Hauptpfad ist lokal, desktop-first und auf einzelne
+> Status: v0.1.1 Alpha. Der Hauptpfad ist lokal, desktop-first und auf einzelne
 > Nutzer unter Windows und Linux ausgerichtet.
 
 ![Conclave Studio](docs/assets/screenshots/conclave-studio-desktop.png)
@@ -96,7 +96,7 @@ Start-, Installations- und Autostart-Adapter:
 
 - Windows: Desktop-Start, optional User-Autostart oder NSSM-Service.
 - Linux: Desktop-Start, optional `systemd --user` und `.desktop` Datei.
-- Docker ist nicht Teil des v0.1.0-Endnutzerpfads.
+- Docker ist nicht Teil des v0.1.x-Endnutzerpfads.
 
 ## Installation
 
@@ -121,7 +121,7 @@ Vor der PyPI-Veröffentlichung wird aus dem gebauten Wheel getestet:
 ```bash
 python -m build --sdist --wheel
 python -m venv .venv-smoke
-.venv-smoke/Scripts/pip install dist/conclave_personal-0.1.0-py3-none-any.whl
+.venv-smoke/Scripts/pip install dist/conclave_personal-0.1.1-py3-none-any.whl
 .venv-smoke/Scripts/conclave --help
 ```
 
@@ -252,7 +252,7 @@ static/
 
 ## Provider
 
-Conclave bleibt provideragnostisch. v0.1.0 unterscheidet bewusst zwischen
+Conclave bleibt provideragnostisch. v0.1.x unterscheidet bewusst zwischen
 getesteten Hauptpfaden und kompatiblen Presets.
 
 ### First-class / getestet
@@ -305,12 +305,13 @@ Wichtige Dokumente:
 - [Beispiel-Workflows](docs/beispiel-workflows.md)
 - [Sicherheit](docs/sicherheit.md)
 - [Konfiguration](docs/referenz/konfiguration.md)
+- [Release Notes v0.1.1](docs/release-notes-v0.1.1.md)
 - [Release Notes v0.1.0](docs/release-notes-v0.1.0.md)
 - [Dokumentationsindex](docs/index.md)
 
 ## Known Limitations
 
-v0.1.0 bleibt bewusst Alpha. Bekannte Einschränkungen:
+v0.1.1 bleibt bewusst Alpha. Bekannte Einschränkungen:
 
 - Backup-Erstellung ist vorhanden; Restore validiert aktuell nur und schreibt
   noch keine Daten zurück.
@@ -322,7 +323,7 @@ v0.1.0 bleibt bewusst Alpha. Bekannte Einschränkungen:
 
 ## Release-Verifikation
 
-Der v0.1.0-Schnitt wird vor Veröffentlichung mit diesen lokalen Checks
+Der v0.1.1-Schnitt wird vor Veröffentlichung mit diesen lokalen Checks
 verifiziert:
 
 - `python -m pytest`
