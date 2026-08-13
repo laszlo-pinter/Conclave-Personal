@@ -11,7 +11,7 @@ Der Nutzer bleibt die Steuerungsinstanz. Agenten sind Teilnehmer, keine
 Controller. Conversations, Workspace-Dateien, Agenten und Usage liegen
 standardmäßig lokal.
 
-> Status: v0.1.2 Alpha. Der Hauptpfad ist lokal, desktop-first und auf einzelne
+> Status: v0.1.3 Alpha. Der Hauptpfad ist lokal, desktop-first und auf einzelne
 > Nutzer unter Windows und Linux ausgerichtet.
 
 ![Conclave Studio](docs/assets/screenshots/conclave-studio-desktop.png)
@@ -122,7 +122,7 @@ Lokale Artefakte können direkt aus einem frisch gebauten Wheel geprüft werden:
 ```bash
 python -m build --sdist --wheel
 python -m venv .venv-smoke
-.venv-smoke/Scripts/pip install dist/conclave_personal-0.1.2-py3-none-any.whl
+.venv-smoke/Scripts/pip install dist/conclave_personal-0.1.3-py3-none-any.whl
 .venv-smoke/Scripts/conclave --help
 ```
 
@@ -315,6 +315,7 @@ Wichtige Dokumente:
 - [Beispiel-Workflows](docs/beispiel-workflows.md)
 - [Sicherheit](docs/sicherheit.md)
 - [Konfiguration](docs/referenz/konfiguration.md)
+- [Release Notes v0.1.3](docs/release-notes-v0.1.3.md)
 - [Release Notes v0.1.2](docs/release-notes-v0.1.2.md)
 - [Release Notes v0.1.1](docs/release-notes-v0.1.1.md)
 - [Release Notes v0.1.0](docs/release-notes-v0.1.0.md)
@@ -322,7 +323,7 @@ Wichtige Dokumente:
 
 ## Known Limitations
 
-v0.1.2 bleibt bewusst Alpha. Bekannte Einschränkungen:
+v0.1.3 bleibt bewusst Alpha. Bekannte Einschränkungen:
 
 - Backup-Erstellung ist vorhanden; Restore validiert aktuell nur und schreibt
   noch keine Daten zurück.
@@ -334,7 +335,7 @@ v0.1.2 bleibt bewusst Alpha. Bekannte Einschränkungen:
 
 ## Release-Verifikation
 
-Der v0.1.2-Schnitt wurde mit diesen lokalen Checks verifiziert:
+Der v0.1.3-Schnitt wurde mit diesen lokalen Checks verifiziert:
 
 - `python -m pytest`
 - `python -m build --sdist --wheel`
