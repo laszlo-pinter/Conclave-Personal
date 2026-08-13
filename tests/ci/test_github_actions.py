@@ -51,6 +51,13 @@ def test_ci_does_not_use_real_provider_secrets():
         assert token not in text
 
 
+def test_workflows_use_runner_context_only_in_steps():
+    for workflow in (WORKFLOW, PUBLISH_WORKFLOW):
+        text = workflow.read_text(encoding="utf-8")
+        before_steps = text.split("    steps:", 1)[0]
+        assert "runner.temp" not in before_steps
+
+
 def test_publish_workflow_uses_trusted_publishing():
     text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
 

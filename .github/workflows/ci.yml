@@ -31,7 +31,6 @@ jobs:
     env:
       CONCLAVE_MODE: development
       CONCLAVE_API_KEY: test-ci-local-key
-      CONCLAVE_SECRET_KEY_FILE: ${{ runner.temp }}/conclave-secret.key
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
     steps:
       - name: Checkout
@@ -49,6 +48,8 @@ jobs:
           python -m pip install -e ".[dev-all]"
 
       - name: Run tests
+        env:
+          CONCLAVE_SECRET_KEY_FILE: ${{ runner.temp }}/conclave-secret.key
         run: python -m pytest
 
   build:
