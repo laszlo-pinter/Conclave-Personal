@@ -69,6 +69,15 @@ class TestExpandWorkspaceRefsPathTraversal:
         result = ConversationFlowService._expand_workspace_refs(conversation)
         assert "Hallo Workspace" in result.messages[0].content
 
+    def test_legitimate_path_with_trailing_punctuation_still_works(self, workspace, conversation, monkeypatch):
+        monkeypatch.setenv("CONCLAVE_WORKSPACE", str(workspace))
+        conversation.add_user_message("Lies @workspace/readme.txt.")
+
+        result = ConversationFlowService._expand_workspace_refs(conversation)
+
+        assert "Hallo Workspace" in result.messages[0].content
+        assert "readme.txt." not in result.messages[0].content
+
     def test_hidden_path_is_invisible(self, workspace, conversation, monkeypatch):
         monkeypatch.setenv("CONCLAVE_WORKSPACE", str(workspace))
         conversation.add_user_message("Lies @workspace/.private/secret.txt")

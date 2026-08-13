@@ -162,29 +162,34 @@ class ConversationFlowService:
             content = msg.content
             for match in matches:
                 filepath = match.group(1)
+                suffix = ""
+                stripped_filepath = filepath.rstrip(".,;:!?")
+                if stripped_filepath != filepath:
+                    suffix = filepath[len(stripped_filepath):]
+                    filepath = stripped_filepath
                 original = match.group(0)
                 resolved = resolve_workspace_path(filepath)
                 if resolved is None:
-                    content = content.replace(original, "[FEHLER: Pfad nicht erlaubt]")
+                    content = content.replace(original, f"[FEHLER: Pfad nicht erlaubt]{suffix}")
                     continue
                 if not is_agent_visible(resolved.path, root=resolved.root):
-                    content = content.replace(original, f"[FEHLER: {filepath} nicht gefunden]")
+                    content = content.replace(original, f"[FEHLER: {filepath} nicht gefunden]{suffix}")
                     continue
                 if resolved.path.is_file():
                     if not assert_size_allowed(resolved.path, limit):
-                        content = content.replace(original, f"[FEHLER: {filepath} ist zu gross]")
+                        content = content.replace(original, f"[FEHLER: {filepath} ist zu gross]{suffix}")
                         continue
                     try:
                         with open(resolved.path, "r", encoding="utf-8") as f:
                             file_content = f.read()
                         content = content.replace(
                             original,
-                            f"\n--- Datei: {filepath} ---\n```\n{file_content}\n```\n"
+                            f"\n--- Datei: {filepath} ---\n```\n{file_content}\n```\n{suffix}"
                         )
                     except Exception:
-                        content = content.replace(original, f"[FEHLER: {filepath} nicht lesbar]")
+                        content = content.replace(original, f"[FEHLER: {filepath} nicht lesbar]{suffix}")
                 else:
-                    content = content.replace(original, f"[FEHLER: {filepath} nicht gefunden]")
+                    content = content.replace(original, f"[FEHLER: {filepath} nicht gefunden]{suffix}")
             replaced = dataclasses.replace(msg, content=content)
             new_messages.append(replaced)
             changed = True
