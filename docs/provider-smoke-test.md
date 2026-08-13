@@ -123,13 +123,16 @@ Terminal-Variable setzen und Server neu starten.
 Windows / PowerShell und Linux / Bash:
 
 ```powershell
-conclave agent-new Claude --name "Claude" --provider anthropic --preset anthropic --model claude-sonnet-5
-conclave agent-new Gemini --name "Gemini" --provider gemini --preset gemini --model gemini-3.6-flash
-conclave agent-new GPT --name "GPT" --provider openai-responses --preset openai-responses --model gpt-5.6-terra
+conclave agent-new Claude --name "Claude" --provider anthropic --preset anthropic --model "<anthropic-model>"
+conclave agent-new Gemini --name "Gemini" --provider gemini --preset gemini --model "<gemini-model>"
+conclave agent-new GPT --name "GPT" --provider openai-responses --preset openai-responses --model "<openai-model>"
 ```
 
 Wenn die Agenten bereits existieren, stattdessen in der UI prüfen oder mit
 `conclave agent-show <id>` kontrollieren.
+
+Ersetze die Modell-Platzhalter durch Modelle, die in deinem jeweiligen
+Provider-Account aktuell verfügbar sind.
 
 ## 6. Conversation Erstellen Und Alle Drei Modelle Testen
 

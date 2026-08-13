@@ -31,7 +31,7 @@ Zusammenarbeit sichtbar.
 Der Zielpfad nach Veröffentlichung ist:
 
 ```bash
-pipx install conclave
+pipx install conclave-personal
 conclave desktop
 ```
 
@@ -40,7 +40,7 @@ Vor der PyPI-Veröffentlichung kann das gebaute Wheel installiert werden:
 ```bash
 python -m build --sdist --wheel
 python -m venv .venv-smoke
-.venv-smoke/Scripts/pip install dist/conclave-0.1.0-py3-none-any.whl
+.venv-smoke/Scripts/pip install dist/conclave_personal-0.1.0-py3-none-any.whl
 .venv-smoke/Scripts/conclave --help
 ```
 

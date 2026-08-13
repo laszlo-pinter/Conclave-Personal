@@ -16,9 +16,9 @@ def _seed_agents(agent_service):
 
     Env-Var Format: CONCLAVE_AGENT_<ID>=<provider>:<model>:<preset>:<name>
     Name ist optional, Default = ID.
-    Beispiel: CONCLAVE_AGENT_GPT=openai-responses:gpt-5.6:openai-responses:GPT
-              CONCLAVE_AGENT_Claude=anthropic:claude-sonnet-5:anthropic:Claude
-              CONCLAVE_AGENT_Gemini=gemini:gemini-3.6-flash:gemini:Gemini
+    Beispiel: CONCLAVE_AGENT_GPT=openai-responses:<openai-model>:openai-responses:GPT
+              CONCLAVE_AGENT_Claude=anthropic:<anthropic-model>:anthropic:Claude
+              CONCLAVE_AGENT_Gemini=gemini:<gemini-model>:gemini:Gemini
     """
     from conclave.domain.agent import Agent
     prefix = "CONCLAVE_AGENT_"

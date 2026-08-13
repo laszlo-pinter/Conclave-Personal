@@ -1,6 +1,6 @@
-Dieses Projekt wurde ausschließlich von LLM-Modellen erstellt.
-
 # Conclave Personal
+
+> Dieses Projekt wurde ausschließlich von LLM-Modellen erstellt.
 
 Conclave Personal ist ein lokales Multi-Agent-Arbeitswerkzeug für einzelne
 Nutzer. Es bringt mehrere KI-Modelle in eine gemeinsame, strukturierte
@@ -57,7 +57,7 @@ Minimaler CLI-Flow:
 
 ```bash
 conclave desktop
-conclave agent-new writer --name "Writer" --provider "openai-responses" --preset "openai-responses" --model "gpt-5.6" --role "Writer" --api-key "..."
+conclave agent-new writer --name "Writer" --provider "openai-responses" --preset "openai-responses" --model "<openai-model>" --role "Writer" --api-key "..."
 conclave agent-new judge --name "Judge" --provider "ollama" --preset "ollama" --model "llama3.1" --role "Judge"
 CONV=$(conclave --json new | python -c "import sys,json; print(json.load(sys.stdin)['conversation_id'])")
 conclave add-participant "$CONV" writer --name "Writer" --type model
@@ -105,14 +105,14 @@ Nach der PyPI-Veröffentlichung ist der Zielpfad:
 ### Windows
 
 ```powershell
-pipx install conclave
+pipx install conclave-personal
 conclave desktop
 ```
 
 ### Linux
 
 ```bash
-pipx install conclave
+pipx install conclave-personal
 conclave desktop
 ```
 
@@ -121,7 +121,7 @@ Vor der PyPI-Veröffentlichung wird aus dem gebauten Wheel getestet:
 ```bash
 python -m build --sdist --wheel
 python -m venv .venv-smoke
-.venv-smoke/Scripts/pip install dist/conclave-0.1.0-py3-none-any.whl
+.venv-smoke/Scripts/pip install dist/conclave_personal-0.1.0-py3-none-any.whl
 .venv-smoke/Scripts/conclave --help
 ```
 
@@ -156,7 +156,7 @@ conclave agent-new reviewer \
   --name "Reviewer" \
   --provider "anthropic" \
   --preset "anthropic" \
-  --model "claude-sonnet-4-20250514" \
+  --model "<anthropic-model>" \
   --role "Reviewer" \
   --api-key "..."
 ```
@@ -197,7 +197,7 @@ conclave agent-new assistant \
   --name "Assistant" \
   --provider "openai-responses" \
   --preset "openai-responses" \
-  --model "gpt-5.6" \
+  --model "<openai-model>" \
   --api-key "..."
 
 ID=$(conclave --json new | python -c "import sys,json; print(json.load(sys.stdin)['conversation_id'])")

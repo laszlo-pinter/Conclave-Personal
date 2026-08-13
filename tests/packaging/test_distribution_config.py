@@ -18,6 +18,12 @@ def test_base_install_has_desktop_runtime_dependencies():
     assert "cryptography>=42.0" in deps
 
 
+def test_distribution_name_avoids_reserved_pypi_project():
+    project = _pyproject()["project"]
+
+    assert project["name"] == "conclave-personal"
+
+
 def test_console_scripts_are_declared():
     scripts = _pyproject()["project"]["scripts"]
 

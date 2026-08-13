@@ -8,8 +8,8 @@ Agenten, entscheidet über Kontext und prüft Ergebnisse sichtbar in Runs.
 Ziel: Einen Text aus drei Perspektiven prüfen.
 
 ```powershell
-conclave agent-new writer --name "Writer" --provider openai-responses --preset openai-responses --model gpt-5.6 --role Writer
-conclave agent-new critic --name "Critic" --provider anthropic --preset anthropic --model claude-sonnet-4-20250514 --role Critic
+conclave agent-new writer --name "Writer" --provider openai-responses --preset openai-responses --model "<openai-model>" --role Writer
+conclave agent-new critic --name "Critic" --provider anthropic --preset anthropic --model "<anthropic-model>" --role Critic
 conclave agent-new judge --name "Judge" --provider ollama --preset ollama --model llama3.1 --role Judge
 
 $conv = (conclave --json new | ConvertFrom-Json).conversation_id
@@ -76,3 +76,5 @@ conclave runs --conversation-id $conv
 - CLI-Kommandos sind gut für Debugging, Dokumentation und reproduzierbare
   Arbeitsmuster.
 - Echte Provider-Calls benötigen passende API-Keys oder lokale Ollama-Modelle.
+- Ersetze `<openai-model>` und `<anthropic-model>` durch Modelle, die in deinem
+  Provider-Account aktuell verfügbar sind.

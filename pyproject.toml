@@ -3,7 +3,7 @@ requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "conclave"
+name = "conclave-personal"
 version = "0.1.0"
 description = "Local personal multi-agent workspace for Windows and Linux."
 readme = "README.md"
