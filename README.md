@@ -1,7 +1,5 @@
 # Conclave Personal
 
-> Dieses Projekt wurde ausschließlich von LLM-Modellen erstellt.
-
 Conclave Personal ist ein lokales Multi-Agent-Arbeitswerkzeug für einzelne
 Nutzer. Es bringt mehrere KI-Modelle in eine gemeinsame, strukturierte
 Conversation, gibt ihnen explizite Rollen und macht ihre Zusammenarbeit über
@@ -333,6 +331,10 @@ Der v0.1.3-Schnitt wurde mit diesen lokalen Checks verifiziert:
 - `conclave desktop`
 - Artefaktprüfung ohne Workspace-Daten, Datenbanken, Keys, Logs und alte
   Enterprise-/DSGVO-Pfade.
+
+## Entstehung
+
+Dieses Projekt wurde ausschließlich von LLM-Modellen erstellt.
 
 ## Lizenz
 

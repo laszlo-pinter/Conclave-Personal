@@ -48,6 +48,16 @@ def test_readme_links_release_material():
     assert "PolyForm Noncommercial License 1.0.0" in readme
 
 
+def test_readme_places_llm_origin_notice_as_section():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    lines = readme.splitlines()
+
+    assert lines[0] == "# Conclave Personal"
+    assert "## Entstehung" in readme
+    assert "Dieses Projekt wurde ausschließlich von LLM-Modellen erstellt." in readme
+    assert lines[1].strip() != "> Dieses Projekt wurde ausschließlich von LLM-Modellen erstellt."
+
+
 def test_release_docs_use_publishable_distribution_name():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     release_notes = (ROOT / "docs/release-notes-v0.1.3.md").read_text(encoding="utf-8")
