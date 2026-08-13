@@ -67,8 +67,8 @@ jobs:
 
       - name: Verify distribution names
         run: |
-          test -f dist/conclave_personal-0.1.1-py3-none-any.whl
-          test -f dist/conclave_personal-0.1.1.tar.gz
+          test -f dist/conclave_personal-0.1.2-py3-none-any.whl
+          test -f dist/conclave_personal-0.1.2.tar.gz
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4
