@@ -1,37 +1,38 @@
-# Conclave Dokumentation
+# Conclave Documentation
 
-## Was willst du tun?
+## What Do You Want To Do?
 
 ### Getting Started
-- [Schnellstart und Zielbild](../README.md) — Lokales Multi-Agent-Tool für Windows und Linux
+- [Quickstart and product shape](../README.md) - Local multi-agent tool for Windows and Linux
 
 ### Concepts
-- [Multi-Agent-Leitfaden](multi-agent-leitfaden.md) — Rollen, Workflows und Arbeitsmuster
+- [Multi-agent guide](multi-agent-leitfaden.md) - Roles, workflows, and working patterns
 
 ### Workflows
-- [Beispiel-Workflows](beispiel-workflows.md) — Review, Architektur, Workspace-Kontext und Judge
-- [Provider-Smoke-Test](provider-smoke-test.md) — Claude, Gemini und GPT lokal prüfen
+- [Example workflows](beispiel-workflows.md) - Review, architecture, workspace context, and Judge
+- [Provider smoke test](provider-smoke-test.md) - Check Claude, Gemini, and GPT locally
 
 ### Product UI
-- [Personal UI Architektur](personal-ui-architektur.md) — Studio, Agents, Workspace, Runs, Settings
+- [Personal UI architecture](personal-ui-architektur.md) - Studio, Agents, Workspace, Runs, Settings
 
 ### Security
-- [Sicherheit](sicherheit.md) — Lokale API, Secrets, Workspace und Release-Artefakte
+- [Security](sicherheit.md) - Local API, secrets, workspace, and release artifacts
 
 ### Reference
-- [API-Referenz](referenz/api.md) — Aktuelle Personal-API
-- [CLI-Referenz](referenz/cli.md) — Aktuelle Personal-CLI
-- [Konfiguration](referenz/konfiguration.md) — Runtime-Pfade, Env-Vars und TOML-Fallback
+- [API reference](referenz/api.md) - Current Personal API
+- [CLI reference](referenz/cli.md) - Current Personal CLI
+- [Configuration](referenz/konfiguration.md) - Runtime paths, environment variables, and TOML fallback
 
 ### Architecture
-- [Flow: API-Request](flows/api-request.md) — Vom HTTP-Call zur LLM-Antwort
-- [Flow: Orchestrierung](flows/orchestrierung.md) — Sequentiell, parallel, auto-loop
-- [Flow: Workspace-Directives](flows/workspace-directives.md) — `@workspace`, `@read` und `@save`
-- [Ports & Adapter](architektur/ports-adapter.md) — Interfaces, ProviderProfiles, ResilientAdapter
+- [Flow: API request](flows/api-request.md) - From HTTP call to LLM response
+- [Flow: orchestration](flows/orchestrierung.md) - Sequential, parallel, auto-loop
+- [Flow: workspace directives](flows/workspace-directives.md) - `@workspace`, `@read`, and `@save`
+- [Ports & adapters](architektur/ports-adapter.md) - Interfaces, ProviderProfiles, ResilientAdapter
 
 ### Release
-- [Release Notes v0.1.4](release-notes-v0.1.4.md) — README-Hinweis zur LLM-Entstehung auf PyPI nachgezogen
-- [Release Notes v0.1.3](release-notes-v0.1.3.md) — README- und sdist-Korrekturen nach Veröffentlichung
-- [Release Notes v0.1.2](release-notes-v0.1.2.md) — Paketierte UI-Assets und robuster Runtime-Lookup
-- [Release Notes v0.1.1](release-notes-v0.1.1.md) — PyPI-Metadaten und Projektlinks
-- [Release Notes v0.1.0](release-notes-v0.1.0.md) — Erster Personal-Multiplattform-Schnitt
+- [Release Notes v0.1.5](release-notes-v0.1.5.md) - English public documentation surface
+- [Release Notes v0.1.4](release-notes-v0.1.4.md) - README origin notice placement for PyPI
+- [Release Notes v0.1.3](release-notes-v0.1.3.md) - README and sdist corrections after release
+- [Release Notes v0.1.2](release-notes-v0.1.2.md) - Packaged UI assets and robust runtime lookup
+- [Release Notes v0.1.1](release-notes-v0.1.1.md) - PyPI metadata and project links
+- [Release Notes v0.1.0](release-notes-v0.1.0.md) - First Personal multiplatform surface
