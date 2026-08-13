@@ -74,4 +74,4 @@ def test_manifest_includes_release_material():
     assert "include docs/release-notes-v0.1.0.md" in manifest
     assert "include docs/release-notes-v0.1.1.md" in manifest
     assert "include docs/release-notes-v0.1.2.md" in manifest
-    assert "recursive-include docs/assets/screenshots *.png" in manifest
+    assert "recursive-include docs/assets/screenshots *.png" not in manifest

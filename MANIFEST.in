@@ -3,7 +3,6 @@ include PROJECT.md
 include LICENSE
 exclude conclave-ui.html
 recursive-include src/conclave/assets *
-recursive-include docs/assets/screenshots *.png
 include docs/index.md
 include docs/beispiel-workflows.md
 include docs/multi-agent-leitfaden.md
