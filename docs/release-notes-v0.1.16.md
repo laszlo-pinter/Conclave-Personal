@@ -10,6 +10,7 @@ Conclave v0.1.16 adds a language switch to the local desktop UI.
 - Added a small frontend i18n layer with persisted language choice.
 - Localized the main navigation, modals, workspace surfaces, status labels, and core dynamic messages.
 - Generated default agent role prompts now follow the selected UI language.
+- README screenshot now uses a public HTTPS image URL so it renders on PyPI.
 
 ## Status
 

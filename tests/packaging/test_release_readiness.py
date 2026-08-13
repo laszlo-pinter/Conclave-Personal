@@ -45,7 +45,10 @@ def test_release_screenshots_exist():
 def test_readme_links_release_material():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
-    assert "docs/assets/screenshots/conclave-studio-desktop.png" in readme
+    assert (
+        "https://raw.githubusercontent.com/laszlo-pinter/Conclave-Personal/main/"
+        "docs/assets/screenshots/conclave-studio-desktop.png"
+    ) in readme
     assert "docs/beispiel-workflows.md" in readme
     assert "docs/sicherheit.md" in readme
     assert "PolyForm Noncommercial License 1.0.0" in readme

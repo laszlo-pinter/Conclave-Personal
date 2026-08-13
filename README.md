@@ -11,7 +11,7 @@ default.
 > Status: v0.1.16 Alpha. The primary path is local, desktop-first, and designed
 > for individual users on Windows and Linux.
 
-![Conclave Studio](docs/assets/screenshots/conclave-studio-desktop.png)
+![Conclave Studio](https://raw.githubusercontent.com/laszlo-pinter/Conclave-Personal/main/docs/assets/screenshots/conclave-studio-desktop.png)
 
 ## What Conclave Is For
 
