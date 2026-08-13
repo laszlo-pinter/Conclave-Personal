@@ -9,7 +9,7 @@ Der Nutzer bleibt die Steuerungsinstanz. Agenten sind Teilnehmer, keine
 Controller. Conversations, Workspace-Dateien, Agenten und Usage liegen
 standardmäßig lokal.
 
-> Status: v0.1.3 Alpha. Der Hauptpfad ist lokal, desktop-first und auf einzelne
+> Status: v0.1.4 Alpha. Der Hauptpfad ist lokal, desktop-first und auf einzelne
 > Nutzer unter Windows und Linux ausgerichtet.
 
 ![Conclave Studio](docs/assets/screenshots/conclave-studio-desktop.png)
@@ -302,6 +302,7 @@ Wichtige Dokumente:
 - [Beispiel-Workflows](docs/beispiel-workflows.md)
 - [Sicherheit](docs/sicherheit.md)
 - [Konfiguration](docs/referenz/konfiguration.md)
+- [Release Notes v0.1.4](docs/release-notes-v0.1.4.md)
 - [Release Notes v0.1.3](docs/release-notes-v0.1.3.md)
 - [Release Notes v0.1.2](docs/release-notes-v0.1.2.md)
 - [Release Notes v0.1.1](docs/release-notes-v0.1.1.md)
@@ -310,7 +311,7 @@ Wichtige Dokumente:
 
 ## Known Limitations
 
-v0.1.3 bleibt bewusst Alpha. Bekannte Einschränkungen:
+v0.1.4 bleibt bewusst Alpha. Bekannte Einschränkungen:
 
 - Backup-Erstellung ist vorhanden; Restore validiert aktuell nur und schreibt
   noch keine Daten zurück.
@@ -322,7 +323,7 @@ v0.1.3 bleibt bewusst Alpha. Bekannte Einschränkungen:
 
 ## Release-Verifikation
 
-Der v0.1.3-Schnitt wurde mit diesen lokalen Checks verifiziert:
+Der v0.1.4-Schnitt wurde mit diesen lokalen Checks verifiziert:
 
 - `python -m pytest`
 - `python -m build --sdist --wheel`

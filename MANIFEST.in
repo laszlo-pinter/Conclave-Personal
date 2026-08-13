@@ -11,6 +11,7 @@ include docs/release-notes-v0.1.0.md
 include docs/release-notes-v0.1.1.md
 include docs/release-notes-v0.1.2.md
 include docs/release-notes-v0.1.3.md
+include docs/release-notes-v0.1.4.md
 include docs/sicherheit.md
 include docs/architektur/ports-adapter.md
 include docs/flows/api-request.md
