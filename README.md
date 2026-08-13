@@ -234,7 +234,7 @@ zum Beispiel mit `@workspace/notizen.md`.
 Ein ausführbarer Arbeitslauf: Invoke, Stream, Orchestrierung, Auto-Loop oder
 Judge. Runs machen Status, Fehler, Dauer und Usage sichtbar.
 
-## Zielarchitektur
+## Architekturstand und Zielbild
 
 ```text
 src/conclave/
@@ -245,9 +245,18 @@ src/conclave/
   cli/             Kommandozeile
   runtime/         plattformneutrale Desktop-/Server-Startlogik
 
-static/
-  js/core/         API, State, Router, Events
-  js/features/     Studio, Agents, Workspace, Runs, Settings
+src/conclave/assets/
+  conclave-ui.html installierte UI-Ressource
+  static/js/       aktueller flacher JS-Einstieg: api, state, utils, main
+  static/js/features/
+                   Studio, Agents, Workspace, Runs, Settings
+  scripts/         Windows- und Linux-Start-/Service-Skripte
+
+Zielbild für spätere UI-Aufräumarbeiten:
+
+static/js/
+  core/            API, State, Router, Events
+  features/        Studio, Agents, Workspace, Runs, Settings
 ```
 
 ## Provider

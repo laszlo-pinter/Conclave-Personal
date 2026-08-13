@@ -44,14 +44,17 @@ def test_console_scripts_are_declared():
     assert scripts["conclave-mcp"] == "conclave.mcp_server:main"
 
 
-def test_distribution_data_files_include_ui_and_platform_scripts():
-    data_files = _pyproject()["tool"]["setuptools"]["data-files"]
+def test_distribution_package_data_include_ui_and_platform_scripts():
+    setuptools_config = _pyproject()["tool"]["setuptools"]
+    package_data = setuptools_config["package-data"]["conclave"]
 
-    assert "conclave-ui.html" in data_files["share/conclave"]
-    assert "static/css/*.css" in data_files["share/conclave/static/css"]
-    assert "static/js/features/*.js" in data_files["share/conclave/static/js/features"]
-    assert "scripts/windows/*.ps1" in data_files["share/conclave/scripts/windows"]
-    assert "scripts/linux/*" in data_files["share/conclave/scripts/linux"]
+    assert "data-files" not in setuptools_config
+    assert "assets/conclave-ui.html" in package_data
+    assert "assets/static/css/*.css" in package_data
+    assert "assets/static/js/*.js" in package_data
+    assert "assets/static/js/features/*.js" in package_data
+    assert "assets/scripts/windows/*.ps1" in package_data
+    assert "assets/scripts/linux/*" in package_data
 
 
 def test_manifest_excludes_local_runtime_data():
@@ -65,6 +68,7 @@ def test_manifest_includes_release_material():
     manifest = (ROOT / "MANIFEST.in").read_text(encoding="utf-8")
 
     assert "include LICENSE" in manifest
+    assert "recursive-include src/conclave/assets *" in manifest
     assert "include docs/sicherheit.md" in manifest
     assert "include docs/beispiel-workflows.md" in manifest
     assert "include docs/release-notes-v0.1.0.md" in manifest

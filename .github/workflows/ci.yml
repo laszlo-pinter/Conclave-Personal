@@ -94,11 +94,9 @@ jobs:
           ]
           if len(entry_points) != 1:
               raise SystemExit(f"Unexpected entry_points files: {entry_points}")
-          package_root = entry_points[0].split(".dist-info/", 1)[0]
-          data_root = f"{package_root}.data/data/share/conclave"
           required_wheel = {
-              f"{data_root}/conclave-ui.html",
-              f"{data_root}/static/openapi.json",
+              "conclave/assets/conclave-ui.html",
+              "conclave/assets/static/openapi.json",
               entry_points[0],
           }
           missing = sorted(required_wheel - wheel_names)

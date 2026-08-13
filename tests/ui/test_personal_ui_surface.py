@@ -1,8 +1,10 @@
 from pathlib import Path
 
+from conclave.runtime.assets import get_asset_root
+
 
 ROOT = Path(__file__).resolve().parents[2]
-HTML = ROOT / "conclave-ui.html"
+HTML = get_asset_root() / "conclave-ui.html"
 
 
 def test_personal_navigation_has_five_workspaces():

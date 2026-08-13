@@ -64,11 +64,13 @@ include-package-data = true
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.setuptools.data-files]
-"share/conclave" = ["conclave-ui.html"]
-"share/conclave/static" = ["static/openapi.json"]
-"share/conclave/static/css" = ["static/css/*.css"]
-"share/conclave/static/js" = ["static/js/*.js"]
-"share/conclave/static/js/features" = ["static/js/features/*.js"]
-"share/conclave/scripts/windows" = ["scripts/windows/*.ps1"]
-"share/conclave/scripts/linux" = ["scripts/linux/*"]
+[tool.setuptools.package-data]
+"conclave" = [
+    "assets/conclave-ui.html",
+    "assets/static/openapi.json",
+    "assets/static/css/*.css",
+    "assets/static/js/*.js",
+    "assets/static/js/features/*.js",
+    "assets/scripts/windows/*.ps1",
+    "assets/scripts/linux/*",
+]

@@ -29,8 +29,8 @@ def test_ci_builds_and_inspects_release_artifacts():
     text = _workflow_text()
 
     assert "python -m build --sdist --wheel" in text
-    assert "conclave-ui.html" in text
-    assert "static/openapi.json" in text
+    assert "conclave/assets/conclave-ui.html" in text
+    assert "conclave/assets/static/openapi.json" in text
     assert "entry_points.txt" in text
     assert "__pycache__" in text
     assert "workspace/" in text

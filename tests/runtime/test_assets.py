@@ -12,10 +12,11 @@ def test_get_asset_root_uses_env_override(tmp_path, monkeypatch):
     assert get_asset_root() == asset_root.resolve()
 
 
-def test_get_asset_root_finds_source_assets(monkeypatch):
+def test_get_asset_root_finds_packaged_assets(monkeypatch):
     monkeypatch.delenv("CONCLAVE_ASSET_DIR", raising=False)
 
     root = get_asset_root()
 
     assert (root / "conclave-ui.html").is_file()
     assert (root / "static" / "openapi.json").is_file()
+    assert root.parts[-3:] == ("src", "conclave", "assets")

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Conclave Personal
+Comment=Local multi-agent workspace
+Exec=sh -lc 'python -m conclave.cli.main desktop'
+Terminal=true
+Categories=Development;Utility;

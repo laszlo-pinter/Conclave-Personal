@@ -1,10 +1,8 @@
 include README.md
 include PROJECT.md
 include LICENSE
-include conclave-ui.html
-recursive-include static *.css *.js *.json
-recursive-include scripts/windows *.ps1
-recursive-include scripts/linux *
+exclude conclave-ui.html
+recursive-include src/conclave/assets *
 recursive-include docs/assets/screenshots *.png
 include docs/index.md
 include docs/beispiel-workflows.md
@@ -20,5 +18,7 @@ include docs/flows/workspace-directives.md
 recursive-include docs/referenz *.md
 recursive-exclude workspace *
 recursive-exclude .claude *
+recursive-exclude static *
+recursive-exclude scripts *
 recursive-exclude tests __pycache__ *.pyc
 global-exclude __pycache__ *.py[cod] *.db *.db-shm *.db-wal *.key *.pem *.log

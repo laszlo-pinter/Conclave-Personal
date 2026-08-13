@@ -140,7 +140,34 @@ Settings bündelt lokale App-Konfiguration.
 - Server-Port
 - Desktop-/Browser-Startmodus
 
-## Technische Zielstruktur
+## Technischer Stand und Zielstruktur
+
+Aktuell liegen die installierten UI-Ressourcen als Package-Data unter
+`src/conclave/assets/`. Der JavaScript-Einstieg ist noch flach:
+
+```text
+src/conclave/assets/static/js/
+  api.js
+  state.js
+  utils.js
+  main.js
+  features/
+    agents.js
+    auth.js
+    autoloop.js
+    conversations.js
+    export.js
+    floor.js
+    messages.js
+    participants.js
+    runs.js
+    settings.js
+    speech.js
+    usage.js
+    workspace.js
+```
+
+Zielstruktur für spätere UI-Aufräumarbeiten:
 
 ```text
 static/js/
