@@ -46,6 +46,22 @@ python -m venv .venv-smoke
 
 Unter Linux entsprechend mit `.venv-smoke/bin/...`.
 
+## PyPI Publishing
+
+Die Distribution heißt `conclave-personal`; das installierte CLI-Kommando
+bleibt `conclave`.
+
+PyPI-Veröffentlichungen laufen über Trusted Publishing / OIDC aus GitHub
+Actions. Die PyPI-Publisher-Konfiguration muss auf diese Werte zeigen:
+
+- Project name: `conclave-personal`
+- Repository: `laszlo-pinter/Conclave-Personal`
+- Workflow: `publish.yml`
+- Environment: `pypi`
+
+Der Workflow veröffentlicht nur gebaute Artefakte aus `dist/` und benötigt
+keinen PyPI API-Token in GitHub Secrets.
+
 ## Supported Platforms
 
 - Windows mit Python 3.11 und 3.12 in CI.

@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+PUBLISH_WORKFLOW = ROOT / ".github" / "workflows" / "publish.yml"
 
 
 def _workflow_text() -> str:
@@ -11,6 +12,7 @@ def _workflow_text() -> str:
 
 def test_ci_workflow_exists():
     assert WORKFLOW.exists()
+    assert PUBLISH_WORKFLOW.exists()
 
 
 def test_ci_runs_personal_matrix_on_windows_and_linux():
@@ -47,3 +49,23 @@ def test_ci_does_not_use_real_provider_secrets():
 
     for token in forbidden:
         assert token not in text
+
+
+def test_publish_workflow_uses_trusted_publishing():
+    text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+
+    assert 'tags:' in text
+    assert '- "v*"' in text
+    assert "environment:" in text
+    assert "name: pypi" in text
+    assert "id-token: write" in text
+    assert "pypa/gh-action-pypi-publish@release/v1" in text
+    assert "secrets." not in text
+
+
+def test_publish_workflow_builds_conclave_personal_artifacts():
+    text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "python -m build --sdist --wheel" in text
+    assert "dist/conclave_personal-0.1.0-py3-none-any.whl" in text
+    assert "dist/conclave_personal-0.1.0.tar.gz" in text
