@@ -30,6 +30,7 @@
 - [Ports & adapters](architektur/ports-adapter.md) - Interfaces, ProviderProfiles, ResilientAdapter
 
 ### Release
+- [Release Notes v0.1.16](release-notes-v0.1.16.md) - Switchable German/English desktop UI
 - [Release Notes v0.1.5](release-notes-v0.1.5.md) - English public documentation surface
 - [Release Notes v0.1.4](release-notes-v0.1.4.md) - README origin notice placement for PyPI
 - [Release Notes v0.1.3](release-notes-v0.1.3.md) - README and sdist corrections after release

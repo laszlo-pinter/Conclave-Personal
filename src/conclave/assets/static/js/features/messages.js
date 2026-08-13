@@ -12,7 +12,7 @@ function buildMsg(m){
   const pName=pid?(participants.find(p=>p.id===pid)?.name||pid):'User';
   const div=document.createElement('div');div.className=`msg ${isUser?'user':'model'}`;
   if(!isUser&&c) div.style.borderLeftColor=c.bd;
-  const dlBtn=isUser?'':`<button class="msg-dl" onclick="downloadMsg(this)" data-name="${esc(pName)}" data-seq="${m.sequence}" title="Antwort herunterladen">&#8615;</button>`;
+  const dlBtn=isUser?'':`<button class="msg-dl" onclick="downloadMsg(this)" data-name="${esc(pName)}" data-seq="${m.sequence}" title="${t('download.response')}">&#8615;</button>`;
   const rendered=isUser?esc(m.content):renderMarkdown(m.content);
   div.innerHTML=`<div class="msg-header"><span class="msg-label" style="color:${isUser?'var(--text-dim)':(c?.tx||'var(--accent)')}">${esc(pName)}</span><span class="msg-seq">#${m.sequence}</span>${dlBtn}</div><div class="msg-content">${rendered}</div>`;
   // Code-Highlighting auf alle pre>code Bloecke
@@ -31,7 +31,7 @@ function downloadMsg(btn){
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download=`${name}-${seq}.md`;
   document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
-  toast(`${name} #${seq} heruntergeladen`,'ok');
+  toast(t('download.done', {name, seq}),'ok');
 }
 
 // ── Message actions ───────────────────────────────────────────────────────
@@ -44,17 +44,17 @@ async function sendMsg(){
 }
 
 async function invokeP(){
-  const pid=document.getElementById('pSel').value;if(!pid){toast('Bitte Participant waehlen','err');return;}
-  if(!AppState.getState('currentMessages').length){toast('Bitte zuerst eine Nachricht schreiben.','err');return;}
+  const pid=document.getElementById('pSel').value;if(!pid){toast(t('participants.chooseRequired'),'err');return;}
+  if(!AppState.getState('currentMessages').length){toast(t('input.writeFirst'),'err');return;}
   const btn=document.getElementById('btnInvoke');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';
-  try{await req('POST',`/conversations/${currentConvId}/participants/${pid}/invoke`);const d=await req('GET',`/conversations/${currentConvId}`);renderMessages(d.messages||[]);toast('Antwort erhalten','ok');}
+  try{await req('POST',`/conversations/${currentConvId}/participants/${pid}/invoke`);const d=await req('GET',`/conversations/${currentConvId}`);renderMessages(d.messages||[]);toast(t('input.answerReceived'),'ok');}
   catch(e){toast(e.message,'err');}
-  finally{btn.disabled=false;btn.innerHTML='Aufrufen';}
+  finally{btn.disabled=false;btn.innerHTML=t('input.invoke');}
 }
 
 async function streamP(){
-  const pid=document.getElementById('pSel').value;if(!pid){toast('Bitte Participant waehlen','err');return;}
-  if(!AppState.getState('currentMessages').length){toast('Bitte zuerst eine Nachricht schreiben.','err');return;}
+  const pid=document.getElementById('pSel').value;if(!pid){toast(t('participants.chooseRequired'),'err');return;}
+  if(!AppState.getState('currentMessages').length){toast(t('input.writeFirst'),'err');return;}
   const btn=document.getElementById('btnStream');btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Stream';
   const el=document.getElementById('messages');
   const c=colorFor(pid),pName=participants.find(p=>p.id===pid)?.name||pid;
@@ -82,9 +82,9 @@ async function streamP(){
     const data=await req('GET',`/conversations/${currentConvId}`);
     const last=data.messages.at(-1);
     div.querySelector('.msg-seq').textContent=last?'#'+last.sequence:'';
-    div.removeAttribute('id');toast('Stream abgeschlossen','ok');
+    div.removeAttribute('id');toast(t('input.streamDone'),'ok');
   }catch(e){cursor.remove();toast(e.message,'err');}
-  btn.disabled=false;btn.innerHTML='&#9654; Stream';
+  btn.disabled=false;btn.innerHTML=`&#9654; ${t('input.stream')}`;
 }
 
 function openOrch(){
@@ -96,8 +96,8 @@ function openOrch(){
 async function runOrch(){
   const seq=document.getElementById('orchSeq').value.split(',').map(s=>s.trim()).filter(Boolean);
   const parallel=document.getElementById('orchParallel').checked;
-  if(!seq.length){toast('Bitte IDs eingeben','err');return;}
-  if(!AppState.getState('currentMessages').length){toast('Bitte zuerst eine Nachricht schreiben.','err');return;}
+  if(!seq.length){toast(t('input.idsRequired'),'err');return;}
+  if(!AppState.getState('currentMessages').length){toast(t('input.writeFirst'),'err');return;}
   closeOverlay('overlayOrch');
   const btn=document.getElementById('btnOrch');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';
   try{
@@ -105,8 +105,8 @@ async function runOrch(){
     const body=parallel?{groups:seq.map(id=>[id])}:{sequence:seq};
     await req('POST',`/conversations/${currentConvId}${endpoint}`,body);
     const d=await req('GET',`/conversations/${currentConvId}`);renderMessages(d.messages||[]);
-    toast(`${seq.length} Antwort(en)${parallel?' (parallel)':''}`,`ok`);
+    toast(t('input.answers', {count: seq.length, parallel: parallel ? ' (parallel)' : ''}),`ok`);
   }catch(e){toast(e.message,'err');}
-  finally{btn.disabled=false;btn.innerHTML='&#8635; Orchestrieren';}
+  finally{btn.disabled=false;btn.innerHTML=`&#8635; ${t('input.orchestrate')}`;}
 }
 

@@ -8,7 +8,7 @@ The user remains the control point. Agents are participants, not controllers.
 Conversations, workspace files, agents, and usage data are stored locally by
 default.
 
-> Status: v0.1.5 Alpha. The primary path is local, desktop-first, and designed
+> Status: v0.1.16 Alpha. The primary path is local, desktop-first, and designed
 > for individual users on Windows and Linux.
 
 ![Conclave Studio](docs/assets/screenshots/conclave-studio-desktop.png)
@@ -34,6 +34,7 @@ In practice, this means:
 - Use Judge and review runs for mutual checking.
 - Inspect runs, token usage, errors, and results.
 - Work locally on Windows and Linux.
+- Switch the desktop UI between German and English.
 
 ## 60-Second Example
 
@@ -73,7 +74,7 @@ conclave runs "$CONV"
 | Agents | Agents, roles, providers, models, presets, connection tests |
 | Workspace | Local files, context, notes, outputs |
 | Runs | Invoke, Judge, auto-loop, and orchestration history, usage, errors |
-| Settings | API keys, data paths, theme, backup, local security mode |
+| Settings | API keys, data paths, language, theme, backup, local security mode |
 
 ## Non-Goals
 
@@ -234,7 +235,7 @@ src/conclave/
 
 src/conclave/assets/
   conclave-ui.html installed UI resource
-  static/js/       current flat JS entry: api, state, utils, main
+  static/js/       current flat JS entry: api, i18n, state, utils, main
   static/js/features/
                    Studio, Agents, Workspace, Runs, Settings
   scripts/         Windows and Linux startup/service scripts
@@ -298,6 +299,7 @@ Important documents:
 - [Example workflows](docs/beispiel-workflows.md)
 - [Security](docs/sicherheit.md)
 - [Configuration](docs/referenz/konfiguration.md)
+- [Release Notes v0.1.16](docs/release-notes-v0.1.16.md)
 - [Release Notes v0.1.5](docs/release-notes-v0.1.5.md)
 - [Release Notes v0.1.4](docs/release-notes-v0.1.4.md)
 - [Release Notes v0.1.3](docs/release-notes-v0.1.3.md)
@@ -308,7 +310,7 @@ Important documents:
 
 ## Known Limitations
 
-v0.1.5 remains alpha. Known limitations:
+v0.1.16 remains alpha. Known limitations:
 
 - Backup creation exists; restore currently validates only and does not write
   data back yet.
@@ -320,7 +322,7 @@ v0.1.5 remains alpha. Known limitations:
 
 ## Release Verification
 
-The v0.1.5 surface was verified with these local checks:
+The v0.1.16 surface was verified with these local checks:
 
 - `python -m pytest`
 - `python -m build --sdist --wheel`

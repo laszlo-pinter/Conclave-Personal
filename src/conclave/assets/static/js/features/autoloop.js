@@ -17,7 +17,7 @@ async function runAutoloop(){
   const seq=document.getElementById('loopSeq').value.split(',').map(s=>s.trim()).filter(Boolean);
   const maxRounds=parseInt(document.getElementById('loopRounds').value,10)||10;
   const stopSignal=document.getElementById('loopStop').value.trim()||'@done';
-  if(seq.length<1){toast('Bitte mindestens eine Participant-ID angeben','err');return;}
+  if(seq.length<1){toast(t('autoloop.needOne'),'err');return;}
   closeOverlay('overlayAutoloop');
 
   const btn=document.getElementById('btnAutoloop');btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Loop';
@@ -26,7 +26,7 @@ async function runAutoloop(){
 
   // Status-Banner oben im Messages-Container
   const banner=document.createElement('div');banner.className='loop-banner';
-  banner.innerHTML='<span class="spinner"></span> <span id="loopStatus">Auto-Loop startet…</span>';
+  banner.innerHTML=`<span class="spinner"></span> <span id="loopStatus">${t('autoloop.starting')}</span>`;
   el.appendChild(banner);scrollBottom();
   const status=banner.querySelector('#loopStatus');
 
@@ -66,27 +66,27 @@ async function runAutoloop(){
     // Echte Messages mit korrekten Sequenznummern nachladen.
     const data=await req('GET',`/conversations/${currentConvId}`);
     renderMessages(data.messages||[]);
-    toast('Auto-Loop beendet','ok');
+    toast(t('autoloop.finished'),'ok');
   }catch(e){
     finishLive();banner.remove();toast(e.message,'err');
   }finally{
-    btn.disabled=false;btn.innerHTML='&#8734; Auto-Loop';
+    btn.disabled=false;btn.innerHTML=`&#8734; ${t('input.autoloop')}`;
   }
 }
 
 // Verarbeitet ein einzelnes SSE-Event und aktualisiert die UI.
 function handleLoopEvent(ev,seq,ctx){
   if(ev.event==='start'){
-    ctx.status.textContent=`Auto-Loop läuft — bis zu ${ev.max_rounds} Runden, Stop bei „${ev.stop_signal}"`;
+    ctx.status.textContent=t('autoloop.running', {rounds: ev.max_rounds, signal: ev.stop_signal});
     return;
   }
   if(ev.event==='invoke'){
     const pName=participants.find(p=>p.id===ev.participant)?.name||ev.participant;
-    ctx.status.textContent=`Runde ${ev.round} — ${pName} denkt nach…`;
+    ctx.status.textContent=t('autoloop.thinking', {round: ev.round, name: pName});
     // Live-Card vorbereiten, in die der Response-Text geschrieben wird.
     const c=colorFor(ev.participant);
     const div=document.createElement('div');div.className='msg model';div.style.borderLeftColor=c.bd;
-    div.innerHTML=`<div class="msg-header"><span class="msg-label" style="color:${c.tx}">${esc(pName)}</span><span class="msg-seq">Runde ${ev.round} <span class="spinner"></span></span></div><div class="msg-content"></div>`;
+    div.innerHTML=`<div class="msg-header"><span class="msg-label" style="color:${c.tx}">${esc(pName)}</span><span class="msg-seq">${t('autoloop.round', {round: ev.round})} <span class="spinner"></span></span></div><div class="msg-content"></div>`;
     ctx.el.insertBefore(div,ctx.el.lastElementChild);  // vor dem Banner einfuegen
     ctx.setLive(div,div.querySelector('.msg-content'));
     scrollBottom();
@@ -98,10 +98,10 @@ function handleLoopEvent(ev,seq,ctx){
     return;
   }
   if(ev.event==='stop'){
-    const reasons={signal:`Konsens erreicht — „${ev.signal}" in Runde ${ev.round}`,
-                   max_rounds:`Maximale Rundenzahl (${ev.rounds}) erreicht`,
-                   error:`Abbruch: ${ev.message||'Fehler'}`};
-    ctx.status.textContent=reasons[ev.reason]||'Beendet';
+    const reasons={signal:t('autoloop.signal', {signal: ev.signal, round: ev.round}),
+                   max_rounds:t('autoloop.maxReached', {rounds: ev.rounds}),
+                   error:t('autoloop.abort', {message: ev.message||t('common.errorPrefix')})};
+    ctx.status.textContent=reasons[ev.reason]||t('autoloop.ended');
     return;
   }
 }

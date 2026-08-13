@@ -25,27 +25,27 @@ async function grantFloor(pid){
     await req('POST',`/conversations/${currentConvId}/floor/grant`,{participant_id:pid});
     currentFloor=pid;renderFloorUI();
     const p=participants.find(x=>x.id===pid);
-    toast(`${p?.name||pid} hat das Wort`,'floor');
+    toast(t('floor.hasFloor', {name: p?.name||pid}),'floor');
   }catch(e){toast(e.message,'err');}
 }
 
 async function revokeFloor(){
-  try{await req('POST',`/conversations/${currentConvId}/floor/revoke`);currentFloor=null;renderFloorUI();toast('Rederecht entzogen','ok');}
+  try{await req('POST',`/conversations/${currentConvId}/floor/revoke`);currentFloor=null;renderFloorUI();toast(t('floor.revoked'),'ok');}
   catch(e){toast(e.message,'err');}
 }
 
 async function invokeWithFloor(){
-  if(!currentFloor){toast('Kein Participant hat das Wort','err');return;}
-  if(!AppState.getState('currentMessages').length){toast('Bitte zuerst eine Nachricht schreiben.','err');return;}
+  if(!currentFloor){toast(t('floor.noParticipant'),'err');return;}
+  if(!AppState.getState('currentMessages').length){toast(t('input.writeFirst'),'err');return;}
   const btn=document.getElementById('btnFloorInvoke');
-  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Antwortet…';
+  btn.disabled=true;btn.innerHTML=`<span class="spinner"></span> ${t('floor.answering')}`;
   try{
     await req('POST',`/conversations/${currentConvId}/floor/invoke`);
     currentFloor=null;
     const conv=await req('GET',`/conversations/${currentConvId}`);
     renderMessages(conv.messages||[]);renderFloorUI();
-    toast('Antwort erhalten','ok');
+    toast(t('input.answerReceived'),'ok');
   }catch(e){toast(e.message,'err');}
-  finally{btn.disabled=false;btn.innerHTML='Antworten lassen';}
+  finally{btn.disabled=false;btn.innerHTML=t('floor.invoke');}
 }
 

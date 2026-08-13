@@ -17,11 +17,11 @@ async function loadSettings(){
 function renderSettings(settings){
   const limits=settings.workspace_limits||{};
   const rows=[
-    ['Modus', settings.mode||'-'],
-    ['Server', `${settings.host||'127.0.0.1'}:${settings.port||8000}`],
-    ['Datenbank', settings.db_provider||'sqlite'],
-    ['DB-Pfad', settings.db_path||'-'],
-    ['Workspace', settings.workspace_path||'-'],
+    [t('settings.mode'), settings.mode||'-'],
+    [t('settings.server'), `${settings.host||'127.0.0.1'}:${settings.port||8000}`],
+    [t('settings.database'), settings.db_provider||'sqlite'],
+    [t('settings.dbPath'), settings.db_path||'-'],
+    [t('workspace.title'), settings.workspace_path||'-'],
   ];
   const runtime=document.getElementById('settingsRuntime');
   if(runtime){
@@ -47,12 +47,12 @@ function renderSettings(settings){
     summary.innerHTML=`
       <div class="usage-card">
         <div class="usage-card-stats">
-          <div class="usage-stat"><span class="usage-stat-value">${settings.auth_required?'An':'Aus'}</span><span class="usage-stat-label">API Auth</span></div>
+          <div class="usage-stat"><span class="usage-stat-value">${settings.auth_required?t('settings.authOn'):t('settings.authOff')}</span><span class="usage-stat-label">${t('settings.apiAuth')}</span></div>
           <div class="usage-stat"><span class="usage-stat-value">${keyNames.filter(k=>keys[k]).length}</span><span class="usage-stat-label">Keys</span></div>
         </div>
       </div>
       <div class="settings-key-list">${keyNames.map(k=>`
-        <div class="settings-key"><span>${esc(k)}</span><span class="status-chip ${keys[k]?'ok':'muted'}">${keys[k]?'gesetzt':'leer'}</span></div>
+        <div class="settings-key"><span>${esc(k)}</span><span class="status-chip ${keys[k]?'ok':'muted'}">${keys[k]?t('settings.keySet'):t('settings.keyEmpty')}</span></div>
       `).join('')}</div>`;
   }
 }
@@ -60,23 +60,23 @@ function renderSettings(settings){
 async function saveSettingsWorkspace(){
   const input=document.getElementById('settingsWorkspacePath');
   const workspace_path=(input?.value||'').trim();
-  if(!workspace_path){toast('Workspace-Pfad ist erforderlich','err');return;}
+  if(!workspace_path){toast(t('settings.workspaceRequired'),'err');return;}
   try{
     const d=await req('PUT','/settings',{workspace_path});
     renderSettings(d.settings||{});
     await loadWorkspace();
-    toast('Workspace-Pfad gespeichert','ok');
+    toast(t('settings.workspaceSaved'),'ok');
   }catch(e){toast(e.message,'err');}
 }
 
 async function createBackup(){
   const status=document.getElementById('backupStatus');
-  if(status) status.textContent='Backup laeuft...';
+  if(status) status.textContent=t('settings.backupRunning');
   try{
     const d=await req('POST','/backup',{});
-    const path=d.backup_path||'Backup erstellt';
+    const path=d.backup_path||t('settings.backupCreated');
     if(status) status.textContent=path;
-    toast('Backup erstellt','ok');
+    toast(t('settings.backupCreated'),'ok');
   }catch(e){
     if(status) status.textContent=e.message;
     toast(e.message,'err');

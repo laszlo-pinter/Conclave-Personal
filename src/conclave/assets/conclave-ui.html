@@ -14,6 +14,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
 <script src="static/js/state.js"></script>
 <script src="static/js/api.js"></script>
+<script src="static/js/i18n.js"></script>
 <script src="static/js/utils.js"></script>
 
 </head>
@@ -28,73 +29,80 @@
     <div class="logo-text">Conclave</div>
   </div>
   <div class="sb-tabs">
-    <button class="sb-tab active" data-action="switch-tab" data-tab="conv">Studio</button>
-    <button class="sb-tab" data-action="switch-tab" data-tab="agents">Agents</button>
-    <button class="sb-tab" data-action="switch-tab" data-tab="workspace">Files</button>
-    <button class="sb-tab" data-action="switch-tab" data-tab="runs">Runs</button>
-    <button class="sb-tab" data-action="switch-tab" data-tab="settings">Settings</button>
+    <button class="sb-tab active" data-action="switch-tab" data-tab="conv" data-i18n="nav.studio">Studio</button>
+    <button class="sb-tab" data-action="switch-tab" data-tab="agents" data-i18n="nav.agents">Agents</button>
+    <button class="sb-tab" data-action="switch-tab" data-tab="workspace" data-i18n="nav.files">Files</button>
+    <button class="sb-tab" data-action="switch-tab" data-tab="runs" data-i18n="nav.runs">Runs</button>
+    <button class="sb-tab" data-action="switch-tab" data-tab="settings" data-i18n="nav.settings">Settings</button>
   </div>
 
   <div class="sb-panel active" id="panelConv">
     <div class="sb-actions">
       <button class="btn-full" data-action="open-new-conv">
         <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v9M1 5.5h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        Neue Conversation
+        <span data-i18n="conv.new">Neue Conversation</span>
       </button>
     </div>
-    <div class="conv-list-inner" id="convList"><div class="empty-list">Noch keine Conversations</div></div>
+    <div class="conv-list-inner" id="convList"><div class="empty-list" data-i18n="conv.none">Noch keine Conversations</div></div>
   </div>
 
   <div class="sb-panel" id="panelAgents">
     <div class="sb-actions">
       <button class="btn-full" data-action="open-agent-form">
         <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v9M1 5.5h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        Neuer Agent
+        <span data-i18n="agents.new">Neuer Agent</span>
       </button>
     </div>
-    <div class="agent-list-inner" id="agentList"><div class="empty-list">Lade Agenten…</div></div>
+    <div class="agent-list-inner" id="agentList"><div class="empty-list" data-i18n="agents.loading">Lade Agenten...</div></div>
   </div>
 
   <div class="sb-panel" id="panelWorkspace">
     <div class="surface-section">
-      <div class="surface-section-title">Workspace</div>
-      <div id="workspaceList"><div class="surface-empty">Lade…</div></div>
+      <div class="surface-section-title" data-i18n="workspace.title">Workspace</div>
+      <div id="workspaceList"><div class="surface-empty" data-i18n="common.loading">Lade...</div></div>
       <div style="margin-top:8px;display:flex;gap:6px">
-        <button class="btn-full secondary" data-action="ws-upload-click" style="flex:1">Datei hochladen</button>
-        <button class="btn-full secondary" data-action="open-ws-text" style="flex:1">Text ablegen</button>
+        <button class="btn-full secondary" data-action="ws-upload-click" style="flex:1" data-i18n="workspace.upload">Datei hochladen</button>
+        <button class="btn-full secondary" data-action="open-ws-text" style="flex:1" data-i18n="workspace.text">Text ablegen</button>
       </div>
       <input type="file" id="wsUpload" style="display:none" accept=".txt,.md,.csv,.json,.xml,.yaml,.yml,.toml,.log,.py,.js,.ts,.html,.css,.sql,.sh" onchange="uploadWsFile(this)"/>
-      <div class="surface-info" style="margin-top:4px">Im Chat mit <code>@workspace/datei.md</code> referenzieren. Klick auf Dateiname fuegt Referenz ein.</div>
+      <div class="surface-info" style="margin-top:4px" data-i18n-html="workspace.info">Im Chat mit <code>@workspace/datei.md</code> referenzieren. Klick auf Dateiname fuegt Referenz ein.</div>
     </div>
     <div class="surface-section">
-      <div class="surface-section-title">Export</div>
-      <div class="surface-info">Conversation waehlen, dann:</div>
-      <button class="btn-full secondary" data-action="export-conv" id="btnExport" disabled>Conversation exportieren</button>
+      <div class="surface-section-title" data-i18n="workspace.export">Export</div>
+      <div class="surface-info" data-i18n="conv.choose">Conversation waehlen, dann:</div>
+      <button class="btn-full secondary" data-action="export-conv" id="btnExport" disabled data-i18n="workspace.exportConv">Conversation exportieren</button>
     </div>
   </div>
 
   <div class="sb-panel" id="panelRuns">
     <div class="surface-section">
-      <div class="surface-section-title">Letzte Runs</div>
-      <div id="runList"><div class="surface-empty">Lade...</div></div>
+      <div class="surface-section-title" data-i18n="runs.recent">Letzte Runs</div>
+      <div id="runList"><div class="surface-empty" data-i18n="common.loading">Lade...</div></div>
     </div>
     <div class="surface-section">
       <div class="surface-section-title">Usage</div>
-      <div id="usageSummary"><div class="surface-empty">Lade...</div></div>
+      <div id="usageSummary"><div class="surface-empty" data-i18n="common.loading">Lade...</div></div>
     </div>
   </div>
 
   <div class="sb-panel" id="panelSettings">
     <div class="surface-section">
-      <div class="surface-section-title">Betrieb</div>
-      <div id="settingsSummary"><div class="surface-empty">Lade...</div></div>
+      <div class="surface-section-title" data-i18n="settings.operation">Betrieb</div>
+      <div id="settingsSummary"><div class="surface-empty" data-i18n="common.loading">Lade...</div></div>
     </div>
     <div class="surface-section">
-      <button class="btn-full secondary" data-action="open-key-modal">API-Zugang</button>
+      <button class="btn-full secondary" data-action="open-key-modal" data-i18n="settings.apiAccess">API-Zugang</button>
     </div>
   </div>
 
   <div class="sb-foot">
+    <div class="language-row">
+      <span data-i18n="lang.label">Sprache</span>
+      <select id="languageSelect" onchange="setLanguage(this.value)" aria-label="Language">
+        <option value="de" data-i18n="lang.de">Deutsch</option>
+        <option value="en" data-i18n="lang.en">English</option>
+      </select>
+    </div>
     <div class="api-status"><div class="api-dot" id="apiDot"></div><span id="apiLabel">Verbinde…</span></div>
     <button class="btn-key" data-action="open-key-modal">
       <span class="key-dot" id="keyDot"></span>
@@ -108,37 +116,37 @@
   <!-- Topbar -->
   <div class="topbar" id="topbar" style="display:none">
     <div class="topbar-id" id="topbarId"></div>
-    <div class="topic-pill" id="topicPill" style="display:none" data-action="open-topic-modal" title="Thema bearbeiten">
+    <div class="topic-pill" id="topicPill" style="display:none" data-action="open-topic-modal" title="Thema bearbeiten" data-i18n-title="topic.editTitle">
       <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 5h8M5 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span class="topic-pill-text" id="topicText"></span>
     </div>
     <button class="btn-sm" id="btnTopicSet" data-action="open-topic-modal" style="display:none">
       <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M1 4.5h7M4.5 1l3.5 3.5L4.5 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      Thema setzen
+      <span data-i18n="topic.set">Thema setzen</span>
     </button>
     <div class="p-badges" id="pBadges"></div>
     <button class="btn-sm" data-action="open-add-participant">
       <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M4.5 1v7M1 4.5h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
       Participant
     </button>
-    <button class="btn-sm" data-action="open-rules-modal" title="Chat-Regeln fuer Agenten">
-      Regeln
+    <button class="btn-sm" data-action="open-rules-modal" title="Chat-Regeln fuer Agenten" data-i18n-title="rules.title">
+      <span data-i18n="rules.button">Regeln</span>
     </button>
   </div>
 
   <!-- Floor bar -->
   <div class="floorbar" id="floorbar">
-    <span class="floor-label">Wort erteilt</span>
+    <span class="floor-label" data-i18n="floor.label">Wort erteilt</span>
     <span class="floor-holder" id="floorHolder">—</span>
     <div class="floor-actions">
-      <button class="btn-floor-invoke" id="btnFloorInvoke" data-action="invoke-with-floor">Antworten lassen</button>
-      <button class="btn-floor-revoke" data-action="revoke-floor">Entziehen</button>
+      <button class="btn-floor-invoke" id="btnFloorInvoke" data-action="invoke-with-floor" data-i18n="floor.invoke">Antworten lassen</button>
+      <button class="btn-floor-revoke" data-action="revoke-floor" data-i18n="floor.revoke">Entziehen</button>
     </div>
   </div>
 
   <!-- Floor grant panel -->
   <div class="floor-panel" id="floorPanel">
-    <span class="floor-panel-label">Wort erteilen:</span>
+    <span class="floor-panel-label" data-i18n="floor.grant">Wort erteilen:</span>
     <div id="floorGrantBtns"></div>
   </div>
 
@@ -146,8 +154,8 @@
   <div class="messages" id="messages">
     <div class="empty" id="emptyMsg">
       <div class="empty-icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="9" stroke="#6b7280" stroke-width="1.5"/><circle cx="7.5" cy="11" r="2" fill="#6b7280"/><circle cx="14.5" cy="11" r="2" fill="#6b7280"/></svg></div>
-      <div class="empty-title">Kein Gespraech gewaehlt</div>
-      <div class="empty-sub">Waehle eine Conversation oder erstelle eine neue.</div>
+      <div class="empty-title" data-i18n="conv.noneSelected">Kein Gespraech gewaehlt</div>
+      <div class="empty-sub" data-i18n="conv.selectOrCreate">Waehle eine Conversation oder erstelle eine neue.</div>
     </div>
   </div>
 
@@ -157,21 +165,21 @@
       <div class="page-head">
         <div>
           <h2>Agents</h2>
-          <p>Wiederverwendbare Rollen, Provider und Modelle.</p>
+          <p data-i18n="agents.subtitle">Wiederverwendbare Rollen, Provider und Modelle.</p>
         </div>
         <button class="btn-full page-action" data-action="open-agent-form">
           <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v9M1 5.5h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          Neuer Agent
+          <span data-i18n="agents.new">Neuer Agent</span>
         </button>
       </div>
       <div class="workbench-grid">
         <section class="workbench-section">
-          <div class="workbench-title">Agenten</div>
-          <div id="agentWorkbench"><div class="surface-empty">Lade Agenten...</div></div>
+          <div class="workbench-title" data-i18n="agents.listTitle">Agenten</div>
+          <div id="agentWorkbench"><div class="surface-empty" data-i18n="agents.loading">Lade Agenten...</div></div>
         </section>
         <section class="workbench-section">
-          <div class="workbench-title">Provider</div>
-          <div id="providerWorkbench"><div class="surface-empty">Lade Provider...</div></div>
+          <div class="workbench-title" data-i18n="agents.providers">Provider</div>
+          <div id="providerWorkbench"><div class="surface-empty" data-i18n="agents.providersLoading">Lade Provider...</div></div>
         </section>
       </div>
     </div>
@@ -183,17 +191,17 @@
       <div class="page-head">
         <div>
           <h2>Workspace</h2>
-          <p>Lokale Dateien, Notizen und Outputs.</p>
+          <p data-i18n="workspace.subtitle">Lokale Dateien, Notizen und Outputs.</p>
         </div>
         <div class="page-actions">
-          <button class="btn-full secondary page-action" data-action="ws-upload-click">Hochladen</button>
-          <button class="btn-full page-action" data-action="open-ws-text">Text ablegen</button>
+          <button class="btn-full secondary page-action" data-action="ws-upload-click" data-i18n="workspace.uploadShort">Hochladen</button>
+          <button class="btn-full page-action" data-action="open-ws-text" data-i18n="workspace.text">Text ablegen</button>
         </div>
       </div>
       <div class="workbench-section">
-        <div class="workbench-title">Dateien</div>
+        <div class="workbench-title" data-i18n="workspace.files">Dateien</div>
         <div id="workspaceLimits" class="limit-row"></div>
-        <div id="workspaceMainList"><div class="surface-empty">Lade Workspace...</div></div>
+        <div id="workspaceMainList"><div class="surface-empty" data-i18n="workspace.loading">Lade Workspace...</div></div>
       </div>
     </div>
   </div>
@@ -204,16 +212,16 @@
       <div class="page-head">
         <div>
           <h2>Runs</h2>
-          <p>Aufrufe, Orchestrierungen und Token-Nutzung.</p>
+          <p data-i18n="runs.subtitle">Aufrufe, Orchestrierungen und Token-Nutzung.</p>
         </div>
       </div>
       <div class="workbench-section">
-        <div class="workbench-title">Run-Historie</div>
-        <div id="runsTable"><div class="surface-empty">Lade...</div></div>
+        <div class="workbench-title" data-i18n="runs.history">Run-Historie</div>
+        <div id="runsTable"><div class="surface-empty" data-i18n="common.loading">Lade...</div></div>
       </div>
       <div class="workbench-section">
-        <div class="workbench-title">Usage pro Conversation</div>
-        <div id="usageTable"><div class="surface-empty">Lade...</div></div>
+        <div class="workbench-title" data-i18n="runs.usageByConversation">Usage pro Conversation</div>
+        <div id="usageTable"><div class="surface-empty" data-i18n="common.loading">Lade...</div></div>
       </div>
     </div>
   </div>
@@ -224,27 +232,27 @@
       <div class="page-head">
         <div>
           <h2>Settings</h2>
-          <p>Lokale Pfade, API-Zugang und Backups.</p>
+          <p data-i18n="settings.subtitle">Lokale Pfade, API-Zugang und Backups.</p>
         </div>
       </div>
       <div class="workbench-grid">
         <section class="workbench-section">
-          <div class="workbench-title">Runtime</div>
-          <div id="settingsRuntime"><div class="surface-empty">Lade Settings...</div></div>
+          <div class="workbench-title" data-i18n="settings.runtime">Runtime</div>
+          <div id="settingsRuntime"><div class="surface-empty" data-i18n="common.loading">Lade Settings...</div></div>
         </section>
         <section class="workbench-section">
-          <div class="workbench-title">Lokaler Workspace</div>
+          <div class="workbench-title" data-i18n="settings.localWorkspace">Lokaler Workspace</div>
           <div id="settingsWorkspacePolicy" class="limit-row"></div>
           <div class="field">
-            <label>Workspace-Pfad</label>
-            <input type="text" id="settingsWorkspacePath" placeholder="Workspace-Pfad"/>
+            <label data-i18n="settings.workspacePath">Workspace-Pfad</label>
+            <input type="text" id="settingsWorkspacePath" placeholder="Workspace-Pfad" data-i18n-placeholder="settings.workspacePath"/>
           </div>
-          <button class="btn-full page-action" data-action="save-settings-workspace">Speichern</button>
+          <button class="btn-full page-action" data-action="save-settings-workspace" data-i18n="common.save">Speichern</button>
         </section>
         <section class="workbench-section">
-          <div class="workbench-title">Backup</div>
-          <div id="backupStatus" class="surface-info">Bereit.</div>
-          <button class="btn-full page-action" data-action="create-backup">Backup erstellen</button>
+          <div class="workbench-title" data-i18n="settings.backup">Backup</div>
+          <div id="backupStatus" class="surface-info" data-i18n="common.ready">Bereit.</div>
+          <button class="btn-full page-action" data-action="create-backup" data-i18n="settings.createBackup">Backup erstellen</button>
         </section>
       </div>
     </div>
@@ -254,13 +262,13 @@
   <div class="inputbar" id="inputbar" style="display:none">
     <div class="input-row">
       <div class="ta-wrap">
-        <textarea class="msg-ta" id="msgInput" placeholder="Nachricht schreiben…" rows="1"
+        <textarea class="msg-ta" id="msgInput" placeholder="Nachricht schreiben..." data-i18n-placeholder="input.placeholder" rows="1"
           onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
       </div>
-      <button class="btn-send" id="btnMic" data-action="toggle-mic" title="Spracheingabe">
+      <button class="btn-send" id="btnMic" data-action="toggle-mic" title="Spracheingabe" data-i18n-title="input.micTitle">
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none" id="micIcon"><path d="M7.5 1a2 2 0 0 0-2 2v4a2 2 0 0 0 4 0V3a2 2 0 0 0-2-2z" stroke="currentColor" stroke-width="1.3"/><path d="M4 7a3.5 3.5 0 0 0 7 0" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M7.5 11.5v2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
       </button>
-      <button class="btn-send" data-action="pick-file" title="Datei anhaengen">
+      <button class="btn-send" data-action="pick-file" title="Datei anhaengen" data-i18n-title="input.attachTitle">
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M7.5 1v10M4 5.5l3.5-3.5L11 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 10v2.5h11V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <input type="file" id="fileInput" style="display:none" accept=".txt,.md,.csv,.json,.xml,.yaml,.yml,.toml,.log,.py,.js,.ts,.html,.css,.sql,.sh,.java,.go,.rs,.c,.cpp,.h,.rb,.php,.r,.swift,.kt" onchange="handleFile(this)"/>
@@ -269,11 +277,11 @@
       </button>
     </div>
     <div class="acts">
-      <select class="sel" id="pSel" onchange="onPSelChange()"><option value="">Participant waehlen…</option></select>
-      <button class="btn-act btn-invoke" data-action="invoke-p" id="btnInvoke" disabled>Aufrufen</button>
-      <button class="btn-act btn-stream" data-action="stream-p" id="btnStream" disabled>&#9654; Stream</button>
-      <button class="btn-act btn-orch" data-action="open-orch" id="btnOrch" disabled>&#8635; Orchestrieren</button>
-      <button class="btn-act btn-loop" data-action="open-autoloop" id="btnAutoloop" disabled>&#8734; Auto-Loop</button>
+      <select class="sel" id="pSel" onchange="onPSelChange()"><option value="" data-i18n="participants.pick">Participant waehlen...</option></select>
+      <button class="btn-act btn-invoke" data-action="invoke-p" id="btnInvoke" disabled data-i18n="input.invoke">Aufrufen</button>
+      <button class="btn-act btn-stream" data-action="stream-p" id="btnStream" disabled>&#9654; <span data-i18n="input.stream">Stream</span></button>
+      <button class="btn-act btn-orch" data-action="open-orch" id="btnOrch" disabled>&#8635; <span data-i18n="input.orchestrate">Orchestrieren</span></button>
+      <button class="btn-act btn-loop" data-action="open-autoloop" id="btnAutoloop" disabled>&#8734; <span data-i18n="input.autoloop">Auto-Loop</span></button>
       <div class="flex1"></div>
     </div>
   </div>
@@ -282,15 +290,15 @@
 <!-- Modal: Neue Conversation -->
 <div class="overlay" id="overlayNewConv">
   <div class="modal">
-    <div class="modal-title">Neue Conversation</div>
+    <div class="modal-title" data-i18n="conv.new">Neue Conversation</div>
     <div class="field">
-      <label>Thema (optional)</label>
+      <label data-i18n="topic.optional">Thema (optional)</label>
       <input type="text" id="newConvTopic" placeholder="z.B. Klimawandel, KI-Ethik, Softwarearchitektur…"/>
-      <div class="field-hint">Schraenkt das Gespraech thematisch ein.</div>
+      <div class="field-hint" data-i18n="topic.hint">Schraenkt das Gespraech thematisch ein.</div>
     </div>
     <div class="modal-acts">
-      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayNewConv">Abbrechen</button>
-      <button class="btn-confirm" data-action="create-conv">Erstellen</button>
+      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayNewConv" data-i18n="common.cancel">Abbrechen</button>
+      <button class="btn-confirm" data-action="create-conv" data-i18n="common.create">Erstellen</button>
     </div>
   </div>
 </div>
@@ -298,14 +306,14 @@
 <!-- Modal: Thema setzen -->
 <div class="overlay" id="overlayTopic">
   <div class="modal">
-    <div class="modal-title">Thema setzen</div>
+    <div class="modal-title" data-i18n="topic.set">Thema setzen</div>
     <div class="field">
-      <label>Thema</label>
+      <label data-i18n="topic.label">Thema</label>
       <input type="text" id="topicInput" placeholder="z.B. Klimawandel, Ethik in KI…"/>
     </div>
     <div class="modal-acts">
-      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayTopic">Abbrechen</button>
-      <button class="btn-confirm orange" data-action="save-topic">Setzen</button>
+      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayTopic" data-i18n="common.cancel">Abbrechen</button>
+      <button class="btn-confirm orange" data-action="save-topic" data-i18n="topic.set">Setzen</button>
     </div>
   </div>
 </div>
@@ -313,32 +321,32 @@
 <!-- Modal: Agent -->
 <div class="overlay" id="overlayAgent">
   <div class="modal">
-    <div class="modal-title" id="agentModalTitle">Agent konfigurieren</div>
+    <div class="modal-title" id="agentModalTitle" data-i18n="agents.modalTitleCreate">Agent konfigurieren</div>
     <div class="field-row">
-      <div class="field"><label>ID *</label><input type="text" id="aId" placeholder="z.B. claude1" oninput="updatePrompt()"/></div>
-      <div class="field"><label>Name *</label><input type="text" id="aName" placeholder="z.B. Claude Sonnet" oninput="updatePrompt()"/></div>
+      <div class="field"><label data-i18n="agents.id">ID *</label><input type="text" id="aId" placeholder="z.B. claude1" oninput="updatePrompt()"/></div>
+      <div class="field"><label data-i18n="agents.name">Name *</label><input type="text" id="aName" placeholder="z.B. Claude Sonnet" oninput="updatePrompt()"/></div>
     </div>
     <div class="field-row">
       <div class="field">
-        <label>Preset</label>
+        <label data-i18n="agents.preset">Preset</label>
         <select id="aPreset" onchange="onPresetChange()">
-          <option value="">Lade...</option>
+          <option value="" data-i18n="common.loading">Lade...</option>
         </select>
       </div>
       <div class="field">
-        <label>Modell *</label>
+        <label data-i18n="agents.model">Modell *</label>
         <select id="aModel"></select>
       </div>
     </div>
     <div class="field">
-      <label>API-Key</label>
-      <input type="password" id="aApiKey" placeholder="Leer = Env-Var Fallback"/>
-      <div class="field-hint">Wird verschluesselt gespeichert. Ollama braucht keinen Key.</div>
+      <label data-i18n="agents.apiKey">API-Key</label>
+      <input type="password" id="aApiKey" placeholder="Leer = Env-Var Fallback" data-i18n-placeholder="agents.emptyKeyFallback"/>
+      <div class="field-hint" data-i18n="agents.keyHint">Wird verschluesselt gespeichert. Ollama braucht keinen Key.</div>
     </div>
     <div class="field">
-      <label>Rolle (optional)</label>
+      <label data-i18n="agents.role">Rolle (optional)</label>
       <div class="radio-group" id="roleGroup">
-        <div class="radio-opt sel-none" data-role="" data-action="select-role">Keine</div>
+        <div class="radio-opt sel-none" data-role="" data-action="select-role" data-i18n="common.none">Keine</div>
         <div class="radio-opt" data-role="writer" data-action="select-role">Writer</div>
         <div class="radio-opt" data-role="reviewer" data-action="select-role">Reviewer</div>
         <div class="radio-opt" data-role="critic" data-action="select-role">Critic</div>
@@ -348,18 +356,18 @@
         <div class="radio-opt" data-role="custom" data-action="select-role">Custom</div>
       </div>
     </div>
-    <div class="field"><label>Thema (optional)</label><input type="text" id="aTopic" placeholder="z.B. Klimawandel…" oninput="updatePrompt()"/></div>
+    <div class="field"><label data-i18n="topic.optional">Thema (optional)</label><input type="text" id="aTopic" placeholder="z.B. Klimawandel..." oninput="updatePrompt()"/></div>
     <div class="field">
-      <label>System-Prompt</label>
+      <label data-i18n="agents.systemPrompt">System-Prompt</label>
       <textarea id="aSysPrompt" rows="3" oninput="onSysEdit()"></textarea>
     </div>
     <div style="margin-top:8px;margin-bottom:8px">
-      <button class="btn-sm" data-action="toggle-advanced" id="btnAdvanced" style="font-size:11px">Erweitert anzeigen</button>
+      <button class="btn-sm" data-action="toggle-advanced" id="btnAdvanced" style="font-size:11px" data-i18n="agents.advancedShow">Erweitert anzeigen</button>
     </div>
     <div id="advancedFields" style="display:none">
-      <div class="field"><label>API-URL</label><input type="text" id="aApiUrl" placeholder="Wird vom Preset gesetzt"/></div>
-      <div class="field"><label>Response-Path</label><input type="text" id="aResponsePath" placeholder="z.B. choices[0].message.content"/></div>
-      <div class="field"><label>Message-Format</label>
+      <div class="field"><label data-i18n="agents.apiUrl">API-URL</label><input type="text" id="aApiUrl" placeholder="Wird vom Preset gesetzt" data-i18n-placeholder="agents.urlFromPreset"/></div>
+      <div class="field"><label data-i18n="agents.responsePath">Response-Path</label><input type="text" id="aResponsePath" placeholder="z.B. choices[0].message.content"/></div>
+      <div class="field"><label data-i18n="agents.messageFormat">Message-Format</label>
         <select id="aMsgFormat">
           <option value="standard">Standard (OpenAI/Mistral/Ollama)</option>
           <option value="gemini">Gemini</option>
@@ -367,9 +375,9 @@
       </div>
     </div>
     <div class="modal-acts">
-      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayAgent">Abbrechen</button>
-      <button class="btn" data-action="test-agent" id="btnTestAgent">Testen</button>
-      <button class="btn-confirm" id="btnSaveAgent" data-action="save-agent"><span id="btnSaveAgentLabel">Speichern</span></button>
+      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayAgent" data-i18n="common.cancel">Abbrechen</button>
+      <button class="btn" data-action="test-agent" id="btnTestAgent" data-i18n="agents.test">Testen</button>
+      <button class="btn-confirm" id="btnSaveAgent" data-action="save-agent"><span id="btnSaveAgentLabel" data-i18n="common.save">Speichern</span></button>
     </div>
   </div>
 </div>
@@ -377,20 +385,20 @@
 <!-- Modal: Participant -->
 <div class="overlay" id="overlayParticipant">
   <div class="modal">
-    <div class="modal-title">Participant hinzufuegen</div>
+    <div class="modal-title" data-i18n="participants.title">Participant hinzufuegen</div>
     <div class="field">
-      <label>Aus Agenten waehlen</label>
-      <select class="sel" id="agentPick" onchange="fillFromAgent()" style="width:100%"><option value="">— Manuell eingeben —</option></select>
+      <label data-i18n="participants.chooseAgent">Aus Agenten waehlen</label>
+      <select class="sel" id="agentPick" onchange="fillFromAgent()" style="width:100%"><option value="" data-i18n="participants.manual">— Manuell eingeben —</option></select>
     </div>
     <div style="height:1px;background:var(--border);margin:0 0 14px"></div>
     <div class="field-row">
-      <div class="field"><label>Participant ID *</label><input type="text" id="pFormId" placeholder="z.B. claude1"/></div>
-      <div class="field"><label>Name *</label><input type="text" id="pFormName" placeholder="z.B. Claude Sonnet"/></div>
+      <div class="field"><label data-i18n="participants.id">Participant ID *</label><input type="text" id="pFormId" placeholder="z.B. claude1"/></div>
+      <div class="field"><label data-i18n="participants.name">Name *</label><input type="text" id="pFormName" placeholder="z.B. Claude Sonnet"/></div>
     </div>
-    <div class="field"><label>Typ</label><select id="pFormType"><option value="model">Model</option><option value="user">User</option></select></div>
+    <div class="field"><label data-i18n="participants.type">Typ</label><select id="pFormType"><option value="model">Model</option><option value="user">User</option></select></div>
     <div class="modal-acts">
-      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayParticipant">Abbrechen</button>
-      <button class="btn-confirm" data-action="add-participant">Registrieren</button>
+      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayParticipant" data-i18n="common.cancel">Abbrechen</button>
+      <button class="btn-confirm" data-action="add-participant" data-i18n="participants.register">Registrieren</button>
     </div>
   </div>
 </div>
@@ -398,19 +406,19 @@
 <!-- Modal: Orchestrierung -->
 <div class="overlay" id="overlayOrch">
   <div class="modal">
-    <div class="modal-title">Orchestrierung</div>
+    <div class="modal-title" data-i18n="orch.title">Orchestrierung</div>
     <div class="field">
-      <label>Reihenfolge</label>
+      <label data-i18n="orch.sequence">Reihenfolge</label>
       <input type="text" id="orchSeq" placeholder="z.B. claude1, gpt1, claude1"/>
-      <div class="field-hint">Komma-getrennte IDs. Wiederholungen moeglich.</div>
+      <div class="field-hint" data-i18n="orch.sequenceHint">Komma-getrennte IDs. Wiederholungen moeglich.</div>
     </div>
     <div class="check-row">
       <input type="checkbox" id="orchParallel"/>
-      <label for="orchParallel">Parallel ausfuehren (alle gleichzeitig, ohne gegenseitigen Kontext)</label>
+      <label for="orchParallel" data-i18n="orch.parallel">Parallel ausfuehren (alle gleichzeitig, ohne gegenseitigen Kontext)</label>
     </div>
     <div class="modal-acts">
-      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayOrch">Abbrechen</button>
-      <button class="btn-confirm purple" data-action="run-orch">Starten</button>
+      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayOrch" data-i18n="common.cancel">Abbrechen</button>
+      <button class="btn-confirm purple" data-action="run-orch" data-i18n="common.start">Starten</button>
     </div>
   </div>
 </div>
@@ -418,28 +426,28 @@
 <!-- Modal: Auto-Loop -->
 <div class="overlay" id="overlayAutoloop">
   <div class="modal">
-    <div class="modal-title">Auto-Loop &mdash; Agenten diskutieren lassen</div>
+    <div class="modal-title" data-i18n="autoloop.title">Auto-Loop &mdash; Agenten diskutieren lassen</div>
     <div class="field">
-      <label>Reihenfolge</label>
+      <label data-i18n="autoloop.sequence">Reihenfolge</label>
       <input type="text" id="loopSeq" placeholder="z.B. claude1, gpt1"/>
-      <div class="field-hint">Komma-getrennte IDs. Diese Sequenz wird pro Runde wiederholt; jeder Agent sieht die Antworten der anderen.</div>
+      <div class="field-hint" data-i18n="autoloop.sequenceHint">Komma-getrennte IDs. Diese Sequenz wird pro Runde wiederholt; jeder Agent sieht die Antworten der anderen.</div>
     </div>
     <div class="field-row">
       <div class="field">
-        <label>Max. Runden</label>
+        <label data-i18n="autoloop.maxRounds">Max. Runden</label>
         <input type="number" id="loopRounds" min="1" max="50" value="6"/>
-        <div class="field-hint">Notbremse, falls kein Stop-Signal kommt.</div>
+        <div class="field-hint" data-i18n="autoloop.maxRoundsHint">Notbremse, falls kein Stop-Signal kommt.</div>
       </div>
       <div class="field">
-        <label>Stop-Signal</label>
+        <label data-i18n="autoloop.stopSignal">Stop-Signal</label>
         <input type="text" id="loopStop" value="@done"/>
-        <div class="field-hint">Sobald ein Agent das schreibt, endet die Diskussion.</div>
+        <div class="field-hint" data-i18n="autoloop.stopSignalHint">Sobald ein Agent das schreibt, endet die Diskussion.</div>
       </div>
     </div>
-    <div class="field-hint" style="margin-bottom:4px">Tipp: Hinterlege unter <b>Regeln</b> eine Anweisung wie &bdquo;Diskutiert miteinander und schreibt <code>@done</code> bei Konsens&ldquo;, damit die Runde sinnvoll endet.</div>
+    <div class="field-hint" style="margin-bottom:4px" data-i18n-html="autoloop.tip">Tipp: Hinterlege unter <b>Regeln</b> eine Anweisung wie &bdquo;Diskutiert miteinander und schreibt <code>@done</code> bei Konsens&ldquo;, damit die Runde sinnvoll endet.</div>
     <div class="modal-acts">
-      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayAutoloop">Abbrechen</button>
-      <button class="btn-confirm purple" data-action="run-autoloop">Diskussion starten</button>
+      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayAutoloop" data-i18n="common.cancel">Abbrechen</button>
+      <button class="btn-confirm purple" data-action="run-autoloop" data-i18n="autoloop.start">Diskussion starten</button>
     </div>
   </div>
 </div>
@@ -447,21 +455,21 @@
 <!-- Modal: API-Key -->
 <div class="overlay" id="overlayKey">
   <div class="modal">
-    <div class="modal-title">API-Key Einstellungen</div>
+    <div class="modal-title" data-i18n="auth.modalTitle">API-Key Einstellungen</div>
     <div class="field">
-      <label>API-Server URL</label>
+      <label data-i18n="auth.serverUrl">API-Server URL</label>
       <input type="text" id="keyApiUrl" placeholder="http://localhost:8000"/>
-      <div class="field-hint">Standard: http://localhost:8000</div>
+      <div class="field-hint" data-i18n="auth.serverDefault">Standard: http://localhost:8000</div>
     </div>
     <div class="field">
-      <label>API-Key (Bearer Token)</label>
-      <input type="password" id="keyInput" placeholder="Leer lassen wenn keine Auth noetig"/>
-      <div class="field-hint">Wird lokal im Browser gespeichert (LocalStorage). Wird als Authorization: Bearer Header gesendet.</div>
+      <label data-i18n="auth.keyLabel">API-Key (Bearer Token)</label>
+      <input type="password" id="keyInput" placeholder="Leer lassen wenn keine Auth noetig" data-i18n-placeholder="auth.keyPlaceholder"/>
+      <div class="field-hint" data-i18n="auth.keyHint">Wird lokal im Browser gespeichert (LocalStorage). Wird als Authorization: Bearer Header gesendet.</div>
     </div>
     <div class="modal-acts">
-      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayKey">Abbrechen</button>
-      <button class="btn-confirm danger" data-action="clear-key" style="margin-right:auto">Key loeschen</button>
-      <button class="btn-confirm" data-action="save-key">Speichern</button>
+      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayKey" data-i18n="common.cancel">Abbrechen</button>
+      <button class="btn-confirm danger" data-action="clear-key" style="margin-right:auto" data-i18n="auth.clear">Key loeschen</button>
+      <button class="btn-confirm" data-action="save-key" data-i18n="common.save">Speichern</button>
     </div>
   </div>
 </div>
@@ -469,12 +477,12 @@
 <!-- Modal: Workspace Text ablegen -->
 <div class="overlay" id="overlayWsText">
   <div class="modal">
-    <div class="modal-title">Text im Workspace ablegen</div>
-    <div class="field"><label>Dateiname</label><input type="text" id="wsFileName" placeholder="z.B. notizen.md"/></div>
-    <div class="field"><label>Inhalt</label><textarea id="wsFileContent" rows="10" placeholder="Inhalt hier einfuegen..."></textarea></div>
+    <div class="modal-title" data-i18n="workspace.textTitle">Text im Workspace ablegen</div>
+    <div class="field"><label data-i18n="workspace.fileName">Dateiname</label><input type="text" id="wsFileName" placeholder="z.B. notes.md"/></div>
+    <div class="field"><label data-i18n="workspace.content">Inhalt</label><textarea id="wsFileContent" rows="10" placeholder="Inhalt hier einfuegen..." data-i18n-placeholder="workspace.contentPlaceholder"></textarea></div>
     <div class="modal-acts">
-      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayWsText">Abbrechen</button>
-      <button class="btn-confirm" data-action="save-ws-text">Speichern</button>
+      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayWsText" data-i18n="common.cancel">Abbrechen</button>
+      <button class="btn-confirm" data-action="save-ws-text" data-i18n="common.save">Speichern</button>
     </div>
   </div>
 </div>
@@ -482,15 +490,15 @@
 <!-- Modal: Chat-Regeln -->
 <div class="overlay" id="overlayRules">
   <div class="modal">
-    <div class="modal-title">Chat-Regeln</div>
+    <div class="modal-title" data-i18n="rules.title">Chat-Regeln</div>
     <div class="field">
-      <label>Regeln fuer alle Agenten in dieser Conversation</label>
+      <label data-i18n="rules.modalLabel">Regeln fuer alle Agenten in dieser Conversation</label>
       <textarea id="rulesInput" rows="8" placeholder="z.B.&#10;- Antworte knapp und fokussiert&#10;- Nutze Aufzaehlungen&#10;- Maximal 3 Saetze pro Punkt&#10;- Sprich Deutsch"></textarea>
-      <div class="field-hint">Werden als System-Instruktion an alle Agenten gesendet, bevor sie antworten.</div>
+      <div class="field-hint" data-i18n="rules.hint">Werden als System-Instruktion an alle Agenten gesendet, bevor sie antworten.</div>
     </div>
     <div class="modal-acts">
-      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayRules">Abbrechen</button>
-      <button class="btn-confirm" data-action="save-rules">Speichern</button>
+      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayRules" data-i18n="common.cancel">Abbrechen</button>
+      <button class="btn-confirm" data-action="save-rules" data-i18n="common.save">Speichern</button>
     </div>
   </div>
 </div>

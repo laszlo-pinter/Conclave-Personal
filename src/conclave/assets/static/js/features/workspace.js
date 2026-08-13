@@ -1,7 +1,7 @@
 // static/js/features/workspace.js
 
 async function openRulesModal(){
-  if(!currentConvId){toast('Zuerst Conversation waehlen','err');return;}
+  if(!currentConvId){toast(t('conv.chooseFirst'),'err');return;}
   try{
     const d=await req('GET',`/conversations/${currentConvId}/rules`);
     currentRules=d.rules||'';
@@ -16,7 +16,7 @@ async function saveRules(){
     await req('POST',`/conversations/${currentConvId}/rules`,{rules});
     currentRules=rules;
     closeOverlay('overlayRules');
-    toast(rules?'Chat-Regeln gespeichert':'Chat-Regeln entfernt','ok');
+    toast(rules?t('rules.saved'):t('rules.removed'),'ok');
   }catch(e){toast(e.message,'err');}
 }
 
@@ -29,7 +29,7 @@ async function loadWorkspace(){
     const files=d.files||[];
     renderWorkspaceLimits(d.limits||{});
     if(!files.length){
-      const empty='<div class="surface-empty">Keine Dateien im Workspace.</div>';
+      const empty=`<div class="surface-empty">${t('workspace.none')}</div>`;
       if(el) el.innerHTML=empty;
       if(mainEl) mainEl.innerHTML=empty;
       return;
@@ -89,7 +89,7 @@ function _renderFileTree(node,prefix='',depth=0){
   for(const f of node._files.sort((a,b)=>a.path.localeCompare(b.path))){
     const name=f.path.split('/').pop();
     html+=`<div class="surface-item" style="padding:3px 10px"><div class="surface-item-row">
-      <span class="surface-item-label" style="cursor:pointer;font-size:11px" onclick="insertWorkspaceRef('${esc(f.path)}')" title="Klick = @workspace/${esc(f.path)} einfuegen">${esc(name)}</span>
+      <span class="surface-item-label" style="cursor:pointer;font-size:11px" onclick="insertWorkspaceRef('${esc(f.path)}')" title="@workspace/${esc(f.path)}">${esc(name)}</span>
       <span style="font-size:10px;color:var(--text-faint)">${(f.size/1024).toFixed(1)} KB</span>
     </div></div>`;
   }
@@ -105,12 +105,12 @@ function _countFiles(node){
 async function uploadWsFile(input){
   const file=input.files[0];if(!file)return;
   input.value='';
-  if(file.size>512*1024){toast('Datei zu gross (max 512 KB)','err');return;}
+  if(file.size>512*1024){toast(t('workspace.fileTooLarge'),'err');return;}
   const reader=new FileReader();
   reader.onload=async function(e){
     try{
       await req('POST',`/workspace/${file.name}`,{content:e.target.result});
-      toast(`${file.name} hochgeladen`,'ok');
+      toast(t('workspace.uploaded', {name: file.name}),'ok');
       loadWorkspace();
     }catch(err){toast(err.message,'err');}
   };
@@ -127,10 +127,10 @@ function openWsTextModal(){
 async function saveWsText(){
   const name=document.getElementById('wsFileName').value.trim();
   const content=document.getElementById('wsFileContent').value;
-  if(!name){toast('Dateiname erforderlich','err');return;}
+  if(!name){toast(t('workspace.fileNameRequired'),'err');return;}
   try{
     await req('POST',`/workspace/${name}`,{content});
-    toast(`${name} gespeichert`,'ok');
+    toast(t('workspace.saved', {name}),'ok');
     closeOverlay('overlayWsText');
     loadWorkspace();
   }catch(e){toast(e.message,'err');}
@@ -142,7 +142,7 @@ function insertWorkspaceRef(path){
   if(ta.value.trim()) ta.value+='\n'+ref;
   else ta.value=ref;
   autoResize(ta);ta.focus();
-  toast(`${ref} eingefuegt`,'ok');
+  toast(t('workspace.inserted', {ref}),'ok');
   switchTab('conv');
 }
 
@@ -154,11 +154,11 @@ function handleFile(input){
   input.value='';
   const ext=file.name.split('.').pop().toLowerCase();
   const maxSize=512*1024; // 512 KB
-  if(file.size>maxSize){toast(`Datei zu gross (max 512 KB)`,'err');return;}
+  if(file.size>maxSize){toast(t('workspace.fileTooLarge'),'err');return;}
   const reader=new FileReader();
   reader.onload=function(e){
     const content=e.target.result;
-    const wrapped=`--- Datei: ${file.name} ---\n\`\`\`${ext}\n${content}\n\`\`\``;
+    const wrapped=`--- ${t('workspace.filePrefix')}: ${file.name} ---\n\`\`\`${ext}\n${content}\n\`\`\``;
     const textarea=document.getElementById('msgInput');
     if(textarea.value.trim()){
       textarea.value+='\n\n'+wrapped;
@@ -167,9 +167,9 @@ function handleFile(input){
     }
     autoResize(textarea);
     textarea.focus();
-    toast(`${file.name} angehaengt`,'ok');
+    toast(t('workspace.attached', {name: file.name}),'ok');
   };
-  reader.onerror=function(){toast('Datei konnte nicht gelesen werden','err');};
+  reader.onerror=function(){toast(t('workspace.readFailed'),'err');};
   reader.readAsText(file);
 }
 

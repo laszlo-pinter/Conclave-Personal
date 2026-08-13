@@ -11,8 +11,8 @@ async function loadConversationUsage(){
     const convs=d.conversations||[];
     const grand=d.grand_totals||{};
     if(!convs.length){
-      tableEl.innerHTML='<div class="surface-empty">Noch keine Aufrufe.</div>';
-      summaryEl.innerHTML='<div class="surface-empty">Keine Daten.</div>';
+      tableEl.innerHTML=`<div class="surface-empty">${t('runs.none')}</div>`;
+      summaryEl.innerHTML=`<div class="surface-empty">${t('common.noData')}</div>`;
       return;
     }
     // Sidebar summary
@@ -66,7 +66,7 @@ async function loadConversationUsage(){
           </td></tr>`;
         }).join('')}</tbody>
         <tfoot><tr class="usage-foot">
-          <td><strong>Gesamt (${sorted.length} Conversations)</strong></td>
+          <td><strong>${getLanguage()==='en'?'Total':'Gesamt'} (${sorted.length} Conversations)</strong></td>
           <td class="usage-td-num"><strong>${fmt(grand.total_tokens||0)}</strong></td>
           <td class="usage-td-num">${fmt(grand.input_tokens||0)}</td>
           <td class="usage-td-num">${fmt(grand.output_tokens||0)}</td>
@@ -74,7 +74,7 @@ async function loadConversationUsage(){
           <td></td>
         </tr></tfoot>
       </table>`;
-  }catch(e){tableEl.innerHTML=`<div class="surface-empty">Fehler: ${esc(e.message)}</div>`;}
+  }catch(e){tableEl.innerHTML=`<div class="surface-empty">${t('common.errorPrefix')}: ${esc(e.message)}</div>`;}
 }
 
 function sortUsage(key){

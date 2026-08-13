@@ -4,8 +4,8 @@
 function updateKeyUI(){
   const dot=document.getElementById('keyDot');
   const lbl=document.getElementById('keyLabel');
-  if(apiKey){dot.className='key-dot set';lbl.textContent='API-Key gesetzt';}
-  else{dot.className='key-dot unset';lbl.textContent='API-Key setzen';}
+  if(apiKey){dot.className='key-dot set';lbl.textContent=t('auth.keySet');}
+  else{dot.className='key-dot unset';lbl.textContent=t('auth.setKey');}
 }
 
 function openKeyModal(){
@@ -22,7 +22,7 @@ function saveKey(){
   if(apiKey) localStorage.setItem('conclave_api_key',apiKey);
   else localStorage.removeItem('conclave_api_key');
   updateKeyUI();closeOverlay('overlayKey');
-  toast('Einstellungen gespeichert','ok');
+  toast(t('auth.saved'),'ok');
   checkApi();loadConversations();loadAgents();
 }
 
@@ -31,7 +31,7 @@ function clearKey(){
   localStorage.removeItem('conclave_api_key');
   document.getElementById('keyInput').value='';
   updateKeyUI();closeOverlay('overlayKey');
-  toast('API-Key entfernt','ok');
+  toast(t('auth.removed'),'ok');
   checkApi();
 }
 

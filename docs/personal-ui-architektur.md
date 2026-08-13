@@ -20,6 +20,24 @@ einzelne Nutzer.
 Globale Navigation trennt Arbeitsräume. Lokale Navigation strukturiert nur
 innerhalb eines Arbeitsraums.
 
+## Sprache
+
+Die Desktop-UI ist mindestens auf Deutsch und Englisch umschaltbar. Die
+Sprachauswahl liegt im Sidebar-Footer und wird lokal im Browser unter
+`conclave_ui_lang` gespeichert.
+
+Die Umschaltung betrifft die sichtbaren Kernflächen der App:
+
+- globale Navigation
+- Sidebar-Panels
+- Modale Dialoge
+- zentrale Buttons, Placeholder und Hilfetexte
+- wichtige dynamische Statusmeldungen und Toasts
+- generierte Default-Systemprompts für neue Agentenrollen
+
+API-Fehlermeldungen aus dem Backend können weiterhin im Originaltext des
+Servers erscheinen.
+
 ## 1. Studio
 
 ### Zweck
@@ -148,6 +166,7 @@ Aktuell liegen die installierten UI-Ressourcen als Package-Data unter
 ```text
 src/conclave/assets/static/js/
   api.js
+  i18n.js
   state.js
   utils.js
   main.js

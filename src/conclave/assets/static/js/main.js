@@ -76,6 +76,7 @@ document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{
 if(typeof marked!=='undefined'){
   marked.setOptions({gfm:true,breaks:true,headerIds:false,mangle:false});
 }
+initI18n();
 updateKeyUI();
 checkApi();
 loadConversations();

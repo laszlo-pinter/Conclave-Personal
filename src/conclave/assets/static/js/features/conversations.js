@@ -44,14 +44,15 @@ async function loadConversations(){
 
 function renderConvList(){
   const el=document.getElementById('convList');
-  if(!conversations.length){el.innerHTML='<div class="empty-list">Noch keine Conversations</div>';return;}
+  if(!conversations.length){el.innerHTML=`<div class="empty-list">${t('conv.none')}</div>`;return;}
   el.innerHTML=conversations.map(c=>{
     const title=c.topic||c.id.slice(0,8)+'…';
     const short=c.id.slice(0,8);
-    const date=new Date(c.created_at).toLocaleDateString('de-DE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+    const locale=getLanguage()==='en'?'en-US':'de-DE';
+    const date=new Date(c.created_at).toLocaleDateString(locale,{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
     return `<div class="conv-item${c.id===currentConvId?' active':''}" onclick="selectConv('${c.id}')">
       <div class="conv-item-id" style="font-size:12px;font-weight:600;font-family:var(--font-ui);color:var(--text)">${esc(title)}</div>
-      <div class="conv-item-meta"><div class="conv-dot"></div><span class="copyable" onclick="event.stopPropagation();copyId('${c.id}','Conv-ID')" title="Volle ID kopieren: ${c.id}">${short}</span> · ${date}</div>
+      <div class="conv-item-meta"><div class="conv-dot"></div><span class="copyable" onclick="event.stopPropagation();copyId('${c.id}','Conv-ID')" title="${esc(t('copy.fullConv', {id: c.id}))}">${short}</span> · ${date}</div>
       <button class="row-del" onclick="delConv(event,'${c.id}')">
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 1h2M4 3v7M8 3v7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
       </button>
@@ -70,7 +71,7 @@ async function createConv(){
   try{
     const d=await req('POST','/conversations');
     if(topic) await req('POST',`/conversations/${d.conversation_id}/topic`,{topic});
-    toast('Conversation erstellt','ok');
+    toast(t('conv.created'),'ok');
     closeOverlay('overlayNewConv');
     await loadConversations();
     selectConv(d.conversation_id);
@@ -79,7 +80,7 @@ async function createConv(){
 
 async function delConv(e,id){
   e.stopPropagation();
-  try{await req('DELETE',`/conversations/${id}`);if(currentConvId===id){currentConvId=null;showEmpty();}await loadConversations();toast('Geloescht','ok');}
+  try{await req('DELETE',`/conversations/${id}`);if(currentConvId===id){currentConvId=null;showEmpty();}await loadConversations();toast(t('conv.deleted'),'ok');}
   catch(e){toast(e.message,'err');}
 }
 
@@ -90,7 +91,7 @@ async function selectConv(id){
   const tb=document.getElementById('topbarId');
   tb.textContent=id;
   tb.classList.add('copyable');
-  tb.title='ID kopieren';
+  tb.title=t('copy.title');
   tb.onclick=()=>copyId(id,'Conv-ID');
   document.getElementById('btnExport').disabled=false;
   try{
@@ -104,7 +105,7 @@ async function selectConv(id){
     // 404: Conversation existiert nicht mehr → deselect
     currentConvId=null;showEmpty();
     await loadConversations();
-    toast('Conversation nicht mehr vorhanden','err');
+    toast(t('conv.missing'),'err');
   }
 }
 
@@ -128,7 +129,7 @@ async function saveTopic(){
     currentTopic=topic;renderTopicUI();
     await loadConversations();
     closeOverlay('overlayTopic');
-    toast(topic?`Thema: ${topic}`:'Thema entfernt','ok');
+    toast(topic?`${t('topic.label')}: ${topic}`:t('topic.removed'),'ok');
   }catch(e){toast(e.message,'err');}
 }
 

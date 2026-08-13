@@ -8,7 +8,7 @@ function initSpeech(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){document.getElementById('btnMic').style.display='none';return;}
   recognition=new SR();
-  recognition.lang='de-DE';
+  recognition.lang=getLanguage()==='en'?'en-US':'de-DE';
   recognition.continuous=true;
   recognition.interimResults=true;
 
@@ -31,7 +31,7 @@ function initSpeech(){
   };
 
   recognition.onerror=function(e){
-    if(e.error!=='no-speech') toast(`Sprache: ${e.error}`,'err');
+    if(e.error!=='no-speech') toast(t('speech.error', {error: e.error}),'err');
     stopMic();
   };
 
@@ -46,11 +46,12 @@ function toggleMic(){
 }
 
 function startMic(){
-  if(!recognition){toast('Spracheingabe nicht verfuegbar (Chrome/Edge noetig)','err');return;}
+  if(!recognition){toast(t('speech.unavailable'),'err');return;}
   micActive=true;
   document.getElementById('btnMic').classList.add('recording');
+  recognition.lang=getLanguage()==='en'?'en-US':'de-DE';
   recognition.start();
-  toast('Aufnahme laeuft...','floor');
+  toast(t('speech.recording'),'floor');
 }
 
 function stopMic(){

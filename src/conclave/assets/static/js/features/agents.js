@@ -4,23 +4,23 @@
 async function loadAgents(){
   try{const d=await req('GET','/agents');agents=d.agents||[];renderAgentList();renderAgentWorkbench();}
   catch{
-    document.getElementById('agentList').innerHTML='<div class="empty-list">API nicht erreichbar</div>';
+    document.getElementById('agentList').innerHTML=`<div class="empty-list">${t('common.apiUnreachable')}</div>`;
     const wb=document.getElementById('agentWorkbench');
-    if(wb) wb.innerHTML='<div class="surface-empty">API nicht erreichbar.</div>';
+    if(wb) wb.innerHTML=`<div class="surface-empty">${t('common.apiUnreachable')}.</div>`;
   }
 }
 
 function renderAgentList(){
   const el=document.getElementById('agentList');
   if(!el) return;
-  if(!agents.length){el.innerHTML='<div class="empty-list">Noch keine Agenten.</div>';return;}
+  if(!agents.length){el.innerHTML=`<div class="empty-list">${t('agents.none')}</div>`;return;}
   el.innerHTML=agents.map(a=>_agentCard(a)).join('');
 }
 
 function renderAgentWorkbench(){
   const el=document.getElementById('agentWorkbench');
   if(!el) return;
-  if(!agents.length){el.innerHTML='<div class="surface-empty">Noch keine Agenten.</div>';return;}
+  if(!agents.length){el.innerHTML=`<div class="surface-empty">${t('agents.none')}</div>`;return;}
   el.innerHTML=agents.map(a=>_agentCard(a,'agent-card-wide')).join('');
 }
 
@@ -32,7 +32,7 @@ function _agentCard(a,extraClass=''){
       <div class="agent-item-name">${esc(a.name)}${chip}</div>
       <div class="agent-item-id">${esc(a.id)}</div>
       <div class="agent-item-meta"><span>${esc(a.preset||a.provider)}</span><span>${esc(a.model)}</span>${key}</div>
-      ${a.topic?`<div class="agent-item-topic">Thema: ${esc(a.topic)}</div>`:''}
+      ${a.topic?`<div class="agent-item-topic">${t('agents.topicPrefix')}: ${esc(a.topic)}</div>`:''}
       <div class="agent-actions">
         <button class="icon-btn" onclick="openAgentForm('${a.id}')">
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M9 2.5l1.5 1.5-7 7H2v-1.5l7-7z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
@@ -50,12 +50,12 @@ async function loadProviders(){
   try{
     const d=await req('GET','/providers');
     const providers=d.providers||[];
-    if(!providers.length){el.innerHTML='<div class="surface-empty">Keine Provider gefunden.</div>';return;}
+    if(!providers.length){el.innerHTML=`<div class="surface-empty">${t('agents.noProviders')}</div>`;return;}
     el.innerHTML=providers.map(p=>`
       <div class="surface-item provider-item">
         <div class="surface-item-row">
           <span class="surface-item-label">${esc(p.label||p.name)}</span>
-          <span class="surface-item-status ${p.api_key_configured||p.requires_api_key===false?'active':'inactive'}">${p.api_key_configured||p.requires_api_key===false?'bereit':'Key fehlt'}</span>
+          <span class="surface-item-status ${p.api_key_configured||p.requires_api_key===false?'active':'inactive'}">${p.api_key_configured||p.requires_api_key===false?t('agents.ready'):t('agents.keyMissing')}</span>
         </div>
         <div class="provider-models">${(p.models||[]).slice(0,4).map(m=>`<span>${esc(m)}</span>`).join('')}</div>
       </div>`).join('');
@@ -78,9 +78,9 @@ function onPresetChange(){
   const mSel=document.getElementById('aModel');
   const models=p.models||[];
   if(models.length){
-    mSel.innerHTML=models.map((m,i)=>`<option value="${m}">${m}${i===0?' (Empfohlen)':''}</option>`).join('');
+    mSel.innerHTML=models.map((m,i)=>`<option value="${m}">${m}${i===0?` (${t('agents.recommended')})`:''}</option>`).join('');
   } else {
-    mSel.innerHTML='<option value="">Modell eingeben...</option>';
+    mSel.innerHTML=`<option value="">${t('agents.modelInput')}</option>`;
   }
   // Erweiterte Felder setzen
   document.getElementById('aApiUrl').value=p.api_url||'';
@@ -93,15 +93,15 @@ function onPresetChange(){
 function toggleAdvanced(){
   const el=document.getElementById('advancedFields');
   const btn=document.getElementById('btnAdvanced');
-  if(el.style.display==='none'){el.style.display='block';btn.textContent='Erweitert ausblenden';}
-  else{el.style.display='none';btn.textContent='Erweitert anzeigen';}
+  if(el.style.display==='none'){el.style.display='block';btn.textContent=t('agents.advancedHide');}
+  else{el.style.display='none';btn.textContent=t('agents.advancedShow');}
 }
 
 function openAgentForm(id){
   editingAgentId=id||null;sysEdited=false;
-  document.getElementById('agentModalTitle').textContent=id?'Agent bearbeiten':'Agent konfigurieren';
+  document.getElementById('agentModalTitle').textContent=id?t('agents.modalTitleEdit'):t('agents.modalTitleCreate');
   document.getElementById('advancedFields').style.display='none';
-  document.getElementById('btnAdvanced').textContent='Erweitert anzeigen';
+  document.getElementById('btnAdvanced').textContent=t('agents.advancedShow');
   document.querySelectorAll('#roleGroup .radio-opt').forEach(el=>el.className='radio-opt');
   document.querySelector('#roleGroup .radio-opt[data-role=""]').classList.add('sel-none');
 
@@ -160,7 +160,7 @@ async function saveAgent(){
   const api_url=document.getElementById('aApiUrl').value.trim();
   const response_path=document.getElementById('aResponsePath').value.trim();
   const message_format=document.getElementById('aMsgFormat').value;
-  if(!id||!name){toast('ID und Name sind Pflichtfelder','err');return;}
+  if(!id||!name){toast(t('common.requiredIdName'),'err');return;}
   const btn=document.getElementById('btnSaveAgent'),lbl=document.getElementById('btnSaveAgentLabel');
   btn.disabled=true;lbl.innerHTML='<span class="spinner"></span>';
   const wasEditing=Boolean(editingAgentId);
@@ -170,10 +170,10 @@ async function saveAgent(){
     if(editingAgentId) await req('PUT',`/agents/${editingAgentId}`,body);
     else await req('POST','/agents',body);
     editingAgentId=id;
-    toast(wasEditing?'Agent aktualisiert':'Agent erstellt','ok');
+    toast(wasEditing?t('agents.updated'):t('agents.created'),'ok');
     closeOverlay('overlayAgent');await loadAgents();
   }catch(e){toast(e.message,'err');}
-  finally{btn.disabled=false;lbl.textContent='Speichern';}
+  finally{btn.disabled=false;lbl.textContent=t('common.save');}
 }
 
 async function testAgent(){
@@ -183,17 +183,17 @@ async function testAgent(){
     if(!editingAgentId) return;
   }
   const btn=document.getElementById('btnTestAgent');
-  btn.disabled=true;btn.textContent='Teste...';
+  btn.disabled=true;btn.textContent=t('agents.testing');
   try{
     const d=await req('POST',`/agents/${editingAgentId}/test`);
     if(d.success) toast(`Test OK: ${d.message}`,'ok');
-    else toast(`Test fehlgeschlagen: ${d.message}`,'err');
+    else toast(t('agents.testFailed', {message: d.message}),'err');
   }catch(e){toast(e.message,'err');}
-  finally{btn.disabled=false;btn.textContent='Testen';}
+  finally{btn.disabled=false;btn.textContent=t('agents.test');}
 }
 
 async function deleteAgent(id){
-  try{await req('DELETE',`/agents/${id}`);toast('Agent geloescht','ok');await loadAgents();}
+  try{await req('DELETE',`/agents/${id}`);toast(t('agents.deleted'),'ok');await loadAgents();}
   catch(e){toast(e.message,'err');}
 }
 
