@@ -24,6 +24,18 @@ def test_distribution_name_avoids_reserved_pypi_project():
     assert project["name"] == "conclave-personal"
 
 
+def test_distribution_metadata_links_back_to_project():
+    project = _pyproject()["project"]
+    urls = project["urls"]
+
+    assert project["authors"] == [{"name": "Laszlo Pinter"}]
+    assert urls["Homepage"] == "https://github.com/laszlo-pinter/Conclave-Personal"
+    assert urls["Source"] == "https://github.com/laszlo-pinter/Conclave-Personal"
+    assert urls["Issues"] == "https://github.com/laszlo-pinter/Conclave-Personal/issues"
+    assert urls["Documentation"].endswith("/docs/index.md")
+    assert urls["Changelog"].endswith("/docs/release-notes-v0.1.0.md")
+
+
 def test_console_scripts_are_declared():
     scripts = _pyproject()["project"]["scripts"]
 
