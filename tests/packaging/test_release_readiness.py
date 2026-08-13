@@ -69,3 +69,5 @@ def test_readme_describes_published_install_path():
     assert "Nach der PyPI-Veröffentlichung ist der Zielpfad" not in readme
     assert "Vor der PyPI-Veröffentlichung wird" not in readme
     assert "wird vor Veröffentlichung" not in readme
+    assert "Lokale Artefakte können direkt aus einem frisch gebauten Wheel geprüft werden" not in readme
+    assert ".venv-smoke/Scripts/pip install" not in readme

@@ -117,17 +117,6 @@ pipx install conclave-personal
 conclave desktop
 ```
 
-Lokale Artefakte können direkt aus einem frisch gebauten Wheel geprüft werden:
-
-```bash
-python -m build --sdist --wheel
-python -m venv .venv-smoke
-.venv-smoke/Scripts/pip install dist/conclave_personal-0.1.3-py3-none-any.whl
-.venv-smoke/Scripts/conclave --help
-```
-
-Unter Linux entsprechend mit `.venv-smoke/bin/...`.
-
 ### Aus einem Checkout
 
 ```bash
