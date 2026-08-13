@@ -100,7 +100,8 @@ Start-, Installations- und Autostart-Adapter:
 
 ## Installation
 
-Nach der PyPI-Veröffentlichung ist der Zielpfad:
+Das veröffentlichte Paket heißt `conclave-personal`. Der installierte
+Kommandozeilenbefehl bleibt `conclave`.
 
 ### Windows
 
@@ -116,7 +117,7 @@ pipx install conclave-personal
 conclave desktop
 ```
 
-Vor der PyPI-Veröffentlichung wird aus dem gebauten Wheel getestet:
+Lokale Artefakte können direkt aus einem frisch gebauten Wheel geprüft werden:
 
 ```bash
 python -m build --sdist --wheel
@@ -127,7 +128,7 @@ python -m venv .venv-smoke
 
 Unter Linux entsprechend mit `.venv-smoke/bin/...`.
 
-### Aus Einem Checkout
+### Aus einem Checkout
 
 ```bash
 python -m pip install -e ".[dev-all]"
@@ -333,8 +334,7 @@ v0.1.2 bleibt bewusst Alpha. Bekannte Einschränkungen:
 
 ## Release-Verifikation
 
-Der v0.1.2-Schnitt wird vor Veröffentlichung mit diesen lokalen Checks
-verifiziert:
+Der v0.1.2-Schnitt wurde mit diesen lokalen Checks verifiziert:
 
 - `python -m pytest`
 - `python -m build --sdist --wheel`

@@ -58,3 +58,12 @@ def test_release_docs_use_publishable_distribution_name():
     assert "conclave-0.1.0-py3-none-any.whl" not in combined
     assert "conclave-0.1.1-py3-none-any.whl" not in combined
     assert "conclave-0.1.2-py3-none-any.whl" not in combined
+
+
+def test_readme_describes_published_install_path():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "Das veröffentlichte Paket heißt `conclave-personal`" in readme
+    assert "Nach der PyPI-Veröffentlichung ist der Zielpfad" not in readme
+    assert "Vor der PyPI-Veröffentlichung wird" not in readme
+    assert "wird vor Veröffentlichung" not in readme
