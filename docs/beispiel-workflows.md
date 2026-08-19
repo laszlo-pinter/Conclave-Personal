@@ -3,22 +3,21 @@
 Diese Workflows zeigen typische Personal-Nutzung: ein Nutzer steuert mehrere
 Agenten, entscheidet über Kontext und prüft Ergebnisse sichtbar in Runs.
 
-## 1. Text Von Drei Agenten Reviewen Lassen
+## 1. Text Aus Mehreren Perspektiven Prüfen
 
-Ziel: Einen Text aus drei Perspektiven prüfen.
+Ziel: Einen Text aus zwei Perspektiven prüfen. Die Modelle liefern Hinweise;
+die Entscheidung bleibt beim Nutzer.
 
 ```powershell
 conclave agent-new writer --name "Writer" --provider openai-responses --preset openai-responses --model "<openai-model>" --role Writer
 conclave agent-new critic --name "Critic" --provider anthropic --preset anthropic --model "<anthropic-model>" --role Critic
-conclave agent-new judge --name "Judge" --provider ollama --preset ollama --model llama3.1 --role Judge
 
 $conv = (conclave --json new | ConvertFrom-Json).conversation_id
-conclave topic $conv "Review: Produkttext"
+conclave topic $conv "Produkttext prüfen"
 conclave add-participant $conv writer --name "Writer"
 conclave add-participant $conv critic --name "Critic"
-conclave add-participant $conv judge --name "Judge"
-conclave message $conv "Prüft diesen Text auf Klarheit, Risiko und Überzeugungskraft: ..."
-conclave orchestrate $conv writer critic judge
+conclave message $conv "Prüft diesen Text auf Klarheit, Risiko und offene Annahmen. Keine Wahrheitsentscheidung treffen: ..."
+conclave orchestrate $conv writer critic
 conclave runs --conversation-id $conv
 ```
 
@@ -54,19 +53,20 @@ conclave invoke $conv reviewer
 Workspace-Dateien werden nicht automatisch importiert. Der Nutzer referenziert
 sie explizit.
 
-## 4. Judge-Agent Zur Qualitätsprüfung Verwenden
+## 4. Menschliche Entscheidung Nach Mehreren Antworten
 
-Ziel: Eine Antwort bewerten lassen, statt sie sofort zu übernehmen.
+Ziel: Mehrere Modellantworten sichtbar vergleichen, ohne die Entscheidung an
+ein Modell auszulagern.
 
 ```powershell
 $conv = (conclave --json new | ConvertFrom-Json).conversation_id
-conclave topic $conv "Chain-of-Verification"
+conclave topic $conv "Release-Smoke-Test Perspektiven"
 conclave add-participant $conv planner --name "Planner"
-conclave add-participant $conv judge --name "Judge"
+conclave add-participant $conv reviewer --name "Reviewer"
 conclave message $conv "Erstelle einen knappen Plan für einen Windows/Linux Release-Smoke-Test."
 conclave invoke $conv planner
-conclave message $conv "Bewerte die letzte Antwort als Judge: Welche Annahmen sind unbewiesen?"
-conclave invoke $conv judge
+conclave message $conv "Nenne nur Risiken, offene Annahmen und Punkte, die ich extern prüfen sollte."
+conclave invoke $conv reviewer
 conclave runs --conversation-id $conv
 ```
 
@@ -75,6 +75,7 @@ conclave runs --conversation-id $conv
 - `conclave desktop` ist der normale Einstieg.
 - CLI-Kommandos sind gut für Debugging, Dokumentation und reproduzierbare
   Arbeitsmuster.
+- Conclave trifft keine Wahrheitsentscheidung. Der Nutzer prüft und entscheidet.
 - Echte Provider-Calls benötigen passende API-Keys oder lokale Ollama-Modelle.
 - Ersetze `<openai-model>` und `<anthropic-model>` durch Modelle, die in deinem
   Provider-Account aktuell verfügbar sind.

@@ -64,7 +64,7 @@
         <button class="btn-full secondary" data-action="ws-upload-click" style="flex:1" data-i18n="workspace.upload">Datei hochladen</button>
         <button class="btn-full secondary" data-action="open-ws-text" style="flex:1" data-i18n="workspace.text">Text ablegen</button>
       </div>
-      <input type="file" id="wsUpload" style="display:none" accept=".txt,.md,.csv,.json,.xml,.yaml,.yml,.toml,.log,.py,.js,.ts,.html,.css,.sql,.sh" onchange="uploadWsFile(this)"/>
+      <input type="file" id="wsUpload" style="display:none" accept=".txt,.md,.csv,.json,.xml,.yaml,.yml,.toml,.log,.py,.js,.ts,.html,.css,.sql,.sh"/>
       <div class="surface-info" style="margin-top:4px" data-i18n-html="workspace.info">Im Chat mit <code>@workspace/datei.md</code> referenzieren. Klick auf Dateiname fuegt Referenz ein.</div>
     </div>
     <div class="surface-section">
@@ -98,7 +98,7 @@
   <div class="sb-foot">
     <div class="language-row">
       <span data-i18n="lang.label">Sprache</span>
-      <select id="languageSelect" onchange="setLanguage(this.value)" aria-label="Language">
+      <select id="languageSelect" aria-label="Language">
         <option value="de" data-i18n="lang.de">Deutsch</option>
         <option value="en" data-i18n="lang.en">English</option>
       </select>
@@ -262,8 +262,7 @@
   <div class="inputbar" id="inputbar" style="display:none">
     <div class="input-row">
       <div class="ta-wrap">
-        <textarea class="msg-ta" id="msgInput" placeholder="Nachricht schreiben..." data-i18n-placeholder="input.placeholder" rows="1"
-          onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <textarea class="msg-ta" id="msgInput" placeholder="Nachricht schreiben..." data-i18n-placeholder="input.placeholder" rows="1"></textarea>
       </div>
       <button class="btn-send" id="btnMic" data-action="toggle-mic" title="Spracheingabe" data-i18n-title="input.micTitle">
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none" id="micIcon"><path d="M7.5 1a2 2 0 0 0-2 2v4a2 2 0 0 0 4 0V3a2 2 0 0 0-2-2z" stroke="currentColor" stroke-width="1.3"/><path d="M4 7a3.5 3.5 0 0 0 7 0" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M7.5 11.5v2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
@@ -271,13 +270,13 @@
       <button class="btn-send" data-action="pick-file" title="Datei anhaengen" data-i18n-title="input.attachTitle">
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M7.5 1v10M4 5.5l3.5-3.5L11 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 10v2.5h11V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
-      <input type="file" id="fileInput" style="display:none" accept=".txt,.md,.csv,.json,.xml,.yaml,.yml,.toml,.log,.py,.js,.ts,.html,.css,.sql,.sh,.java,.go,.rs,.c,.cpp,.h,.rb,.php,.r,.swift,.kt" onchange="handleFile(this)"/>
+      <input type="file" id="fileInput" style="display:none" accept=".txt,.md,.csv,.json,.xml,.yaml,.yml,.toml,.log,.py,.js,.ts,.html,.css,.sql,.sh,.java,.go,.rs,.c,.cpp,.h,.rb,.php,.r,.swift,.kt"/>
       <button class="btn-send" data-action="send-msg">
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M1 7.5h13M7.5 1l6.5 6.5-6.5 6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
     </div>
     <div class="acts">
-      <select class="sel" id="pSel" onchange="onPSelChange()"><option value="" data-i18n="participants.pick">Participant waehlen...</option></select>
+      <select class="sel" id="pSel"><option value="" data-i18n="participants.pick">Participant waehlen...</option></select>
       <button class="btn-act btn-invoke" data-action="invoke-p" id="btnInvoke" disabled data-i18n="input.invoke">Aufrufen</button>
       <button class="btn-act btn-stream" data-action="stream-p" id="btnStream" disabled>&#9654; <span data-i18n="input.stream">Stream</span></button>
       <button class="btn-act btn-orch" data-action="open-orch" id="btnOrch" disabled>&#8635; <span data-i18n="input.orchestrate">Orchestrieren</span></button>
@@ -323,13 +322,13 @@
   <div class="modal">
     <div class="modal-title" id="agentModalTitle" data-i18n="agents.modalTitleCreate">Agent konfigurieren</div>
     <div class="field-row">
-      <div class="field"><label data-i18n="agents.id">ID *</label><input type="text" id="aId" placeholder="z.B. claude1" oninput="updatePrompt()"/></div>
-      <div class="field"><label data-i18n="agents.name">Name *</label><input type="text" id="aName" placeholder="z.B. Claude Sonnet" oninput="updatePrompt()"/></div>
+      <div class="field"><label data-i18n="agents.id">ID *</label><input type="text" id="aId" placeholder="z.B. claude1"/></div>
+      <div class="field"><label data-i18n="agents.name">Name *</label><input type="text" id="aName" placeholder="z.B. Claude Sonnet"/></div>
     </div>
     <div class="field-row">
       <div class="field">
         <label data-i18n="agents.preset">Preset</label>
-        <select id="aPreset" onchange="onPresetChange()">
+        <select id="aPreset">
           <option value="" data-i18n="common.loading">Lade...</option>
         </select>
       </div>
@@ -352,14 +351,13 @@
         <div class="radio-opt" data-role="critic" data-action="select-role">Critic</div>
         <div class="radio-opt" data-role="researcher" data-action="select-role">Researcher</div>
         <div class="radio-opt" data-role="planner" data-action="select-role">Planner</div>
-        <div class="radio-opt" data-role="judge" data-action="select-role">Judge</div>
         <div class="radio-opt" data-role="custom" data-action="select-role">Custom</div>
       </div>
     </div>
-    <div class="field"><label data-i18n="topic.optional">Thema (optional)</label><input type="text" id="aTopic" placeholder="z.B. Klimawandel..." oninput="updatePrompt()"/></div>
+    <div class="field"><label data-i18n="topic.optional">Thema (optional)</label><input type="text" id="aTopic" placeholder="z.B. Klimawandel..."/></div>
     <div class="field">
       <label data-i18n="agents.systemPrompt">System-Prompt</label>
-      <textarea id="aSysPrompt" rows="3" oninput="onSysEdit()"></textarea>
+      <textarea id="aSysPrompt" rows="3"></textarea>
     </div>
     <div style="margin-top:8px;margin-bottom:8px">
       <button class="btn-sm" data-action="toggle-advanced" id="btnAdvanced" style="font-size:11px" data-i18n="agents.advancedShow">Erweitert anzeigen</button>
@@ -388,7 +386,7 @@
     <div class="modal-title" data-i18n="participants.title">Participant hinzufuegen</div>
     <div class="field">
       <label data-i18n="participants.chooseAgent">Aus Agenten waehlen</label>
-      <select class="sel" id="agentPick" onchange="fillFromAgent()" style="width:100%"><option value="" data-i18n="participants.manual">— Manuell eingeben —</option></select>
+      <select class="sel" id="agentPick" style="width:100%"><option value="" data-i18n="participants.manual">— Manuell eingeben —</option></select>
     </div>
     <div style="height:1px;background:var(--border);margin:0 0 14px"></div>
     <div class="field-row">
@@ -431,6 +429,14 @@
       <label data-i18n="autoloop.sequence">Reihenfolge</label>
       <input type="text" id="loopSeq" placeholder="z.B. claude1, gpt1"/>
       <div class="field-hint" data-i18n="autoloop.sequenceHint">Komma-getrennte IDs. Diese Sequenz wird pro Runde wiederholt; jeder Agent sieht die Antworten der anderen.</div>
+    </div>
+    <div class="field">
+      <label data-i18n="autoloop.rotation">Antwortreihenfolge</label>
+      <select id="loopRotation">
+        <option value="none" data-i18n="autoloop.rotationNone">Statisch</option>
+        <option value="round_robin" data-i18n="autoloop.rotationRoundRobin">Rotierend</option>
+      </select>
+      <div class="field-hint" data-i18n="autoloop.rotationHint">Rotierend verschiebt den ersten Agenten pro Runde um eine Position.</div>
     </div>
     <div class="field-row">
       <div class="field">

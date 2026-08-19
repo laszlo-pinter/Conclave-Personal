@@ -28,29 +28,12 @@ SCHEMAS = {
         "response": {"properties": {"participant_id": {"type": "string"}}},
     },
     ("POST", "/conversations/<conversation_id>/participants/<participant_id>/invoke"): {
-        "request": {
-            "description": "Body ist optional. Ohne Body: einfacher Invoke. Mit judge_via: Chain-of-Verification - nach dem Primary-Invoke wird ein Judge-Agent mit dem gerenderten judge_prompt aufgerufen.",
-            "properties": {
-                "judge_via": {"type": "string", "description": "Agent-ID des Judges (Cross-Model-Verification)."},
-                "judge_prompt": {"type": "string", "description": "Template mit Platzhaltern {primary_response} und {original_prompt}. Erforderlich wenn judge_via gesetzt ist."},
-            },
-        },
         "response": {
             "required": ["participant_id", "content"],
             "properties": {
                 "participant_id": {"type": "string"},
                 "content": {"type": "string"},
                 "sequence": {"type": "integer"},
-                "judge": {
-                    "type": "object",
-                    "description": "Nur gesetzt wenn judge_via im Request war. Bei Judge-Fehler enthaelt es 'error' statt 'content'.",
-                    "properties": {
-                        "participant_id": {"type": "string"},
-                        "content": {"type": "string"},
-                        "sequence": {"type": "integer"},
-                        "error": {"type": "string"},
-                    },
-                },
             },
         },
     },
@@ -65,29 +48,17 @@ SCHEMAS = {
         }},
     },
     ("POST", "/conversations/<conversation_id>/orchestrate"): {
-        "request": {"required": ["sequence"], "properties": {"sequence": {"type": "array", "items": {"type": "string"}}}},
+        "request": {"required": ["sequence"], "properties": {"sequence": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string", "minLength": 1}}}},
     },
     ("POST", "/conversations/<conversation_id>/orchestrate-parallel"): {
-        "request": {"required": ["groups"], "properties": {"groups": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}}}},
-    },
-    ("POST", "/conversations/<conversation_id>/judge"): {
-        "request": {"required": ["primary_id", "judge_id", "judge_prompt"], "properties": {
-            "primary_id": {"type": "string"},
-            "judge_id": {"type": "string"},
-            "judge_prompt": {"type": "string"},
-        }},
-        "response": {"required": ["participant_id", "content", "judge"], "properties": {
-            "participant_id": {"type": "string"},
-            "content": {"type": "string"},
-            "sequence": {"type": "integer"},
-            "judge": {"type": "object"},
-        }},
+        "request": {"required": ["groups"], "properties": {"groups": {"type": "array", "minItems": 1, "items": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}}}},
     },
     ("POST", "/conversations/<conversation_id>/auto-loop"): {
         "request": {"required": ["sequence"], "properties": {
-            "sequence": {"type": "array", "items": {"type": "string"}},
-            "stop_signal": {"type": "string", "default": "@done"},
-            "max_rounds": {"type": "integer", "default": 20},
+            "sequence": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string", "minLength": 1}},
+            "stop_signal": {"type": "string", "default": "@done", "minLength": 1, "maxLength": 128},
+            "max_rounds": {"type": "integer", "default": 20, "minimum": 1, "maximum": 50},
+            "rotation": {"type": "string", "default": "none", "enum": ["none", "round_robin"]},
         }},
     },
     ("GET", "/health"): {
@@ -166,7 +137,18 @@ SCHEMAS = {
         }},
     },
     ("POST", "/restore"): {
-        "request": {"required": ["backup_path"], "properties": {"backup_path": {"type": "string"}}},
+        "request": {"required": ["backup_path"], "properties": {
+            "backup_path": {"type": "string"},
+            "replace_workspace": {"type": "boolean", "default": True},
+        }},
+        "response": {"required": ["status"], "properties": {
+            "status": {"type": "string"},
+            "format": {"type": "string"},
+            "db_restored": {"type": "boolean"},
+            "workspace_files_restored": {"type": "integer"},
+            "workspace_replaced": {"type": "boolean"},
+            "pre_restore_backup_path": {"type": "string"},
+        }},
     },
     ("GET", "/workspace"): {
         "response": {"required": ["files"], "properties": {
@@ -254,7 +236,7 @@ def build_spec(routes: list[dict]) -> dict:
         if schema_key in SCHEMAS and "request" in SCHEMAS[schema_key]:
             req_schema = SCHEMAS[schema_key]["request"]
             # required: True nur wenn das Schema mindestens ein required-Feld definiert
-            # (sonst ist der Body optional, wie bei /invoke mit judge_via).
+            # (sonst ist der Body optional).
             body_required = bool(req_schema.get("required"))
             operation["requestBody"] = {
                 "required": body_required,

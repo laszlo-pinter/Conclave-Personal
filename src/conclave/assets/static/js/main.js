@@ -46,10 +46,22 @@ const _actions = {
   'open-autoloop':       () => openAutoloop(),
   'run-autoloop':        () => runAutoloop(),
   'open-agent-form':     () => openAgentForm(null),
+  'edit-agent':          (el) => openAgentForm(el.dataset.agentId),
+  'delete-agent':        (el) => deleteAgent(el.dataset.agentId),
   'save-agent':          () => saveAgent(),
   'test-agent':          () => testAgent(),
   'toggle-advanced':     () => toggleAdvanced(),
   'select-role':         (el) => selectRole(el),
+  'select-conversation': (el) => selectConv(el.dataset.conversationId),
+  'copy-conversation-id':(el) => copyId(el.dataset.conversationId,'Conv-ID'),
+  'delete-conversation': (el) => delConv(el.dataset.conversationId),
+  'copy-topbar-id':      () => copyId(currentConvId,'Conv-ID'),
+  'grant-floor':         (el) => grantFloor(el.dataset.participantId),
+  'download-message':    (el) => downloadMsg(el),
+  'sort-usage':          (el) => sortUsage(el.dataset.sortKey),
+  'toggle-usage-detail': (el) => toggleUsageDetail(el),
+  'toggle-workspace-dir':(el) => toggleWorkspaceDir(el),
+  'insert-workspace-ref':(el) => insertWorkspaceRef(el.dataset.path),
   'export-conv':         () => exportConv(),
   'open-key-modal':      () => openKeyModal(),
   'save-key':            () => saveKey(),
@@ -69,6 +81,23 @@ document.addEventListener('click', (e) => {
   if (handler) handler(el)
 })
 
+function _bindStaticUiEvents() {
+  const on = (id, event, handler) => {
+    const el = document.getElementById(id)
+    if (el) el.addEventListener(event, handler)
+  }
+  on('languageSelect', 'change', (e) => setLanguage(e.target.value))
+  on('wsUpload', 'change', (e) => uploadWsFile(e.target))
+  on('fileInput', 'change', (e) => handleFile(e.target))
+  on('pSel', 'change', () => onPSelChange())
+  on('agentPick', 'change', () => fillFromAgent())
+  on('msgInput', 'keydown', handleKey)
+  on('msgInput', 'input', (e) => autoResize(e.target))
+  ;['aId','aName','aTopic'].forEach(id => on(id, 'input', updatePrompt))
+  on('aPreset', 'change', onPresetChange)
+  on('aSysPrompt', 'input', onSysEdit)
+}
+
 // ── Overlay-Klick-Handler ────────────────────────────────────────────────
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
 
@@ -77,6 +106,7 @@ if(typeof marked!=='undefined'){
   marked.setOptions({gfm:true,breaks:true,headerIds:false,mangle:false});
 }
 initI18n();
+_bindStaticUiEvents();
 updateKeyUI();
 checkApi();
 loadConversations();

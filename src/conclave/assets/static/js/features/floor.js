@@ -15,7 +15,7 @@ function renderFloorUI(){
     floorPanel.classList.add('visible');
     document.getElementById('floorGrantBtns').innerHTML=models.map(p=>{
       const c=colorFor(p.id),isActive=p.id===currentFloor;
-      return `<button class="floor-grant-btn${isActive?' active':''}" style="${isActive?`background:${c.bg};border-color:${c.bd};color:${c.tx}`:''}" onclick="grantFloor('${p.id}')">&#127908; ${esc(p.name)}</button>`;
+      return `<button class="floor-grant-btn${isActive?' active':''}" style="${isActive?`background:${c.bg};border-color:${c.bd};color:${c.tx}`:''}" data-action="grant-floor" data-participant-id="${attr(p.id)}">&#127908; ${esc(p.name)}</button>`;
     }).join('');
   } else {floorPanel.classList.remove('visible');}
 }

@@ -57,8 +57,9 @@ def test_no_dsgvo_vocabulary_in_user_interface():
 def test_agent_form_uses_personal_roles():
     html = HTML.read_text(encoding="utf-8")
 
-    for role in ["writer", "reviewer", "critic", "researcher", "planner", "judge", "custom"]:
+    for role in ["writer", "reviewer", "critic", "researcher", "planner", "custom"]:
         assert f'data-role="{role}"' in html
+    assert 'data-role="judge"' not in html
 
     for old_role in ["analytiker", "kritiker", "programmierer", "advocatus"]:
         assert f'data-role="{old_role}"' not in html
@@ -69,10 +70,28 @@ def test_frontend_has_switchable_english_language_surface():
     i18n = (HTML.parent / "static/js/i18n.js").read_text(encoding="utf-8")
 
     assert 'id="languageSelect"' in html
+    assert 'id="loopRotation"' in html
     assert 'value="en"' in html
     assert 'data-i18n="conv.new"' in html
+    assert 'data-i18n="autoloop.rotation"' in html
     assert 'data-i18n-placeholder="input.placeholder"' in html
     assert 'data-i18n-html="workspace.info"' in html
     assert "window.setLanguage = setLanguage" in i18n
     assert "'conv.new': 'New conversation'" in i18n
+    assert "'autoloop.rotationRoundRobin': 'Rotating'" in i18n
     assert "'input.placeholder': 'Write a message...'" in i18n
+
+
+def test_frontend_uses_delegated_ui_events():
+    html = HTML.read_text(encoding="utf-8")
+    js_root = HTML.parent / "static/js"
+    scripts = [p.read_text(encoding="utf-8") for p in js_root.rglob("*.js")]
+
+    for inline_handler in ["onclick=", "onchange=", "oninput=", "onkeydown="]:
+        assert inline_handler not in html
+        assert all(inline_handler not in script for script in scripts)
+
+    main_js = (js_root / "main.js").read_text(encoding="utf-8")
+    assert "document.addEventListener('click'" in main_js
+    assert "'select-conversation'" in main_js
+    assert "'insert-workspace-ref'" in main_js

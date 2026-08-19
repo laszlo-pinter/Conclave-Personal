@@ -3,6 +3,7 @@ pytest.importorskip("flask")
 
 from pathlib import Path
 from unittest.mock import MagicMock
+import zipfile
 
 from conclave.api.app import create_app
 from conclave.cli.config import ConclaveConfig
@@ -14,16 +15,6 @@ def handler():
     h = MagicMock()
     h.delete_participant.return_value = CLIResult(
         success=True, message="ok", data={"participant_id": "p1"}
-    )
-    h.invoke_with_judge.return_value = CLIResult(
-        success=True,
-        message="ok",
-        data={
-            "participant_id": "primary",
-            "content": "Antwort",
-            "sequence": 2,
-            "judge": {"participant_id": "judge", "content": "ok", "sequence": 4},
-        },
     )
     return h
 
@@ -74,7 +65,8 @@ def test_agent_roles_returns_personal_roles(client):
     body = resp.get_json()
     assert resp.status_code == 200
     ids = {role["id"] for role in body["roles"]}
-    assert {"writer", "reviewer", "critic", "researcher", "planner", "judge", "custom"} <= ids
+    assert {"writer", "reviewer", "critic", "researcher", "planner", "custom"} <= ids
+    assert "judge" not in ids
 
 
 def test_settings_get_returns_runtime_settings(client):
@@ -110,26 +102,69 @@ def test_backup_creates_zip(client, tmp_path, monkeypatch):
     assert backup_path.suffix == ".zip"
 
 
-def test_restore_validates_archive_but_does_not_write(client, tmp_path):
+def test_restore_rejects_invalid_archive(client, tmp_path):
     backup_path = tmp_path / "backup.zip"
     backup_path.write_text("not really a zip", encoding="utf-8")
 
     resp = client.post("/restore", json={"backup_path": str(backup_path)})
 
-    assert resp.status_code == 501
-    assert resp.get_json()["status"] == "not_implemented"
+    assert resp.status_code == 400
+    assert resp.get_json()["status"] == "invalid_backup"
 
 
-def test_judge_endpoint_invokes_handler(client, handler):
-    resp = client.post(
-        "/conversations/conv-1/judge",
-        json={"primary_id": "primary", "judge_id": "judge", "judge_prompt": "Pruefe: {primary_response}"},
-    )
+def test_restore_restores_db_and_replaces_workspace(handler, tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "old.txt").write_text("old workspace", encoding="utf-8")
+    monkeypatch.setenv("CONCLAVE_WORKSPACE", str(workspace))
+    backup_dir = tmp_path / "backups"
+    monkeypatch.setenv("CONCLAVE_BACKUP_DIR", str(backup_dir))
+    db_path = tmp_path / "conclave.db"
+    db_path.write_text("old db", encoding="utf-8")
 
+    backup_path = tmp_path / "restore.zip"
+    with zipfile.ZipFile(backup_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("conclave.db", "restored db")
+        zf.writestr("workspace/notes/restored.md", "restored workspace")
+
+    config = ConclaveConfig(db_path=db_path, openai_api_key="sk-test")
+    app = create_app(handler, config=config)
+    app.config["TESTING"] = True
+
+    with app.test_client() as c:
+        resp = c.post("/restore", json={"backup_path": str(backup_path)})
+
+    body = resp.get_json()
     assert resp.status_code == 200
-    handler.invoke_with_judge.assert_called_once_with(
-        "conv-1", "primary", "judge", "Pruefe: {primary_response}"
-    )
+    assert body["status"] == "restored"
+    assert body["db_restored"] is True
+    assert body["workspace_files_restored"] == 1
+    assert body["workspace_replaced"] is True
+    assert Path(body["pre_restore_backup_path"]).is_file()
+    assert db_path.read_text(encoding="utf-8") == "restored db"
+    assert (workspace / "notes" / "restored.md").read_text(encoding="utf-8") == "restored workspace"
+    assert not (workspace / "old.txt").exists()
+
+
+def test_restore_rejects_zip_slip_path(handler, tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("CONCLAVE_WORKSPACE", str(workspace))
+    db_path = tmp_path / "conclave.db"
+    db_path.write_text("old db", encoding="utf-8")
+    backup_path = tmp_path / "bad.zip"
+    with zipfile.ZipFile(backup_path, "w") as zf:
+        zf.writestr("workspace/../escape.txt", "nope")
+
+    app = create_app(handler, config=ConclaveConfig(db_path=db_path))
+    app.config["TESTING"] = True
+
+    with app.test_client() as c:
+        resp = c.post("/restore", json={"backup_path": str(backup_path)})
+
+    assert resp.status_code == 400
+    assert resp.get_json()["status"] == "invalid_backup"
+    assert not (tmp_path / "escape.txt").exists()
 
 
 def test_delete_participant_endpoint(client, handler):

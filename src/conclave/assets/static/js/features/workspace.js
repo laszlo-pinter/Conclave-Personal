@@ -74,9 +74,9 @@ function _renderFileTree(node,prefix='',depth=0){
   for(const dir of dirs){
     const sub=node._dirs[dir];
     const count=_countFiles(sub);
-    const id='ws-dir-'+prefix+dir;
+    const id='ws-dir-'+Array.from(prefix+dir).map(ch=>ch.charCodeAt(0).toString(16)).join('-');
     const open=depth<1; // Erste Ebene offen, Rest zu
-    html+=`<div class="surface-item" style="padding:4px 10px;cursor:pointer;user-select:none" onclick="document.getElementById('${id}').style.display=document.getElementById('${id}').style.display==='none'?'':'none';this.querySelector('.ws-arrow').textContent=document.getElementById('${id}').style.display==='none'?'\\u25B6':'\\u25BC'">
+    html+=`<div class="surface-item ws-dir-toggle" data-action="toggle-workspace-dir" data-target-id="${attr(id)}">
       <span class="ws-arrow" style="font-size:9px;margin-right:4px;color:var(--text-faint)">${open?'\u25BC':'\u25B6'}</span>
       <span style="font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--text-dim)">${esc(dir)}/</span>
       <span style="font-size:10px;color:var(--text-faint);margin-left:4px">(${count})</span>
@@ -89,7 +89,7 @@ function _renderFileTree(node,prefix='',depth=0){
   for(const f of node._files.sort((a,b)=>a.path.localeCompare(b.path))){
     const name=f.path.split('/').pop();
     html+=`<div class="surface-item" style="padding:3px 10px"><div class="surface-item-row">
-      <span class="surface-item-label" style="cursor:pointer;font-size:11px" onclick="insertWorkspaceRef('${esc(f.path)}')" title="@workspace/${esc(f.path)}">${esc(name)}</span>
+      <span class="surface-item-label ws-file-ref" data-action="insert-workspace-ref" data-path="${attr(f.path)}" title="@workspace/${attr(f.path)}">${esc(name)}</span>
       <span style="font-size:10px;color:var(--text-faint)">${(f.size/1024).toFixed(1)} KB</span>
     </div></div>`;
   }
@@ -100,6 +100,15 @@ function _countFiles(node){
   let n=node._files.length;
   for(const d of Object.values(node._dirs)) n+=_countFiles(d);
   return n;
+}
+
+function toggleWorkspaceDir(el){
+  const target=document.getElementById(el.dataset.targetId);
+  if(!target) return;
+  const isHidden=target.style.display==='none';
+  target.style.display=isHidden?'':'none';
+  const arrow=el.querySelector('.ws-arrow');
+  if(arrow) arrow.textContent=isHidden?'\u25BC':'\u25B6';
 }
 
 async function uploadWsFile(input){

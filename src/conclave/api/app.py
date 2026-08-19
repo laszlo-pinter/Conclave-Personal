@@ -13,7 +13,13 @@ except ImportError:
         "Bitte installieren mit: pip install conclave[api]"
     )
 
-from conclave.cli.handler import CLIHandler, CLIResult
+from conclave.cli.handler import (
+    CLIHandler,
+    CLIResult,
+    normalize_auto_loop_options,
+    normalize_parallel_groups,
+    normalize_participant_sequence,
+)
 from conclave.domain.errors import (
     AdapterNotFound,
     AgentAlreadyExists,
@@ -37,6 +43,7 @@ from conclave.application.workspace_security import (
     write_limit_bytes,
 )
 from conclave.infrastructure.log import get_logger
+from conclave.runtime.backup import create_backup_archive, restore_backup_archive
 from conclave.runtime.assets import get_asset_root
 
 try:
@@ -554,21 +561,6 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     @app.post("/conversations/<conversation_id>/participants/<participant_id>/invoke")
     def invoke_participant(conversation_id: str, participant_id: str):
-        body = request.get_json(silent=True) or {}
-        judge_via = body.get("judge_via")
-
-        if judge_via:
-            judge_prompt = body.get("judge_prompt")
-            if not judge_prompt or not isinstance(judge_prompt, str):
-                return jsonify({"error": "judge_prompt (string) ist erforderlich wenn judge_via gesetzt ist."}), 400
-            result = handler.invoke_with_judge(conversation_id, participant_id, judge_via, judge_prompt)
-            # Partial success: Primary erfolgreich, Judge fehlgeschlagen -> 200 mit judge.error im body
-            if not result.success and "content" in (result.data or {}):
-                return jsonify(result.data), 200
-            if not result.success:
-                return jsonify({"error": result.message}), 502
-            return jsonify(result.data), 200
-
         result = handler.invoke_participant(conversation_id, participant_id)
         if not result.success:
             return _cli_error_json(result, 502)
@@ -579,9 +571,10 @@ def create_app(handler: CLIHandler, auth_service=None,
     @app.post("/conversations/<conversation_id>/orchestrate")
     def orchestrate(conversation_id: str):
         body = request.get_json() or {}
-        sequence = body.get("sequence")
-        if not sequence or not isinstance(sequence, list):
-            return jsonify({"error": "sequence (Liste von participant_ids) ist erforderlich."}), 400
+        try:
+            sequence = normalize_participant_sequence(body.get("sequence"))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
         result = handler.orchestrate(conversation_id, sequence)
         if not result.success:
@@ -593,9 +586,10 @@ def create_app(handler: CLIHandler, auth_service=None,
     @app.post("/conversations/<conversation_id>/orchestrate-parallel")
     def orchestrate_parallel(conversation_id: str):
         body = request.get_json() or {}
-        groups = body.get("groups")
-        if not groups or not isinstance(groups, list):
-            return jsonify({"error": "groups (Liste von Listen mit participant_ids) ist erforderlich."}), 400
+        try:
+            groups = normalize_parallel_groups(body.get("groups"))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
         result = handler.orchestrate_parallel(conversation_id, groups)
         if not result.success:
@@ -629,14 +623,15 @@ def create_app(handler: CLIHandler, auth_service=None,
     @app.post("/conversations/<conversation_id>/auto-loop")
     def auto_loop(conversation_id: str):
         body = request.get_json() or {}
-        sequence = body.get("sequence")
-        if not sequence or not isinstance(sequence, list) or len(sequence) == 0:
-            return jsonify({
-                "error": "sequence (nicht-leere Liste von participant_ids) ist erforderlich."
-            }), 400
-
-        stop_signal = body.get("stop_signal", "@done")
-        max_rounds = int(body.get("max_rounds", 20))
+        try:
+            sequence, stop_signal, max_rounds, rotation = normalize_auto_loop_options(
+                sequence=body.get("sequence"),
+                stop_signal=body.get("stop_signal", "@done"),
+                max_rounds=body.get("max_rounds", 20),
+                rotation=body.get("rotation", "none"),
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
         def generate():
             try:
@@ -645,6 +640,7 @@ def create_app(handler: CLIHandler, auth_service=None,
                     sequence=sequence,
                     stop_signal=stop_signal,
                     max_rounds=max_rounds,
+                    rotation=rotation,
                 ):
                     yield f"data: {_json.dumps(event)}\n\n"
                 yield "data: [DONE]\n\n"
@@ -666,22 +662,6 @@ def create_app(handler: CLIHandler, auth_service=None,
         result = handler.export_conversation(conversation_id)
         if not result.success:
             return jsonify({"error": result.message}), 404
-        return jsonify(result.data), 200
-
-    @app.post("/conversations/<conversation_id>/judge")
-    def judge(conversation_id: str):
-        """Fuehrt Primary + Judge als expliziten Personal-API-Flow aus."""
-        body = request.get_json() or {}
-        primary_id = body.get("primary_id")
-        judge_id = body.get("judge_id")
-        judge_prompt = body.get("judge_prompt")
-        if not primary_id or not judge_id or not judge_prompt:
-            return jsonify({"error": "primary_id, judge_id und judge_prompt sind erforderlich."}), 400
-        result = handler.invoke_with_judge(conversation_id, primary_id, judge_id, judge_prompt)
-        if not result.success and "content" in (result.data or {}):
-            return jsonify(result.data), 200
-        if not result.success:
-            return jsonify({"error": result.message}), 502
         return jsonify(result.data), 200
 
     # ── Token Usage ────────────────────────────────────────────────────
@@ -764,9 +744,6 @@ def create_app(handler: CLIHandler, auth_service=None,
     @app.post("/backup")
     def create_backup():
         """Erstellt ein lokales ZIP-Backup von SQLite-DB und Workspace."""
-        import zipfile
-        from datetime import datetime, timezone
-
         backup_root_env = os.environ.get("CONCLAVE_BACKUP_DIR", "").strip()
         backup_root = pathlib.Path(backup_root_env) if backup_root_env else None
         if backup_root is None:
@@ -774,24 +751,19 @@ def create_app(handler: CLIHandler, auth_service=None,
                 backup_root = pathlib.Path(config.db_path).parent / "backups"
             else:
                 backup_root = pathlib.Path(WORKSPACE).parent / "backups"
-        backup_root.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        backup_path = backup_root / f"conclave-backup-{stamp}.zip"
-        with zipfile.ZipFile(backup_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-            if config and getattr(config, "db_provider", "sqlite") == "sqlite":
-                db_path = pathlib.Path(config.db_path)
-                if db_path.is_file():
-                    zf.write(db_path, "conclave.db")
-            workspace = pathlib.Path(WORKSPACE)
-            if workspace.is_dir():
-                for path in workspace.rglob("*"):
-                    if path.is_file():
-                        zf.write(path, pathlib.PurePosixPath("workspace", *path.relative_to(workspace).parts))
+        db_path = None
+        if config and getattr(config, "db_provider", "sqlite") == "sqlite":
+            db_path = pathlib.Path(config.db_path)
+        backup_path = create_backup_archive(
+            db_path=db_path,
+            workspace_root=pathlib.Path(WORKSPACE),
+            backup_dir=backup_root,
+        )
         return jsonify({"backup_path": str(backup_path), "format": "zip"}), 201
 
     @app.post("/restore")
     def restore_backup():
-        """Validate Backup: prueft ein Archiv, schreibt aber keine lokalen Daten."""
+        """Stellt SQLite-DB und Workspace aus einem lokalen ZIP-Backup wieder her."""
         body = request.get_json() or {}
         backup_path = body.get("backup_path")
         if not backup_path:
@@ -799,10 +771,38 @@ def create_app(handler: CLIHandler, auth_service=None,
         path = pathlib.Path(str(backup_path))
         if not path.is_file():
             return jsonify({"error": "Backup nicht gefunden."}), 404
+        backup_root_env = os.environ.get("CONCLAVE_BACKUP_DIR", "").strip()
+        backup_root = pathlib.Path(backup_root_env) if backup_root_env else None
+        if backup_root is None:
+            if config and getattr(config, "db_provider", "sqlite") == "sqlite":
+                backup_root = pathlib.Path(config.db_path).parent / "backups"
+            else:
+                backup_root = pathlib.Path(WORKSPACE).parent / "backups"
+        db_path = None
+        if config and getattr(config, "db_provider", "sqlite") == "sqlite":
+            db_path = pathlib.Path(config.db_path)
+        replace_workspace = bool(body.get("replace_workspace", True))
+        try:
+            result = restore_backup_archive(
+                backup_path=path,
+                db_path=db_path,
+                workspace_root=pathlib.Path(WORKSPACE),
+                backup_dir=backup_root,
+                replace_workspace=replace_workspace,
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc), "status": "invalid_backup"}), 400
+        except OSError as exc:
+            logger.exception("Restore fehlgeschlagen: %s", exc)
+            return jsonify({"error": "Restore fehlgeschlagen.", "status": "restore_failed"}), 500
         return jsonify({
-            "status": "not_implemented",
-            "message": "Backup-Validierung ist vorbereitet; Restore schreibt in v0.1.0 keine lokalen Daten.",
-        }), 501
+            "status": "restored",
+            "format": "zip",
+            "db_restored": result.db_restored,
+            "workspace_files_restored": result.workspace_files_restored,
+            "workspace_replaced": result.workspace_replaced,
+            "pre_restore_backup_path": str(result.pre_restore_backup_path),
+        }), 200
 
     # ── Workspace (Dateisystem) ──────────────────────────────────────
 

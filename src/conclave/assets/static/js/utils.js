@@ -28,9 +28,6 @@ const ROLES={
   planner:   (n,t)=>getLanguage()==='en'
     ? `You are ${n}, a pragmatic planner. Break work into clear steps and dependencies.${t?` Focus: ${t}.`:''}`
     : `Du bist ${n}, ein pragmatischer Planner. Zerlege Arbeit in klare Schritte und Abhaengigkeiten.${t?` Fokus: ${t}.`:''}`,
-  judge:     (n,t)=>getLanguage()==='en'
-    ? `You are ${n}, a strict judge. Evaluate results against the task and give a clear verdict.${t?` Focus: ${t}.`:''}`
-    : `Du bist ${n}, ein strenger Judge. Bewerte Ergebnisse anhand der Aufgabe und benenne ein klares Urteil.${t?` Fokus: ${t}.`:''}`,
   custom:    null,
 };
 
@@ -40,6 +37,9 @@ function scrollBottom(){const el=document.getElementById('messages');el.scrollTo
 function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,120)+'px';}
 function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function attr(s){
+  return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 
 async function copyId(id, label='ID'){
   try{

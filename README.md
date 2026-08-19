@@ -8,7 +8,12 @@ The user remains the control point. Agents are participants, not controllers.
 Conversations, workspace files, agents, and usage data are stored locally by
 default.
 
-> Status: v0.1.16 Alpha. The primary path is local, desktop-first, and designed
+Conclave does not verify the truth of model answers. It does not decide which
+answer is correct. It gives users a structured workspace for comparing model
+outputs, tracking runs, and deliberately choosing the next step. The human
+decides. Always.
+
+> Status: v0.1.17 Alpha. The primary path is local, desktop-first, and designed
 > for individual users on Windows and Linux.
 
 ![Conclave Studio](https://raw.githubusercontent.com/laszlo-pinter/Conclave-Personal/main/docs/assets/screenshots/conclave-studio-desktop.png)
@@ -27,26 +32,34 @@ Conclave is not just another chat UI. Its core is:
 In practice, this means:
 
 - Run multi-agent conversations with Writer, Critic, Reviewer, Planner,
-  Researcher, or Judge roles.
+  Researcher, or custom roles.
 - Invite agents as participants into specific conversations.
 - Use local workspace files explicitly as context.
 - Let models work one by one, in parallel, or in auto-loops.
-- Use Judge and review runs for mutual checking.
+- Compare different model outputs without treating model agreement as truth.
 - Inspect runs, token usage, errors, and results.
 - Work locally on Windows and Linux.
 - Switch the desktop UI between German and English.
+
+## Human Decision Boundary
+
+Conclave is a tool, not an arbiter. Agent outputs can be useful, wrong,
+incomplete, overconfident, or mutually reinforcing. Conclave can make those
+outputs visible and traceable, but it does not certify factual correctness.
+
+The user decides what to trust, what to verify externally, and what to do next.
 
 ## 60-Second Example
 
 ```text
           -> Writer
-Prompt ---+-> Critic -> Judge
+Prompt ---+-> Critic
           -> Researcher
 ```
 
 1. Create a conversation.
 2. Add agents as participants.
-3. Assign roles: Writer drafts, Critic challenges, Judge evaluates.
+3. Assign roles: Writer drafts, Critic challenges, Researcher adds context.
 4. Send a prompt.
 5. Watch the run.
 6. Compare the results and deliberately start the next round.
@@ -56,13 +69,13 @@ Minimal CLI flow:
 ```bash
 conclave desktop
 conclave agent-new writer --name "Writer" --provider "openai-responses" --preset "openai-responses" --model "<openai-model>" --role "Writer" --api-key "..."
-conclave agent-new judge --name "Judge" --provider "ollama" --preset "ollama" --model "llama3.1" --role "Judge"
+conclave agent-new critic --name "Critic" --provider "ollama" --preset "ollama" --model "llama3.1" --role "Critic"
 CONV=$(conclave --json new | python -c "import sys,json; print(json.load(sys.stdin)['conversation_id'])")
 conclave add-participant "$CONV" writer --name "Writer" --type model
-conclave add-participant "$CONV" judge --name "Judge" --type model
-conclave message "$CONV" "Draft a concise product positioning and have it reviewed."
+conclave add-participant "$CONV" critic --name "Critic" --type model
+conclave message "$CONV" "Draft a concise product positioning and list risks or open assumptions."
 conclave invoke "$CONV" writer
-conclave invoke "$CONV" judge
+conclave invoke "$CONV" critic
 conclave runs "$CONV"
 ```
 
@@ -73,7 +86,7 @@ conclave runs "$CONV"
 | Studio | Conversations, messages, participants, floor control, invoke, stream, orchestration, auto-loop |
 | Agents | Agents, roles, providers, models, presets, connection tests |
 | Workspace | Local files, context, notes, outputs |
-| Runs | Invoke, Judge, auto-loop, and orchestration history, usage, errors |
+| Runs | Invoke, auto-loop, orchestration history, usage, and errors |
 | Settings | API keys, data paths, language, theme, backup, local security mode |
 
 ## Non-Goals
@@ -152,12 +165,12 @@ conclave agent-new reviewer \
 Ollama can run locally without an API key:
 
 ```bash
-conclave agent-new local-judge \
-  --name "Local Judge" \
+conclave agent-new local-critic \
+  --name "Local Critic" \
   --provider "ollama" \
   --preset "ollama" \
   --model "llama3.1" \
-  --role "Judge"
+  --role "Critic"
 ```
 
 The [provider smoke test](docs/provider-smoke-test.md) describes a reproducible
@@ -194,8 +207,45 @@ conclave message "$ID" "Analyze this idea from three perspectives."
 conclave invoke "$ID" assistant
 ```
 
-Auto-loop and Judge workflows are described in the
+Auto-loop and multi-agent workflows are described in the
 [example workflows](docs/beispiel-workflows.md).
+
+## MCP Server
+
+Conclave includes an MCP server for Claude Desktop, Claude Code, and other
+Anthropic-compatible MCP clients. It exposes Conclave conversations, agents,
+messages, orchestration, workspace files, and usage as local tools.
+
+Install with MCP support:
+
+```bash
+pipx install "conclave-personal[mcp]"
+```
+
+Start Conclave locally:
+
+```bash
+conclave server --host 127.0.0.1 --port 8000
+```
+
+Add Conclave to your MCP client configuration:
+
+```json
+{
+  "mcpServers": {
+    "conclave": {
+      "command": "conclave-mcp",
+      "env": {
+        "CONCLAVE_API_URL": "http://localhost:8000",
+        "CONCLAVE_API_KEY": ""
+      }
+    }
+  }
+}
+```
+
+If the local API runs with authentication, set `CONCLAVE_API_KEY` to the same
+API key used by the Conclave server.
 
 ## Core Concepts
 
@@ -219,7 +269,7 @@ context automatically. The user references them explicitly, for example with
 
 ### Run
 
-An executable work step: invoke, stream, orchestration, auto-loop, or Judge.
+An executable work step: invoke, stream, orchestration, or auto-loop.
 Runs expose status, errors, duration, and usage.
 
 ## Architecture State And Target
@@ -235,14 +285,14 @@ src/conclave/
 
 src/conclave/assets/
   conclave-ui.html installed UI resource
-  static/js/       current flat JS entry: api, i18n, state, utils, main
+  static/js/       current packaged JS entry: api, i18n, state, utils, main
   static/js/features/
                    Studio, Agents, Workspace, Runs, Settings
   scripts/         Windows and Linux startup/service scripts
 
 Future target for UI cleanup:
 
-static/js/
+src/conclave/assets/static/js/
   core/            API, State, Router, Events
   features/        Studio, Agents, Workspace, Runs, Settings
 ```
@@ -299,6 +349,7 @@ Important documents:
 - [Example workflows](docs/beispiel-workflows.md)
 - [Security](docs/sicherheit.md)
 - [Configuration](docs/referenz/konfiguration.md)
+- [Release Notes v0.1.17](docs/release-notes-v0.1.17.md)
 - [Release Notes v0.1.16](docs/release-notes-v0.1.16.md)
 - [Release Notes v0.1.5](docs/release-notes-v0.1.5.md)
 - [Release Notes v0.1.4](docs/release-notes-v0.1.4.md)
@@ -310,10 +361,8 @@ Important documents:
 
 ## Known Limitations
 
-v0.1.16 remains alpha. Known limitations:
+v0.1.17 remains alpha. Known limitations:
 
-- Backup creation exists; restore currently validates only and does not write
-  data back yet.
 - Provider compatibility varies by API, model, account, and region.
 - Remote providers receive the data required for the model call.
 - Desktop mode starts the local web application in a browser.
@@ -322,7 +371,7 @@ v0.1.16 remains alpha. Known limitations:
 
 ## Release Verification
 
-The v0.1.16 surface was verified with these local checks:
+The v0.1.17 surface was verified with these local checks:
 
 - `python -m pytest`
 - `python -m build --sdist --wheel`
@@ -340,5 +389,4 @@ This project was created exclusively by LLM models.
 
 PolyForm Noncommercial License 1.0.0. See [LICENSE](LICENSE).
 
-Free for noncommercial use. Commercial use requires a separate license.
-Commercial licensing: coming soon.
+Free for noncommercial use.

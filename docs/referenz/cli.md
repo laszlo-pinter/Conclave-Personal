@@ -27,7 +27,7 @@ conclave invoke <conversation_id> <participant_id>
 conclave stream <conversation_id> <participant_id>
 conclave orchestrate <conversation_id> <participant_id>...
 conclave orchestrate-parallel <conversation_id> --groups a,b c
-conclave auto-loop <conversation_id> <participant_id>... [--stop-signal @done] [--max-rounds 20]
+conclave auto-loop <conversation_id> <participant_id>... [--stop-signal @done] [--max-rounds 20] [--rotation none|round-robin]
 ```
 
 ## Agents
@@ -59,7 +59,14 @@ conclave runs [--conversation-id <id>] [--limit 100]
 conclave usage [--by-conversation]
 conclave export <conversation_id>
 conclave backup [--dir <backup_dir>]
+conclave restore --backup <backup.zip> [--dir <backup_dir>] [--keep-workspace]
 ```
+
+`backup` erstellt ein ZIP mit lokaler SQLite-DB und Workspace-Dateien.
+`restore` stellt die SQLite-DB und Workspace-Dateien aus einem solchen ZIP
+wieder her. Vor dem Schreiben wird automatisch ein Pre-Restore-Backup erstellt.
+Standardmäßig ersetzt Restore den Workspace-Inhalt; mit `--keep-workspace`
+werden Dateien aus dem Backup in den bestehenden Workspace gemischt.
 
 ## Migration
 

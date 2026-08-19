@@ -137,6 +137,8 @@ select.sel:focus{border-color:var(--accent)}
 .surface-btn.revoke:hover{background:var(--danger-bg)}
 .surface-empty{font-size:11px;color:var(--text-faint);padding:8px 0}
 .surface-info{font-size:11px;color:var(--text-faint);line-height:1.6;padding:4px 0}
+.ws-dir-toggle{padding:4px 10px;cursor:pointer;user-select:none}
+.ws-file-ref{cursor:pointer;font-size:11px}
 .status-chip{display:inline-flex;align-items:center;justify-content:center;font-size:10px;line-height:1;padding:3px 7px;border-radius:10px;border:1px solid var(--border-mid);font-family:var(--font-mono)}
 .status-chip.ok{background:var(--accent-bg);border-color:rgba(0,212,170,.3);color:var(--accent)}
 .status-chip.muted{background:var(--bg-4);color:var(--text-faint)}

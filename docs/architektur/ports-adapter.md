@@ -83,4 +83,4 @@ Provider-Adaptern:
 3. Adapter werden pro Agent gecacht.
 4. Agent-CRUD invalidiert den Cache.
 5. `get_for(participant_id)` liefert den Adapter für Invoke, Stream,
-   Orchestrierung, Auto-Loop und Judge-Flows.
+   Orchestrierung und Auto-Loop.

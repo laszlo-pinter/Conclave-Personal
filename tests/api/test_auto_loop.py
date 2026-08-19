@@ -31,6 +31,19 @@ def run_loop(mock_handler, conversation_id, sequence, stop_signal="@done", max_r
     ))
 
 
+def run_loop_with_rotation(
+    mock_handler,
+    conversation_id,
+    sequence,
+    stop_signal="@done",
+    max_rounds=20,
+    rotation="none",
+):
+    return list(CLIHandler.auto_loop(
+        mock_handler, conversation_id, sequence, stop_signal, max_rounds, rotation
+    ))
+
+
 def make_mock_handler(**kwargs):
     h = MagicMock()
     if "invoke_side_effect" in kwargs:
@@ -180,6 +193,39 @@ class TestAutoLoopHandlerLogic:
         assert stop["round"] == 2
         assert stop["participant"] == "cc"
 
+    def test_round_robin_rotation_shifts_first_participant_each_round(self):
+        h = make_mock_handler(invoke_side_effect=[
+            make_ok("a", "R1 a"),
+            make_ok("b", "R1 b"),
+            make_ok("c", "R1 c"),
+            make_ok("b", "R2 b"),
+            make_ok("c", "R2 c"),
+            make_ok("a", "R2 a @done"),
+        ])
+        events = run_loop_with_rotation(
+            h, "conv-1", ["a", "b", "c"], max_rounds=3, rotation="round_robin"
+        )
+        invoke_order = [e["participant"] for e in events if e["event"] == "invoke"]
+        assert invoke_order == ["a", "b", "c", "b", "c", "a"]
+        response = [e for e in events if e["event"] == "response" and e["round"] == 2][0]
+        assert response["round_sequence"] == ["b", "c", "a"]
+
+    def test_default_rotation_remains_static(self):
+        h = make_mock_handler(invoke_side_effect=[
+            make_ok("a", "R1 a"),
+            make_ok("b", "R1 b"),
+            make_ok("a", "R2 a"),
+            make_ok("b", "R2 b @done"),
+        ])
+        events = run_loop(h, "conv-1", ["a", "b"])
+        invoke_order = [e["participant"] for e in events if e["event"] == "invoke"]
+        assert invoke_order == ["a", "b", "a", "b"]
+
+    def test_invalid_rotation_raises_value_error(self):
+        h = make_mock_handler(invoke_return=make_ok("a", "irrelevant"))
+        with pytest.raises(ValueError, match="rotation"):
+            run_loop_with_rotation(h, "conv-1", ["a"], rotation="random")
+
 
 # ── Teil 2: Endpoint — Validierung ───────────────────────────────────────────
 
@@ -197,6 +243,31 @@ class TestAutoLoopEndpointValidation:
     def test_non_list_sequence_returns_400(self, client):
         resp = client.post("/conversations/conv-1/auto-loop",
                            json={"sequence": "cc"})
+        assert resp.status_code == 400
+
+    def test_empty_participant_id_returns_400(self, client):
+        resp = client.post("/conversations/conv-1/auto-loop",
+                           json={"sequence": ["cc", " "]})
+        assert resp.status_code == 400
+
+    def test_invalid_max_rounds_returns_400(self, client):
+        resp = client.post("/conversations/conv-1/auto-loop",
+                           json={"sequence": ["cc"], "max_rounds": 0})
+        assert resp.status_code == 400
+
+    def test_too_many_rounds_returns_400(self, client):
+        resp = client.post("/conversations/conv-1/auto-loop",
+                           json={"sequence": ["cc"], "max_rounds": 51})
+        assert resp.status_code == 400
+
+    def test_empty_stop_signal_returns_400(self, client):
+        resp = client.post("/conversations/conv-1/auto-loop",
+                           json={"sequence": ["cc"], "stop_signal": " "})
+        assert resp.status_code == 400
+
+    def test_invalid_rotation_returns_400(self, client):
+        resp = client.post("/conversations/conv-1/auto-loop",
+                           json={"sequence": ["cc"], "rotation": "random"})
         assert resp.status_code == 400
 
 
@@ -231,13 +302,15 @@ class TestAutoLoopEndpointFormat:
             {"event": "stop", "reason": "max_rounds", "rounds": 5},
         ])
         client.post("/conversations/conv-1/auto-loop", json={
-            "sequence": ["cc", "cd"],
-            "stop_signal": "@fertig",
-            "max_rounds": 5,
+            "sequence": [" cc ", "cd"],
+            "stop_signal": " @fertig ",
+            "max_rounds": "5",
+            "rotation": "round-robin",
         })
         handler.auto_loop.assert_called_once_with(
             conversation_id="conv-1",
             sequence=["cc", "cd"],
             stop_signal="@fertig",
             max_rounds=5,
+            rotation="round_robin",
         )

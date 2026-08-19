@@ -30,11 +30,6 @@ AGENT_ROLES: tuple[dict[str, str], ...] = (
         "prompt": "Du bist {name}, ein pragmatischer Planner. Zerlege Arbeit in klare Schritte und Abhaengigkeiten.{topic}",
     },
     {
-        "id": "judge",
-        "label": "Judge",
-        "prompt": "Du bist {name}, ein strenger Judge. Bewerte Ergebnisse anhand der Aufgabe und benenne ein klares Urteil.{topic}",
-    },
-    {
         "id": "custom",
         "label": "Custom",
         "prompt": "",

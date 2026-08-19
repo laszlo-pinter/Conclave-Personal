@@ -139,6 +139,16 @@ def test_orchestrate_command_passes_participants(capsys):
     handler.orchestrate.assert_called_once_with("conv-1", ["p1", "p2"])
 
 
+def test_auto_loop_validation_error_returns_one(capsys):
+    handler = make_handler_mock()
+    handler.auto_loop.side_effect = ValueError("max_rounds muss zwischen 1 und 50 liegen.")
+    with patch_run(handler):
+        code = run(["auto-loop", "conv-1", "p1", "--max-rounds", "0"])
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "max_rounds" in captured.err
+
+
 def test_list_command_calls_list_conversations():
     handler = make_handler_mock()
     handler.list_conversations.return_value = CLIResult(
@@ -266,6 +276,20 @@ def test_backup_command_calls_handler(tmp_path):
         code = run(["backup", "--dir", str(tmp_path)])
     assert code == 0
     handler.create_backup.assert_called_once()
+
+
+def test_restore_command_calls_handler(tmp_path):
+    handler = make_handler_mock()
+    backup_path = tmp_path / "backup.zip"
+    handler.restore_backup.return_value = CLIResult(success=True, message="ok", data={"status": "restored"})
+    with patch_run(handler):
+        code = run(["restore", "--backup", str(backup_path), "--dir", str(tmp_path), "--keep-workspace"])
+    assert code == 0
+    handler.restore_backup.assert_called_once()
+    kwargs = handler.restore_backup.call_args.kwargs
+    assert kwargs["backup_path"] == backup_path
+    assert kwargs["backup_dir"] == tmp_path
+    assert kwargs["replace_workspace"] is False
 
 
 def test_web_command_opens_browser():

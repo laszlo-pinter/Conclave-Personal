@@ -5,7 +5,8 @@ def test_list_agent_roles_returns_personal_roles():
     roles = list_agent_roles()
     ids = {role["id"] for role in roles}
 
-    assert {"writer", "reviewer", "critic", "researcher", "planner", "judge", "custom"} <= ids
+    assert {"writer", "reviewer", "critic", "researcher", "planner", "custom"} <= ids
+    assert "judge" not in ids
 
 
 def test_role_prompt_uses_name_and_topic():

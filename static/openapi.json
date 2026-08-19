@@ -925,24 +925,6 @@
                     },
                     "sequence": {
                       "type": "integer"
-                    },
-                    "judge": {
-                      "type": "object",
-                      "description": "Nur gesetzt wenn judge_via im Request war. Bei Judge-Fehler enthaelt es 'error' statt 'content'.",
-                      "properties": {
-                        "participant_id": {
-                          "type": "string"
-                        },
-                        "content": {
-                          "type": "string"
-                        },
-                        "sequence": {
-                          "type": "integer"
-                        },
-                        "error": {
-                          "type": "string"
-                        }
-                      }
                     }
                   }
                 }
@@ -969,22 +951,10 @@
           }
         ],
         "requestBody": {
-          "required": false,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "description": "Body ist optional. Ohne Body: einfacher Invoke. Mit judge_via: Chain-of-Verification - nach dem Primary-Invoke wird ein Judge-Agent mit dem gerenderten judge_prompt aufgerufen.",
-                "properties": {
-                  "judge_via": {
-                    "type": "string",
-                    "description": "Agent-ID des Judges (Cross-Model-Verification)."
-                  },
-                  "judge_prompt": {
-                    "type": "string",
-                    "description": "Template mit Platzhaltern {primary_response} und {original_prompt}. Erforderlich wenn judge_via gesetzt ist."
-                  }
-                }
+                "type": "object"
               }
             }
           }
@@ -1025,8 +995,11 @@
                 "properties": {
                   "sequence": {
                     "type": "array",
+                    "minItems": 1,
+                    "maxItems": 20,
                     "items": {
-                      "type": "string"
+                      "type": "string",
+                      "minLength": 1
                     }
                   }
                 }
@@ -1070,10 +1043,13 @@
                 "properties": {
                   "groups": {
                     "type": "array",
+                    "minItems": 1,
                     "items": {
                       "type": "array",
+                      "minItems": 1,
                       "items": {
-                        "type": "string"
+                        "type": "string",
+                        "minLength": 1
                       }
                     }
                   }
@@ -1150,17 +1126,32 @@
                 "properties": {
                   "sequence": {
                     "type": "array",
+                    "minItems": 1,
+                    "maxItems": 20,
                     "items": {
-                      "type": "string"
+                      "type": "string",
+                      "minLength": 1
                     }
                   },
                   "stop_signal": {
                     "type": "string",
-                    "default": "@done"
+                    "default": "@done",
+                    "minLength": 1,
+                    "maxLength": 128
                   },
                   "max_rounds": {
                     "type": "integer",
-                    "default": 20
+                    "default": 20,
+                    "minimum": 1,
+                    "maximum": 50
+                  },
+                  "rotation": {
+                    "type": "string",
+                    "default": "none",
+                    "enum": [
+                      "none",
+                      "round_robin"
+                    ]
                   }
                 }
               }
@@ -1191,82 +1182,6 @@
             }
           }
         ]
-      }
-    },
-    "/conversations/{conversation_id}/judge": {
-      "post": {
-        "summary": "Fuehrt Primary + Judge als expliziten Personal-API-Flow aus.",
-        "tags": [
-          "conversations"
-        ],
-        "operationId": "judge",
-        "responses": {
-          "200": {
-            "description": "Erfolg",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "required": [
-                    "participant_id",
-                    "content",
-                    "judge"
-                  ],
-                  "properties": {
-                    "participant_id": {
-                      "type": "string"
-                    },
-                    "content": {
-                      "type": "string"
-                    },
-                    "sequence": {
-                      "type": "integer"
-                    },
-                    "judge": {
-                      "type": "object"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "conversation_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "primary_id",
-                  "judge_id",
-                  "judge_prompt"
-                ],
-                "properties": {
-                  "primary_id": {
-                    "type": "string"
-                  },
-                  "judge_id": {
-                    "type": "string"
-                  },
-                  "judge_prompt": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/usage": {
@@ -1506,14 +1421,44 @@
     },
     "/restore": {
       "post": {
-        "summary": "Validate Backup: prueft ein Archiv, schreibt aber keine lokalen Daten.",
+        "summary": "Stellt SQLite-DB und Workspace aus einem lokalen ZIP-Backup wieder her.",
         "tags": [
           "restore"
         ],
         "operationId": "restore_backup",
         "responses": {
           "200": {
-            "description": "Erfolg"
+            "description": "Erfolg",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "format": {
+                      "type": "string"
+                    },
+                    "db_restored": {
+                      "type": "boolean"
+                    },
+                    "workspace_files_restored": {
+                      "type": "integer"
+                    },
+                    "workspace_replaced": {
+                      "type": "boolean"
+                    },
+                    "pre_restore_backup_path": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "requestBody": {
@@ -1528,6 +1473,10 @@
                 "properties": {
                   "backup_path": {
                     "type": "string"
+                  },
+                  "replace_workspace": {
+                    "type": "boolean",
+                    "default": true
                   }
                 }
               }

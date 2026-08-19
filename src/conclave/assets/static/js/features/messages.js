@@ -12,7 +12,7 @@ function buildMsg(m){
   const pName=pid?(participants.find(p=>p.id===pid)?.name||pid):'User';
   const div=document.createElement('div');div.className=`msg ${isUser?'user':'model'}`;
   if(!isUser&&c) div.style.borderLeftColor=c.bd;
-  const dlBtn=isUser?'':`<button class="msg-dl" onclick="downloadMsg(this)" data-name="${esc(pName)}" data-seq="${m.sequence}" title="${t('download.response')}">&#8615;</button>`;
+  const dlBtn=isUser?'':`<button class="msg-dl" data-action="download-message" data-name="${attr(pName)}" data-seq="${attr(m.sequence)}" title="${attr(t('download.response'))}">&#8615;</button>`;
   const rendered=isUser?esc(m.content):renderMarkdown(m.content);
   div.innerHTML=`<div class="msg-header"><span class="msg-label" style="color:${isUser?'var(--text-dim)':(c?.tx||'var(--accent)')}">${esc(pName)}</span><span class="msg-seq">#${m.sequence}</span>${dlBtn}</div><div class="msg-content">${rendered}</div>`;
   // Code-Highlighting auf alle pre>code Bloecke

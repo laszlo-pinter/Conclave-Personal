@@ -10,6 +10,7 @@ function openAutoloop(){
   document.getElementById('loopSeq').value=models.map(p=>p.id).join(', ');
   document.getElementById('loopRounds').value=6;
   document.getElementById('loopStop').value='@done';
+  document.getElementById('loopRotation').value='none';
   openOverlay('overlayAutoloop');
 }
 
@@ -17,7 +18,11 @@ async function runAutoloop(){
   const seq=document.getElementById('loopSeq').value.split(',').map(s=>s.trim()).filter(Boolean);
   const maxRounds=parseInt(document.getElementById('loopRounds').value,10)||10;
   const stopSignal=document.getElementById('loopStop').value.trim()||'@done';
+  const rotation=document.getElementById('loopRotation').value||'none';
   if(seq.length<1){toast(t('autoloop.needOne'),'err');return;}
+  if(seq.length>20){toast(t('autoloop.tooManyParticipants'),'err');return;}
+  if(maxRounds<1||maxRounds>50){toast(t('autoloop.invalidRounds'),'err');return;}
+  if(!stopSignal||stopSignal.length>128){toast(t('autoloop.invalidStopSignal'),'err');return;}
   closeOverlay('overlayAutoloop');
 
   const btn=document.getElementById('btnAutoloop');btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Loop';
@@ -41,7 +46,7 @@ async function runAutoloop(){
     const hdrs={'Content-Type':'application/json'};if(apiKey)hdrs['Authorization']='Bearer '+apiKey;
     const res=await fetch(`${API}/conversations/${currentConvId}/auto-loop`,{
       method:'POST',headers:hdrs,
-      body:JSON.stringify({sequence:seq,stop_signal:stopSignal,max_rounds:maxRounds}),
+      body:JSON.stringify({sequence:seq,stop_signal:stopSignal,max_rounds:maxRounds,rotation}),
     });
     if(!res.ok){const t=await res.text();throw new Error(`HTTP ${res.status}: ${t.slice(0,200)}`);}
 

@@ -9,7 +9,7 @@
 - [Multi-agent guide](multi-agent-leitfaden.md) - Roles, workflows, and working patterns
 
 ### Workflows
-- [Example workflows](beispiel-workflows.md) - Review, architecture, workspace context, and Judge
+- [Example workflows](beispiel-workflows.md) - Writing, architecture, workspace context, and multi-agent runs
 - [Provider smoke test](provider-smoke-test.md) - Check Claude, Gemini, and GPT locally
 
 ### Product UI
@@ -30,6 +30,7 @@
 - [Ports & adapters](architektur/ports-adapter.md) - Interfaces, ProviderProfiles, ResilientAdapter
 
 ### Release
+- [Release Notes v0.1.17](release-notes-v0.1.17.md) - Restore, orchestration rotation, and tool boundary cleanup
 - [Release Notes v0.1.16](release-notes-v0.1.16.md) - Switchable German/English desktop UI
 - [Release Notes v0.1.5](release-notes-v0.1.5.md) - English public documentation surface
 - [Release Notes v0.1.4](release-notes-v0.1.4.md) - README origin notice placement for PyPI

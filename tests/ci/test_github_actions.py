@@ -74,5 +74,5 @@ def test_publish_workflow_builds_conclave_personal_artifacts():
     text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
 
     assert "python -m build --sdist --wheel" in text
-    assert "dist/conclave_personal-0.1.16-py3-none-any.whl" in text
-    assert "dist/conclave_personal-0.1.16.tar.gz" in text
+    assert "dist/conclave_personal-0.1.17-py3-none-any.whl" in text
+    assert "dist/conclave_personal-0.1.17.tar.gz" in text

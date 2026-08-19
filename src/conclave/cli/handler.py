@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 import os
-import zipfile
 from datetime import datetime, timezone
 
 from conclave.application.agent_service import AgentService
@@ -29,6 +28,88 @@ from conclave.domain.errors import (
     ParticipantAlreadyRegistered,
 )
 from conclave.domain.participant import ParticipantType
+
+
+MAX_ORCHESTRATION_PARTICIPANTS = 20
+MAX_AUTO_LOOP_ROUNDS = 50
+MAX_STOP_SIGNAL_LENGTH = 128
+AUTO_LOOP_ROTATIONS = {"none", "round_robin"}
+
+
+def normalize_participant_sequence(sequence: list[str], *, field: str = "sequence") -> list[str]:
+    if not isinstance(sequence, list):
+        raise ValueError(f"{field} muss eine Liste von Participant-IDs sein.")
+    normalized: list[str] = []
+    for item in sequence:
+        if not isinstance(item, str):
+            raise ValueError(f"{field} darf nur Participant-IDs als Strings enthalten.")
+        participant_id = item.strip()
+        if not participant_id:
+            raise ValueError(f"{field} darf keine leeren Participant-IDs enthalten.")
+        normalized.append(participant_id)
+    if not normalized:
+        raise ValueError(f"{field} muss mindestens eine Participant-ID enthalten.")
+    if len(normalized) > MAX_ORCHESTRATION_PARTICIPANTS:
+        raise ValueError(
+            f"{field} darf maximal {MAX_ORCHESTRATION_PARTICIPANTS} Participant-IDs enthalten."
+        )
+    return normalized
+
+
+def normalize_parallel_groups(groups: list[list[str]]) -> list[list[str]]:
+    if not isinstance(groups, list):
+        raise ValueError("groups muss eine Liste von Participant-Gruppen sein.")
+    normalized: list[list[str]] = []
+    total = 0
+    for index, group in enumerate(groups, start=1):
+        normalized_group = normalize_participant_sequence(group, field=f"groups[{index}]")
+        total += len(normalized_group)
+        normalized.append(normalized_group)
+    if not normalized:
+        raise ValueError("groups muss mindestens eine Participant-Gruppe enthalten.")
+    if total > MAX_ORCHESTRATION_PARTICIPANTS:
+        raise ValueError(
+            f"groups darf insgesamt maximal {MAX_ORCHESTRATION_PARTICIPANTS} Participant-IDs enthalten."
+        )
+    return normalized
+
+
+def normalize_auto_loop_options(
+    sequence: list[str],
+    stop_signal: str = "@done",
+    max_rounds: int = 20,
+    rotation: str = "none",
+) -> tuple[list[str], str, int, str]:
+    normalized_sequence = normalize_participant_sequence(sequence)
+    if not isinstance(stop_signal, str):
+        raise ValueError("stop_signal muss ein String sein.")
+    normalized_signal = stop_signal.strip()
+    if not normalized_signal:
+        raise ValueError("stop_signal darf nicht leer sein.")
+    if len(normalized_signal) > MAX_STOP_SIGNAL_LENGTH:
+        raise ValueError(
+            f"stop_signal darf maximal {MAX_STOP_SIGNAL_LENGTH} Zeichen lang sein."
+        )
+    try:
+        normalized_rounds = int(max_rounds)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("max_rounds muss eine ganze Zahl sein.") from exc
+    if normalized_rounds < 1 or normalized_rounds > MAX_AUTO_LOOP_ROUNDS:
+        raise ValueError(f"max_rounds muss zwischen 1 und {MAX_AUTO_LOOP_ROUNDS} liegen.")
+    if not isinstance(rotation, str):
+        raise ValueError("rotation muss ein String sein.")
+    normalized_rotation = rotation.strip().lower().replace("-", "_") or "none"
+    if normalized_rotation not in AUTO_LOOP_ROTATIONS:
+        allowed = ", ".join(sorted(AUTO_LOOP_ROTATIONS))
+        raise ValueError(f"rotation muss einer dieser Werte sein: {allowed}.")
+    return normalized_sequence, normalized_signal, normalized_rounds, normalized_rotation
+
+
+def auto_loop_round_sequence(sequence: list[str], round_number: int, rotation: str) -> list[str]:
+    if rotation != "round_robin" or len(sequence) < 2:
+        return list(sequence)
+    offset = (round_number - 1) % len(sequence)
+    return sequence[offset:] + sequence[:offset]
 
 
 @dataclass
@@ -444,117 +525,17 @@ class CLIHandler:
             },
         )
 
-    def invoke_with_judge(
-        self,
-        conversation_id: str,
-        primary_id: str,
-        judge_id: str,
-        judge_prompt_template: str,
-    ) -> CLIResult:
-        """Chain-of-Verification: Primary antwortet, dann beurteilt Judge die Antwort.
-
-        Ablauf:
-          1. Primary invoken (Antwort wird als Message persistiert).
-          2. judge_prompt_template rendern mit {primary_response} und {original_prompt}.
-          3. Judge als Participant idempotent hinzufuegen.
-          4. Gerenderten Prompt als USER-Message in die Conv schreiben.
-          5. Judge invoken (Antwort wird als Message persistiert).
-
-        Bei Primary-Fehler: CLIResult.success=False, kein data["content"].
-        Bei Judge-Fehler nach Primary-Erfolg: CLIResult.success=False, aber data
-        enthaelt Primary-Content + judge.error -> Caller kann partial-success
-        anhand "content" in data erkennen.
-        """
-        from conclave.domain.message import MessageAuthorType
-
-        primary_result = self.invoke_participant(conversation_id, primary_id)
-        if not primary_result.success:
-            return primary_result
-
-        primary_content = primary_result.data["content"]
-        primary_sequence = primary_result.data["sequence"]
-
-        try:
-            conv = self._service.load_conversation(conversation_id)
-        except ConversationNotFound:
-            return CLIResult(
-                success=False,
-                message=f"Conversation '{conversation_id}' nach Primary-Invoke nicht mehr ladbar.",
-                data={"participant_id": primary_id, "content": primary_content, "sequence": primary_sequence},
-            )
-
-        original_prompt = ""
-        # Letzte Message ist Primary-Response; davor letzte USER-Message suchen.
-        for msg in reversed(conv.messages[:-1]):
-            if msg.author_type == MessageAuthorType.USER:
-                original_prompt = msg.content
-                break
-
-        rendered = judge_prompt_template.replace(
-            "{primary_response}", primary_content
-        ).replace("{original_prompt}", original_prompt)
-
-        if not any(p.id == judge_id for p in conv.participants):
-            add_result = self.add_participant(
-                conversation_id=conversation_id,
-                participant_id=judge_id,
-                name=judge_id,
-                participant_type=ParticipantType.MODEL,
-            )
-            if not add_result.success and "bereits registriert" not in add_result.message:
-                return CLIResult(
-                    success=False,
-                    message=f"Judge-Add fehlgeschlagen: {add_result.message}",
-                    data={"participant_id": primary_id, "content": primary_content, "sequence": primary_sequence,
-                          "judge": {"error": add_result.message}},
-                )
-
-        msg_result = self.add_message(conversation_id, rendered)
-        if not msg_result.success:
-            return CLIResult(
-                success=False,
-                message=f"Judge-Prompt-Message konnte nicht angefuegt werden: {msg_result.message}",
-                data={"participant_id": primary_id, "content": primary_content, "sequence": primary_sequence,
-                      "judge": {"error": msg_result.message}},
-            )
-
-        try:
-            judge_result = self.invoke_participant(conversation_id, judge_id)
-        except Exception as exc:
-            # Primary war erfolgreich -> Partial Result mit judge.error zurueckgeben,
-            # damit der Caller die Primary-Antwort nicht verliert.
-            return CLIResult(
-                success=False,
-                message=f"Judge-Invoke fehlgeschlagen: {type(exc).__name__}: {exc}",
-                data={"participant_id": primary_id, "content": primary_content, "sequence": primary_sequence,
-                      "judge": {"error": f"{type(exc).__name__}: {exc}"}},
-            )
-        if not judge_result.success:
-            return CLIResult(
-                success=False,
-                message=f"Judge-Invoke fehlgeschlagen: {judge_result.message}",
-                data={"participant_id": primary_id, "content": primary_content, "sequence": primary_sequence,
-                      "judge": {"error": judge_result.message}},
-            )
-
-        return CLIResult(
-            success=True,
-            message=f"Primary '{primary_id}' + Judge '{judge_id}' fertig.",
-            data={
-                "participant_id": primary_id,
-                "content": primary_content,
-                "sequence": primary_sequence,
-                "judge": {
-                    "participant_id": judge_id,
-                    "content": judge_result.data["content"],
-                    "sequence": judge_result.data["sequence"],
-                },
-            },
-        )
-
     def orchestrate(
         self, conversation_id: str, sequence: list[str]
     ) -> CLIResult:
+        try:
+            sequence = normalize_participant_sequence(sequence)
+        except ValueError as exc:
+            return CLIResult(
+                success=False,
+                message=str(exc),
+                data={"type": "ValidationError", "status": 400},
+            )
         orchestrator = Orchestrator(self._service)
         result = orchestrator.run(conversation_id=conversation_id, sequence=sequence)
 
@@ -584,6 +565,14 @@ class CLIHandler:
         self, conversation_id: str, groups: list[list[str]]
     ) -> CLIResult:
         import asyncio
+        try:
+            groups = normalize_parallel_groups(groups)
+        except ValueError as exc:
+            return CLIResult(
+                success=False,
+                message=str(exc),
+                data={"type": "ValidationError", "status": 400},
+            )
         orchestrator = ParallelOrchestrator(self._service)
         result = asyncio.run(
             orchestrator.run(conversation_id=conversation_id, groups=groups)
@@ -617,22 +606,36 @@ class CLIHandler:
         sequence: list[str],
         stop_signal: str = "@done",
         max_rounds: int = 20,
+        rotation: str = "none",
     ):
         """Generator: fuehrt bis zu max_rounds Runden durch.
 
         Jede Runde ruft alle Participants in sequence der Reihe nach auf.
         Nach jeder Antwort wird geprueft ob stop_signal (case-insensitiv) enthalten ist.
         """
+        sequence, stop_signal, max_rounds, rotation = normalize_auto_loop_options(
+            sequence=sequence,
+            stop_signal=stop_signal,
+            max_rounds=max_rounds,
+            rotation=rotation,
+        )
         yield {
             "event": "start",
             "max_rounds": max_rounds,
             "sequence": sequence,
             "stop_signal": stop_signal,
+            "rotation": rotation,
         }
 
         for round_n in range(1, max_rounds + 1):
-            for pid in sequence:
-                yield {"event": "invoke", "round": round_n, "participant": pid}
+            round_sequence = auto_loop_round_sequence(sequence, round_n, rotation)
+            for pid in round_sequence:
+                yield {
+                    "event": "invoke",
+                    "round": round_n,
+                    "participant": pid,
+                    "round_sequence": round_sequence,
+                }
 
                 result = self.invoke_participant(conversation_id, pid)
 
@@ -652,6 +655,7 @@ class CLIHandler:
                     "round": round_n,
                     "participant": pid,
                     "content": content,
+                    "round_sequence": round_sequence,
                 }
 
                 if stop_signal.lower() in content.lower():
@@ -798,15 +802,44 @@ class CLIHandler:
         if backup_dir is None:
             backup_dir_env = os.environ.get("CONCLAVE_BACKUP_DIR", "").strip()
             backup_dir = Path(backup_dir_env) if backup_dir_env else root.parent / "backups"
-        backup_dir.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        backup_path = backup_dir / f"conclave-backup-{stamp}.zip"
-        with zipfile.ZipFile(backup_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-            if db_path and db_path.is_file():
-                zf.write(db_path, "conclave.db")
-            if root.is_dir():
-                for path in root.rglob("*"):
-                    if path.is_file():
-                        zf.write(path, Path("workspace", *path.relative_to(root).parts).as_posix())
+        from conclave.runtime.backup import create_backup_archive
+        backup_path = create_backup_archive(db_path=db_path, workspace_root=root, backup_dir=backup_dir)
         return CLIResult(success=True, message="Backup erstellt.",
                          data={"backup_path": str(backup_path), "format": "zip"})
+
+    def restore_backup(
+        self,
+        backup_path: Path,
+        db_path: Path | None = None,
+        backup_dir: Path | None = None,
+        replace_workspace: bool = True,
+    ) -> CLIResult:
+        root = self._workspace_root()
+        if backup_dir is None:
+            backup_dir_env = os.environ.get("CONCLAVE_BACKUP_DIR", "").strip()
+            backup_dir = Path(backup_dir_env) if backup_dir_env else root.parent / "backups"
+        from conclave.runtime.backup import restore_backup_archive
+        try:
+            result = restore_backup_archive(
+                backup_path=backup_path,
+                db_path=db_path,
+                workspace_root=root,
+                backup_dir=backup_dir,
+                replace_workspace=replace_workspace,
+            )
+        except ValueError as exc:
+            return CLIResult(success=False, message=str(exc), data={"status": "invalid_backup"})
+        except OSError:
+            return CLIResult(success=False, message="Restore fehlgeschlagen.", data={"status": "restore_failed"})
+        return CLIResult(
+            success=True,
+            message="Backup wiederhergestellt.",
+            data={
+                "status": "restored",
+                "backup_path": str(backup_path),
+                "pre_restore_backup_path": str(result.pre_restore_backup_path),
+                "db_restored": result.db_restored,
+                "workspace_files_restored": result.workspace_files_restored,
+                "workspace_replaced": result.workspace_replaced,
+            },
+        )

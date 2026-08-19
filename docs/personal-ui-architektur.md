@@ -92,7 +92,6 @@ Startrollen:
 - Critic
 - Researcher
 - Planner
-- Judge
 - Custom
 
 ## 3. Workspace
@@ -129,7 +128,6 @@ hinausgehen.
 - Invoke-Historie
 - Orchestrierungsläufe
 - Auto-Loops
-- Judge-Läufe
 - Status
 - Dauer
 - beteiligte Agenten
@@ -153,7 +151,7 @@ Settings bündelt lokale App-Konfiguration.
 - lokaler Datenpfad
 - Workspace-Pfad
 - Theme
-- Backup und Restore-Validierung
+- Backup und Restore
 - lokaler Sicherheitsmodus
 - Server-Port
 - Desktop-/Browser-Startmodus
@@ -189,7 +187,7 @@ src/conclave/assets/static/js/
 Zielstruktur für spätere UI-Aufräumarbeiten:
 
 ```text
-static/js/
+src/conclave/assets/static/js/
   core/
     api.js
     state.js
@@ -215,7 +213,6 @@ static/js/
     runs/
       runs.js
       usage.js
-      judge.js
     settings/
       settings.js
       keys.js
@@ -228,7 +225,7 @@ static/js/
 2. Privacy-/DSGVO-Panel entfernen.
 3. Agentenverwaltung aus dem Studio herauslösen.
 4. Workspace als eigenen Bereich bauen.
-5. Usage, Judge und Auto-Loop-Historie in Runs sammeln.
+5. Usage, Invoke-, Orchestrierungs- und Auto-Loop-Historie in Runs sammeln.
 6. API-Key-Status, Datenpfade und Backup nach Settings verschieben.
 7. Inline-Handler und globale UI-Zustände schrittweise reduzieren.
 

@@ -105,6 +105,12 @@ def build_parser() -> argparse.ArgumentParser:
     loop_p.add_argument("participants", nargs="+", metavar="participant_id")
     loop_p.add_argument("--stop-signal", default="@done")
     loop_p.add_argument("--max-rounds", type=int, default=20)
+    loop_p.add_argument(
+        "--rotation",
+        choices=["none", "round-robin", "round_robin"],
+        default="none",
+        help="Antwortreihenfolge pro Runde rotieren lassen",
+    )
 
     # ── Thema & Rederecht ────────────────────────────────────────────────
     topic_p = sub.add_parser("topic", help="Thema einer Conversation setzen")
@@ -187,6 +193,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     backup_p = sub.add_parser("backup", help="Lokales ZIP-Backup erstellen")
     backup_p.add_argument("--dir", default=None, dest="backup_dir")
+
+    restore_p = sub.add_parser("restore", help="Lokales ZIP-Backup wiederherstellen")
+    restore_p.add_argument("--backup", required=True, dest="backup_path")
+    restore_p.add_argument("--dir", default=None, dest="backup_dir")
+    restore_p.add_argument("--keep-workspace", action="store_true",
+                           help="Workspace-Dateien zusammenfuehren statt vorhandenen Workspace zu ersetzen")
 
     migrate_p = sub.add_parser("migrate-personal", help="Alte lokale SQLite-Daten nach Conclave Personal migrieren")
     migrate_p.add_argument("--from", required=True, dest="source_path", help="Pfad zur alten SQLite-DB")
@@ -281,19 +293,27 @@ def run(argv: list[str] | None = None) -> int:
         result = handler.orchestrate_parallel(args.conversation_id, groups)
 
     elif args.command == "auto-loop":
-        for event in handler.auto_loop(
-            args.conversation_id,
-            args.participants,
-            stop_signal=args.stop_signal,
-            max_rounds=args.max_rounds,
-        ):
+        try:
+            for event in handler.auto_loop(
+                args.conversation_id,
+                args.participants,
+                stop_signal=args.stop_signal,
+                max_rounds=args.max_rounds,
+                rotation=args.rotation,
+            ):
+                if output_json:
+                    print(json.dumps(event, default=str))
+                else:
+                    kind = event.get("event", "?")
+                    detail = event.get("participant") or event.get("reason") or ""
+                    print(f"{kind}: {detail}".rstrip())
+            return 0
+        except ValueError as exc:
             if output_json:
-                print(json.dumps(event, default=str))
+                print(json.dumps({"success": False, "error": str(exc)}))
             else:
-                kind = event.get("event", "?")
-                detail = event.get("participant") or event.get("reason") or ""
-                print(f"{kind}: {detail}".rstrip())
-        return 0
+                print(f"✗ {exc}", file=sys.stderr)
+            return 1
 
     elif args.command == "topic":
         result = handler.set_topic(args.conversation_id, args.topic)
@@ -426,6 +446,16 @@ def run(argv: list[str] | None = None) -> int:
             from pathlib import Path
             backup_dir = Path(args.backup_dir)
         result = handler.create_backup(db_path=config.db_path, backup_dir=backup_dir)
+
+    elif args.command == "restore":
+        from pathlib import Path
+        backup_dir = Path(args.backup_dir) if args.backup_dir else None
+        result = handler.restore_backup(
+            backup_path=Path(args.backup_path),
+            db_path=config.db_path,
+            backup_dir=backup_dir,
+            replace_workspace=not args.keep_workspace,
+        )
 
     elif args.command == "watch":
         return _run_watch(handler, args)

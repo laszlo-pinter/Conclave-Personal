@@ -17,9 +17,9 @@ Zusammenarbeit sichtbar.
 - Desktop-first Startpfad mit `conclave desktop`.
 - Personal UI mit Studio, Agents, Workspace, Runs und Settings.
 - Agentenmodell mit Rollen wie Writer, Reviewer, Critic, Researcher, Planner
-  und Judge.
+  und Custom.
 - Conversations mit mehreren Participants.
-- Invoke, Stream, Orchestrierung, Auto-Loop und Judge-/Review-Flows.
+- Invoke, Stream, Orchestrierung und Auto-Loop.
 - Lokale Workspace-Grenzen mit Hidden-Policy und Dateigrößenlimits.
 - Runs und UsageRecords für Verlauf, Fehler, Dauer und Token-Nutzung.
 - SQLite-Migration aus bestehenden lokalen Installationen.
@@ -104,14 +104,11 @@ vollständig lokal betrieben werden.
 ## License
 
 Conclave v0.1.0 steht unter der PolyForm Noncommercial License 1.0.0.
-Free for noncommercial use. Commercial use requires a separate license.
-Commercial licensing: coming soon.
+Free for noncommercial use.
 
 ## Known Limitations
 
 - v0.1.0 ist Alpha.
-- Backup-Erstellung ist vorhanden; Restore validiert aktuell nur und schreibt
-  noch keine Daten zurück.
 - Provider-Kompatibilität variiert nach API, Modell, Account und Region.
 - Remote-Provider übertragen Prompt-/Kontextdaten extern.
 - Desktop-Modus nutzt die lokale Web-Anwendung im Browser.

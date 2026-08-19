@@ -272,6 +272,4 @@ def _run_kind(operation: str) -> str:
         return "orchestrate"
     if "stream" in op:
         return "stream"
-    if "judge" in op:
-        return "judge"
     return "invoke"

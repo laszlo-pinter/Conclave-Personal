@@ -28,16 +28,17 @@ function _agentCard(a,extraClass=''){
   const c=colorFor(a.id);
   const chip=a.role?`<span class="role-chip" style="background:${c.bg};border:1px solid ${c.bd};color:${c.tx}">${esc(a.role)}</span>`:'';
   const key=a.api_key_set?'<span class="status-chip ok">Key</span>':'<span class="status-chip muted">Env</span>';
+  const agentId=attr(a.id);
   return `<div class="agent-item ${extraClass}">
       <div class="agent-item-name">${esc(a.name)}${chip}</div>
       <div class="agent-item-id">${esc(a.id)}</div>
       <div class="agent-item-meta"><span>${esc(a.preset||a.provider)}</span><span>${esc(a.model)}</span>${key}</div>
       ${a.topic?`<div class="agent-item-topic">${t('agents.topicPrefix')}: ${esc(a.topic)}</div>`:''}
       <div class="agent-actions">
-        <button class="icon-btn" onclick="openAgentForm('${a.id}')">
+        <button class="icon-btn" data-action="edit-agent" data-agent-id="${agentId}">
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M9 2.5l1.5 1.5-7 7H2v-1.5l7-7z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
         </button>
-        <button class="icon-btn del" onclick="deleteAgent('${a.id}')">
+        <button class="icon-btn del" data-action="delete-agent" data-agent-id="${agentId}">
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2.5 3.5h8M5 2h3M4 3.5V10M9 3.5V10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
         </button>
       </div>

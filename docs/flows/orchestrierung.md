@@ -29,16 +29,31 @@
 
 ## Auto-Loop (POST /auto-loop)
 
-1. `api/app.py:auto_loop()` liest `sequence`, `stop_signal` (Default: "@done"), `max_rounds` (Default: 20).
-2. `cli/handler.py:auto_loop()` ist ein **Generator** — liefert SSE-Events.
-3. Pro Runde: Alle Participants in `sequence` werden sequentiell aufgerufen.
-4. Nach jeder Antwort: Prüfung ob `stop_signal` (case-insensitiv) im Content enthalten.
-5. Events:
-   - `start` — max_rounds, sequence, stop_signal
-   - `invoke` — round, participant (vor dem Call)
-   - `response` — round, participant, content (nach dem Call)
+1. `api/app.py:auto_loop()` liest `sequence`, `stop_signal` (Default: "@done"), `max_rounds` (Default: 20) und `rotation` (Default: "none").
+2. Die Eingaben werden vor Stream-Start normalisiert:
+   - `sequence`: nicht-leere Liste von Participant-IDs
+   - maximal 20 Participant-Aufrufe pro Runde
+   - leere IDs und Nicht-Strings werden abgelehnt
+   - `stop_signal`: nicht leer, maximal 128 Zeichen
+   - `max_rounds`: ganze Zahl zwischen 1 und 50
+   - `rotation`: "none" oder "round_robin"
+3. `cli/handler.py:auto_loop()` ist ein **Generator** — liefert SSE-Events.
+4. Pro Runde wird eine `round_sequence` berechnet.
+   - `none`: jede Runde nutzt exakt `sequence`
+   - `round_robin`: Runde 1 `a,b,c`, Runde 2 `b,c,a`, Runde 3 `c,a,b`
+5. Pro Runde: Alle Participants in `round_sequence` werden sequentiell aufgerufen.
+6. Jeder `invoke_participant()` schreibt die Modellantwort als normale Conversation-Message.
+7. Dadurch sieht der nächste Agent alle vorherigen Antworten aus demselben Loop.
+8. Nach jeder Antwort: Prüfung ob `stop_signal` (case-insensitiv) im Content enthalten.
+9. Events:
+   - `start` — max_rounds, sequence, stop_signal, rotation
+   - `invoke` — round, participant, round_sequence (vor dem Call)
+   - `response` — round, participant, round_sequence, content (nach dem Call)
    - `stop` — reason: "signal" | "max_rounds" | "error"
-6. SSE-Stream: `data: {json}\n\n` pro Event, `data: [DONE]\n\n` am Ende.
+10. SSE-Stream: `data: {json}\n\n` pro Event, `data: [DONE]\n\n` am Ende.
+
+Der Loop ist kein Wahrheitsprüfer. Er automatisiert nur wiederholte Agentenaufrufe.
+Der Mensch entscheidet, ob die Antworten brauchbar sind.
 
 **Test:** `tests/api/test_auto_loop.py` (19 Tests)
 

@@ -195,6 +195,11 @@ def test_orchestrate_missing_sequence_returns_400(client):
     assert res.status_code == 400
 
 
+def test_orchestrate_empty_participant_returns_400(client):
+    res = client.post("/conversations/conv-1/orchestrate", json={"sequence": ["p1", " "]})
+    assert res.status_code == 400
+
+
 def test_orchestrate_passes_sequence_to_handler(client, handler):
     handler.orchestrate.return_value = CLIResult(
         success=True, message="ok", data={"responses": []}

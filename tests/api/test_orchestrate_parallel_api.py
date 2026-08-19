@@ -79,6 +79,22 @@ def test_orchestrate_parallel_invalid_groups_returns_400(client):
     assert resp.status_code == 400
 
 
+def test_orchestrate_parallel_empty_group_returns_400(client):
+    resp = client.post(
+        "/conversations/conv-1/orchestrate-parallel",
+        json={"groups": [["a"], []]},
+    )
+    assert resp.status_code == 400
+
+
+def test_orchestrate_parallel_empty_participant_returns_400(client):
+    resp = client.post(
+        "/conversations/conv-1/orchestrate-parallel",
+        json={"groups": [["a", " "]]},
+    )
+    assert resp.status_code == 400
+
+
 def test_orchestrate_parallel_failure_returns_502(client, handler):
     handler.orchestrate_parallel.return_value = CLIResult(
         success=False, message="Fehler", data={}

@@ -1,6 +1,6 @@
 # API-Referenz
 
-**46 Endpoints** — automatisch generiert aus `src/conclave/api/app.py`.
+**45 dokumentierte Endpoints** — öffentliche Personal-API.
 
 | Methode | Pfad | Beschreibung |
 |---------|------|-------------|
@@ -37,7 +37,6 @@
 | `GET` | `/conversations/<conversation_id>/participants/<participant_id>/stream` | Stream Participant |
 | `POST` | `/conversations/<conversation_id>/auto-loop` | Auto Loop |
 | `GET` | `/conversations/<conversation_id>/export` | Export Conversation |
-| `POST` | `/conversations/<conversation_id>/judge` | Führt Primary + Judge als expliziten Personal-API-Flow aus. |
 | `GET` | `/usage` | Token Usage |
 | `GET` | `/usage/conversations` | Conversation Usage |
 | `GET` | `/runs` | List Runs |
@@ -45,7 +44,7 @@
 | `GET` | `/settings` | Gibt lokale Runtime-Settings ohne Secrets zurück. |
 | `PUT` | `/settings` | Aktualisiert einfache Runtime-Settings für die laufende Session. |
 | `POST` | `/backup` | Erstellt ein lokales ZIP-Backup von SQLite-DB und Workspace. |
-| `POST` | `/restore` | Validate Backup: prüft ein Archiv, schreibt aber keine lokalen Daten. |
+| `POST` | `/restore` | Stellt SQLite-DB und Workspace aus einem lokalen ZIP-Backup wieder her. |
 | `GET` | `/workspace` | Listet alle Dateien im Workspace. |
 | `GET` | `/workspace/<path:filepath>` | Liest eine Datei aus dem Workspace. |
 | `POST` | `/workspace/<path:filepath>` | Schreibt eine Datei in den Workspace. |

@@ -37,18 +37,18 @@ async function loadConversationUsage(){
     tableEl.innerHTML=`
       <table class="usage-tbl">
         <thead><tr>
-          <th class="usage-th-topic" onclick="sortUsage('topic')">Conversation${arrow('topic')}</th>
-          <th class="usage-th-num" onclick="sortUsage('total_tokens')">Total${arrow('total_tokens')}</th>
-          <th class="usage-th-num" onclick="sortUsage('input_tokens')">Input${arrow('input_tokens')}</th>
-          <th class="usage-th-num" onclick="sortUsage('output_tokens')">Output${arrow('output_tokens')}</th>
-          <th class="usage-th-num" onclick="sortUsage('calls')">Calls${arrow('calls')}</th>
+          <th class="usage-th-topic" data-action="sort-usage" data-sort-key="topic">Conversation${arrow('topic')}</th>
+          <th class="usage-th-num" data-action="sort-usage" data-sort-key="total_tokens">Total${arrow('total_tokens')}</th>
+          <th class="usage-th-num" data-action="sort-usage" data-sort-key="input_tokens">Input${arrow('input_tokens')}</th>
+          <th class="usage-th-num" data-action="sort-usage" data-sort-key="output_tokens">Output${arrow('output_tokens')}</th>
+          <th class="usage-th-num" data-action="sort-usage" data-sort-key="calls">Calls${arrow('calls')}</th>
           <th class="usage-th-prov">Provider</th>
         </tr></thead>
         <tbody>${sorted.map(c=>{
           const t=c.totals;
           const topic=c.topic||c.conversation_id.slice(0,8)+'...';
           const provs=c.providers.map(p=>`<span class="usage-prov-tag">${esc(p.provider)} ${fmt(p.total_tokens)}</span>`).join(' ');
-          return `<tr class="usage-row" onclick="toggleUsageDetail(this)">
+          return `<tr class="usage-row" data-action="toggle-usage-detail">
             <td class="usage-td-topic" title="${esc(c.conversation_id)}">${esc(topic)}</td>
             <td class="usage-td-num"><strong>${fmt(t.total_tokens)}</strong></td>
             <td class="usage-td-num">${fmt(t.input_tokens)}</td>
@@ -89,5 +89,3 @@ function toggleUsageDetail(row){
     detail.style.display=detail.style.display==='none'?'':'none';
   }
 }
-
-document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
