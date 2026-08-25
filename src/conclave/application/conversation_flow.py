@@ -389,6 +389,28 @@ class ConversationFlowService:
         for event in events:
             event.message_id = message_id
             self._tool_event_repo.save(event)
+            tool_path = ""
+            if isinstance(event.output_json, dict):
+                tool_path = str(event.output_json.get("path") or "")
+            if not tool_path and isinstance(event.input_json, dict):
+                tool_path = str(event.input_json.get("path") or "")
+            logger.info(
+                "tool_event recorded: %s %s",
+                event.tool,
+                event.status,
+                extra={
+                    "operation": "tool_event.record",
+                    "conversation_id": event.conversation_id,
+                    "participant_id": event.participant_id,
+                    "message_id": message_id,
+                    "run_id": event.run_id,
+                    "tool_event_id": event.id,
+                    "tool": event.tool,
+                    "tool_path": tool_path,
+                    "status": event.status,
+                    "error": event.error,
+                },
+            )
 
     def _store_model_response(
         self,

@@ -94,6 +94,22 @@ class TestJsonFormatter:
         assert parsed["conversation_id"] == "conv-123"
         assert parsed["duration_ms"] == 42.5
 
+    def test_includes_tool_event_extra_fields(self):
+        formatter = JsonFormatter()
+        record = self._make_record(
+            tool_event_id="event-123",
+            message_id="msg-123",
+            tool="workspace.save",
+            tool_path="output/report.md",
+            status="succeeded",
+        )
+        parsed = json.loads(formatter.format(record))
+        assert parsed["tool_event_id"] == "event-123"
+        assert parsed["message_id"] == "msg-123"
+        assert parsed["tool"] == "workspace.save"
+        assert parsed["tool_path"] == "output/report.md"
+        assert parsed["status"] == "succeeded"
+
     def test_excludes_internal_log_record_fields(self):
         formatter = JsonFormatter()
         record = self._make_record()

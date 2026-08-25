@@ -1,5 +1,7 @@
 # tests/application/test_invoke_participant.py
 
+import logging
+
 import pytest
 
 from conclave.application.ports import ModelAdapter
@@ -19,6 +21,20 @@ class FakeModelAdapter:
     def complete(self, conversation: Conversation, participant: Participant) -> str:
         self.calls.append(conversation)
         return self._response
+
+
+class RecordingToolEventRepository:
+    def __init__(self):
+        self.events = []
+
+    def save(self, event) -> None:
+        self.events.append(event)
+
+    def list_by_conversation(self, conversation_id: str):
+        return [event for event in self.events if event.conversation_id == conversation_id]
+
+    def list_by_message(self, message_id: str):
+        return [event for event in self.events if event.message_id == message_id]
 
 
 def test_invoke_participant_returns_updated_conversation(service):
@@ -89,6 +105,38 @@ def test_invoke_participant_persists_model_message(service):
     assert len(loaded.messages) == 2
     assert loaded.messages[1].content == "Persistierte Antwort"
     assert loaded.messages[1].author_id == "model-a"
+
+
+def test_invoke_participant_logs_recorded_tool_event(service, tmp_path, monkeypatch, caplog):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("CONCLAVE_WORKSPACE", str(workspace))
+    tool_repo = RecordingToolEventRepository()
+    service.set_tool_event_repository(tool_repo)
+    conversation = service.create_conversation()
+    service.register_participant(
+        conversation_id=conversation.id,
+        participant_id="model-a",
+        participant_type=ParticipantType.MODEL,
+        name="Model A",
+    )
+    service.add_user_message(conversation.id, "Bitte speichern.")
+
+    adapter = FakeModelAdapter("@save(report.md)\n# Ergebnis\n@endsave")
+    with caplog.at_level(logging.INFO, logger="conclave.application.conversation_flow"):
+        service.invoke_participant(
+            conversation_id=conversation.id,
+            participant_id="model-a",
+            adapter=adapter,
+        )
+
+    records = [record for record in caplog.records if getattr(record, "operation", "") == "tool_event.record"]
+    assert len(records) == 1
+    assert records[0].tool_event_id == tool_repo.events[0].id
+    assert records[0].tool == "workspace.save"
+    assert records[0].status == "succeeded"
+    assert records[0].tool_path == "output/report.md"
+    assert records[0].message_id == tool_repo.events[0].message_id
 
 
 def test_invoke_participant_raises_for_unknown_participant(service):

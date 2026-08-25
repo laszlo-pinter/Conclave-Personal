@@ -23,7 +23,8 @@ _INTERNAL_FIELDS = frozenset({
 _ALLOWED_EXTRA = frozenset({
     "conversation_id", "participant_id", "operation", "duration_ms",
     "model", "method", "path", "status", "provider", "agent_id",
-    "success", "error", "groups",
+    "success", "error", "groups", "message_id", "run_id",
+    "tool_event_id", "tool", "tool_path",
 })
 
 # Sensitive Felder — werden als "[REDACTED]" ausgegeben
