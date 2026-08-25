@@ -30,6 +30,7 @@
 - [Ports & adapters](architektur/ports-adapter.md) - Interfaces, ProviderProfiles, ResilientAdapter
 
 ### Release
+- [Release Notes v0.1.19](release-notes-v0.1.19.md) - Workspace tool-event provenance for read/write actions
 - [Release Notes v0.1.18](release-notes-v0.1.18.md) - Delete cleanup, runtime logs, DeepSeek fixes, and UI polish
 - [Release Notes v0.1.17](release-notes-v0.1.17.md) - Restore, orchestration rotation, and tool boundary cleanup
 - [Release Notes v0.1.16](release-notes-v0.1.16.md) - Switchable German/English desktop UI
