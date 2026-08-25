@@ -30,6 +30,25 @@ def handler():
             "participants": [{"id": "p1", "name": "Claude", "type": "model"}],
         },
     )
+    h.list_tool_events.return_value = CLIResult(
+        success=True,
+        message="ok",
+        data={"tool_events": [
+            {
+                "id": "event-1",
+                "conversation_id": "conv-1",
+                "message_id": "msg-1",
+                "run_id": None,
+                "participant_id": "p1",
+                "tool": "workspace.save",
+                "status": "succeeded",
+                "input": {"path": "report.md"},
+                "output": {"path": "output/report.md", "bytes_written": 7},
+                "error": None,
+                "created_at": "2026-01-01T00:00:00+00:00",
+            }
+        ]},
+    )
     h.add_participant.return_value = CLIResult(
         success=True,
         message="Registriert",
@@ -92,6 +111,26 @@ def test_get_conversation_not_found_returns_404(client, handler):
         message="Nicht gefunden.",
     )
     res = client.get("/conversations/unbekannt")
+    assert res.status_code == 404
+
+
+def test_get_tool_events_returns_events(client, handler):
+    res = client.get("/conversations/conv-1/tool-events")
+    body = json.loads(res.data)
+
+    assert res.status_code == 200
+    assert body["tool_events"][0]["tool"] == "workspace.save"
+    handler.list_tool_events.assert_called_once_with("conv-1")
+
+
+def test_get_tool_events_not_found_returns_404(client, handler):
+    handler.list_tool_events.return_value = CLIResult(
+        success=False,
+        message="Nicht gefunden.",
+    )
+
+    res = client.get("/conversations/unbekannt/tool-events")
+
     assert res.status_code == 404
 
 

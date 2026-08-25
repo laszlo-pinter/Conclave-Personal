@@ -47,6 +47,9 @@ def handler():
         success=True, message="ok",
         data={"participant_id": "PRIM", "content": "primary response", "sequence": 2},
     )
+    h.list_tool_events.return_value = CLIResult(
+        success=True, message="ok", data={"tool_events": []}
+    )
     return h
 
 
@@ -74,6 +77,7 @@ def test_spec_loads_and_has_paths(spec):
     expected_core_paths = {
         "/conversations",
         "/conversations/{conversation_id}",
+        "/conversations/{conversation_id}/tool-events",
         "/conversations/{conversation_id}/messages",
         "/conversations/{conversation_id}/participants",
         "/conversations/{conversation_id}/participants/{participant_id}/invoke",
@@ -100,6 +104,16 @@ def test_invoke_response_matches_spec(client, spec):
     body = response.get_json()
     for field in required:
         assert field in body, f"invoke: required '{field}' fehlt"
+
+
+def test_tool_events_response_matches_spec(client, spec):
+    path = "/conversations/{conversation_id}/tool-events"
+    required = _required_fields_of(spec, path, "GET")
+    response = client.get("/conversations/conv-test/tool-events")
+    assert response.status_code == 200
+    body = response.get_json()
+    for field in required:
+        assert field in body, f"tool-events: required '{field}' fehlt"
 
 
 def test_spec_does_not_expose_judge_contract(spec):

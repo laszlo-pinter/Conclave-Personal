@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from conclave.cli.handler import CLIHandler, CLIResult
 from conclave.domain.participant import ParticipantType
+from conclave.domain.tool_event import ToolEvent
 
 
 # ── Conversation erstellen ─────────────────────────────────────────────────
@@ -46,6 +47,38 @@ def test_show_conversation_returns_id_status_counts(service):
 def test_show_conversation_unknown_id_returns_failure(service):
     handler = CLIHandler(service)
     result = handler.show_conversation("unbekannt")
+
+    assert not result.success
+    assert "unbekannt" in result.message
+
+
+def test_list_tool_events_returns_serialized_events(service):
+    handler = CLIHandler(service)
+    conv_id = handler.new_conversation().data["conversation_id"]
+    event = ToolEvent.create(
+        conversation_id=conv_id,
+        participant_id="writer",
+        tool="workspace.save",
+        status="succeeded",
+        input_json={"path": "report.md"},
+        output_json={"path": "output/report.md", "bytes_written": 7},
+        message_id="msg-1",
+    )
+    service.list_tool_events_by_conversation = lambda conversation_id: [event]
+
+    result = handler.list_tool_events(conv_id)
+
+    assert result.success
+    assert result.data["tool_events"][0]["id"] == event.id
+    assert result.data["tool_events"][0]["tool"] == "workspace.save"
+    assert result.data["tool_events"][0]["input"] == {"path": "report.md"}
+    assert result.data["tool_events"][0]["output"]["bytes_written"] == 7
+
+
+def test_list_tool_events_unknown_conversation_returns_failure(service):
+    handler = CLIHandler(service)
+
+    result = handler.list_tool_events("unbekannt")
 
     assert not result.success
     assert "unbekannt" in result.message

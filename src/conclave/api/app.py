@@ -512,6 +512,13 @@ def create_app(handler: CLIHandler, auth_service=None,
             return jsonify({"error": result.message}), 404
         return jsonify(result.data), 200
 
+    @app.get("/conversations/<conversation_id>/tool-events")
+    def list_tool_events(conversation_id: str):
+        result = handler.list_tool_events(conversation_id)
+        if not result.success:
+            return jsonify({"error": result.message}), 404
+        return jsonify(result.data), 200
+
     # ── POST /conversations/<id>/participants ────────────────────────────
 
     @app.post("/conversations/<conversation_id>/participants")

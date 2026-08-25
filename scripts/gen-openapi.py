@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""Generiert static/openapi.json aus den Flask-Routes in app.py."""
+"""Generiert die OpenAPI-Spec aus den Flask-Routes in app.py."""
 
 import json
 import re
 from pathlib import Path
 
 APP_PY = Path(__file__).parent.parent / "src" / "conclave" / "api" / "app.py"
-OUT = Path(__file__).parent.parent / "static" / "openapi.json"
+ROOT = Path(__file__).parent.parent
+OUTS = (
+    ROOT / "static" / "openapi.json",
+    ROOT / "src" / "conclave" / "assets" / "static" / "openapi.json",
+)
 
 # Bekannte Request/Response-Schemas pro Endpoint-Pattern.
 # Wer einen Client gegen Conclave baut, sollte sich an die hier gelisteten
@@ -87,6 +91,24 @@ SCHEMAS = {
                 "id": {"type": "string"},
                 "label": {"type": "string"},
                 "prompt": {"type": "string"},
+            },
+        }}}},
+    },
+    ("GET", "/conversations/<conversation_id>/tool-events"): {
+        "response": {"required": ["tool_events"], "properties": {"tool_events": {"type": "array", "items": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "conversation_id": {"type": "string"},
+                "message_id": {"type": "string", "nullable": True},
+                "run_id": {"type": "string", "nullable": True},
+                "participant_id": {"type": "string"},
+                "tool": {"type": "string"},
+                "status": {"type": "string"},
+                "input": {"type": "object"},
+                "output": {"type": "object"},
+                "error": {"type": "string", "nullable": True},
+                "created_at": {"type": "string"},
             },
         }}}},
     },
@@ -277,9 +299,11 @@ def main():
     source = APP_PY.read_text(encoding="utf-8")
     routes = extract_routes(source)
     spec = build_spec(routes)
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(spec, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"{len(routes)} Routes -> {OUT}")
+    payload = json.dumps(spec, indent=2, ensure_ascii=False)
+    for out in OUTS:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(payload, encoding="utf-8")
+    print(f"{len(routes)} Routes -> {', '.join(str(out) for out in OUTS)}")
 
 
 if __name__ == "__main__":

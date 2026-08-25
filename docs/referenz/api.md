@@ -1,6 +1,6 @@
 # API-Referenz
 
-**45 dokumentierte Endpoints** — öffentliche Personal-API.
+**46 dokumentierte Endpoints** — öffentliche Personal-API.
 
 | Methode | Pfad | Beschreibung |
 |---------|------|-------------|
@@ -28,6 +28,7 @@
 | `POST` | `/conversations/<conversation_id>/floor/revoke` | Revoke Floor |
 | `POST` | `/conversations/<conversation_id>/floor/invoke` | Invoke With Floor |
 | `GET` | `/conversations/<conversation_id>` | Get Conversation |
+| `GET` | `/conversations/<conversation_id>/tool-events` | List Tool Events |
 | `POST` | `/conversations/<conversation_id>/participants` | Add Participant |
 | `DELETE` | `/conversations/<conversation_id>/participants/<participant_id>` | Delete Participant |
 | `POST` | `/conversations/<conversation_id>/messages` | Add Message |

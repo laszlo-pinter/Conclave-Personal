@@ -470,6 +470,22 @@ class CLIHandler:
             },
         )
 
+    def list_tool_events(self, conversation_id: str) -> CLIResult:
+        try:
+            self._service.load_conversation(conversation_id)
+        except ConversationNotFound:
+            return CLIResult(
+                success=False,
+                message=f"Conversation '{conversation_id}' nicht gefunden.",
+            )
+
+        events = self._service.list_tool_events_by_conversation(conversation_id)
+        return CLIResult(
+            success=True,
+            message=f"{len(events)} Tool-Event(s).",
+            data={"tool_events": [self._tool_event_to_dict(event) for event in events]},
+        )
+
     def add_participant(
         self,
         conversation_id: str,

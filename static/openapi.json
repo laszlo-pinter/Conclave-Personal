@@ -744,6 +744,86 @@
         }
       }
     },
+    "/conversations/{conversation_id}/tool-events": {
+      "get": {
+        "summary": "List Tool Events",
+        "tags": [
+          "conversations"
+        ],
+        "operationId": "list_tool_events",
+        "responses": {
+          "200": {
+            "description": "Erfolg",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "tool_events"
+                  ],
+                  "properties": {
+                    "tool_events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "conversation_id": {
+                            "type": "string"
+                          },
+                          "message_id": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "run_id": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "participant_id": {
+                            "type": "string"
+                          },
+                          "tool": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "input": {
+                            "type": "object"
+                          },
+                          "output": {
+                            "type": "object"
+                          },
+                          "error": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "created_at": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/conversations/{conversation_id}/participants": {
       "post": {
         "summary": "Add Participant",
