@@ -36,12 +36,14 @@ function renderToolEvents(events){
 function renderToolEvent(event){
   const ok=event.status==='succeeded';
   const path=event.output?.path||event.input?.path||'';
-  const bytes=typeof event.output?.bytes_written==='number'?` · ${fmtBytes(event.output.bytes_written)}`:'';
-  const label=event.tool==='workspace.save'?'workspace.save':(event.tool||'tool');
+  const byteCount=typeof event.output?.bytes_written==='number'?event.output.bytes_written:event.output?.bytes_read;
+  const bytes=typeof byteCount==='number'?` · ${fmtBytes(byteCount)}`:'';
+  const label=event.tool==='workspace.save'||event.tool==='workspace.read'?event.tool:(event.tool||'tool');
+  const okText=event.tool==='workspace.save'?'saved':(event.tool==='workspace.read'?'read':'ok');
   const detail=ok
     ? `${path?esc(path):esc(event.id)}${bytes}`
     : `${path?esc(path):esc(event.id)}${event.error?` · ${esc(event.error)}`:''}`;
-  return `<div class="tool-event ${ok?'ok':'err'}"><span class="tool-event-dot"></span><span class="tool-event-name">${esc(label)}</span><span class="tool-event-status">${ok?'saved':'failed'}</span><span class="tool-event-detail">${detail}</span></div>`;
+  return `<div class="tool-event ${ok?'ok':'err'}"><span class="tool-event-dot"></span><span class="tool-event-name">${esc(label)}</span><span class="tool-event-status">${ok?okText:'failed'}</span><span class="tool-event-detail">${detail}</span></div>`;
 }
 
 // renderMarkdown → static/js/utils.js

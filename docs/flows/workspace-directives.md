@@ -27,7 +27,13 @@ unter Linux `~/Conclave/workspace`.
 - **Security:** Gleiche `resolve_workspace_path()`-/Hidden-Path-Prüfung wie `@workspace`
 - **Scope:** Gesamter Workspace (lesend)
 - **Limits:** `CONCLAVE_WORKSPACE_AGENT_READ_LIMIT_BYTES`, Default `524288`
+- **Protokoll:** Der Leseversuch erzeugt ein `tool_events`-DB-Ereignis
+  mit `tool=workspace.read` und `status=succeeded|failed`.
+- **Ersetzung:** Im Runtime-Pfad wird zusätzlich
+  `[tool_event:<event_id>]` in der Message referenziert. Die UI blendet
+  diese technische Referenz aus und zeigt das Tool-Ereignis separat an.
 - **Test:** `tests/application/test_workspace_directives.py:TestProcessAgentDirectivesReadPathTraversal`
+  und `tests/cli/test_bootstrap.py:test_build_service_records_workspace_read_tool_event`
 
 ## 3. @save(datei)...@endsave — Agent schreibt Dateien
 
@@ -75,7 +81,10 @@ _expand_workspace_refs() → Dateiinhalt inline → Provider sieht Inhalt
 Agent antwortet mit @read(andere-datei.py)
         |
         v
-_process_agent_directives() → Dateiinhalt eingefügt → gespeichert in DB
+_process_agent_directives_for_context() → Dateiinhalt eingefügt
+                         → tool_events-Eintrag gespeichert
+                         → Message referenziert [tool_event:<event_id>]
+                         → gespeichert in DB
         |
 Agent antwortet mit @save(ergebnis.md)\n...\n@endsave
         |

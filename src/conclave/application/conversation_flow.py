@@ -303,19 +303,68 @@ class ConversationFlowService:
         read_pattern = re.compile(r'@read\(([^)]+)\)')
         def _read_replace(match):
             filepath = match.group(1).strip()
+            input_json = {"path": filepath}
+
+            def _legacy_or_event(
+                *,
+                status: str,
+                legacy_text: str,
+                output_json: dict | None = None,
+                error: str | None = None,
+            ) -> str:
+                if not emit_tool_events:
+                    return legacy_text
+                event = ToolEvent.create(
+                    conversation_id=conversation_id,
+                    participant_id=participant_id,
+                    tool="workspace.read",
+                    status=status,
+                    input_json=input_json,
+                    output_json=output_json,
+                    error=error,
+                )
+                events.append(event)
+                return f"[tool_event:{event.id}]\n{legacy_text}"
+
             resolved = resolve_workspace_path(filepath, root=root)
             if resolved is None:
-                return f"[FEHLER: Pfad '{filepath}' nicht erlaubt]"
+                return _legacy_or_event(
+                    status="failed",
+                    legacy_text=f"[FEHLER: Pfad '{filepath}' nicht erlaubt]",
+                    error="path_not_allowed",
+                )
             if not is_agent_visible(resolved.path, root=root) or not resolved.path.is_file():
-                return f"[FEHLER: {filepath} nicht gefunden]"
+                return _legacy_or_event(
+                    status="failed",
+                    legacy_text=f"[FEHLER: {filepath} nicht gefunden]",
+                    output_json={"path": resolved.relative},
+                    error="file_not_found",
+                )
             if not assert_size_allowed(resolved.path, agent_read_limit_bytes()):
-                return f"[FEHLER: {filepath} ist zu gross]"
+                return _legacy_or_event(
+                    status="failed",
+                    legacy_text=f"[FEHLER: {filepath} ist zu gross]",
+                    output_json={"path": resolved.relative},
+                    error="file_too_large",
+                )
             try:
                 with open(resolved.path, "r", encoding="utf-8") as f:
                     file_content = f.read()
-                return f"\n--- Datei: {filepath} ---\n```\n{file_content}\n```\n"
-            except Exception:
-                return f"[FEHLER: {filepath} nicht lesbar]"
+                return _legacy_or_event(
+                    status="succeeded",
+                    legacy_text=f"\n--- Datei: {filepath} ---\n```\n{file_content}\n```\n",
+                    output_json={
+                        "path": resolved.relative,
+                        "bytes_read": len(file_content.encode("utf-8")),
+                    },
+                )
+            except Exception as e:
+                return _legacy_or_event(
+                    status="failed",
+                    legacy_text=f"[FEHLER: {filepath} nicht lesbar]",
+                    output_json={"path": resolved.relative},
+                    error=type(e).__name__,
+                )
         content = read_pattern.sub(_read_replace, content)
 
         return content, events

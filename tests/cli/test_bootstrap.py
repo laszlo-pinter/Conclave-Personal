@@ -138,6 +138,81 @@ def test_build_service_records_failed_workspace_save_tool_event(tmp_path, monkey
     assert not (workspace / "output" / "blocked.md").exists()
 
 
+def test_build_service_records_workspace_read_tool_event(tmp_path, monkeypatch):
+    class ReadAdapter:
+        provider = "fake"
+
+        def complete(self, conversation, participant):
+            return "Bitte pruefen:\n@read(source.md)"
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "source.md").write_text("Quelle", encoding="utf-8")
+    monkeypatch.setenv("CONCLAVE_WORKSPACE", str(workspace))
+    config = ConclaveConfig(db_path=tmp_path / "test.db")
+    service = build_service(config=config)
+    conversation = service.create_conversation()
+    service.register_participant(
+        conversation_id=conversation.id,
+        participant_id="reader",
+        participant_type=ParticipantType.MODEL,
+        name="Reader",
+    )
+    service.add_user_message(conversation.id, "Bitte lesen.")
+
+    updated = service.invoke_participant(
+        conversation_id=conversation.id,
+        participant_id="reader",
+        adapter=ReadAdapter(),
+    )
+
+    message = updated.messages[-1]
+    events = service.list_tool_events_by_message(message.id)
+    assert len(events) == 1
+    assert events[0].tool == "workspace.read"
+    assert events[0].status == "succeeded"
+    assert events[0].output_json == {"path": "source.md", "bytes_read": 6}
+    assert f"[tool_event:{events[0].id}]" in message.content
+    assert "Quelle" in message.content
+
+
+def test_build_service_records_failed_workspace_read_tool_event(tmp_path, monkeypatch):
+    class ReadAdapter:
+        provider = "fake"
+
+        def complete(self, conversation, participant):
+            return "@read(/blocked.md)"
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("CONCLAVE_WORKSPACE", str(workspace))
+    config = ConclaveConfig(db_path=tmp_path / "test.db")
+    service = build_service(config=config)
+    conversation = service.create_conversation()
+    service.register_participant(
+        conversation_id=conversation.id,
+        participant_id="reader",
+        participant_type=ParticipantType.MODEL,
+        name="Reader",
+    )
+    service.add_user_message(conversation.id, "Bitte lesen.")
+
+    updated = service.invoke_participant(
+        conversation_id=conversation.id,
+        participant_id="reader",
+        adapter=ReadAdapter(),
+    )
+
+    message = updated.messages[-1]
+    events = service.list_tool_events_by_message(message.id)
+    assert len(events) == 1
+    assert events[0].tool == "workspace.read"
+    assert events[0].status == "failed"
+    assert events[0].error == "path_not_allowed"
+    assert f"[tool_event:{events[0].id}]" in message.content
+    assert "FEHLER" in message.content
+
+
 def test_build_agent_service_creates_db(tmp_path):
     config = ConclaveConfig(db_path=tmp_path / "test.db")
     svc = build_agent_service(config=config)
