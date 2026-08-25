@@ -4,8 +4,13 @@ from conclave.domain.participant import Participant, ParticipantType
 
 
 class SQLiteParticipantRepository:
-    def __init__(self, connection):
+    def __init__(self, connection, *, autocommit: bool = False):
         self._connection = connection
+        self._autocommit = autocommit
+
+    def _commit_if_needed(self) -> None:
+        if self._autocommit:
+            self._connection.commit()
 
     def save(self, participant: Participant) -> None:
         self._connection.execute(
@@ -27,18 +32,21 @@ class SQLiteParticipantRepository:
                 participant.created_at.isoformat(),
             ),
         )
+        self._commit_if_needed()
 
     def delete_by_conversation(self, conversation_id: str) -> None:
         self._connection.execute(
             "DELETE FROM participants WHERE conversation_id = ?",
             (conversation_id,),
         )
+        self._commit_if_needed()
 
     def delete(self, conversation_id: str, participant_id: str) -> None:
         self._connection.execute(
             "DELETE FROM participants WHERE conversation_id = ? AND id = ?",
             (conversation_id, participant_id),
         )
+        self._commit_if_needed()
 
     def list_by_conversation_id(self, conversation_id: str) -> list[Participant]:
         rows = self._connection.execute(

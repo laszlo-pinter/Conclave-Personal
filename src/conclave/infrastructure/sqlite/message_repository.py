@@ -12,9 +12,20 @@ if TYPE_CHECKING:
 
 
 class SQLiteMessageRepository:
-    def __init__(self, connection, crypto: CryptoService | None = None):
+    def __init__(
+        self,
+        connection,
+        crypto: CryptoService | None = None,
+        *,
+        autocommit: bool = False,
+    ):
         self._connection = connection
         self._crypto = crypto
+        self._autocommit = autocommit
+
+    def _commit_if_needed(self) -> None:
+        if self._autocommit:
+            self._connection.commit()
 
     def _encrypt(self, plaintext: str) -> str:
         if self._crypto is None:
@@ -53,6 +64,7 @@ class SQLiteMessageRepository:
         ).fetchone()
         if row:
             message.sequence = row[0]
+        self._commit_if_needed()
 
     def list_by_conversation_id(self, conversation_id: str) -> list[Message]:
         rows = self._connection.execute(

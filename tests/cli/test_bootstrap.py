@@ -1,6 +1,7 @@
 # tests/cli/test_bootstrap.py
 
 from pathlib import Path
+import sqlite3
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 from conclave.cli.bootstrap import build_agent_service, build_registry, build_service
 from conclave.cli.config import ConclaveConfig
 from conclave.domain.agent import Agent
+from conclave.domain.participant import ParticipantType
 
 
 def test_build_service_creates_db(tmp_path):
@@ -20,6 +22,46 @@ def test_build_service_initializes_schema(tmp_path):
     config = ConclaveConfig(db_path=tmp_path / "test.db")
     service = build_service(config=config)
     assert service.create_conversation().id is not None
+
+
+def test_build_service_commits_last_model_message_for_other_connections(tmp_path):
+    class FakeAdapter:
+        provider = "deepseek"
+
+        def complete(self, conversation, participant):
+            return "DeepSeek Antwort"
+
+    db_path = tmp_path / "test.db"
+    config = ConclaveConfig(db_path=db_path)
+    service = build_service(config=config)
+    conversation = service.create_conversation()
+    service.register_participant(
+        conversation_id=conversation.id,
+        participant_id="deepseek",
+        participant_type=ParticipantType.MODEL,
+        name="DeepSeek",
+    )
+    service.add_user_message(conversation.id, "Start")
+
+    service.invoke_participant(
+        conversation_id=conversation.id,
+        participant_id="deepseek",
+        adapter=FakeAdapter(),
+    )
+
+    with sqlite3.connect(db_path) as second_connection:
+        row = second_connection.execute(
+            """
+            SELECT id
+            FROM messages
+            WHERE conversation_id = ? AND author_id = ?
+            ORDER BY sequence DESC
+            LIMIT 1
+            """,
+            (conversation.id, "deepseek"),
+        ).fetchone()
+
+    assert row is not None
 
 
 def test_build_agent_service_creates_db(tmp_path):

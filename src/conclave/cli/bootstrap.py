@@ -96,9 +96,9 @@ def build_service(
         crypto = _load_crypto()
 
     service = ConversationFlowService(
-        conversation_repository=SQLiteConversationRepository(connection),
-        message_repository=SQLiteMessageRepository(connection, crypto=crypto),
-        participant_repository=SQLiteParticipantRepository(connection),
+        conversation_repository=SQLiteConversationRepository(connection, autocommit=True),
+        message_repository=SQLiteMessageRepository(connection, crypto=crypto, autocommit=True),
+        participant_repository=SQLiteParticipantRepository(connection, autocommit=True),
     )
     service.set_run_repository(SQLiteRunRepository(connection))
     return service

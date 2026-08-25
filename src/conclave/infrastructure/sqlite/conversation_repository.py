@@ -5,8 +5,13 @@ from conclave.domain.participant import Participant, ParticipantType
 
 
 class SQLiteConversationRepository:
-    def __init__(self, connection):
+    def __init__(self, connection, *, autocommit: bool = False):
         self._connection = connection
+        self._autocommit = autocommit
+
+    def _commit_if_needed(self) -> None:
+        if self._autocommit:
+            self._connection.commit()
 
     def save(self, conversation: Conversation) -> None:
         self._connection.execute(
@@ -27,6 +32,7 @@ class SQLiteConversationRepository:
                 conversation.created_at.isoformat(),
             ),
         )
+        self._commit_if_needed()
 
     def get_by_id(self, conversation_id: str) -> Conversation | None:
         cursor = self._connection.execute(
