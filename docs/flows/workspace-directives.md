@@ -20,7 +20,7 @@ unter Linux `~/Conclave/workspace`.
 
 ## 2. @read(pfad) — Agent liest Dateien
 
-- **Datei:** `application/conversation_flow.py:_process_agent_directives()`
+- **Datei:** `application/conversation_flow.py:_process_agent_directives_for_context()`
 - **Trigger:** Nach Agent-Antwort, vor Message-Persistierung
 - **Regex:** `@read\(([^)]+)\)`
 - **Aktion:** Ersetzt @read(pfad) durch Dateiinhalt als Markdown-Codeblock
@@ -38,8 +38,13 @@ unter Linux `~/Conclave/workspace`.
 - **Security:** `resolve_output_path()` begrenzt Schreibzugriffe auf `workspace/output/`
 - **Scope:** Nur workspace/output/ (schreibend) — Rest ist schreibgeschützt
 - **Limits:** `CONCLAVE_WORKSPACE_WRITE_LIMIT_BYTES`, Default `524288`
-- **Ersetzung:** `[Datei gespeichert: @workspace/output/dateiname]` im Chat
+- **Protokoll:** Der Schreibversuch erzeugt ein `tool_events`-DB-Ereignis
+  mit `tool=workspace.save` und `status=succeeded|failed`.
+- **Ersetzung:** Im Runtime-Pfad wird die Agent-Antwort durch
+  `[tool_event:<event_id>]` referenziert. Der Agent beschreibt den
+  Seiteneffekt nicht selbst; das Backend protokolliert das Ergebnis.
 - **Test:** `tests/application/test_workspace_directives.py:TestProcessAgentDirectivesSavePathTraversal`
+  und `tests/cli/test_bootstrap.py:test_build_service_records_workspace_save_tool_event`
 
 ## 4. Workspace-API (HTTP-Endpoints)
 
@@ -75,12 +80,15 @@ _process_agent_directives() → Dateiinhalt eingefügt → gespeichert in DB
 Agent antwortet mit @save(ergebnis.md)\n...\n@endsave
         |
         v
-_process_agent_directives() → Datei in workspace/output/ geschrieben
+_process_agent_directives_for_context() → Datei in workspace/output/ geschrieben
+                         → tool_events-Eintrag gespeichert
+                         → Message referenziert [tool_event:<event_id>]
 ```
 
 **Code-Referenzen:**
 - Lesen/Expandieren: `src/conclave/application/conversation_flow.py:_expand_workspace_refs()`
-- Agent-Direktiven: `src/conclave/application/conversation_flow.py:_process_agent_directives()`
+- Agent-Direktiven: `src/conclave/application/conversation_flow.py:_process_agent_directives_for_context()`
+- Tool-Events: `src/conclave/domain/tool_event.py`, `src/conclave/infrastructure/sqlite/tool_event_repository.py`
 - Security: `src/conclave/application/workspace_security.py`
 - API: `src/conclave/api/app.py` Workspace-Endpunkte
 - System-Prompt: `src/conclave/infrastructure/universal/adapter.py:_build_workspace_info()`

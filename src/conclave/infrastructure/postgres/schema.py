@@ -101,6 +101,21 @@ def initialize_schema(connection) -> None:
                 created_at      TIMESTAMPTZ NOT NULL
             )
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS tool_events (
+                id              TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL REFERENCES conversations(id),
+                message_id      TEXT REFERENCES messages(id),
+                run_id          TEXT REFERENCES runs(id),
+                participant_id  TEXT NOT NULL,
+                tool            TEXT NOT NULL,
+                status          TEXT NOT NULL,
+                input_json      TEXT NOT NULL,
+                output_json     TEXT NOT NULL,
+                error           TEXT,
+                created_at      TIMESTAMPTZ NOT NULL
+            )
+        """)
     connection.commit()
 
     # Migrationen fuer bestehende DBs (fuegt fehlende Spalten hinzu)

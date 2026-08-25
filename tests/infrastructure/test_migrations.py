@@ -56,6 +56,8 @@ def test_migration_adds_columns(db):
     cols = {row[1] for row in db.execute("PRAGMA table_info(audit_log)").fetchall()}
     assert "input_tokens" in cols
     assert "output_tokens" in cols
+    tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    assert "tool_events" in tables
 
 
 def test_migration_skips_already_existing_columns():

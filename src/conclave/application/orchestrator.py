@@ -17,6 +17,7 @@ class ParticipantResponse:
     participant_id: str
     content: str
     sequence: int
+    message_id: str = ""
 
 
 @dataclass
@@ -81,6 +82,7 @@ class Orchestrator:
                     participant_id=participant_id,
                     content=last_message.content,
                     sequence=last_message.sequence,
+                    message_id=last_message.id,
                 )
             )
 
@@ -150,6 +152,7 @@ class ParallelOrchestrator:
                             participant_id=pid,
                             content=last_message.content,
                             sequence=last_message.sequence,
+                            message_id=last_message.id,
                         )
                     )
 

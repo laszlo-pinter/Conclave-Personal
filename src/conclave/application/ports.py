@@ -16,6 +16,7 @@ from conclave.domain.conversation import Conversation
 from conclave.domain.message import Message
 from conclave.domain.participant import Participant
 from conclave.domain.run import Run
+from conclave.domain.tool_event import ToolEvent
 
 
 @runtime_checkable
@@ -202,6 +203,23 @@ class RunRepository(Protocol):
 
     def list_by_date_range(self, start: datetime, end: datetime) -> list[AuditEntry]:
         """Gibt Laufprotokoll-Eintraege in einem Zeitraum zurueck."""
+        ...
+
+
+@runtime_checkable
+class ToolEventRepository(Protocol):
+    """Persistiert deterministische Backend-Ereignisse aus Tool-Directives."""
+
+    def save(self, event: ToolEvent) -> None:
+        """Speichert ein Tool-Event."""
+        ...
+
+    def list_by_conversation(self, conversation_id: str) -> list[ToolEvent]:
+        """Gibt alle Tool-Events einer Conversation zurueck."""
+        ...
+
+    def list_by_message(self, message_id: str) -> list[ToolEvent]:
+        """Gibt alle Tool-Events einer Message zurueck."""
         ...
 
 

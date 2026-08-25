@@ -89,6 +89,7 @@ def _build_postgres(config):
     from conclave.infrastructure.postgres.audit_repository import PostgresAuditRepository
     from conclave.infrastructure.postgres.agent_repository import PostgresAgentRepository
     from conclave.infrastructure.postgres.run_repository import PostgresRunRepository
+    from conclave.infrastructure.postgres.tool_event_repository import PostgresToolEventRepository
     from conclave.application.conversation_flow import ConversationFlowService
     from conclave.application.agent_service import AgentService
     from pathlib import Path
@@ -104,6 +105,7 @@ def _build_postgres(config):
     )
     service.set_audit_repository(PostgresAuditRepository(conn))
     service.set_run_repository(PostgresRunRepository(conn))
+    service.set_tool_event_repository(PostgresToolEventRepository(conn))
 
     agent_service = AgentService(PostgresAgentRepository(conn, crypto))
 
@@ -122,10 +124,12 @@ def _build_sqlite(config):
     from conclave.cli.bootstrap import build_service
     from conclave.infrastructure.sqlite.audit_repository import SQLiteAuditRepository
     from conclave.infrastructure.sqlite.run_repository import SQLiteRunRepository
+    from conclave.infrastructure.sqlite.tool_event_repository import SQLiteToolEventRepository
 
     service = build_service(config=config, connection=conn)
     service.set_audit_repository(SQLiteAuditRepository(conn))
     service.set_run_repository(SQLiteRunRepository(conn))
+    service.set_tool_event_repository(SQLiteToolEventRepository(conn, autocommit=True))
     agent_service = build_agent_service(config=config, connection=conn)
 
     return service, agent_service, conn

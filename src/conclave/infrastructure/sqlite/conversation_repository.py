@@ -109,6 +109,10 @@ class SQLiteConversationRepository:
 
     def delete(self, conversation_id: str) -> None:
         self._connection.execute(
+            "DELETE FROM tool_events WHERE conversation_id = ?",
+            (conversation_id,),
+        )
+        self._connection.execute(
             "DELETE FROM usage_records WHERE conversation_id = ?",
             (conversation_id,),
         )

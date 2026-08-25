@@ -114,6 +114,25 @@ def initialize_schema(connection: sqlite3.Connection) -> None:
         )
     """)
 
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS tool_events (
+            id              TEXT PRIMARY KEY,
+            conversation_id TEXT NOT NULL,
+            message_id      TEXT,
+            run_id          TEXT,
+            participant_id  TEXT NOT NULL,
+            tool            TEXT NOT NULL,
+            status          TEXT NOT NULL,
+            input_json      TEXT NOT NULL,
+            output_json     TEXT NOT NULL,
+            error           TEXT,
+            created_at      TEXT NOT NULL,
+            FOREIGN KEY(conversation_id) REFERENCES conversations(id),
+            FOREIGN KEY(message_id) REFERENCES messages(id),
+            FOREIGN KEY(run_id) REFERENCES runs(id)
+        )
+    """)
+
     connection.commit()
 
     # Migrationen fuer bestehende DBs (fuegt fehlende Spalten hinzu)

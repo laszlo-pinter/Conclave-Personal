@@ -64,6 +64,80 @@ def test_build_service_commits_last_model_message_for_other_connections(tmp_path
     assert row is not None
 
 
+def test_build_service_records_workspace_save_tool_event(tmp_path, monkeypatch):
+    class SaveAdapter:
+        provider = "fake"
+
+        def complete(self, conversation, participant):
+            return "@save(report.md)\n# Ergebnis\n@endsave"
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("CONCLAVE_WORKSPACE", str(workspace))
+    config = ConclaveConfig(db_path=tmp_path / "test.db")
+    service = build_service(config=config)
+    conversation = service.create_conversation()
+    service.register_participant(
+        conversation_id=conversation.id,
+        participant_id="writer",
+        participant_type=ParticipantType.MODEL,
+        name="Writer",
+    )
+    service.add_user_message(conversation.id, "Bitte speichern.")
+
+    updated = service.invoke_participant(
+        conversation_id=conversation.id,
+        participant_id="writer",
+        adapter=SaveAdapter(),
+    )
+
+    output = workspace / "output" / "report.md"
+    assert output.read_text(encoding="utf-8") == "# Ergebnis"
+    message = updated.messages[-1]
+    events = service.list_tool_events_by_message(message.id)
+    assert len(events) == 1
+    assert events[0].tool == "workspace.save"
+    assert events[0].status == "succeeded"
+    assert events[0].output_json == {"path": "output/report.md", "bytes_written": 10}
+    assert message.content == f"[tool_event:{events[0].id}]"
+
+
+def test_build_service_records_failed_workspace_save_tool_event(tmp_path, monkeypatch):
+    class SaveAdapter:
+        provider = "fake"
+
+        def complete(self, conversation, participant):
+            return "@save(/blocked.md)\nnope\n@endsave"
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("CONCLAVE_WORKSPACE", str(workspace))
+    config = ConclaveConfig(db_path=tmp_path / "test.db")
+    service = build_service(config=config)
+    conversation = service.create_conversation()
+    service.register_participant(
+        conversation_id=conversation.id,
+        participant_id="writer",
+        participant_type=ParticipantType.MODEL,
+        name="Writer",
+    )
+    service.add_user_message(conversation.id, "Bitte speichern.")
+
+    updated = service.invoke_participant(
+        conversation_id=conversation.id,
+        participant_id="writer",
+        adapter=SaveAdapter(),
+    )
+
+    message = updated.messages[-1]
+    events = service.list_tool_events_by_message(message.id)
+    assert len(events) == 1
+    assert events[0].status == "failed"
+    assert events[0].error == "path_not_allowed"
+    assert message.content == f"[tool_event:{events[0].id}]"
+    assert not (workspace / "output" / "blocked.md").exists()
+
+
 def test_build_agent_service_creates_db(tmp_path):
     config = ConclaveConfig(db_path=tmp_path / "test.db")
     svc = build_agent_service(config=config)

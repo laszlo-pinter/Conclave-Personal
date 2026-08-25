@@ -148,7 +148,8 @@ def _build_workspace_info() -> str:
         "@save(dateiname.md)\n"
         "Hier steht der Dateiinhalt...\n"
         "@endsave\n"
-        "Die Datei wird automatisch unter @workspace/output/dateiname.md gespeichert."
+        "Behaupte nicht selbst, dass die Datei gespeichert wurde. Das Backend "
+        "fuehrt den Schreibvorgang aus und protokolliert das Ergebnis als Tool-Event."
     )
     if not os.environ.get("CONCLAVE_WORKSPACE_AUTOLIST"):
         return info

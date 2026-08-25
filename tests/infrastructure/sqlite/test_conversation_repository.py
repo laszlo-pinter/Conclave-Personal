@@ -6,10 +6,12 @@ from datetime import datetime, timezone
 from conclave.domain.audit import AuditEntry
 from conclave.domain.conversation import Conversation
 from conclave.domain.run import Run, UsageRecord
+from conclave.domain.tool_event import ToolEvent
 from conclave.infrastructure.sqlite.audit_repository import SQLiteAuditRepository
 from conclave.infrastructure.sqlite.conversation_repository import SQLiteConversationRepository
 from conclave.infrastructure.sqlite.run_repository import SQLiteRunRepository
 from conclave.infrastructure.sqlite.schema import initialize_schema
+from conclave.infrastructure.sqlite.tool_event_repository import SQLiteToolEventRepository
 
 def test_load_returns_none_for_unknown_conversation(db_connection):
     repository = SQLiteConversationRepository(db_connection)
@@ -147,6 +149,7 @@ def test_delete_also_removes_runs_usage_and_audit(db_connection):
     conv_repo = SQLiteConversationRepository(db_connection)
     run_repo = SQLiteRunRepository(db_connection)
     audit_repo = SQLiteAuditRepository(db_connection)
+    tool_event_repo = SQLiteToolEventRepository(db_connection)
 
     conversation = Conversation.create()
     now = datetime.now(timezone.utc)
@@ -173,11 +176,19 @@ def test_delete_also_removes_runs_usage_and_audit(db_connection):
         input_tokens=3,
         output_tokens=5,
     ))
+    tool_event_repo.save(ToolEvent.create(
+        conversation_id=conversation.id,
+        participant_id="agent-a",
+        tool="workspace.save",
+        status="succeeded",
+        input_json={"path": "report.md"},
+        output_json={"path": "output/report.md"},
+    ))
 
     conv_repo.delete(conversation.id)
 
     assert conv_repo.load(conversation.id) is None
-    for table in ("runs", "usage_records", "audit_log"):
+    for table in ("runs", "usage_records", "audit_log", "tool_events"):
         count = db_connection.execute(
             f"SELECT COUNT(*) FROM {table} WHERE conversation_id = ?",
             (conversation.id,),

@@ -57,6 +57,11 @@ MIGRATIONS: list[Migration] = [
         description="Personal-Runs und UsageRecords",
         fn=lambda connection, is_postgres: _create_runs_tables(connection, is_postgres),
     ),
+    Migration(
+        id="006_tool_events",
+        description="Tool-Events fuer deterministische Backend-Aktionen",
+        fn=lambda connection, is_postgres: _create_tool_events_table(connection, is_postgres),
+    ),
 ]
 
 
@@ -115,6 +120,45 @@ def _create_runs_tables(connection, is_postgres: bool) -> None:
                 created_at      TEXT NOT NULL,
                 FOREIGN KEY(run_id) REFERENCES runs(id),
                 FOREIGN KEY(conversation_id) REFERENCES conversations(id)
+            )
+        """)
+
+
+def _create_tool_events_table(connection, is_postgres: bool) -> None:
+    if is_postgres:
+        with connection.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS tool_events (
+                    id              TEXT PRIMARY KEY,
+                    conversation_id TEXT NOT NULL REFERENCES conversations(id),
+                    message_id      TEXT REFERENCES messages(id),
+                    run_id          TEXT REFERENCES runs(id),
+                    participant_id  TEXT NOT NULL,
+                    tool            TEXT NOT NULL,
+                    status          TEXT NOT NULL,
+                    input_json      TEXT NOT NULL,
+                    output_json     TEXT NOT NULL,
+                    error           TEXT,
+                    created_at      TIMESTAMPTZ NOT NULL
+                )
+            """)
+    else:
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS tool_events (
+                id              TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                message_id      TEXT,
+                run_id          TEXT,
+                participant_id  TEXT NOT NULL,
+                tool            TEXT NOT NULL,
+                status          TEXT NOT NULL,
+                input_json      TEXT NOT NULL,
+                output_json     TEXT NOT NULL,
+                error           TEXT,
+                created_at      TEXT NOT NULL,
+                FOREIGN KEY(conversation_id) REFERENCES conversations(id),
+                FOREIGN KEY(message_id) REFERENCES messages(id),
+                FOREIGN KEY(run_id) REFERENCES runs(id)
             )
         """)
 

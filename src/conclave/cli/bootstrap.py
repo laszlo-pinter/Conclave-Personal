@@ -17,6 +17,7 @@ from conclave.infrastructure.sqlite.message_repository import SQLiteMessageRepos
 from conclave.infrastructure.sqlite.participant_repository import SQLiteParticipantRepository
 from conclave.infrastructure.sqlite.run_repository import SQLiteRunRepository
 from conclave.infrastructure.sqlite.schema import initialize_schema
+from conclave.infrastructure.sqlite.tool_event_repository import SQLiteToolEventRepository
 from conclave.runtime.paths import get_runtime_paths
 
 DEFAULT_KEY_PATH = get_runtime_paths().secret_key_path
@@ -101,6 +102,7 @@ def build_service(
         participant_repository=SQLiteParticipantRepository(connection, autocommit=True),
     )
     service.set_run_repository(SQLiteRunRepository(connection))
+    service.set_tool_event_repository(SQLiteToolEventRepository(connection, autocommit=True))
     return service
 
 

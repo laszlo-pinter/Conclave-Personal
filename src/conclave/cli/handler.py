@@ -178,6 +178,21 @@ class CLIHandler:
             "usage": usage,
         }
 
+    def _tool_event_to_dict(self, event) -> dict:
+        return {
+            "id": event.id,
+            "conversation_id": event.conversation_id,
+            "message_id": event.message_id,
+            "run_id": event.run_id,
+            "participant_id": event.participant_id,
+            "tool": event.tool,
+            "status": event.status,
+            "input": event.input_json,
+            "output": event.output_json,
+            "error": event.error,
+            "created_at": event.created_at.isoformat(),
+        }
+
     def test_agent(self, agent_id: str) -> dict:
         """Testet ob ein Agent erreichbar ist."""
         if not self._agent_service:
@@ -378,7 +393,16 @@ class CLIHandler:
         message = updated.messages[-1]
         return CLIResult(
             success=True, message="Antwort erhalten.",
-            data={"participant_id": message.author_id, "content": message.content, "sequence": message.sequence},
+            data={
+                "participant_id": message.author_id,
+                "content": message.content,
+                "sequence": message.sequence,
+                "message_id": message.id,
+                "tool_events": [
+                    self._tool_event_to_dict(event)
+                    for event in self._service.list_tool_events_by_message(message.id)
+                ],
+            },
         )
 
     def delete_conversation(self, conversation_id: str) -> CLIResult:
@@ -422,10 +446,15 @@ class CLIHandler:
                 "participant_count": len(conversation.participants),
                 "messages": [
                     {
+                        "id": m.id,
                         "sequence": m.sequence,
                         "author_type": m.author_type.value,
                         "author_id": m.author_id,
                         "content": m.content,
+                        "tool_events": [
+                            self._tool_event_to_dict(event)
+                            for event in self._service.list_tool_events_by_message(m.id)
+                        ],
                     }
                     for m in conversation.messages
                 ],
@@ -533,6 +562,11 @@ class CLIHandler:
                 "participant_id": participant_id,
                 "content": message.content,
                 "sequence": message.sequence,
+                "message_id": message.id,
+                "tool_events": [
+                    self._tool_event_to_dict(event)
+                    for event in self._service.list_tool_events_by_message(message.id)
+                ],
             },
         )
 
@@ -566,6 +600,11 @@ class CLIHandler:
                         "participant_id": r.participant_id,
                         "content": r.content,
                         "sequence": r.sequence,
+                        "message_id": r.message_id,
+                        "tool_events": [
+                            self._tool_event_to_dict(event)
+                            for event in self._service.list_tool_events_by_message(r.message_id)
+                        ],
                     }
                     for r in result.responses
                 ]
@@ -605,6 +644,11 @@ class CLIHandler:
                         "participant_id": r.participant_id,
                         "content": r.content,
                         "sequence": r.sequence,
+                        "message_id": r.message_id,
+                        "tool_events": [
+                            self._tool_event_to_dict(event)
+                            for event in self._service.list_tool_events_by_message(r.message_id)
+                        ],
                     }
                     for r in result.responses
                 ]
@@ -666,6 +710,8 @@ class CLIHandler:
                     "round": round_n,
                     "participant": pid,
                     "content": content,
+                    "message_id": result.data.get("message_id", ""),
+                    "tool_events": result.data.get("tool_events", []),
                     "round_sequence": round_sequence,
                 }
 

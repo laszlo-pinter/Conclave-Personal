@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from conclave.application.adapter_registry import AdapterRegistry
 from conclave.application.participant_service import ParticipantService
-from conclave.application.ports import AuditRepository, ConversationRepository, MessageRepository, ModelAdapter, ParticipantRepository, RunRepository, StreamingModelAdapter
+from conclave.application.ports import AuditRepository, ConversationRepository, MessageRepository, ModelAdapter, ParticipantRepository, RunRepository, StreamingModelAdapter, ToolEventRepository
 from conclave.application.workspace_security import (
     agent_read_limit_bytes,
     assert_size_allowed,
@@ -32,6 +32,7 @@ from conclave.domain.errors import (
 )
 from conclave.domain.participant import ParticipantType
 from conclave.domain.run import Run, UsageRecord
+from conclave.domain.tool_event import ToolEvent
 from conclave.infrastructure.log import get_logger, request_logger
 
 logger = get_logger("application.conversation_flow")
@@ -51,6 +52,7 @@ class ConversationFlowService:
         self._registry: AdapterRegistry | None = None
         self._audit_repo: AuditRepository | None = None
         self._run_repo: RunRepository | None = None
+        self._tool_event_repo: ToolEventRepository | None = None
 
     def set_adapter_registry(self, registry: AdapterRegistry) -> None:
         self._registry = registry
@@ -60,6 +62,9 @@ class ConversationFlowService:
 
     def set_run_repository(self, run_repo: RunRepository) -> None:
         self._run_repo = run_repo
+
+    def set_tool_event_repository(self, tool_event_repo: ToolEventRepository) -> None:
+        self._tool_event_repo = tool_event_repo
 
     @staticmethod
     def _ensure_has_messages(conversation: Conversation) -> None:
@@ -204,7 +209,25 @@ class ConversationFlowService:
         @save(datei)...@endsave — speichert Inhalt in workspace/output/
         @read(pfad) — wird durch den Dateiinhalt aus dem Workspace ersetzt
         """
+        processed, _ = ConversationFlowService._process_agent_directives_for_context(
+            content=content,
+            conversation_id="",
+            participant_id="",
+            emit_tool_events=False,
+        )
+        return processed
+
+    @staticmethod
+    def _process_agent_directives_for_context(
+        *,
+        content: str,
+        conversation_id: str,
+        participant_id: str,
+        emit_tool_events: bool,
+    ) -> tuple[str, list[ToolEvent]]:
+        """Verarbeitet Agent-Directives und gibt optionale Backend-Events zurueck."""
         root = workspace_root()
+        events: list[ToolEvent] = []
 
         # @save(datei)...\n@endsave
         save_pattern = re.compile(
@@ -214,19 +237,66 @@ class ConversationFlowService:
         def _save_replace(match):
             filepath = match.group(1).strip()
             file_content = match.group(2).strip()
+            input_json = {
+                "path": filepath,
+                "content_bytes": len(file_content.encode("utf-8")),
+            }
+
+            def _legacy_or_event(
+                *,
+                status: str,
+                legacy_text: str,
+                output_json: dict | None = None,
+                error: str | None = None,
+            ) -> str:
+                if not emit_tool_events:
+                    return legacy_text
+                event = ToolEvent.create(
+                    conversation_id=conversation_id,
+                    participant_id=participant_id,
+                    tool="workspace.save",
+                    status=status,
+                    input_json=input_json,
+                    output_json=output_json,
+                    error=error,
+                )
+                events.append(event)
+                return f"[tool_event:{event.id}]"
+
             resolved = resolve_output_path(filepath, root=root)
             if resolved is None:
-                return f"[FEHLER: Pfad '{filepath}' nicht erlaubt]"
+                return _legacy_or_event(
+                    status="failed",
+                    legacy_text=f"[FEHLER: Pfad '{filepath}' nicht erlaubt]",
+                    error="path_not_allowed",
+                )
             content_bytes = len(file_content.encode("utf-8"))
             if content_bytes > write_limit_bytes():
-                return f"[FEHLER: Datei '{filepath}' ist zu gross]"
+                return _legacy_or_event(
+                    status="failed",
+                    legacy_text=f"[FEHLER: Datei '{filepath}' ist zu gross]",
+                    output_json={"path": resolved.relative},
+                    error="file_too_large",
+                )
             try:
                 os.makedirs(os.path.dirname(resolved.path), exist_ok=True)
                 with open(resolved.path, "w", encoding="utf-8") as f:
                     f.write(file_content)
-                return f"[Datei gespeichert: @workspace/output/{filepath}]"
+                return _legacy_or_event(
+                    status="succeeded",
+                    legacy_text=f"[Datei gespeichert: @workspace/output/{filepath}]",
+                    output_json={
+                        "path": resolved.relative,
+                        "bytes_written": content_bytes,
+                    },
+                )
             except Exception as e:
-                return f"[FEHLER beim Speichern von '{filepath}': {e}]"
+                return _legacy_or_event(
+                    status="failed",
+                    legacy_text=f"[FEHLER beim Speichern von '{filepath}': {e}]",
+                    output_json={"path": resolved.relative},
+                    error=type(e).__name__,
+                )
         content = save_pattern.sub(_save_replace, content)
 
         # @read(pfad)
@@ -248,7 +318,47 @@ class ConversationFlowService:
                 return f"[FEHLER: {filepath} nicht lesbar]"
         content = read_pattern.sub(_read_replace, content)
 
-        return content
+        return content, events
+
+    def _process_agent_response(
+        self,
+        *,
+        content: str,
+        conversation_id: str,
+        participant_id: str,
+    ) -> tuple[str, list[ToolEvent]]:
+        return self._process_agent_directives_for_context(
+            content=content,
+            conversation_id=conversation_id,
+            participant_id=participant_id,
+            emit_tool_events=self._tool_event_repo is not None,
+        )
+
+    def _save_tool_events(self, events: list[ToolEvent], message_id: str) -> None:
+        if self._tool_event_repo is None:
+            return
+        for event in events:
+            event.message_id = message_id
+            self._tool_event_repo.save(event)
+
+    def _store_model_response(
+        self,
+        conversation: Conversation,
+        participant_id: str,
+        content: str,
+    ):
+        processed, events = self._process_agent_response(
+            content=content,
+            conversation_id=conversation.id,
+            participant_id=participant_id,
+        )
+        message = conversation.add_model_message(
+            participant_id=participant_id,
+            content=processed,
+        )
+        self._message_repository.save(message)
+        self._save_tool_events(events, message.id)
+        return message
 
     def create_conversation(self, topic: str = "") -> Conversation:
         conversation = Conversation.create(topic=topic)
@@ -325,9 +435,7 @@ class ConversationFlowService:
                              error=type(exc).__name__)
             raise
 
-        response = self._process_agent_directives(response)
-        message = conversation.add_model_message(participant_id=participant_id, content=response)
-        self._message_repository.save(message)
+        self._store_model_response(conversation, participant_id, response)
 
         conversation.revoke_floor()
         self._conversation_repository.save(conversation)
@@ -355,6 +463,16 @@ class ConversationFlowService:
         if conversation is None:
             raise ConversationNotFound(conversation_id)
         self._conversation_repository.delete(conversation_id)
+
+    def list_tool_events_by_message(self, message_id: str) -> list[ToolEvent]:
+        if self._tool_event_repo is None:
+            return []
+        return self._tool_event_repo.list_by_message(message_id)
+
+    def list_tool_events_by_conversation(self, conversation_id: str) -> list[ToolEvent]:
+        if self._tool_event_repo is None:
+            return []
+        return self._tool_event_repo.list_by_conversation(conversation_id)
 
     def add_user_message(self, conversation_id: str, content: str) -> Conversation:
         conversation = self.load_conversation(conversation_id)
@@ -397,11 +515,7 @@ class ConversationFlowService:
                 conversation_id=conversation_id,
             )
 
-        message = conversation.add_model_message(
-            participant_id=participant_id,
-            content=content,
-        )
-        self._message_repository.save(message)
+        self._store_model_response(conversation, participant_id, content)
         return conversation
 
     def invoke_participant(
@@ -455,12 +569,7 @@ class ConversationFlowService:
                              error=type(exc).__name__)
             raise
 
-        response = self._process_agent_directives(response)
-        message = conversation.add_model_message(
-            participant_id=participant_id,
-            content=response,
-        )
-        self._message_repository.save(message)
+        self._store_model_response(conversation, participant_id, response)
         return conversation
 
     def stream_participant(
@@ -527,11 +636,7 @@ class ConversationFlowService:
                              error=type(exc).__name__)
             raise
 
-        message = conversation.add_model_message(
-            participant_id=participant_id,
-            content=full_content,
-        )
-        self._message_repository.save(message)
+        self._store_model_response(conversation, participant_id, full_content)
 
     # ── Async-Methoden ───────────────────────────────────────────────────
 
@@ -551,11 +656,7 @@ class ConversationFlowService:
             conversation=conversation,
         )
 
-        message = conversation.add_model_message(
-            participant_id=participant_id,
-            content=response,
-        )
-        self._message_repository.save(message)
+        self._store_model_response(conversation, participant_id, response)
         return conversation
 
     async def async_complete_participant(
@@ -625,7 +726,7 @@ class ConversationFlowService:
                              error=type(exc).__name__)
             raise
 
-        return self._process_agent_directives(response)
+        return response
 
     async def async_stream_participant(
         self,
@@ -692,8 +793,4 @@ class ConversationFlowService:
             raise
 
         full_content = "".join(tokens)
-        message = conversation.add_model_message(
-            participant_id=participant_id,
-            content=full_content,
-        )
-        self._message_repository.save(message)
+        self._store_model_response(conversation, participant_id, full_content)
