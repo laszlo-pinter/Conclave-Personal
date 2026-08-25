@@ -153,18 +153,32 @@ def _build_adapter_for_agent(agent, config: ConclaveConfig):
     """Baut einen ResilientAdapter fuer einen einzelnen Agent."""
     from conclave.infrastructure.universal.resilient import ResilientAdapter
 
-    api_key = agent.api_key or {
-        "anthropic": config.anthropic_api_key,
-        "openai": config.openai_api_key,
-        "openai-responses": config.openai_api_key,
-        "gemini": config.gemini_api_key,
-    }.get(agent.provider, "")
+    api_key = agent.api_key or _fallback_key_for_agent(agent, config)
     if not api_key and agent.provider not in ("ollama",) and not agent.preset:
         return None
     adapter = _make_adapter(agent, api_key=api_key)
     if adapter:
         return ResilientAdapter(adapter)
     return None
+
+
+def _fallback_key_for_agent(agent, config: ConclaveConfig) -> str:
+    api_key = {
+        "anthropic": config.anthropic_api_key,
+        "openai": config.openai_api_key,
+        "openai-responses": config.openai_api_key,
+        "gemini": config.gemini_api_key,
+    }.get(agent.provider, "")
+    if api_key:
+        return api_key
+
+    preset_name = agent.preset or agent.provider
+    if not preset_name:
+        return ""
+    from conclave.infrastructure.universal.presets import get_preset
+    preset = get_preset(preset_name) or {}
+    key_env = preset.get("api_key_env", "")
+    return os.environ.get(key_env, "") if key_env else ""
 
 
 def build_registry(
@@ -260,6 +274,7 @@ def _make_universal_adapter(agent, api_key: str):
     usage_output_key = preset.get("usage_output_key", "completion_tokens")
     extra_body = preset.get("extra_body", {})
     extracts_reasoning = preset.get("extracts_reasoning", False)
+    model = preset.get("model_aliases", {}).get(agent.model, agent.model)
 
     if not api_url:
         return None
@@ -267,7 +282,7 @@ def _make_universal_adapter(agent, api_key: str):
     return UniversalAdapter(
         api_url=api_url,
         api_key=api_key or agent.api_key,
-        model=agent.model,
+        model=model,
         response_path=response_path,
         message_format=message_format,
         system_prompt=agent.system_prompt or None,

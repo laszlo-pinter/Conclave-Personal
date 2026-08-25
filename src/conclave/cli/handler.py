@@ -192,8 +192,10 @@ class CLIHandler:
         """Sendet eine Mini-Anfrage an den Provider."""
         started = datetime.now(timezone.utc)
         try:
-            from conclave.cli.bootstrap import _make_adapter
-            adapter = _make_adapter(agent, api_key=agent.api_key or self._fallback_key_for_agent(agent))
+            try:
+                adapter = self._adapter_for_agent_test(agent)
+            except AdapterNotFound:
+                adapter = None
             if adapter is None:
                 return {
                     "success": False,
@@ -235,6 +237,15 @@ class CLIHandler:
                 "message": str(e)[:200],
                 "hint": "Provider erreichbar, API-Key und Modellnamen pruefen.",
             }
+
+    def _adapter_for_agent_test(self, agent):
+        registry = getattr(self._service, "_registry", None)
+        if registry is not None:
+            registry.invalidate(agent.id)
+            return registry.get_for(agent.id)
+
+        from conclave.cli.bootstrap import _make_adapter
+        return _make_adapter(agent, api_key=agent.api_key or self._fallback_key_for_agent(agent))
 
     def list_agents(self) -> CLIResult:
         if not self._agent_service:

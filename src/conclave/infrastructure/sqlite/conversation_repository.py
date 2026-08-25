@@ -103,6 +103,18 @@ class SQLiteConversationRepository:
 
     def delete(self, conversation_id: str) -> None:
         self._connection.execute(
+            "DELETE FROM usage_records WHERE conversation_id = ?",
+            (conversation_id,),
+        )
+        self._connection.execute(
+            "DELETE FROM runs WHERE conversation_id = ?",
+            (conversation_id,),
+        )
+        self._connection.execute(
+            "DELETE FROM audit_log WHERE conversation_id = ?",
+            (conversation_id,),
+        )
+        self._connection.execute(
             "DELETE FROM messages WHERE conversation_id = ?",
             (conversation_id,),
         )
@@ -114,3 +126,4 @@ class SQLiteConversationRepository:
             "DELETE FROM conversations WHERE id = ?",
             (conversation_id,),
         )
+        self._connection.commit()

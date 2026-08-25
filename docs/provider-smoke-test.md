@@ -3,11 +3,12 @@
 Ziel: Nach Installation oder Checkout prüfen, ob Conclave lokale Runtime,
 Agent-Konfiguration, Provider-Keys und Multi-Agent-Aufruf sauber verbindet.
 
-Der Smoke-Test nutzt drei Remote-Provider:
+Der Smoke-Test nutzt vier Remote-Provider:
 
 - Claude über Anthropic
 - Gemini über Google
 - GPT über OpenAI Responses
+- DeepSeek über die offizielle DeepSeek API
 
 Remote-Provider erhalten die für den Modellaufruf erforderlichen Prompt- und
 Kontextdaten.
@@ -68,6 +69,7 @@ Windows / PowerShell:
 $env:ANTHROPIC_API_KEY="sk-ant-..."
 $env:GEMINI_API_KEY="..."
 $env:OPENAI_API_KEY="sk-..."
+$env:DEEPSEEK_API_KEY="sk-..."
 ```
 
 Linux / Bash:
@@ -76,6 +78,7 @@ Linux / Bash:
 export ANTHROPIC_API_KEY="sk-ant-..."
 export GEMINI_API_KEY="..."
 export OPENAI_API_KEY="sk-..."
+export DEEPSEEK_API_KEY="sk-..."
 ```
 
 Conclave zeigt Provider als verfügbar, wenn ein Agent einen eigenen Key hat
@@ -114,6 +117,7 @@ Erwartung:
 - `anthropic` hat `api_key_available: true`
 - `gemini` hat `api_key_available: true`
 - `openai-responses` hat `api_key_available: true`
+- `deepseek` hat `api_key_available: true`
 
 Wenn OpenAI `false` zeigt, wurde der Server ohne `OPENAI_API_KEY` gestartet.
 Terminal-Variable setzen und Server neu starten.
@@ -126,6 +130,7 @@ Windows / PowerShell und Linux / Bash:
 conclave agent-new Claude --name "Claude" --provider anthropic --preset anthropic --model "<anthropic-model>"
 conclave agent-new Gemini --name "Gemini" --provider gemini --preset gemini --model "<gemini-model>"
 conclave agent-new GPT --name "GPT" --provider openai-responses --preset openai-responses --model "<openai-model>"
+conclave agent-new DeepSeek --name "DeepSeek" --provider deepseek --preset deepseek --model "deepseek-v4-flash"
 ```
 
 Wenn die Agenten bereits existieren, stattdessen in der UI prüfen oder mit
@@ -134,7 +139,7 @@ Wenn die Agenten bereits existieren, stattdessen in der UI prüfen oder mit
 Ersetze die Modell-Platzhalter durch Modelle, die in deinem jeweiligen
 Provider-Account aktuell verfügbar sind.
 
-## 6. Conversation Erstellen Und Alle Drei Modelle Testen
+## 6. Conversation Erstellen Und Alle Vier Modelle Testen
 
 Windows / PowerShell:
 
@@ -144,10 +149,12 @@ conclave topic $conv "Provider-Smoke-Test"
 conclave add-participant $conv Claude --name "Claude"
 conclave add-participant $conv Gemini --name "Gemini"
 conclave add-participant $conv GPT --name "GPT"
+conclave add-participant $conv DeepSeek --name "DeepSeek"
 conclave message $conv "Antworte in einem Satz: Welcher Provider bist du und funktioniert der Conclave-Aufruf?"
 conclave invoke $conv Claude
 conclave invoke $conv Gemini
 conclave invoke $conv GPT
+conclave invoke $conv DeepSeek
 conclave runs --conversation-id $conv
 ```
 
@@ -159,18 +166,20 @@ conclave topic "$conv" "Provider-Smoke-Test"
 conclave add-participant "$conv" Claude --name "Claude"
 conclave add-participant "$conv" Gemini --name "Gemini"
 conclave add-participant "$conv" GPT --name "GPT"
+conclave add-participant "$conv" DeepSeek --name "DeepSeek"
 conclave message "$conv" "Antworte in einem Satz: Welcher Provider bist du und funktioniert der Conclave-Aufruf?"
 conclave invoke "$conv" Claude
 conclave invoke "$conv" Gemini
 conclave invoke "$conv" GPT
+conclave invoke "$conv" DeepSeek
 conclave runs --conversation-id "$conv"
 ```
 
 Erwartung:
 
-- alle drei Invokes liefern eine Antwort
-- `conclave runs --conversation-id $conv` zeigt drei erfolgreiche Runs
-- die UI zeigt die drei Modellantworten in derselben Conversation
+- alle vier Invokes liefern eine Antwort
+- `conclave runs --conversation-id $conv` zeigt vier erfolgreiche Runs
+- die UI zeigt die vier Modellantworten in derselben Conversation
 
 ## Häufige Fehler
 
@@ -215,6 +224,14 @@ Windows / PowerShell:
 $env:OPENAI_API_KEY="sk-..."
 python -m conclave.cli.main desktop --port 8001
 ```
+
+### DeepSeek Liefert 400 Wegen Modellname
+
+Die DeepSeek-API erwartet API-Model-IDs wie `deepseek-v4-flash` oder
+`deepseek-v4-pro`. Produkt- oder Release-Namen wie `DeepSeek-V3` sind keine
+sendbaren API-Identifier. Bestehende `DeepSeek-V3`-Agenten werden von Conclave
+auf `deepseek-v4-flash` gemappt, neue Agenten sollten direkt eine der
+angezeigten API-IDs verwenden.
 
 Linux / Bash:
 

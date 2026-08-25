@@ -232,6 +232,8 @@ class TestPresetDeepSeek:
 
     def test_deepseek_models(self):
         p = get_preset("deepseek")
+        assert "deepseek-v4-flash" in p["models"]
+        assert "deepseek-v4-pro" in p["models"]
         assert "deepseek-chat" in p["models"]
         assert "deepseek-reasoner" in p["models"]
 

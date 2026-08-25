@@ -102,6 +102,10 @@ class PostgresConversationRepository:
 
     def delete(self, conversation_id: str) -> None:
         with self._connection.cursor() as cur:
+            cur.execute("DELETE FROM usage_records WHERE conversation_id = %s", (conversation_id,))
+            cur.execute("DELETE FROM runs WHERE conversation_id = %s", (conversation_id,))
+            cur.execute("DELETE FROM audit_log WHERE conversation_id = %s", (conversation_id,))
             cur.execute("DELETE FROM messages WHERE conversation_id = %s", (conversation_id,))
             cur.execute("DELETE FROM participants WHERE conversation_id = %s", (conversation_id,))
             cur.execute("DELETE FROM conversations WHERE id = %s", (conversation_id,))
+        self._connection.commit()

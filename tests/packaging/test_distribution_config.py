@@ -33,7 +33,7 @@ def test_distribution_metadata_links_back_to_project():
     assert urls["Source"] == "https://github.com/laszlo-pinter/Conclave-Personal"
     assert urls["Issues"] == "https://github.com/laszlo-pinter/Conclave-Personal/issues"
     assert urls["Documentation"].endswith("/docs/index.md")
-    assert urls["Changelog"].endswith("/docs/release-notes-v0.1.17.md")
+    assert urls["Changelog"].endswith("/docs/release-notes-v0.1.18.md")
 
 
 def test_console_scripts_are_declared():
@@ -78,4 +78,6 @@ def test_manifest_includes_release_material():
     assert "include docs/release-notes-v0.1.4.md" in manifest
     assert "include docs/release-notes-v0.1.5.md" in manifest
     assert "include docs/release-notes-v0.1.16.md" in manifest
+    assert "include docs/release-notes-v0.1.17.md" in manifest
+    assert "include docs/release-notes-v0.1.18.md" in manifest
     assert "recursive-include docs/assets/screenshots *.png" not in manifest

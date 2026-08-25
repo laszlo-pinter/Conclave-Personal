@@ -11,8 +11,8 @@
 .sb-tab.active{color:var(--accent);background:var(--accent-bg)}
 .sb-panel{flex:1;overflow-y:auto;display:none;flex-direction:column}
 .sb-panel.active{display:flex}
-.sb-panel::-webkit-scrollbar{width:3px}
-.sb-panel::-webkit-scrollbar-thumb{background:var(--border-mid);border-radius:2px}
+.sb-panel::-webkit-scrollbar{width:8px}
+.sb-panel::-webkit-scrollbar-thumb{background:var(--scrollbar-thumb);border-radius:8px;border:2px solid transparent;background-clip:content-box}
 .sb-actions{padding:10px}
 .sb-foot{padding:10px 20px 12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
 
@@ -37,8 +37,8 @@
 
 /* Messages container */
 .messages{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:10px}
-.messages::-webkit-scrollbar{width:3px}
-.messages::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.messages::-webkit-scrollbar{width:8px}
+.messages::-webkit-scrollbar-thumb{background:var(--scrollbar-thumb);border-radius:8px;border:2px solid transparent;background-clip:content-box}
 
 /* Personal workspace pages */
 .workspace-page{width:100%;max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:16px}

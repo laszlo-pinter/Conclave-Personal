@@ -268,6 +268,56 @@ def test_agent_test_uses_provider_fallback_key(service, agent_service):
     assert make_adapter.call_args.kwargs["api_key"] == "sk-fallback"
 
 
+def test_agent_test_uses_registry_path_when_available(service, agent_service):
+    from conclave.application.adapter_registry import AdapterRegistry
+    from conclave.domain.agent import Agent
+
+    class FakeAdapter:
+        def complete(self, conversation, participant):
+            return "OK"
+
+    registry = AdapterRegistry()
+    registry.set_builder(lambda participant_id: FakeAdapter() if participant_id == "a1" else None)
+    service.set_adapter_registry(registry)
+    handler = CLIHandler(service, agent_service=agent_service)
+    agent_service.create_agent(
+        Agent(id="a1", name="Test", provider="custom", model="m", api_url="https://example.test")
+    )
+
+    with patch("conclave.cli.bootstrap._make_adapter", side_effect=AssertionError("direct path used")):
+        result = handler.test_agent("a1")
+
+    assert result["success"] is True
+    assert result["status"] == "ok"
+
+
+def test_agent_test_invalidates_cached_adapter_before_testing(service, agent_service):
+    from conclave.application.adapter_registry import AdapterRegistry
+    from conclave.domain.agent import Agent
+
+    class StaleAdapter:
+        def complete(self, conversation, participant):
+            raise RuntimeError("stale adapter")
+
+    class FreshAdapter:
+        def complete(self, conversation, participant):
+            return "OK"
+
+    registry = AdapterRegistry()
+    registry.register("a1", StaleAdapter())
+    registry.set_builder(lambda participant_id: FreshAdapter() if participant_id == "a1" else None)
+    service.set_adapter_registry(registry)
+    handler = CLIHandler(service, agent_service=agent_service)
+    agent_service.create_agent(
+        Agent(id="a1", name="Test", provider="custom", model="m", api_url="https://example.test")
+    )
+
+    result = handler.test_agent("a1")
+
+    assert result["success"] is True
+    assert result["message"].startswith("Antwort: OK")
+
+
 def test_agent_test_returns_not_configured_details(service, agent_service):
     from conclave.domain.agent import Agent
 

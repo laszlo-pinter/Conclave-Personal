@@ -1,12 +1,15 @@
 # tests/infrastructure/sqlite/test_conversation_repository.py
 
-from conclave.domain.conversation import Conversation
-from conclave.infrastructure.sqlite.conversation_repository import (
-    SQLiteConversationRepository,
-)
+import sqlite3
+from datetime import datetime, timezone
 
+from conclave.domain.audit import AuditEntry
 from conclave.domain.conversation import Conversation
+from conclave.domain.run import Run, UsageRecord
+from conclave.infrastructure.sqlite.audit_repository import SQLiteAuditRepository
 from conclave.infrastructure.sqlite.conversation_repository import SQLiteConversationRepository
+from conclave.infrastructure.sqlite.run_repository import SQLiteRunRepository
+from conclave.infrastructure.sqlite.schema import initialize_schema
 
 def test_load_returns_none_for_unknown_conversation(db_connection):
     repository = SQLiteConversationRepository(db_connection)
@@ -138,6 +141,71 @@ def test_delete_also_removes_participants(db_connection):
 
     participants = part_repo.list_by_conversation_id(conversation.id)
     assert participants == []
+
+
+def test_delete_also_removes_runs_usage_and_audit(db_connection):
+    conv_repo = SQLiteConversationRepository(db_connection)
+    run_repo = SQLiteRunRepository(db_connection)
+    audit_repo = SQLiteAuditRepository(db_connection)
+
+    conversation = Conversation.create()
+    now = datetime.now(timezone.utc)
+    conv_repo.save(conversation)
+    run_repo.save(Run(
+        id="run-1",
+        conversation_id=conversation.id,
+        kind="invoke",
+        participants=["agent-a"],
+        started_at=now,
+        finished_at=now,
+        status="succeeded",
+        usage=UsageRecord(provider="test", model="m", input_tokens=3, output_tokens=5),
+    ))
+    audit_repo.save(AuditEntry(
+        id="audit-1",
+        timestamp=now,
+        operation="invoke_participant",
+        conversation_id=conversation.id,
+        participant_id="agent-a",
+        provider="test",
+        model="m",
+        success=True,
+        input_tokens=3,
+        output_tokens=5,
+    ))
+
+    conv_repo.delete(conversation.id)
+
+    assert conv_repo.load(conversation.id) is None
+    for table in ("runs", "usage_records", "audit_log"):
+        count = db_connection.execute(
+            f"SELECT COUNT(*) FROM {table} WHERE conversation_id = ?",
+            (conversation.id,),
+        ).fetchone()[0]
+        assert count == 0
+
+
+def test_delete_commits_so_other_connections_see_removal(tmp_path):
+    db_path = tmp_path / "conclave.db"
+    connection = sqlite3.connect(db_path)
+    initialize_schema(connection)
+    repo = SQLiteConversationRepository(connection)
+    conversation = Conversation.create()
+    repo.save(conversation)
+    connection.commit()
+
+    repo.delete(conversation.id)
+
+    other = sqlite3.connect(db_path)
+    try:
+        count = other.execute(
+            "SELECT COUNT(*) FROM conversations WHERE id = ?",
+            (conversation.id,),
+        ).fetchone()[0]
+    finally:
+        other.close()
+        connection.close()
+    assert count == 0
 
 
 def test_delete_unknown_id_does_not_raise(db_connection):

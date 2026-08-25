@@ -700,6 +700,21 @@ def create_app(handler: CLIHandler, auth_service=None,
     # ── Settings und Betrieb ───────────────────────────────────────────
 
     def _settings_payload() -> dict:
+        fallback_keys = {
+            "anthropic": getattr(config, "anthropic_api_key", "") if config else "",
+            "openai": getattr(config, "openai_api_key", "") if config else "",
+            "openai-responses": getattr(config, "openai_api_key", "") if config else "",
+            "gemini": getattr(config, "gemini_api_key", "") if config else "",
+        }
+        from conclave.infrastructure.universal.presets import list_presets as _list_presets
+        provider_keys = {}
+        for preset in _list_presets():
+            if not bool(preset.get("requires_api_key", True)):
+                continue
+            name = preset.get("name", "")
+            key_env = preset.get("api_key_env", "")
+            provider_keys[name] = bool(fallback_keys.get(name)) or bool(key_env and os.environ.get(key_env))
+
         return {
             "mode": getattr(config, "mode", "development") if config else "development",
             "host": getattr(config, "host", "127.0.0.1") if config else "127.0.0.1",
@@ -714,11 +729,7 @@ def create_app(handler: CLIHandler, auth_service=None,
                 "hidden_paths_visible": False,
             },
             "auth_required": bool(getattr(config, "api_key", "") if config else False),
-            "provider_keys": {
-                "anthropic": bool(getattr(config, "anthropic_api_key", "") if config else ""),
-                "openai": bool(getattr(config, "openai_api_key", "") if config else ""),
-                "gemini": bool(getattr(config, "gemini_api_key", "") if config else ""),
-            },
+            "provider_keys": provider_keys,
         }
 
     @app.get("/settings")

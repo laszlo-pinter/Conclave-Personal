@@ -80,6 +80,15 @@ def test_settings_get_returns_runtime_settings(client):
     assert body["workspace_limits"]["agent_read_bytes"] > 0
 
 
+def test_settings_get_reports_deepseek_env_key(client, monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-deepseek-test")
+
+    resp = client.get("/settings")
+
+    body = resp.get_json()["settings"]
+    assert body["provider_keys"]["deepseek"] is True
+
+
 def test_settings_put_updates_workspace_path(client, tmp_path):
     new_workspace = tmp_path / "new-workspace"
 

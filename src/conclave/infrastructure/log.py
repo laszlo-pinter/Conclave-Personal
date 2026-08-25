@@ -5,6 +5,7 @@ import logging
 import time
 from contextlib import contextmanager
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 CONCLAVE_PREFIX = "conclave."
@@ -37,6 +38,28 @@ def get_logger(name: str) -> logging.Logger:
     if not name.startswith(CONCLAVE_PREFIX):
         name = CONCLAVE_PREFIX + name
     return logging.getLogger(name)
+
+
+def configure_logging(level: str = "INFO", log_file: str | Path | None = None) -> logging.Logger:
+    """Konfiguriert Conclave-Logging fuer Server-Runtimes."""
+    logger = logging.getLogger("conclave")
+    logger.setLevel(getattr(logging, level.upper(), logging.INFO))
+
+    for handler in list(logger.handlers):
+        if getattr(handler, "_conclave_managed", False):
+            logger.removeHandler(handler)
+            handler.close()
+
+    if log_file is not None:
+        path = Path(log_file)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handler = logging.FileHandler(path, encoding="utf-8")
+        handler.setFormatter(JsonFormatter())
+        handler.setLevel(logger.level)
+        handler._conclave_managed = True  # type: ignore[attr-defined]
+        logger.addHandler(handler)
+
+    return logger
 
 
 class JsonFormatter(logging.Formatter):

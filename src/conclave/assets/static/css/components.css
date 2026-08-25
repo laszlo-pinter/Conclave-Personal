@@ -190,8 +190,8 @@ select.sel:focus{border-color:var(--accent)}
 .overlay.open{opacity:1;pointer-events:all}
 .modal{background:var(--bg-2);border:1px solid var(--border-strong);border-radius:var(--r2);padding:28px;width:480px;max-width:96vw;max-height:90vh;overflow-y:auto;box-shadow:0 28px 70px rgba(0,0,0,.65);transform:translateY(14px) scale(.97);transition:transform .2s}
 .overlay.open .modal{transform:none}
-.modal::-webkit-scrollbar{width:3px}
-.modal::-webkit-scrollbar-thumb{background:var(--border-mid)}
+.modal::-webkit-scrollbar{width:8px}
+.modal::-webkit-scrollbar-thumb{background:var(--scrollbar-thumb);border-radius:8px;border:2px solid transparent;background-clip:content-box}
 .modal-title{font-family:var(--font-hd);font-weight:800;font-size:17px;margin-bottom:20px;display:flex;align-items:center;gap:8px}
 .field{margin-bottom:14px}
 .field label{display:block;font-family:var(--font-mono);font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.9px;margin-bottom:6px}

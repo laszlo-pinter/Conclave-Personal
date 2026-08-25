@@ -110,3 +110,35 @@ def test_build_registry_uses_agent_api_key_from_db(tmp_path):
     agent_arg = call_args[0][0]
     assert agent_arg.provider == "openai"
     assert call_args[1]["api_key"] == "sk-openai-secret"
+
+
+def test_build_registry_uses_preset_api_key_env(tmp_path):
+    config = ConclaveConfig(db_path=tmp_path / "test.db")
+    service = build_service(config=config)
+    agent_svc = build_agent_service(config=config)
+    agent_svc.create_agent(
+        Agent(id="deepseek", name="DeepSeek", provider="deepseek",
+              model="deepseek-v4-flash", preset="deepseek")
+    )
+    fake_adapter = MagicMock()
+    with patch.dict("os.environ", {"DEEPSEEK_API_KEY": "sk-deepseek-env"}, clear=True):
+        with patch("conclave.cli.bootstrap._make_adapter", return_value=fake_adapter) as mock_make:
+            registry = build_registry(service, agent_service=agent_svc, config=config)
+
+    assert registry is not None
+    call_args = mock_make.call_args
+    agent_arg = call_args[0][0]
+    assert agent_arg.provider == "deepseek"
+    assert call_args[1]["api_key"] == "sk-deepseek-env"
+
+
+def test_make_universal_adapter_applies_preset_model_alias():
+    from conclave.cli.bootstrap import _make_adapter
+
+    adapter = _make_adapter(
+        Agent(id="deepseek", name="DeepSeek", provider="deepseek",
+              model="DeepSeek-V3", preset="deepseek"),
+        api_key="sk-test",
+    )
+
+    assert adapter._model == "deepseek-v4-flash"

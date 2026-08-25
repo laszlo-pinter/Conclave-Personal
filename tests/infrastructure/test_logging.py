@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from conclave.infrastructure.log import get_logger, JsonFormatter, request_logger
+from conclave.infrastructure.log import configure_logging, get_logger, JsonFormatter, request_logger
 
 
 class TestGetLogger:
@@ -25,6 +25,20 @@ class TestGetLogger:
     def test_logger_already_prefixed(self):
         logger = get_logger("conclave.already")
         assert logger.name == "conclave.already"
+
+
+class TestConfigureLogging:
+    def test_writes_conclave_records_to_file(self, tmp_path):
+        log_file = tmp_path / "conclave-server.log"
+        configure_logging("INFO", log_file)
+
+        logger = get_logger("test.file")
+        logger.info("hello file", extra={"conversation_id": "conv-1"})
+
+        parsed = json.loads(log_file.read_text(encoding="utf-8").strip())
+        assert parsed["logger"] == "conclave.test.file"
+        assert parsed["message"] == "hello file"
+        assert parsed["conversation_id"] == "conv-1"
 
 
 class TestJsonFormatter:

@@ -10,7 +10,7 @@
 
 ### Workflows
 - [Example workflows](beispiel-workflows.md) - Writing, architecture, workspace context, and multi-agent runs
-- [Provider smoke test](provider-smoke-test.md) - Check Claude, Gemini, and GPT locally
+- [Provider smoke test](provider-smoke-test.md) - Check Claude, Gemini, GPT, and DeepSeek locally
 
 ### Product UI
 - [Personal UI architecture](personal-ui-architektur.md) - Studio, Agents, Workspace, Runs, Settings
@@ -30,6 +30,7 @@
 - [Ports & adapters](architektur/ports-adapter.md) - Interfaces, ProviderProfiles, ResilientAdapter
 
 ### Release
+- [Release Notes v0.1.18](release-notes-v0.1.18.md) - Delete cleanup, runtime logs, DeepSeek fixes, and UI polish
 - [Release Notes v0.1.17](release-notes-v0.1.17.md) - Restore, orchestration rotation, and tool boundary cleanup
 - [Release Notes v0.1.16](release-notes-v0.1.16.md) - Switchable German/English desktop UI
 - [Release Notes v0.1.5](release-notes-v0.1.5.md) - English public documentation surface

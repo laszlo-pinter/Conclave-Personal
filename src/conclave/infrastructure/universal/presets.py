@@ -152,7 +152,7 @@ PRESETS: dict[str, dict] = {
     "deepseek": {
         "name": "deepseek",
         "label": "DeepSeek (offizielle API)",
-        "description": "DeepSeek Chat und Reasoner ueber die offizielle Chat-Completions-API.",
+        "description": "DeepSeek V4 Flash/Pro ueber die offizielle Chat-Completions-API.",
         "requires_api_key": True,
         "api_url": "https://api.deepseek.com/v1/chat/completions",
         "response_path": "choices[0].message.content",
@@ -161,7 +161,8 @@ PRESETS: dict[str, dict] = {
         "usage_path": "usage",
         "usage_input_key": "prompt_tokens",
         "usage_output_key": "completion_tokens",
-        "models": ["deepseek-chat", "deepseek-reasoner"],
+        "models": ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"],
+        "model_aliases": {"DeepSeek-V3": "deepseek-v4-flash"},
         "api_key_env": "DEEPSEEK_API_KEY",
         "extracts_reasoning": True,
     },

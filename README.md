@@ -13,7 +13,7 @@ answer is correct. It gives users a structured workspace for comparing model
 outputs, tracking runs, and deliberately choosing the next step. The human
 decides. Always.
 
-> Status: v0.1.17 Alpha. The primary path is local, desktop-first, and designed
+> Status: v0.1.18 Alpha. The primary path is local, desktop-first, and designed
 > for individual users on Windows and Linux.
 
 ![Conclave Studio](https://raw.githubusercontent.com/laszlo-pinter/Conclave-Personal/main/docs/assets/screenshots/conclave-studio-desktop.png)
@@ -349,6 +349,7 @@ Important documents:
 - [Example workflows](docs/beispiel-workflows.md)
 - [Security](docs/sicherheit.md)
 - [Configuration](docs/referenz/konfiguration.md)
+- [Release Notes v0.1.18](docs/release-notes-v0.1.18.md)
 - [Release Notes v0.1.17](docs/release-notes-v0.1.17.md)
 - [Release Notes v0.1.16](docs/release-notes-v0.1.16.md)
 - [Release Notes v0.1.5](docs/release-notes-v0.1.5.md)
@@ -361,7 +362,7 @@ Important documents:
 
 ## Known Limitations
 
-v0.1.17 remains alpha. Known limitations:
+v0.1.18 remains alpha. Known limitations:
 
 - Provider compatibility varies by API, model, account, and region.
 - Remote providers receive the data required for the model call.
@@ -371,7 +372,7 @@ v0.1.17 remains alpha. Known limitations:
 
 ## Release Verification
 
-The v0.1.17 surface was verified with these local checks:
+The v0.1.18 surface was verified with these local checks:
 
 - `python -m pytest`
 - `python -m build --sdist --wheel`

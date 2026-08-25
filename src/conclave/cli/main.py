@@ -8,8 +8,27 @@ from conclave.cli.bootstrap import build_agent_service, build_registry, build_se
 from conclave.cli.config import ConclaveConfig
 from conclave.cli.handler import CLIHandler, CLIResult
 from conclave.domain.participant import ParticipantType
+from conclave.infrastructure.log import configure_logging, get_logger
 from conclave.runtime.browser import open_browser
 from conclave.runtime.desktop import prepare_launch_config
+
+
+def _console_symbol(symbol: str, fallback: str, stream=None) -> str:
+    stream = stream or sys.stdout
+    encoding = getattr(stream, "encoding", None) or "utf-8"
+    try:
+        symbol.encode(encoding)
+    except UnicodeEncodeError:
+        return fallback
+    return symbol
+
+
+def _ok(stream=None) -> str:
+    return _console_symbol("✓", "OK", stream)
+
+
+def _err(stream=None) -> str:
+    return _console_symbol("✗", "ERROR", stream)
 
 
 def print_result(result: CLIResult, output_json: bool = False) -> None:
@@ -17,7 +36,7 @@ def print_result(result: CLIResult, output_json: bool = False) -> None:
         print(json.dumps({"success": result.success, "message": result.message, **result.data}, indent=2, default=str))
         return
 
-    icon = "✓" if result.success else "✗"
+    icon = _ok() if result.success else _err()
     print(f"{icon} {result.message}")
 
     if result.success and result.data:
@@ -282,7 +301,7 @@ def run(argv: list[str] | None = None) -> int:
             print()
             return 0
         except Exception as e:
-            print(f"\n✗ {e}", file=sys.stderr)
+            print(f"\n{_err(sys.stderr)} {e}", file=sys.stderr)
             return 1
 
     elif args.command == "orchestrate":
@@ -312,7 +331,7 @@ def run(argv: list[str] | None = None) -> int:
             if output_json:
                 print(json.dumps({"success": False, "error": str(exc)}))
             else:
-                print(f"✗ {exc}", file=sys.stderr)
+                print(f"{_err(sys.stderr)} {exc}", file=sys.stderr)
             return 1
 
     elif args.command == "topic":
@@ -345,7 +364,7 @@ def run(argv: list[str] | None = None) -> int:
                           response_path=args.response_path,
                           message_format=args.message_format)
         except ValueError as e:
-            print(f"✗ {e}", file=sys.stderr)
+            print(f"{_err(sys.stderr)} {e}", file=sys.stderr)
             return 1
         result = handler.create_agent(agent)
 
@@ -368,7 +387,7 @@ def run(argv: list[str] | None = None) -> int:
                           message_format=args.message_format,
                           created_at=created_at)
         except ValueError as e:
-            print(f"✗ {e}", file=sys.stderr)
+            print(f"{_err(sys.stderr)} {e}", file=sys.stderr)
             return 1
         result = handler.update_agent(agent)
 
@@ -390,7 +409,8 @@ def run(argv: list[str] | None = None) -> int:
             print(f"  Name:          {d['name']}")
             print(f"  Provider:      {d['provider']}")
             print(f"  Modell:        {d['model']}")
-            print(f"  API-Key:       {'✓ gesetzt' if d.get('api_key_set') else '✗ nicht gesetzt'}")
+            api_key_status = f"{_ok()} gesetzt" if d.get("api_key_set") else f"{_err()} nicht gesetzt"
+            print(f"  API-Key:       {api_key_status}")
             if d.get("role"):  print(f"  Rolle:         {d['role']}")
             if d.get("topic"): print(f"  Thema:         {d['topic']}")
             if d.get("system_prompt"):
@@ -543,11 +563,18 @@ def _run_server(args, should_open_browser: bool = False) -> int:
         debug=getattr(args, "debug", False),
         open_browser=should_open_browser,
     )
+    log_file = launch.paths.log_dir / "conclave-server.log"
+    configure_logging(launch.config.log_level, log_file)
+    get_logger("cli.server").info(
+        "Server starting",
+        extra={"method": "server", "path": str(log_file)},
+    )
 
     if should_open_browser:
         import threading
         threading.Timer(1.0, lambda: open_browser(launch.url)).start()
         print(f"Conclave Desktop: {launch.url}")
+    print(f"Conclave Logs: {log_file}")
 
     from conclave.api.server import _build_app
     app, config = _build_app(launch.config)
@@ -579,7 +606,7 @@ def _run_migrate_personal(args) -> int:
         return 0
 
     mode = "Dry-Run" if report.dry_run else "Migration"
-    print(f"✓ {mode} abgeschlossen.")
+    print(f"{_ok()} {mode} abgeschlossen.")
     print(f"  Quelle: {report.source_path}")
     print(f"  Ziel:   {report.target_path}")
     if report.backup_path:

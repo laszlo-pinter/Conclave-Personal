@@ -281,6 +281,26 @@ def _validate_url(url: str, *, allow_localhost: bool = False) -> None:
         raise ValueError(f"Private/reservierte IP oder Host '{host}' nicht erlaubt")
 
 
+def _provider_error_text(response) -> str:
+    """Extrahiert eine kurze Provider-Fehlermeldung ohne Secrets."""
+    try:
+        data = response.json()
+    except Exception:
+        return str(getattr(response, "text", ""))[:500]
+
+    error = data.get("error") if isinstance(data, dict) else None
+    if isinstance(error, dict):
+        parts = [
+            str(error.get("message", "")).strip(),
+            str(error.get("type", "")).strip(),
+            str(error.get("code", "")).strip(),
+        ]
+        return " ".join(part for part in parts if part)[:500]
+    if isinstance(error, str):
+        return error[:500]
+    return str(data)[:500]
+
+
 # ── Adapter ───────────────────────────────────────────────────────────────
 
 class UniversalAdapter:
@@ -385,10 +405,15 @@ class UniversalAdapter:
             url, json=body, headers=headers, params=params, timeout=self._timeout,
         )
         if response.status_code >= 400:
+            detail = _provider_error_text(response)
             logger.error("API-Fehler %s %s: %s",
                          response.status_code, url,
-                         response.text[:500],
+                         detail,
                          extra={"provider": self._provider_name, "model": self._model})
+            if response.status_code < 500 and response.status_code != 429:
+                raise ValueError(
+                    f"Provider '{self._provider_name}' HTTP {response.status_code}: {detail}"
+                )
         response.raise_for_status()
         data = response.json()
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "conclave-personal"
-version = "0.1.17"
+version = "0.1.18"
 description = "Local personal multi-agent workspace for Windows and Linux."
 readme = "README.md"
 license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
@@ -27,6 +27,7 @@ dependencies = [
     "cryptography>=42.0",
     "flask>=3.0",
     "flask-limiter>=4.0",
+    "httpx>=0.27",
 ]
 
 [project.urls]
@@ -34,7 +35,7 @@ Homepage = "https://github.com/laszlo-pinter/Conclave-Personal"
 Source = "https://github.com/laszlo-pinter/Conclave-Personal"
 Issues = "https://github.com/laszlo-pinter/Conclave-Personal/issues"
 Documentation = "https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/index.md"
-Changelog = "https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.1.17.md"
+Changelog = "https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.1.18.md"
 
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.40.0"]
@@ -45,7 +46,7 @@ postgres = ["psycopg2-binary>=2.9"]
 mcp = ["mcp>=1.0", "httpx>=0.27"]
 dev     = ["pytest>=9.0"]
 dev-api = ["pytest>=9.0", "flask>=3.0"]
-dev-all = ["pytest>=9.0", "pytest-asyncio>=1.0", "flask>=3.0", "flask-limiter>=4.0", "anthropic>=0.40.0", "openai>=1.0", "cryptography>=42.0", "psycopg2-binary>=2.9"]
+dev-all = ["pytest>=9.0", "pytest-asyncio>=1.0", "flask>=3.0", "flask-limiter>=4.0", "httpx>=0.27", "anthropic>=0.40.0", "openai>=1.0", "cryptography>=42.0", "psycopg2-binary>=2.9"]
 
 [project.scripts]
 conclave = "conclave.cli.main:main"

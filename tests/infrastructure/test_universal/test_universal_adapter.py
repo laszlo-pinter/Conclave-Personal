@@ -286,6 +286,23 @@ class TestComplete:
             adapter.complete(_conversation(), _participant())
 
     @patch("conclave.infrastructure.universal.adapter.httpx")
+    def test_client_error_includes_provider_body(self, mock_httpx):
+        from conclave.infrastructure.universal.adapter import UniversalAdapter
+        mock_httpx.post.return_value = _mock_response(
+            status_code=400,
+            json_data={"error": {"message": "Model Not Exist"}},
+        )
+        adapter = UniversalAdapter(
+            api_url="https://api.example.com",
+            api_key="key",
+            model="DeepSeek-V3",
+            response_path="choices[0].message.content",
+            provider_name="deepseek",
+        )
+        with pytest.raises(ValueError, match="Model Not Exist"):
+            adapter.complete(_conversation(), _participant())
+
+    @patch("conclave.infrastructure.universal.adapter.httpx")
     def test_provider_property(self, mock_httpx):
         from conclave.infrastructure.universal.adapter import UniversalAdapter
         adapter = UniversalAdapter(
