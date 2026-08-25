@@ -5,6 +5,7 @@ import pytest
 from conclave.application.data_export_service import DataExportService
 from conclave.domain.errors import ConversationNotFound
 from conclave.domain.participant import ParticipantType
+from conclave.domain.tool_event import ToolEvent
 
 
 def test_export_contains_conversation_metadata(service):
@@ -25,6 +26,29 @@ def test_export_contains_messages(service):
 
     assert len(data["messages"]) == 1
     assert data["messages"][0]["content"] == "Hallo Welt"
+
+
+def test_export_contains_tool_events(service):
+    conv = service.create_conversation()
+    updated = service.add_user_message(conv.id, "Hallo Welt")
+    message = updated.messages[-1]
+    event = ToolEvent.create(
+        conversation_id=conv.id,
+        participant_id="writer",
+        tool="workspace.save",
+        status="succeeded",
+        input_json={"path": "report.md"},
+        output_json={"path": "output/report.md", "bytes_written": 7},
+        message_id=message.id,
+    )
+    service.list_tool_events_by_conversation = lambda conversation_id: [event]
+    export_svc = DataExportService(service)
+
+    data = export_svc.export_conversation(conv.id)
+
+    assert data["tool_events"][0]["id"] == event.id
+    assert data["tool_events"][0]["tool"] == "workspace.save"
+    assert data["messages"][0]["tool_events"][0]["id"] == event.id
 
 
 def test_export_contains_participants(service):

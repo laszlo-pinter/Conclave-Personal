@@ -98,6 +98,8 @@ _process_agent_directives_for_context() → Datei in workspace/output/ geschrieb
 - Lesen/Expandieren: `src/conclave/application/conversation_flow.py:_expand_workspace_refs()`
 - Agent-Direktiven: `src/conclave/application/conversation_flow.py:_process_agent_directives_for_context()`
 - Tool-Events: `src/conclave/domain/tool_event.py`, `src/conclave/infrastructure/sqlite/tool_event_repository.py`
+- Tool-Event-API und Export: `GET /conversations/<id>/tool-events`,
+  `GET /conversations/<id>/export`
 - Security: `src/conclave/application/workspace_security.py`
 - API: `src/conclave/api/app.py` Workspace-Endpunkte
 - System-Prompt: `src/conclave/infrastructure/universal/adapter.py:_build_workspace_info()`
