@@ -13,11 +13,35 @@ function buildMsg(m){
   const div=document.createElement('div');div.className=`msg ${isUser?'user':'model'}`;
   if(!isUser&&c) div.style.borderLeftColor=c.bd;
   const dlBtn=isUser?'':`<button class="msg-dl" data-action="download-message" data-name="${attr(pName)}" data-seq="${attr(m.sequence)}" title="${attr(t('download.response'))}">&#8615;</button>`;
-  const rendered=isUser?esc(m.content):renderMarkdown(m.content);
+  const content=stripToolEventRefs(m.content||'',m.tool_events||[]);
+  const rendered=isUser?esc(content):renderMarkdown(content);
+  const toolEventsHtml=renderToolEvents(m.tool_events||[]);
   div.innerHTML=`<div class="msg-header"><span class="msg-label" style="color:${isUser?'var(--text-dim)':(c?.tx||'var(--accent)')}">${esc(pName)}</span><span class="msg-seq">#${m.sequence}</span>${dlBtn}</div><div class="msg-content">${rendered}</div>`;
+  if(toolEventsHtml) div.insertAdjacentHTML('beforeend',toolEventsHtml);
   // Code-Highlighting auf alle pre>code Bloecke
   if(!isUser) div.querySelectorAll('pre code').forEach(el=>hljs.highlightElement(el));
   return div;
+}
+
+function stripToolEventRefs(content,events){
+  if(!events.length) return content;
+  return String(content).replace(/\[tool_event:[0-9a-fA-F-]{36}\]/g,'').trim();
+}
+
+function renderToolEvents(events){
+  if(!events.length) return '';
+  return `<div class="tool-events">${events.map(renderToolEvent).join('')}</div>`;
+}
+
+function renderToolEvent(event){
+  const ok=event.status==='succeeded';
+  const path=event.output?.path||event.input?.path||'';
+  const bytes=typeof event.output?.bytes_written==='number'?` · ${fmtBytes(event.output.bytes_written)}`:'';
+  const label=event.tool==='workspace.save'?'workspace.save':(event.tool||'tool');
+  const detail=ok
+    ? `${path?esc(path):esc(event.id)}${bytes}`
+    : `${path?esc(path):esc(event.id)}${event.error?` · ${esc(event.error)}`:''}`;
+  return `<div class="tool-event ${ok?'ok':'err'}"><span class="tool-event-dot"></span><span class="tool-event-name">${esc(label)}</span><span class="tool-event-status">${ok?'saved':'failed'}</span><span class="tool-event-detail">${detail}</span></div>`;
 }
 
 // renderMarkdown → static/js/utils.js
