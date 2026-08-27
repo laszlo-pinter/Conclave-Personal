@@ -1140,6 +1140,57 @@
         }
       }
     },
+    "/conversations/{conversation_id}/orchestrate-parallel-stream": {
+      "post": {
+        "summary": "Orchestrate Parallel Stream",
+        "tags": [
+          "conversations"
+        ],
+        "operationId": "orchestrate_parallel_stream",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "groups"
+                ],
+                "properties": {
+                  "groups": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/conversations/{conversation_id}/participants/{participant_id}/stream": {
       "get": {
         "summary": "Stream Participant",

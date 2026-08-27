@@ -1,6 +1,6 @@
 # Flow: Orchestrierung - Sequentiell, Parallel, Auto-Loop
 
-**Auslöser:** POST /conversations/{id}/orchestrate, /orchestrate-parallel, /auto-loop
+**Auslöser:** POST /conversations/{id}/orchestrate, /orchestrate-parallel, /orchestrate-parallel-stream, /auto-loop
 
 **Vorbedingung:** Conversation existiert, Participants registriert, Agents mit Adaptern
 
@@ -26,6 +26,34 @@
 7. Bei Exception in einem Agent: Loop stoppt, bisherige Responses + Fehlermeldung zurück.
 
 **Test:** `tests/application/test_parallel_orchestrator.py`
+
+## Parallel Live (POST /orchestrate-parallel-stream)
+
+1. `api/app.py:orchestrate_parallel_stream()` liest `groups` und gibt
+   `text/event-stream` zurück.
+2. `cli/handler.py:orchestrate_parallel_stream()` ist ein Generator und
+   liefert SSE-fähige Events.
+3. Innerhalb einer Gruppe werden alle Participants parallel gestartet.
+4. Sobald ein Participant fertig ist, wird seine Antwort sofort als Message
+   gespeichert und als `response`-Event gesendet.
+5. Die UI zeigt beim Start Platzhalter pro Agent und ersetzt jeden Platzhalter,
+   sobald die passende Antwort eintrifft.
+6. Antworten erscheinen in Fertigstellungsreihenfolge, nicht zwingend in der
+   eingegebenen Agentenreihenfolge.
+7. Gruppen bleiben sequentiell: Spätere Gruppen sehen die gespeicherten
+   Antworten früherer Gruppen.
+8. Events:
+   - `start` — groups, total
+   - `group_start` — group, participants
+   - `invoke` — group, slot, participant
+   - `response` — group, slot, participant, content, sequence, message_id, tool_events
+   - `error` — group, slot, participant, message, type, status
+   - `stop` — reason: "error"
+   - `done` — responses
+
+**Test:** `tests/cli/test_handler_parallel.py`,
+`tests/api/test_orchestrate_parallel_api.py`,
+`tests/ui/test_personal_ui_surface.py`
 
 ## Auto-Loop (POST /auto-loop)
 
@@ -63,7 +91,7 @@ Der Mensch entscheidet, ob die Antworten brauchbar sind.
 API-Request
     |
     v
-CLIHandler.orchestrate/orchestrate_parallel/auto_loop
+CLIHandler.orchestrate/orchestrate_parallel/orchestrate_parallel_stream/auto_loop
     |
     v
 Orchestrator.run / ParallelOrchestrator.run / Generator
@@ -81,10 +109,13 @@ MessageRepository + RunRepository + AuditRepository
 **Fehlerfall:**
 - Sequentiell: Stoppt bei erstem Fehler, Partial Result
 - Parallel: Stoppt bei erstem Fehler in einer Gruppe
+- Parallel Live: Sendet fertige Antworten weiter, markiert Fehler und stoppt
+  nach Abschluss der laufenden Gruppe
 - Auto-Loop: stop-Event mit reason "error", SSE-Stream wird sauber beendet
 
 **Code-Referenzen:**
 - `src/conclave/application/orchestrator.py` — Orchestrator + ParallelOrchestrator
+- `src/conclave/cli/handler.py:orchestrate_parallel_stream()` — Generator
 - `src/conclave/cli/handler.py:auto_loop()` — Generator
 - `src/conclave/api/app.py` — 3 Endpoints
 

@@ -126,13 +126,107 @@ async function runOrch(){
   if(!AppState.getState('currentMessages').length){toast(t('input.writeFirst'),'err');return;}
   closeOverlay('overlayOrch');
   const btn=document.getElementById('btnOrch');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';
+  if(parallel){
+    await runParallelOrchStream(seq,btn);
+    return;
+  }
   try{
-    const endpoint=parallel?'/orchestrate-parallel':'/orchestrate';
-    const body=parallel?{groups:seq.map(id=>[id])}:{sequence:seq};
-    await req('POST',`/conversations/${currentConvId}${endpoint}`,body);
+    await req('POST',`/conversations/${currentConvId}/orchestrate`,{sequence:seq});
     const d=await req('GET',`/conversations/${currentConvId}`);renderMessages(d.messages||[]);
-    toast(t('input.answers', {count: seq.length, parallel: parallel ? ' (parallel)' : ''}),`ok`);
+    toast(t('input.answers', {count: seq.length, parallel: ''}),`ok`);
   }catch(e){toast(e.message,'err');}
   finally{btn.disabled=false;btn.innerHTML=`&#8635; ${t('input.orchestrate')}`;}
+}
+
+async function runParallelOrchStream(seq,btn){
+  const el=document.getElementById('messages');
+  const pending=new Map();
+  const banner=document.createElement('div');banner.className='loop-banner';
+  banner.innerHTML=`<span class="spinner"></span> <span id="orchLiveStatus">${t('orch.parallelStarting')}</span>`;
+  el.appendChild(banner);
+  seq.forEach((pid,slot)=>{
+    const pName=participants.find(p=>p.id===pid)?.name||pid;
+    const c=colorFor(pid);
+    const div=document.createElement('div');div.className='msg model pending';div.style.borderLeftColor=c.bd;
+    div.innerHTML=`<div class="msg-header"><span class="msg-label" style="color:${c.tx}">${esc(pName)}</span><span class="msg-seq">${t('orch.pending')} <span class="spinner"></span></span></div><div class="msg-content">${esc(t('orch.working'))}</div>`;
+    el.insertBefore(div,banner);
+    pending.set(`1:${slot}`,div);
+  });
+  scrollBottom();
+  const status=banner.querySelector('#orchLiveStatus');
+
+  try{
+    const hdrs={'Content-Type':'application/json'};if(apiKey)hdrs['Authorization']='Bearer '+apiKey;
+    const res=await fetch(`${API}/conversations/${currentConvId}/orchestrate-parallel-stream`,{
+      method:'POST',headers:hdrs,body:JSON.stringify({groups:[seq]}),
+    });
+    if(!res.ok){const txt=await res.text();throw new Error(`HTTP ${res.status}: ${txt.slice(0,200)}`);}
+    const reader=res.body.getReader(),dec=new TextDecoder();let done=false,sse='';
+    while(!done){
+      const{value,done:d}=await reader.read();done=d;
+      sse+=dec.decode(value||new Uint8Array(),{stream:!done});
+      const parts=sse.split('\n');sse=parts.pop();
+      for(const line of parts){
+        if(!line.startsWith('data: '))continue;
+        const payload=line.slice(6);
+        if(payload==='[DONE]'){done=true;break;}
+        let ev;try{ev=JSON.parse(payload);}catch{continue;}
+        handleParallelOrchEvent(ev,{pending,status});
+      }
+    }
+    const data=await req('GET',`/conversations/${currentConvId}`);
+    renderMessages(data.messages||[]);
+    toast(t('input.answers', {count: seq.length, parallel: ' (parallel)'}),'ok');
+  }catch(e){
+    pending.forEach(div=>markParallelOrchError(div,e.message));
+    toast(e.message,'err');
+  }finally{
+    banner.remove();
+    btn.disabled=false;btn.innerHTML=`&#8635; ${t('input.orchestrate')}`;
+  }
+}
+
+function handleParallelOrchEvent(ev,ctx){
+  if(ev.event==='start'){
+    ctx.status.textContent=t('orch.parallelRunning', {count: ev.total||0});
+    return;
+  }
+  if(ev.event==='invoke'){
+    const div=ctx.pending.get(`${ev.group}:${ev.slot}`);
+    if(div)div.querySelector('.msg-seq').innerHTML=`${t('orch.pending')} <span class="spinner"></span>`;
+    return;
+  }
+  if(ev.event==='response'){
+    const div=ctx.pending.get(`${ev.group}:${ev.slot}`);
+    if(!div)return;
+    renderParallelOrchResponse(div,ev);
+    ctx.pending.delete(`${ev.group}:${ev.slot}`);
+    ctx.status.textContent=t('orch.parallelReceived', {count: ev.sequence||''});
+    return;
+  }
+  if(ev.event==='error'||ev.event==='stop'){
+    const div=ctx.pending.get(`${ev.group}:${ev.slot}`);
+    if(div)markParallelOrchError(div,ev.message||t('common.errorPrefix'));
+    ctx.status.textContent=ev.message||t('common.errorPrefix');
+  }
+}
+
+function renderParallelOrchResponse(div,ev){
+  div.classList.remove('pending');
+  div.querySelector('.msg-seq').textContent=ev.sequence?'#'+ev.sequence:'';
+  const content=stripToolEventRefs(ev.content||'',ev.tool_events||[]);
+  div.querySelector('.msg-content').innerHTML=renderMarkdown(content);
+  div.querySelectorAll('pre code').forEach(el=>hljs.highlightElement(el));
+  div.querySelectorAll('.tool-events').forEach(el=>el.remove());
+  const toolEventsHtml=renderToolEvents(ev.tool_events||[]);
+  if(toolEventsHtml)div.insertAdjacentHTML('beforeend',toolEventsHtml);
+  scrollBottom();
+}
+
+function markParallelOrchError(div,message){
+  div.classList.remove('pending');
+  div.classList.add('error');
+  div.querySelector('.msg-seq').textContent=t('common.errorPrefix');
+  div.querySelector('.msg-content').textContent=message;
 }
 

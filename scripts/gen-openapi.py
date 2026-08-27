@@ -57,6 +57,9 @@ SCHEMAS = {
     ("POST", "/conversations/<conversation_id>/orchestrate-parallel"): {
         "request": {"required": ["groups"], "properties": {"groups": {"type": "array", "minItems": 1, "items": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}}}},
     },
+    ("POST", "/conversations/<conversation_id>/orchestrate-parallel-stream"): {
+        "request": {"required": ["groups"], "properties": {"groups": {"type": "array", "minItems": 1, "items": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}}}},
+    },
     ("POST", "/conversations/<conversation_id>/auto-loop"): {
         "request": {"required": ["sequence"], "properties": {
             "sequence": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string", "minLength": 1}},

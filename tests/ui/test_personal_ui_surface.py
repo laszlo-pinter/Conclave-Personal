@@ -95,3 +95,11 @@ def test_frontend_uses_delegated_ui_events():
     assert "document.addEventListener('click'" in main_js
     assert "'select-conversation'" in main_js
     assert "'insert-workspace-ref'" in main_js
+
+
+def test_parallel_orchestration_uses_streaming_endpoint():
+    messages_js = (HTML.parent / "static/js/features/messages.js").read_text(encoding="utf-8")
+
+    assert "/orchestrate-parallel-stream" in messages_js
+    assert "JSON.stringify({groups:[seq]})" in messages_js
+    assert "seq.map(id=>[id])" not in messages_js

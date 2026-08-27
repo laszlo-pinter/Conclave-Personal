@@ -25,6 +25,11 @@ def handler():
             ]
         },
     )
+    h.orchestrate_parallel_stream.return_value = iter([
+        {"event": "start", "groups": [["a", "b"]], "total": 2},
+        {"event": "response", "participant": "a", "content": "AA", "sequence": 2},
+        {"event": "done", "responses": 1},
+    ])
     return h
 
 
@@ -104,3 +109,34 @@ def test_orchestrate_parallel_failure_returns_502(client, handler):
         json={"groups": [["a"]]},
     )
     assert resp.status_code == 502
+
+
+def test_orchestrate_parallel_stream_returns_event_stream(client):
+    resp = client.post(
+        "/conversations/conv-1/orchestrate-parallel-stream",
+        json={"groups": [["a", "b"]]},
+    )
+
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.content_type
+    body = resp.data.decode()
+    assert 'data: {"event": "start"' in body
+    assert 'data: [DONE]' in body
+
+
+def test_orchestrate_parallel_stream_passes_groups_to_handler(client, handler):
+    client.post(
+        "/conversations/conv-1/orchestrate-parallel-stream",
+        json={"groups": [["a", "b"]]},
+    )
+
+    handler.orchestrate_parallel_stream.assert_called_once_with("conv-1", [["a", "b"]])
+
+
+def test_orchestrate_parallel_stream_missing_groups_returns_400(client):
+    resp = client.post(
+        "/conversations/conv-1/orchestrate-parallel-stream",
+        json={},
+    )
+
+    assert resp.status_code == 400

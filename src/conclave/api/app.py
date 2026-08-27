@@ -603,6 +603,30 @@ def create_app(handler: CLIHandler, auth_service=None,
             return _cli_error_json(result, 502)
         return jsonify(result.data), 200
 
+    @app.post("/conversations/<conversation_id>/orchestrate-parallel-stream")
+    def orchestrate_parallel_stream(conversation_id: str):
+        body = request.get_json() or {}
+        try:
+            groups = normalize_parallel_groups(body.get("groups"))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+        def generate():
+            try:
+                for event in handler.orchestrate_parallel_stream(conversation_id, groups):
+                    yield f"data: {_json.dumps(event)}\n\n"
+                yield "data: [DONE]\n\n"
+            except Exception as e:
+                logger.exception("orchestrate-parallel-stream Fehler: %s", e)
+                yield f"data: {_json.dumps({'event': 'stop', 'reason': 'error', 'message': str(e)})}\n\n"
+                yield "data: [DONE]\n\n"
+
+        return Response(
+            stream_with_context(generate()),
+            content_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     # ── GET /conversations/<id>/participants/<pid>/stream ────────────────
 
     @app.get("/conversations/<conversation_id>/participants/<participant_id>/stream")

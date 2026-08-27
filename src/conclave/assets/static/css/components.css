@@ -85,6 +85,9 @@ select.sel:focus{border-color:var(--accent)}
 .msg{padding:12px 16px;border-radius:var(--r);animation:msgIn .18s ease-out;border:1px solid var(--border)}
 .msg.user{background:rgba(255,255,255,.025)}
 .msg.model{background:var(--bg-2);border-left-width:3px}
+.msg.pending{opacity:.78}
+.msg.pending .msg-content{color:var(--text-dim);font-style:italic}
+.msg.error{border-color:rgba(255,68,102,.35);background:var(--danger-bg)}
 .msg.system-event{background:transparent;border-color:transparent;padding:4px 16px;animation:none}
 .msg-header{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .msg-label{font-family:var(--font-mono);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px}

@@ -10,6 +10,18 @@ from conclave.cli.handler import CLIHandler
 from conclave.domain.participant import ParticipantType
 
 
+class DelayedAdapter:
+    provider = "test"
+
+    def __init__(self, response: str, delay: float):
+        self._response = response
+        self._delay = delay
+
+    async def complete(self, conversation, participant):
+        await asyncio.sleep(self._delay)
+        return self._response
+
+
 def _setup(service, participant_ids: list[str], responses: dict[str, str]) -> str:
     """Helper: Conversation + Participants + Async-Adapter einrichten."""
     handler = CLIHandler(service)
@@ -64,3 +76,35 @@ def test_orchestrate_parallel_failure_returns_error(service):
 
     assert not result.success
     assert result.message != ""
+
+
+def test_orchestrate_parallel_stream_yields_responses_as_they_finish(service):
+    handler = CLIHandler(service)
+    conv_id = handler.new_conversation().data["conversation_id"]
+    for participant_id in ["slow", "fast"]:
+        service.register_participant(conv_id, participant_id, ParticipantType.MODEL, participant_id)
+    service.add_user_message(conv_id, "Startfrage")
+
+    registry = AdapterRegistry()
+    registry.register("slow", DelayedAdapter("SLOW", 0.05))
+    registry.register("fast", DelayedAdapter("FAST", 0.01))
+    service.set_adapter_registry(registry)
+
+    events = list(handler.orchestrate_parallel_stream(conv_id, [["slow", "fast"]]))
+    responses = [event for event in events if event["event"] == "response"]
+
+    assert [event["participant"] for event in responses] == ["fast", "slow"]
+    assert [event["content"] for event in responses] == ["FAST", "SLOW"]
+    loaded = service.load_conversation(conv_id)
+    assert [message.author_id for message in loaded.messages[1:]] == ["fast", "slow"]
+
+
+def test_orchestrate_parallel_stream_returns_stop_event_on_failure(service):
+    conv_id = _setup(service, ["a", "b"], {"a": "OK"})
+    handler = CLIHandler(service)
+
+    events = list(handler.orchestrate_parallel_stream(conv_id, [["a", "b"]]))
+
+    assert any(event["event"] == "error" and event["participant"] == "b" for event in events)
+    assert events[-1]["event"] == "stop"
+    assert events[-1]["reason"] == "error"

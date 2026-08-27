@@ -81,6 +81,7 @@ def test_spec_loads_and_has_paths(spec):
         "/conversations/{conversation_id}/messages",
         "/conversations/{conversation_id}/participants",
         "/conversations/{conversation_id}/participants/{participant_id}/invoke",
+        "/conversations/{conversation_id}/orchestrate-parallel-stream",
         "/agents",
     }
     missing = expected_core_paths - set(spec["paths"].keys())

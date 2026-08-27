@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+import asyncio
 import os
 from datetime import datetime, timezone
 
@@ -26,6 +27,7 @@ from conclave.domain.errors import (
     ConversationNotFound,
     EmptyConversation,
     ParticipantAlreadyRegistered,
+    ParticipantNotRegistered,
 )
 from conclave.domain.participant import ParticipantType
 
@@ -630,7 +632,6 @@ class CLIHandler:
     def orchestrate_parallel(
         self, conversation_id: str, groups: list[list[str]]
     ) -> CLIResult:
-        import asyncio
         try:
             groups = normalize_parallel_groups(groups)
         except ValueError as exc:
@@ -670,6 +671,151 @@ class CLIHandler:
                 ]
             },
         )
+
+    def orchestrate_parallel_stream(self, conversation_id: str, groups: list[list[str]]):
+        """Generator: streamt parallele Orchestrierung als SSE-faehige Events.
+
+        Antworten werden gespeichert und direkt geliefert, sobald der jeweilige
+        Participant fertig ist. Innerhalb einer Gruppe sehen alle denselben
+        Snapshot; Gruppen untereinander bleiben sequentiell.
+        """
+        groups = normalize_parallel_groups(groups)
+        async_events = self._orchestrate_parallel_stream_async(conversation_id, groups)
+        loop = asyncio.new_event_loop()
+        try:
+            while True:
+                try:
+                    yield loop.run_until_complete(async_events.__anext__())
+                except StopAsyncIteration:
+                    break
+        finally:
+            try:
+                loop.run_until_complete(async_events.aclose())
+            except Exception:
+                pass
+            loop.close()
+
+    async def _orchestrate_parallel_stream_async(self, conversation_id: str, groups: list[list[str]]):
+        total = sum(len(group) for group in groups)
+        responses = 0
+        yield {"event": "start", "groups": groups, "total": total}
+
+        for group_index, group in enumerate(groups, start=1):
+            try:
+                conversation = self._service.load_conversation(conversation_id)
+            except ConversationNotFound:
+                yield {
+                    "event": "stop",
+                    "reason": "error",
+                    "message": f"Conversation '{conversation_id}' nicht gefunden.",
+                    "type": "ConversationNotFound",
+                    "status": 404,
+                }
+                return
+
+            snapshot = ParallelOrchestrator._build_group_snapshot(conversation)
+            yield {"event": "group_start", "group": group_index, "participants": group}
+            for slot, participant_id in enumerate(group):
+                yield {"event": "invoke", "group": group_index, "slot": slot, "participant": participant_id}
+
+            async def _complete_one(slot: int, participant_id: str) -> dict:
+                try:
+                    content = await self._service.async_complete_participant(
+                        conversation_id=conversation_id,
+                        participant_id=participant_id,
+                        conversation=conversation,
+                        snapshot=snapshot,
+                    )
+                    return {"ok": True, "slot": slot, "participant": participant_id, "content": content}
+                except Exception as exc:
+                    status = 400 if isinstance(exc, EmptyConversation) else 502
+                    if isinstance(exc, ConversationNotFound):
+                        status = 404
+                    return {
+                        "ok": False,
+                        "slot": slot,
+                        "participant": participant_id,
+                        "message": str(exc),
+                        "type": type(exc).__name__,
+                        "status": status,
+                    }
+
+            tasks = [
+                asyncio.create_task(_complete_one(slot, participant_id))
+                for slot, participant_id in enumerate(group)
+            ]
+            group_error = None
+            for task in asyncio.as_completed(tasks):
+                result = await task
+                participant_id = result["participant"]
+                slot = result["slot"]
+                if not result["ok"]:
+                    group_error = result
+                    yield {
+                        "event": "error",
+                        "group": group_index,
+                        "slot": slot,
+                        "participant": participant_id,
+                        "message": result["message"],
+                        "type": result["type"],
+                        "status": result["status"],
+                    }
+                    continue
+
+                try:
+                    updated = self._service.add_model_message(
+                        conversation_id=conversation_id,
+                        participant_id=participant_id,
+                        content=result["content"],
+                    )
+                except (ConversationNotFound, ParticipantNotRegistered, EmptyConversation) as exc:
+                    group_error = {
+                        "message": str(exc),
+                        "type": type(exc).__name__,
+                        "status": 404 if isinstance(exc, ConversationNotFound) else 400,
+                    }
+                    yield {
+                        "event": "error",
+                        "group": group_index,
+                        "slot": slot,
+                        "participant": participant_id,
+                        "message": str(exc),
+                        "type": type(exc).__name__,
+                        "status": group_error["status"],
+                    }
+                    continue
+
+                message = updated.messages[-1]
+                responses += 1
+                yield {
+                    "event": "response",
+                    "group": group_index,
+                    "slot": slot,
+                    "participant": participant_id,
+                    "participant_id": participant_id,
+                    "content": message.content,
+                    "sequence": message.sequence,
+                    "message_id": message.id,
+                    "tool_events": [
+                        self._tool_event_to_dict(event)
+                        for event in self._service.list_tool_events_by_message(message.id)
+                    ],
+                }
+
+            if group_error is not None:
+                yield {
+                    "event": "stop",
+                    "reason": "error",
+                    "message": group_error["message"],
+                    "type": group_error["type"],
+                    "status": group_error["status"],
+                    "responses": responses,
+                }
+                return
+
+            yield {"event": "group_done", "group": group_index, "responses": responses}
+
+        yield {"event": "done", "responses": responses}
 
     def auto_loop(
         self,

@@ -1,6 +1,6 @@
 # API-Referenz
 
-**46 dokumentierte Endpoints** — öffentliche Personal-API.
+**47 dokumentierte Endpoints** — öffentliche Personal-API.
 
 | Methode | Pfad | Beschreibung |
 |---------|------|-------------|
@@ -35,6 +35,7 @@
 | `POST` | `/conversations/<conversation_id>/participants/<participant_id>/invoke` | Invoke Participant |
 | `POST` | `/conversations/<conversation_id>/orchestrate` | Orchestrate |
 | `POST` | `/conversations/<conversation_id>/orchestrate-parallel` | Orchestrate Parallel |
+| `POST` | `/conversations/<conversation_id>/orchestrate-parallel-stream` | Orchestrate Parallel Stream |
 | `GET` | `/conversations/<conversation_id>/participants/<participant_id>/stream` | Stream Participant |
 | `POST` | `/conversations/<conversation_id>/auto-loop` | Auto Loop |
 | `GET` | `/conversations/<conversation_id>/export` | Export Conversation |
