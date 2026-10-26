@@ -3,6 +3,7 @@ pytest.importorskip("flask")
 
 from pathlib import Path
 from unittest.mock import MagicMock
+import sqlite3
 import zipfile
 
 from conclave.api.app import create_app
@@ -131,12 +132,12 @@ def test_restore_restores_db_and_replaces_workspace(handler, tmp_path, monkeypat
     backup_dir = tmp_path / "backups"
     monkeypatch.setenv("CONCLAVE_BACKUP_DIR", str(backup_dir))
     db_path = tmp_path / "conclave.db"
-    db_path.write_text("old db", encoding="utf-8")
+    _make_db(db_path, "old db")
 
     backup_dir.mkdir()
     backup_path = backup_dir / "restore.zip"
     with zipfile.ZipFile(backup_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("conclave.db", "restored db")
+        zf.writestr("conclave.db", _db_bytes(tmp_path, "restored db"))
         zf.writestr("workspace/notes/restored.md", "restored workspace")
 
     config = ConclaveConfig(db_path=db_path, openai_api_key="sk-test")
@@ -154,7 +155,7 @@ def test_restore_restores_db_and_replaces_workspace(handler, tmp_path, monkeypat
     assert body["workspace_files_restored"] == 1
     assert body["workspace_replaced"] is True
     assert Path(body["pre_restore_backup_path"]).is_file()
-    assert db_path.read_text(encoding="utf-8") == "restored db"
+    assert _marker(db_path) == "restored db"
     assert (workspace / "notes" / "restored.md").read_text(encoding="utf-8") == "restored workspace"
     assert not (workspace / "old.txt").exists()
 
@@ -164,7 +165,7 @@ def test_restore_rejects_zip_slip_path(handler, tmp_path, monkeypatch):
     workspace.mkdir()
     monkeypatch.setenv("CONCLAVE_WORKSPACE", str(workspace))
     db_path = tmp_path / "conclave.db"
-    db_path.write_text("old db", encoding="utf-8")
+    _make_db(db_path, "old db")
     backup_dir = tmp_path / "backups"
     backup_dir.mkdir()
     monkeypatch.setenv("CONCLAVE_BACKUP_DIR", str(backup_dir))
@@ -201,13 +202,13 @@ def restore_env(handler, tmp_path, monkeypatch):
     backup_dir.mkdir()
     monkeypatch.setenv("CONCLAVE_BACKUP_DIR", str(backup_dir))
     db_path = tmp_path / "conclave.db"
-    db_path.write_text("old db", encoding="utf-8")
+    _make_db(db_path, "old db")
     with zipfile.ZipFile(backup_dir / "good.zip", "w") as zf:
-        zf.writestr("conclave.db", "restored db")
+        zf.writestr("conclave.db", _db_bytes(tmp_path, "restored db"))
         zf.writestr("workspace/new.md", "neu")
     outside = tmp_path / "outside.zip"
     with zipfile.ZipFile(outside, "w") as zf:
-        zf.writestr("conclave.db", "evil db")
+        zf.writestr("conclave.db", _db_bytes(tmp_path, "evil db"))
     app = create_app(handler, config=ConclaveConfig(db_path=db_path))
     app.config["TESTING"] = True
     with app.test_client() as c:
@@ -222,14 +223,14 @@ def test_restore_rejects_names_that_are_not_plain_backup_files(restore_env, name
     resp = c.post("/restore", json={"backup": name})
     assert resp.status_code == 400
     assert resp.get_json()["status"] == "invalid_request"
-    assert db_path.read_text(encoding="utf-8") == "old db"
+    assert _marker(db_path) == "old db"
 
 
 def test_restore_rejects_absolute_paths(restore_env):
     c, _, backup_dir, db_path, outside = restore_env
     for value in (str(outside), str(backup_dir / "good.zip")):
         assert c.post("/restore", json={"backup": value}).status_code == 400
-    assert db_path.read_text(encoding="utf-8") == "old db"
+    assert _marker(db_path) == "old db"
 
 
 def test_restore_rejects_legacy_backup_path_field(restore_env):
@@ -237,7 +238,7 @@ def test_restore_rejects_legacy_backup_path_field(restore_env):
     resp = c.post("/restore", json={"backup_path": str(outside)})
     assert resp.status_code == 400
     assert "GET /backups" in resp.get_json()["error"]
-    assert db_path.read_text(encoding="utf-8") == "old db"
+    assert _marker(db_path) == "old db"
 
 
 def test_restore_rejects_symlink_leaving_backup_dir(restore_env):
@@ -248,7 +249,7 @@ def test_restore_rejects_symlink_leaving_backup_dir(restore_env):
     except OSError:
         pytest.skip("Symlinks nicht verfuegbar")
     assert c.post("/restore", json={"backup": "link.zip"}).status_code == 400
-    assert db_path.read_text(encoding="utf-8") == "old db"
+    assert _marker(db_path) == "old db"
 
 
 def test_restore_unknown_backup_returns_404(restore_env):
@@ -262,7 +263,7 @@ def test_restore_keeps_workspace_by_default(restore_env):
     body = resp.get_json()
     assert resp.status_code == 200
     assert body["workspace_replaced"] is False
-    assert db_path.read_text(encoding="utf-8") == "restored db"
+    assert _marker(db_path) == "restored db"
     assert (workspace / "keep.txt").read_text(encoding="utf-8") == "bleibt"
     assert (workspace / "new.md").read_text(encoding="utf-8") == "neu"
 
@@ -272,7 +273,7 @@ def test_replace_workspace_requires_confirmation(restore_env):
     resp = c.post("/restore", json={"backup": "good.zip", "replace_workspace": True})
     assert resp.status_code == 400
     assert resp.get_json()["status"] == "confirmation_required"
-    assert db_path.read_text(encoding="utf-8") == "old db"
+    assert _marker(db_path) == "old db"
     assert (workspace / "keep.txt").exists()
 
 
@@ -310,3 +311,53 @@ def test_backup_response_names_the_file_for_restore(client, tmp_path, monkeypatc
     monkeypatch.setenv("CONCLAVE_WORKSPACE", str(tmp_path / "ws"))
     name = client.post("/backup", json={}).get_json()["backup"]
     assert name in [b["name"] for b in client.get("/backups").get_json()["backups"]]
+
+
+
+def _make_db(path, marker):
+    with sqlite3.connect(path) as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS marker (value TEXT)")
+        conn.execute("DELETE FROM marker")
+        conn.execute("INSERT INTO marker VALUES (?)", (marker,))
+    conn.close()
+
+
+def _db_bytes(tmp_path, marker):
+    path = tmp_path / f"src-{abs(hash(marker))}.db"
+    _make_db(path, marker)
+    return path.read_bytes()
+
+
+def _marker(path):
+    conn = sqlite3.connect(path)
+    try:
+        return conn.execute("SELECT value FROM marker").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_restore_rejects_backup_without_valid_sqlite_db(restore_env):
+    c, workspace, backup_dir, db_path, _ = restore_env
+    with zipfile.ZipFile(backup_dir / "broken.zip", "w") as zf:
+        zf.writestr("conclave.db", "not a database")
+        zf.writestr("workspace/should-not-appear.md", "x")
+    resp = c.post("/restore", json={"backup": "broken.zip"})
+    assert resp.status_code == 400
+    assert resp.get_json()["status"] == "invalid_backup"
+    assert _marker(db_path) == "old db"
+    assert not (workspace / "should-not-appear.md").exists()
+
+
+def test_restore_is_visible_to_connections_that_stay_open(restore_env):
+    """Laufender Server: offene Verbindungen sehen die wiederhergestellten Daten (B15)."""
+    c, _, _, db_path, _ = restore_env
+    with sqlite3.connect(db_path) as wal:
+        wal.execute("PRAGMA journal_mode=WAL")
+    open_conn = sqlite3.connect(db_path)
+    try:
+        assert open_conn.execute("SELECT value FROM marker").fetchone()[0] == "old db"
+        assert c.post("/restore", json={"backup": "good.zip"}).status_code == 200
+        assert open_conn.execute("SELECT value FROM marker").fetchone()[0] == "restored db"
+    finally:
+        open_conn.close()
+    assert _marker(db_path) == "restored db"

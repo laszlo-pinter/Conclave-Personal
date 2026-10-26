@@ -587,7 +587,8 @@ def _run_server(args, should_open_browser: bool = False) -> int:
     print(f"Conclave Logs: {log_file}")
     if not os.environ.get("CONCLAVE_API_KEY"):
         print(f"Conclave API-Token: {token_path()}")
-    app.run(host=config.host, port=config.port, debug=config.debug)
+    from conclave.runtime.serve import serve
+    serve(app, config.host, config.port, debug=config.debug)
     return 0
 
 

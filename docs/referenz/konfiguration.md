@@ -12,10 +12,11 @@ Alle Konfiguration über Umgebungsvariablen. TOML-Config als Fallback.
 
 | Variable | Default | Beschreibung |
 |----------|---------|-------------|
-| CONCLAVE_MODE | development | `development` (keine Auth-Pflicht) / `production` (Auth + Secret-Key-Pflicht) |
+| CONCLAVE_MODE | development | `development` (Token automatisch aus `api.token`) / `production` (`CONCLAVE_API_KEY` und Secret-Key Pflicht) |
 | CONCLAVE_HOST | 127.0.0.1 | Bind-Adresse |
 | CONCLAVE_PORT | 8000 | Server-Port |
 | CONCLAVE_LOG_LEVEL | INFO | DEBUG / INFO / WARNING / ERROR |
+| CONCLAVE_SERVER_THREADS | 16 | Threads des WSGI-Servers (waitress). Laufende Streams belegen je einen Thread |
 | CONCLAVE_WORKERS | 1 | Gunicorn Worker-Anzahl |
 
 ## Datenbank

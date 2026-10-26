@@ -11,6 +11,7 @@ from conclave.cli.config import ConclaveConfig
 from conclave.cli.handler import CLIHandler
 from conclave.infrastructure.auth import StaticKeyAuthService
 from conclave.runtime.api_token import load_or_create_token
+from conclave.infrastructure.sqlite.connection import ThreadLocalConnection
 
 def _seed_agents(agent_service):
     """Registriert Standard-Agents aus Env-Vars beim Start (idempotent).
@@ -115,9 +116,8 @@ def _build_postgres(config):
 
 def _build_sqlite(config):
     """Baut alle Services mit SQLite."""
-    import sqlite3
-    conn = sqlite3.connect(str(config.db_path), check_same_thread=False)
-    conn.execute("PRAGMA journal_mode=WAL")
+    # Eine Verbindung je Thread statt einer geteilten Verbindung (B6)
+    conn = ThreadLocalConnection(config.db_path)
 
     from conclave.infrastructure.sqlite.schema import initialize_schema
     initialize_schema(conn)
@@ -128,7 +128,7 @@ def _build_sqlite(config):
     from conclave.infrastructure.sqlite.tool_event_repository import SQLiteToolEventRepository
 
     service = build_service(config=config, connection=conn)
-    service.set_audit_repository(SQLiteAuditRepository(conn))
+    service.set_audit_repository(SQLiteAuditRepository(conn, autocommit=True))
     service.set_run_repository(SQLiteRunRepository(conn))
     service.set_tool_event_repository(SQLiteToolEventRepository(conn, autocommit=True))
     agent_service = build_agent_service(config=config, connection=conn)
@@ -171,9 +171,28 @@ def _build_app(config: ConclaveConfig | None = None):
         config.api_key = load_or_create_token()
     auth_service = StaticKeyAuthService(config.api_key)
 
-    return create_app(handler, auth_service=auth_service,
-                      agent_service=agent_service, config=config,
-                      service=service), config
+    app = create_app(handler, auth_service=auth_service,
+                     agent_service=agent_service, config=config,
+                     service=service)
+    if isinstance(conn, ThreadLocalConnection):
+        _finish_transactions_per_request(app, conn)
+    return app, config
+
+
+def _finish_transactions_per_request(app, conn) -> None:
+    """Keine offene Transaktion ueber das Ende einer Anfrage hinaus (B6).
+
+    Mit einer Verbindung je Thread wuerde ein vergessener Commit den Schreib-Lock
+    des Threads festhalten und alle anderen Schreiber blockieren.
+    """
+    @app.teardown_request
+    def _finish(exc):
+        if not conn.in_transaction:
+            return
+        if exc is None:
+            conn.commit()
+        else:
+            conn.rollback()
 
 
 def create_wsgi_app():
@@ -188,7 +207,8 @@ def main() -> None:
     except RuntimeError as e:
         print(f"FEHLER: {e}", file=sys.stderr)
         raise SystemExit(1)
-    app.run(host=config.host, port=config.port, debug=config.debug)
+    from conclave.runtime.serve import serve
+    serve(app, config.host, config.port, debug=config.debug)
 
 
 if __name__ == "__main__":

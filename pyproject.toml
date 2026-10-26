@@ -28,6 +28,7 @@ dependencies = [
     "flask>=3.0",
     "flask-limiter>=4.0",
     "httpx>=0.27",
+    "waitress>=3.0.2",
 ]
 
 [project.urls]
@@ -40,14 +41,14 @@ Changelog = "https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/r
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.40.0"]
 openai = ["openai>=1.0"]
-api = ["flask>=3.0", "flask-limiter>=4.0"]
+api = ["flask>=3.0", "flask-limiter>=4.0", "waitress>=3.0.2"]
 crypto = ["cryptography>=42.0"]
 postgres = ["psycopg2-binary>=2.9"]
 mcp = ["mcp>=1.0", "httpx>=0.27"]
 dev     = ["pytest>=9.0"]
 dev-api = ["pytest>=9.0", "flask>=3.0"]
 dev-ui  = ["pytest>=9.0", "playwright==1.64.1"]
-dev-all = ["pytest>=9.0", "pytest-asyncio>=1.0", "flask>=3.0", "flask-limiter>=4.0", "httpx>=0.27", "anthropic>=0.40.0", "openai>=1.0", "cryptography>=42.0", "psycopg2-binary>=2.9"]
+dev-all = ["pytest>=9.0", "pytest-asyncio>=1.0", "flask>=3.0", "flask-limiter>=4.0", "waitress>=3.0.2", "httpx>=0.27", "anthropic>=0.40.0", "openai>=1.0", "cryptography>=42.0", "psycopg2-binary>=2.9"]
 
 [project.scripts]
 conclave = "conclave.cli.main:main"

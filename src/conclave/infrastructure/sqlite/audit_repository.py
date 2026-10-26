@@ -6,8 +6,9 @@ from conclave.domain.audit import AuditEntry
 
 
 class SQLiteAuditRepository:
-    def __init__(self, connection):
+    def __init__(self, connection, *, autocommit: bool = False):
         self._connection = connection
+        self._autocommit = autocommit
 
     def save(self, entry: AuditEntry) -> None:
         self._connection.execute(
@@ -33,6 +34,8 @@ class SQLiteAuditRepository:
                 entry.output_tokens,
             ),
         )
+        if self._autocommit:
+            self._connection.commit()
 
     def list_by_conversation(self, conversation_id: str) -> list[AuditEntry]:
         rows = self._connection.execute(

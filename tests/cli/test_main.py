@@ -316,11 +316,11 @@ def test_desktop_command_opens_browser_with_token(monkeypatch):
     app = MagicMock()
     timer = MagicMock(side_effect=lambda delay, fn: SimpleNamespace(start=fn))
     with patch("conclave.api.server._build_app",
-               side_effect=lambda cfg: (app, SimpleNamespace(api_key="generated", host="127.0.0.1", port=8123, debug=False))),          patch("conclave.runtime.desktop.find_free_port", return_value=8123),          patch("threading.Timer", timer),          patch("conclave.cli.main.configure_logging"),          patch("conclave.cli.main.open_browser") as open_browser:
+               side_effect=lambda cfg: (app, SimpleNamespace(api_key="generated", host="127.0.0.1", port=8123, debug=False))),          patch("conclave.runtime.desktop.find_free_port", return_value=8123),          patch("threading.Timer", timer),          patch("conclave.cli.main.configure_logging"),          patch("conclave.cli.main.open_browser") as open_browser,          patch("conclave.runtime.serve.serve") as serve:
         code = run(["desktop", "--port", "8123"])
     assert code == 0
     open_browser.assert_called_once_with("http://127.0.0.1:8123#token=generated")
-    app.run.assert_called_once()
+    serve.assert_called_once_with(app, "127.0.0.1", 8123, debug=False)
 
 
 def test_server_command_uses_runtime_path():
