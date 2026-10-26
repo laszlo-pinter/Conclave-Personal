@@ -1,7 +1,7 @@
 # Release Notes: v0.2.0
 
 Conclave v0.2.0 is a security and robustness release based on the code review
-of 2026-10-26 (`docs/refactoring-plan.md`). It closes a stored XSS in the
+of 2026-10-26. It closes a stored XSS in the
 desktop UI, requires a token for the local API, ships all UI assets with the
 package and makes the server safe under parallel requests. It also contains
 breaking changes for API clients - read **Upgrading** before updating.
