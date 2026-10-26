@@ -137,3 +137,27 @@ def test_mcp_server_reads_token_per_request():
     headers_fn = source.split("def _headers()", 1)[1].split("\ndef ", 1)[0]
     assert "read_token()" in headers_fn
     assert "API_KEY = read_token()" not in source
+
+
+def test_desktop_keeps_database_path_from_config_toml(tmp_path, monkeypatch):
+    from conclave.cli.config import ConclaveConfig
+    from conclave.runtime.desktop import prepare_launch_config
+    monkeypatch.delenv("CONCLAVE_DB_PATH", raising=False)
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
+    toml = tmp_path / "config.toml"
+    custom = tmp_path / "eigene.db"
+    toml.write_text(f'[database]\npath = "{custom.as_posix()}"\n', encoding="utf-8")
+    launch = prepare_launch_config(ConclaveConfig.from_sources(toml), port=8123)
+    assert launch.config.db_path == custom
+
+
+def test_sequential_orchestrate_unknown_conversation_returns_404(service):
+    pytest.importorskip("flask")
+    from conclave.api.app import create_app
+    from conclave.cli.handler import CLIHandler
+    client = create_app(CLIHandler(service)).test_client()
+    resp = client.post("/conversations/missing/orchestrate", json={"sequence": ["a"]})
+    assert resp.status_code == 404
