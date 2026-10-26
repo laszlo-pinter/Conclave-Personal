@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 import sys
 
 from conclave.cli.bootstrap import build_agent_service, build_registry, build_service, validate_production_config
@@ -547,9 +548,12 @@ def _server_url(host: str, port: int) -> str:
 
 
 def _run_web(args) -> int:
+    from conclave.runtime.api_token import read_token
+    from conclave.runtime.browser import url_with_token
+
     config = ConclaveConfig.from_sources()
     url = args.url or _server_url(config.host, config.port)
-    open_browser(url)
+    open_browser(url_with_token(url, read_token()))
     print(f"Conclave Web: {url}")
     return 0
 
@@ -570,14 +574,19 @@ def _run_server(args, should_open_browser: bool = False) -> int:
         extra={"method": "server", "path": str(log_file)},
     )
 
+    from conclave.api.server import _build_app
+    from conclave.runtime.api_token import token_path
+    from conclave.runtime.browser import url_with_token
+
+    app, config = _build_app(launch.config)
     if should_open_browser:
         import threading
-        threading.Timer(1.0, lambda: open_browser(launch.url)).start()
+        browser_url = url_with_token(launch.url, config.api_key)
+        threading.Timer(1.0, lambda: open_browser(browser_url)).start()
         print(f"Conclave Desktop: {launch.url}")
     print(f"Conclave Logs: {log_file}")
-
-    from conclave.api.server import _build_app
-    app, config = _build_app(launch.config)
+    if not os.environ.get("CONCLAVE_API_KEY"):
+        print(f"Conclave API-Token: {token_path()}")
     app.run(host=config.host, port=config.port, debug=config.debug)
     return 0
 

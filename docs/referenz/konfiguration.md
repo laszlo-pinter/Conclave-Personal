@@ -32,7 +32,9 @@ Alle Konfiguration über Umgebungsvariablen. TOML-Config als Fallback.
 |----------|---------|-------------|
 | CONCLAVE_SECRET_KEY | — | Fernet-Key (base64). Nicht ändern nach Erstanlage! |
 | CONCLAVE_SECRET_KEY_FILE | plattformabhängig | Datei für lokalen Fernet-Key |
-| CONCLAVE_API_KEY | — | API-Authentifizierung (Bearer-Token) |
+| CONCLAVE_API_KEY | — | API-Token (Bearer). Leer: Token aus `CONCLAVE_API_TOKEN_FILE`, beim ersten Serverstart erzeugt |
+| CONCLAVE_API_TOKEN_FILE | `<config_dir>/api.token` | Datei für das automatisch erzeugte API-Token (nur Benutzer lesbar) |
+| CONCLAVE_ALLOWED_HOSTS | — | Zusätzlich erlaubte `Host`-Header (kommasepariert, optional mit Port). `localhost`, `127.0.0.1`, `[::1]` sind immer erlaubt. Pflicht bei Nicht-Loopback-`CONCLAVE_HOST` |
 | CONCLAVE_ALLOWED_ORIGINS | localhost | CORS-Allowlist (kommasepariert) |
 
 ## Provider API-Keys (Fallback)

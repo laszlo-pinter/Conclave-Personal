@@ -236,16 +236,17 @@ Add Conclave to your MCP client configuration:
     "conclave": {
       "command": "conclave-mcp",
       "env": {
-        "CONCLAVE_API_URL": "http://localhost:8000",
-        "CONCLAVE_API_KEY": ""
+        "CONCLAVE_API_URL": "http://localhost:8000"
       }
     }
   }
 }
 ```
 
-If the local API runs with authentication, set `CONCLAVE_API_KEY` to the same
-API key used by the Conclave server.
+The local API always requires a token. Without `CONCLAVE_API_KEY`, the server
+creates one on first start (`api.token` in the configuration directory) and the
+MCP server reads it from there. If the server uses an explicit
+`CONCLAVE_API_KEY`, set the same value in the MCP `env` block.
 
 ## Core Concepts
 

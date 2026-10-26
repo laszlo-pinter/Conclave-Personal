@@ -7,8 +7,25 @@ Interface.
 ## Lokale API
 
 - Standard-Host ist `127.0.0.1`.
+- Die API verlangt immer ein Token. Ist `CONCLAVE_API_KEY` nicht gesetzt,
+  erzeugt der Server beim ersten Start ein zufälliges Token und legt es in
+  `api.token` im Konfigurationsverzeichnis ab (Linux `0600`, Windows ACL nur
+  für den aktuellen Benutzer). CLI-Werkzeuge (`conclave-watch`) und der
+  MCP-Server lesen es von dort, wenn `CONCLAVE_API_KEY` leer ist.
+- Ohne Token erreichbar sind nur `GET /`, `/static/*`, `/health`, `/api-docs`
+  und `/openapi.json`.
+- `conclave desktop` und `conclave web` öffnen den Browser mit dem Token im
+  URL-Fragment (`#token=…`). Fragmente werden nicht an den Server gesendet; die
+  UI übernimmt das Token und entfernt es sofort aus der Adresszeile.
+- Der `Host`-Header wird geprüft (Schutz gegen DNS-Rebinding). Erlaubt sind
+  `localhost`, `127.0.0.1` und `[::1]` sowie Einträge aus
+  `CONCLAVE_ALLOWED_HOSTS`; andere Hosts erhalten `421`, auch mit gültigem
+  Token.
+- POST-Anfragen brauchen `Content-Type: application/json` oder den Header
+  `X-Conclave-Client`, sonst `415`. Fremde Webseiten können so keine Aktionen
+  per einfachem Formular oder `fetch` ohne CORS-Preflight auslösen (CSRF).
 - Bindung an Nicht-Loopback-Adressen wie `0.0.0.0` ist nur mit
-  `CONCLAVE_API_KEY` erlaubt.
+  `CONCLAVE_API_KEY` und `CONCLAVE_ALLOWED_HOSTS` erlaubt.
 - Im `production`-Modus muss `CONCLAVE_API_KEY` gesetzt sein.
 - Browser-Clients senden den API-Key als Bearer-Token.
 - CORS wird über `CONCLAVE_ALLOWED_ORIGINS` begrenzt.

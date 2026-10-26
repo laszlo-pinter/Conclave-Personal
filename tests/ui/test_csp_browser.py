@@ -39,7 +39,7 @@ def _ignorable(problem: str) -> bool:
 
 @pytest.fixture(scope="module")
 def ui(chromium, live_server):
-    page, response, problems, foreign = _load(chromium, live_server + "/", "#convList")
+    page, response, problems, foreign = _load(chromium, f"{live_server.url}/#token={live_server.token}", "#convList")
     yield page, response, problems, foreign
     page.close()
 
@@ -96,7 +96,7 @@ def test_markdown_rendering_works_under_csp(ui):
 
 
 def test_api_docs_render_without_violations(chromium, live_server):
-    page, response, problems, foreign = _load(chromium, live_server + "/api-docs", "#swagger-ui .info .title")
+    page, response, problems, foreign = _load(chromium, live_server.url + "/api-docs", "#swagger-ui .info .title")
     try:
         assert "script-src 'self'" in response.headers.get("content-security-policy", "")
         assert page.evaluate("window.__csp") == []

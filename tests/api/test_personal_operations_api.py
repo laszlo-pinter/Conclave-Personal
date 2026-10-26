@@ -103,7 +103,7 @@ def test_backup_creates_zip(client, tmp_path, monkeypatch):
     backup_dir = tmp_path / "backups"
     monkeypatch.setenv("CONCLAVE_BACKUP_DIR", str(backup_dir))
 
-    resp = client.post("/backup")
+    resp = client.post("/backup", json={})
 
     assert resp.status_code == 201
     backup_path = Path(resp.get_json()["backup_path"])

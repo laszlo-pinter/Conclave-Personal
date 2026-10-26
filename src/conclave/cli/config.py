@@ -31,6 +31,7 @@ class ConclaveConfig:
     gemini_api_key: str = ""
     # API-Authentifizierung
     api_key: str = ""
+    allowed_hosts: str = ""
     # Betriebsmodus
     mode: str = "development"  # "development" | "production"
 
@@ -75,6 +76,7 @@ class ConclaveConfig:
         openai_api_key = os.environ.get("OPENAI_API_KEY", "")
         gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
         api_key = os.environ.get("CONCLAVE_API_KEY", "")
+        allowed_hosts = os.environ.get("CONCLAVE_ALLOWED_HOSTS", "")
         mode = os.environ.get("CONCLAVE_MODE", "development")
         return cls(
             db_provider=provider,
@@ -89,6 +91,7 @@ class ConclaveConfig:
             openai_api_key=openai_api_key,
             gemini_api_key=gemini_api_key,
             api_key=api_key,
+            allowed_hosts=allowed_hosts,
             mode=mode,
         )
 

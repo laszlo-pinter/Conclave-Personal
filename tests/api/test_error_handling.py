@@ -73,7 +73,7 @@ class TestConversationNotFound:
 class TestParticipantNotRegistered:
     def test_returns_404(self, handler, client):
         handler.invoke_participant.side_effect = ParticipantNotRegistered("p1", "conv-1")
-        resp = client.post("/conversations/conv-1/participants/p1/invoke")
+        resp = client.post("/conversations/conv-1/participants/p1/invoke", json={})
         assert resp.status_code == 404
         body = json.loads(resp.data)
         assert body["type"] == "ParticipantNotRegistered"
@@ -94,7 +94,7 @@ class TestParticipantAlreadyRegistered:
 class TestAdapterNotFound:
     def test_returns_502(self, handler, client):
         handler.invoke_participant.side_effect = AdapterNotFound("p1")
-        resp = client.post("/conversations/conv-1/participants/p1/invoke")
+        resp = client.post("/conversations/conv-1/participants/p1/invoke", json={})
         assert resp.status_code == 502
         body = json.loads(resp.data)
         assert body["type"] == "AdapterNotFound"
@@ -123,7 +123,7 @@ class TestAgentAlreadyExists:
 class TestNoFloorGranted:
     def test_returns_409(self, handler, client):
         handler.invoke_with_floor.side_effect = NoFloorGranted("conv-1")
-        resp = client.post("/conversations/conv-1/floor/invoke")
+        resp = client.post("/conversations/conv-1/floor/invoke", json={})
         assert resp.status_code == 409
         body = json.loads(resp.data)
         assert body["type"] == "NoFloorGranted"
@@ -132,7 +132,7 @@ class TestNoFloorGranted:
 class TestEmptyConversation:
     def test_returns_400(self, handler, client):
         handler.invoke_participant.side_effect = EmptyConversation("conv-1")
-        resp = client.post("/conversations/conv-1/participants/p1/invoke")
+        resp = client.post("/conversations/conv-1/participants/p1/invoke", json={})
         assert resp.status_code == 400
         body = json.loads(resp.data)
         assert body["type"] == "EmptyConversation"
@@ -143,7 +143,7 @@ class TestEmptyConversation:
             message="Bitte zuerst eine Nachricht schreiben.",
             data={"type": "EmptyConversation", "status": 400},
         )
-        resp = client.post("/conversations/conv-1/participants/p1/invoke")
+        resp = client.post("/conversations/conv-1/participants/p1/invoke", json={})
         assert resp.status_code == 400
         body = json.loads(resp.data)
         assert body["type"] == "EmptyConversation"

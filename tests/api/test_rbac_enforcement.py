@@ -50,7 +50,7 @@ class TestViewerRoleEnforcement:
 
     def test_viewer_cannot_create_conversation(self, client):
         """Viewer hat keine POST-Rechte → 403, nicht 201."""
-        resp = client.post("/conversations", headers={"X-API-Key": "viewer-token"})
+        resp = client.post("/conversations", json={}, headers={"X-API-Key": "viewer-token"})
         assert resp.status_code == 403
 
     def test_viewer_cannot_delete_conversation(self, client):
@@ -73,7 +73,7 @@ class TestViewerRoleEnforcement:
 class TestOperatorRoleEnforcement:
 
     def test_operator_can_create_conversation(self, client):
-        resp = client.post("/conversations", headers={"X-API-Key": "operator-token"})
+        resp = client.post("/conversations", json={}, headers={"X-API-Key": "operator-token"})
         assert resp.status_code == 201
 
     def test_operator_can_read_agents(self, client):

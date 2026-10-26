@@ -7,6 +7,7 @@ stattdessen, damit sie nicht unbemerkt ausfallen.
 
 import os
 import threading
+from types import SimpleNamespace
 
 import pytest
 
@@ -36,7 +37,7 @@ def chromium():
 
 @pytest.fixture(scope="session")
 def live_server(tmp_path_factory):
-    """Echte Conclave-App (SQLite, leerer Workspace, ohne API-Key) auf einem freien Port."""
+    """Echte Conclave-App (SQLite, leerer Workspace, Token aus Token-Datei) auf einem freien Port."""
     from werkzeug.serving import make_server
 
     from conclave.api.server import _build_app
@@ -48,12 +49,14 @@ def live_server(tmp_path_factory):
         mp.setenv("CONCLAVE_WORKSPACE", str(root / "workspace"))
         mp.setenv("CONCLAVE_SECRET_KEY_FILE", str(root / "secret.key"))
         mp.setenv("CONCLAVE_BACKUP_DIR", str(root / "backups"))
-        app, _ = _build_app(ConclaveConfig(db_path=root / "conclave.db", api_key="", mode="development"))
+        mp.setenv("CONCLAVE_API_TOKEN_FILE", str(root / "api.token"))
+        mp.delenv("CONCLAVE_API_KEY", raising=False)
+        app, config = _build_app(ConclaveConfig(db_path=root / "conclave.db", api_key="", mode="development"))
         server = make_server("127.0.0.1", 0, app, threaded=True)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            yield f"http://127.0.0.1:{server.server_port}"
+            yield SimpleNamespace(url=f"http://127.0.0.1:{server.server_port}", token=config.api_key)
         finally:
             server.shutdown()
             thread.join(timeout=5)

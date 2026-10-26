@@ -14,6 +14,8 @@ import sys
 import time
 import urllib.request
 
+from conclave.runtime.api_token import read_token
+
 
 def fetch_conversation(api: str, conv_id: str, api_key: str = "") -> dict | None:
     headers = {"Content-Type": "application/json"}
@@ -49,8 +51,9 @@ def main() -> None:
     parser.add_argument("--interval", type=int, default=5, help="Poll-Intervall in Sekunden (Default: 5)")
     parser.add_argument("--since", type=int, default=0, help="Ab welcher Sequence starten (Default: 0)")
     parser.add_argument("--full", action="store_true", help="Vollstaendige Nachrichten anzeigen (Default: erste Zeile)")
-    parser.add_argument("--key", default="", help="API-Key (falls Auth aktiv)")
+    parser.add_argument("--key", default="", help="API-Token (Default: CONCLAVE_API_KEY oder lokale Token-Datei)")
     args = parser.parse_args()
+    args.key = args.key or read_token()
 
     conv = fetch_conversation(args.api, args.conversation_id, args.key)
     if conv is None:

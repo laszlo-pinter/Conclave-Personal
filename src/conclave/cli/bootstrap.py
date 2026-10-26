@@ -55,6 +55,8 @@ def validate_production_config(config: ConclaveConfig) -> list[str]:
     errors: list[str] = []
     if not _is_loopback_host(config.host) and not config.api_key:
         errors.append("CONCLAVE_API_KEY ist erforderlich wenn CONCLAVE_HOST nicht loopback ist")
+    if not _is_loopback_host(config.host) and not config.allowed_hosts:
+        errors.append("CONCLAVE_ALLOWED_HOSTS ist erforderlich wenn CONCLAVE_HOST nicht loopback ist")
 
     if config.mode != "production":
         return errors

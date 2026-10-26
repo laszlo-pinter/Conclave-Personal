@@ -66,7 +66,7 @@ class TestAuthRequired:
         assert resp.status_code == 200
 
     def test_post_with_valid_token_works(self, client):
-        resp = client.post("/conversations",
+        resp = client.post("/conversations", json={},
                            headers={"Authorization": "Bearer test-secret-key"})
         assert resp.status_code == 201
 

@@ -29,6 +29,7 @@ def crypto() -> CryptoService:
 def isolated_secret_key(monkeypatch, tmp_path):
     """Verhindert, dass Tests Secret-Key-Dateien im Benutzerprofil anlegen."""
     monkeypatch.setenv("CONCLAVE_SECRET_KEY_FILE", str(tmp_path / "secret.key"))
+    monkeypatch.setenv("CONCLAVE_API_TOKEN_FILE", str(tmp_path / "api.token"))
 
 
 @pytest.fixture

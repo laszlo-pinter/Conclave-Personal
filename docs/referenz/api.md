@@ -2,6 +2,12 @@
 
 **47 dokumentierte Endpoints** — öffentliche Personal-API.
 
+Alle Endpoints außer `GET /`, `/static/*`, `GET /health`, `GET /api-docs` und
+`GET /openapi.json` verlangen ein Token (`Authorization: Bearer <token>` oder
+`X-API-Key`). POST-Anfragen brauchen `Content-Type: application/json` (auch ohne
+Inhalt: `{}`) oder den Header `X-Conclave-Client`. Anfragen mit nicht erlaubtem
+`Host`-Header werden mit `421` abgelehnt. Details: [Sicherheit](../sicherheit.md).
+
 | Methode | Pfad | Beschreibung |
 |---------|------|-------------|
 | `GET` | `/` | Serve Ui |

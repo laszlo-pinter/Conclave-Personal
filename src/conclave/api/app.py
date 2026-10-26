@@ -73,6 +73,38 @@ CONTENT_SECURITY_POLICY = "; ".join([
 # Mikrofon nur fuer die eigene Seite (Spracheingabe in speech.js)
 PERMISSIONS_POLICY = "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
 
+# Ohne Token erreichbar (B12): UI-Seite, statische Dateien, Healthcheck, API-Doku.
+PUBLIC_GET_PATHS = frozenset({"/", "/health", "/api-docs", "/openapi.json"})
+CLIENT_HEADER = "X-Conclave-Client"
+
+# Host-Allowlist gegen DNS-Rebinding (B2). Loopback-Namen sind immer erlaubt,
+# CONCLAVE_ALLOWED_HOSTS ergaenzt sie. Eintraege ohne Port gelten fuer jeden Port.
+DEFAULT_ALLOWED_HOSTS = "localhost,127.0.0.1,[::1]"
+
+
+def _split_host(value: str) -> tuple[str, str]:
+    """'Host'-Wert in (hostname, port) zerlegen; IPv6 in eckigen Klammern oder nackt."""
+    value = value.strip().lower()
+    if value.startswith("["):
+        host, _, rest = value[1:].partition("]")
+        if rest and not rest.startswith(":"):
+            return value, ""  # fehlerhaft, z. B. "[::1].evil" - passt auf keinen Eintrag
+        return host, rest[1:]
+    if value.count(":") == 1:
+        host, port = value.split(":")
+        return host, port
+    return value, ""
+
+
+def parse_allowed_hosts(raw: str) -> set[tuple[str, str]]:
+    entries = f"{DEFAULT_ALLOWED_HOSTS},{raw or ''}".split(",")
+    return {_split_host(entry) for entry in entries if entry.strip()}
+
+
+def is_host_allowed(host_header: str, allowed: set[tuple[str, str]]) -> bool:
+    host, port = _split_host(host_header or "")
+    return bool(host) and ((host, "") in allowed or (host, port) in allowed)
+
 
 def create_app(handler: CLIHandler, auth_service=None,
                agent_service=None, config=None, service=None) -> Flask:
@@ -90,11 +122,38 @@ def create_app(handler: CLIHandler, auth_service=None,
         limiter = Limiter(get_remote_address, app=app, default_limits=["120 per minute"],
                           storage_uri="memory://")
 
+    _allowed_hosts = parse_allowed_hosts(
+        getattr(config, "allowed_hosts", "") or os.environ.get("CONCLAVE_ALLOWED_HOSTS", "")
+    )
+
+    @app.before_request
+    def _check_host():
+        if not is_host_allowed(request.host, _allowed_hosts):
+            return jsonify({"error": "Host nicht erlaubt.", "type": "InvalidHost"}), 421
+
+    @app.before_request
+    def _check_csrf():
+        # Ohne CORS-Preflight senden Browser Cross-Site nur GET/HEAD/POST mit
+        # "einfachem" Content-Type. PUT/DELETE loesen immer einen Preflight aus.
+        # Fuer POST erzwingen JSON oder ein eigener Header den Preflight (B3).
+        if request.method != "POST" or request.routing_exception is not None:
+            return  # unbekannte Routen liefern weiter 404/405
+        if request.mimetype == "application/json" or CLIENT_HEADER in request.headers:
+            return
+        return jsonify({
+            "error": f"Content-Type application/json oder Header {CLIENT_HEADER} erforderlich.",
+            "type": "UnsupportedMediaType",
+        }), 415
+
     @app.before_request
     def _authenticate():
         if request.method == "OPTIONS":
             return
         if auth_service is None:
+            return
+        if request.method in ("GET", "HEAD") and (
+            request.path in PUBLIC_GET_PATHS or request.path.startswith("/static/")
+        ):
             return
         token = None
         auth_header = request.headers.get("Authorization", "")
@@ -160,7 +219,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         origin = request.headers.get("Origin", "")
         if origin and origin in _cors_allowed:
             response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-API-Key"
+            response.headers["Access-Control-Allow-Headers"] = f"Content-Type, Authorization, X-API-Key, {CLIENT_HEADER}"
             response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         return response
 

@@ -10,6 +10,7 @@ from conclave.cli.bootstrap import (
 from conclave.cli.config import ConclaveConfig
 from conclave.cli.handler import CLIHandler
 from conclave.infrastructure.auth import StaticKeyAuthService
+from conclave.runtime.api_token import load_or_create_token
 
 def _seed_agents(agent_service):
     """Registriert Standard-Agents aus Env-Vars beim Start (idempotent).
@@ -165,7 +166,10 @@ def _build_app(config: ConclaveConfig | None = None):
     }
     handler = CLIHandler(service, agent_service=agent_service,
                          provider_fallback_keys=provider_fallback_keys)
-    auth_service = StaticKeyAuthService(config.api_key) if config.api_key else None
+    # Token ist immer Pflicht (B2): ohne CONCLAVE_API_KEY wird die Token-Datei verwendet.
+    if not config.api_key:
+        config.api_key = load_or_create_token()
+    auth_service = StaticKeyAuthService(config.api_key)
 
     return create_app(handler, auth_service=auth_service,
                       agent_service=agent_service, config=config,

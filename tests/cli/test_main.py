@@ -292,11 +292,35 @@ def test_restore_command_calls_handler(tmp_path):
     assert kwargs["replace_workspace"] is False
 
 
-def test_web_command_opens_browser():
+def test_web_command_opens_browser(monkeypatch):
+    monkeypatch.delenv("CONCLAVE_API_KEY", raising=False)
     with patch("conclave.cli.main.open_browser") as open_browser:
         code = run(["web", "--url", "http://127.0.0.1:8123"])
     assert code == 0
     open_browser.assert_called_once_with("http://127.0.0.1:8123")
+
+
+def test_web_command_passes_token_in_fragment(monkeypatch):
+    monkeypatch.setenv("CONCLAVE_API_KEY", "tok/en+1")
+    with patch("conclave.cli.main.open_browser") as open_browser:
+        code = run(["web", "--url", "http://127.0.0.1:8123"])
+    assert code == 0
+    open_browser.assert_called_once_with("http://127.0.0.1:8123#token=tok%2Fen%2B1")
+
+
+def test_desktop_command_opens_browser_with_token(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    monkeypatch.delenv("CONCLAVE_API_KEY", raising=False)
+    app = MagicMock()
+    timer = MagicMock(side_effect=lambda delay, fn: SimpleNamespace(start=fn))
+    with patch("conclave.api.server._build_app",
+               side_effect=lambda cfg: (app, SimpleNamespace(api_key="generated", host="127.0.0.1", port=8123, debug=False))),          patch("conclave.runtime.desktop.find_free_port", return_value=8123),          patch("threading.Timer", timer),          patch("conclave.cli.main.configure_logging"),          patch("conclave.cli.main.open_browser") as open_browser:
+        code = run(["desktop", "--port", "8123"])
+    assert code == 0
+    open_browser.assert_called_once_with("http://127.0.0.1:8123#token=generated")
+    app.run.assert_called_once()
 
 
 def test_server_command_uses_runtime_path():
