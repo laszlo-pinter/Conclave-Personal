@@ -13,7 +13,7 @@ answer is correct. It gives users a structured workspace for comparing model
 outputs, tracking runs, and deliberately choosing the next step. The human
 decides. Always.
 
-> Status: v0.2.0 Alpha. The primary path is local, desktop-first, and designed
+> Status: v0.2.1 Alpha. The primary path is local, desktop-first, and designed
 > for individual users on Windows and Linux.
 
 ![Conclave Studio](https://raw.githubusercontent.com/laszlo-pinter/Conclave-Personal/main/docs/assets/screenshots/conclave-studio-desktop.png)
@@ -224,7 +224,7 @@ Conclave includes an MCP server for Claude Desktop, Claude Code, and other
 Anthropic-compatible MCP clients. It exposes Conclave conversations, agents,
 messages, orchestration, workspace files, and usage as local tools.
 
-Install with MCP support:
+Install with MCP support (this installs the MCP Python SDK 2.x):
 
 ```bash
 pip install "conclave-personal[mcp]"
@@ -236,7 +236,14 @@ Start Conclave locally:
 conclave server --host 127.0.0.1 --port 8000
 ```
 
-Add Conclave to your MCP client configuration:
+In Claude Code, register it with one command (use the full path to
+`conclave-mcp` if its scripts folder is not on `PATH`):
+
+```bash
+claude mcp add Conclave -s user -e CONCLAVE_API_URL=http://localhost:8000 -- conclave-mcp
+```
+
+Other MCP clients use a configuration like this:
 
 ```json
 {
@@ -261,6 +268,10 @@ creates one on first start (`api.token` in the configuration directory) and the
 MCP server reads it from there on every request, so the server may also be
 started after the MCP client. If the server uses an explicit
 `CONCLAVE_API_KEY`, set the same value in the MCP `env` block.
+
+Tool results are returned as JSON text. Errors from the Conclave API (for
+example a missing token or an unreachable server) are reported to the model as
+tool errors with Conclave's own message.
 
 ## Core Concepts
 
@@ -368,6 +379,7 @@ Important documents:
 - [Example workflows](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/beispiel-workflows.md)
 - [Security](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/sicherheit.md)
 - [Configuration](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/referenz/konfiguration.md)
+- [Release Notes v0.2.1](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.2.1.md)
 - [Release Notes v0.2.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.2.0.md)
 - [Release Notes v0.1.20](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.1.20.md)
 - [Release Notes v0.1.19](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.1.19.md)
@@ -384,7 +396,7 @@ Important documents:
 
 ## Known Limitations
 
-v0.2.0 remains alpha. Known limitations:
+v0.2.1 remains alpha. Known limitations:
 
 - Provider compatibility varies by API, model, account, and region.
 - Remote providers receive the data required for the model call.
@@ -398,7 +410,8 @@ CI runs the jobs `test` (Ubuntu and Windows, Python 3.11 and 3.12),
 `ui-browser` (Playwright browser tests in Chromium), `security` (`pip-audit`,
 `bandit`) and `build` (sdist and wheel, artifact inspection).
 
-The v0.2.0 surface was verified with these checks:
+The v0.2.1 surface was verified with these checks (v0.2.1 changes only the
+MCP server; the other checks were run for v0.2.0):
 
 - `python -m pytest` (the Playwright browser tests for XSS protection, CSP,
   token login and the settings page only run with the browser test setup
@@ -407,6 +420,8 @@ The v0.2.0 surface was verified with these checks:
 - Installation from the built wheel in a fresh environment (manual).
 - `conclave --help`
 - `conclave-api` from the installed wheel (token file, CSP header, `/health`)
+- `conclave-mcp` from the installed wheel: MCP handshake and tool listing over
+  stdio (MCP Python SDK 2.x); MCP tests run in CI
 - `conclave desktop` end-to-end with real providers (manual)
 - `pip-audit` and `bandit` (run manually for this release, also in CI)
 - Artifact inspection without workspace data, databases, keys, logs, and old
