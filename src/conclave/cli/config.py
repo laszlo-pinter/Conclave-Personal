@@ -11,6 +11,14 @@ from conclave.runtime.env import env_secret
 
 _RUNTIME_PATHS = get_runtime_paths()
 DEFAULT_CONFIG_PATH = _RUNTIME_PATHS.config_dir / "config.toml"
+
+
+def default_config_path() -> Path:
+    """config.toml: CONCLAVE_CONFIG_FILE, sonst Plattform-Default (zur Aufrufzeit ermittelt)."""
+    override = os.environ.get("CONCLAVE_CONFIG_FILE", "").strip()
+    if override:
+        return Path(override).expanduser()
+    return get_runtime_paths().config_dir / "config.toml"
 DEFAULT_DB_PATH = _RUNTIME_PATHS.db_path
 # flask-limiter-Syntax, pro Route und Client-IP; "off" schaltet die Begrenzung ab
 DEFAULT_RATE_LIMIT = "120 per minute"
@@ -45,12 +53,13 @@ class ConclaveConfig:
     @classmethod
     def from_sources(
         cls,
-        config_path: Path = DEFAULT_CONFIG_PATH,
+        config_path: Path | None = None,
     ) -> "ConclaveConfig":
         """Lädt Config aus TOML, überlagert mit Env-Vars.
 
         Priorität: Env-Var > TOML > Default.
         """
+        config_path = config_path or default_config_path()
         # 1. TOML laden
         data: dict = {}
         if config_path.exists():
@@ -113,8 +122,9 @@ class ConclaveConfig:
         )
 
 
-def load_config(config_path: Path = DEFAULT_CONFIG_PATH) -> ConclaveConfig:
+def load_config(config_path: Path | None = None) -> ConclaveConfig:
     """Rückwärtskompatible Funktion — delegiert an from_sources."""
+    config_path = config_path or default_config_path()
     if not config_path.exists():
         return ConclaveConfig()
 

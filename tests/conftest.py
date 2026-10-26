@@ -31,6 +31,7 @@ def isolated_secret_key(monkeypatch, tmp_path):
     monkeypatch.setenv("CONCLAVE_SECRET_KEY_FILE", str(tmp_path / "secret.key"))
     monkeypatch.setenv("CONCLAVE_API_TOKEN_FILE", str(tmp_path / "api.token"))
     monkeypatch.setenv("CONCLAVE_LOG_DIR", str(tmp_path / "logs"))
+    monkeypatch.setenv("CONCLAVE_CONFIG_FILE", str(tmp_path / "config.toml"))
 
 
 @pytest.fixture

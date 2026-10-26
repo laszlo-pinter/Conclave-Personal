@@ -177,3 +177,15 @@ def test_successful_reads_are_not_logged_at_info(handler, file_logging):
     assert not any(m.startswith("GET /static/") for m in messages)
     assert any(m.startswith("POST /conversations") for m in messages)
     assert any(m.startswith("GET /does-not-exist") for m in messages)
+
+
+def test_config_file_location_can_be_overridden(monkeypatch, tmp_path):
+    from conclave.cli.config import default_config_path
+    target = tmp_path / "eigene.toml"
+    target.write_text('[server]\nrate_limit = "7/minute"\n', encoding="utf-8")
+    monkeypatch.setenv("CONCLAVE_CONFIG_FILE", str(target))
+    monkeypatch.delenv("CONCLAVE_RATE_LIMIT", raising=False)
+    assert default_config_path() == target
+    config = ConclaveConfig.from_sources()
+    assert config.config_path == target
+    assert config.rate_limit == "7/minute"
