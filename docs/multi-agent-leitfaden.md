@@ -7,18 +7,34 @@
 
 ## Das Wichtigste zuerst: Token-Explosion ist real
 
-Bei sequentieller Orchestrierung wächst der Kontext quadratisch.
-Jeder Agent sieht alle vorherigen Nachrichten. Bei 100 Nachrichten
-mit ~300 Tokens Durchschnitt sind das am Ende ~30.000 Tokens pro
-Aufruf — nur für den Kontext.
+Ohne Kürzung wächst der Kontext bei sequentieller Orchestrierung
+quadratisch: Jeder Agent sieht alle vorherigen Nachrichten. Bei 100
+Nachrichten mit ~300 Tokens Durchschnitt sind das am Ende ~30.000
+Tokens pro Aufruf — nur für den Kontext.
+
+**Was Conclave tatsächlich sendet:**
+
+- **Agenten mit Preset** (Universal-Adapter) erhalten nur die erste
+  User-Nachricht plus die letzten 24 Nachrichten
+  (`CONCLAVE_MAX_MESSAGES`, Default 25). In der UI angelegte Agenten
+  haben immer ein Preset, fallen also immer unter diese Kürzung.
+- **Volle Historie** erhalten nur Agenten über die nativen Adapter:
+  per CLI angelegte Agenten mit Provider `anthropic` oder `openai`
+  ohne Preset.
+
+Die Kürzung begrenzt den Kontext pro Aufruf, aber jede Antwort bleibt
+eine bezahlte Ausgabe, und bis zum Erreichen des Fensters wächst der
+Kontext weiter.
 
 **Drei Agenten sind nicht 50% teurer als zwei. Sie sind 100% teurer.**
+(Gilt ohne Kürzung; mit Kürzung wächst der Kontext nur bis zum Fenster.)
 
 Jede zusätzliche Antwort vergrößert den Kontext für alle
 folgenden Aufrufe. Das führt zu:
 - API-Rate-Limits bei langen Sessions
 - Abnehmender Antwortqualität (Kontext überflutet den Prompt)
-- Unvermeidlichem Abbruch bei >30.000 Tokens pro Aufruf
+- In den Durchläufen beobachteten Abbrüchen bei >30.000 Tokens pro
+  Aufruf (Beobachtung beim jeweiligen Provider, kein Limit in Conclave)
 
 ---
 
@@ -47,7 +63,7 @@ Mensch (passiv) → Claude + GPT + Gemini
 ```
 
 - **Nachrichten:** 117 (davon 64 Setup)
-- **Token-Limit:** Erreicht bei >30.000 Tokens
+- **Token-Limit:** Abbruch beobachtet bei >30.000 Tokens (kein Limit in Conclave)
 - **Ergebnis:** Substanzloser Plan ohne Bezug zur Realität
 
 **Was schiefging:**
@@ -64,6 +80,12 @@ Weg zu hohen Kosten bei null Ergebnis.
 
 ### Setup 3: Drei Agenten + AI-Moderator (kein Verifikator)
 
+Conclave hat keine eingebaute Moderator-Rolle (Startrollen: Writer,
+Reviewer, Critic, Researcher, Planner, Custom). "AI-Moderator" meint
+hier einen externen Agenten (z.B. Claude Code), der Conclave über den
+MCP-Server (`conclave_create_conversation`, `conclave_send_message`,
+`conclave_orchestrate` …) steuert.
+
 ```
 AI-Moderator → Claude + GPT + Gemini (parallel)
 ```
@@ -75,13 +97,27 @@ AI-Moderator → Claude + GPT + Gemini (parallel)
 **Was schiefging:**
 - Die Agenten hatten den Quellcode im Kontext und haben trotzdem
   aus dem Trainingsvorwissen generiert statt den Code zu lesen
-- "openai" → Chat Completions API (tatsächlich: Responses API)
-- "docker-compose" → postgres:16-alpine (tatsächlich: postgres:17)
+- Beispiele aus dem damaligen Durchlauf (historische Beobachtung,
+  Codestand 04/2026; heute gibt es die Presets `openai` und
+  `openai-responses` nebeneinander, eine docker-compose-Datei liegt
+  nicht mehr im Repository): Angaben zur OpenAI-API und zu
+  Postgres-Versionen wurden aus dem Vorwissen erfunden statt dem Code
+  entnommen
 - Alle drei Agenten zeigten dasselbe Verhalten
 
-**Lektion:** Chat-Agents im API-Paradigma können Code nicht
-zuverlässig analysieren. Für Code-Aufgaben braucht man
+**Lektion:** Chat-Agents im API-Paradigma haben Code in diesem
+Durchlauf nicht zuverlässig analysiert. Für Code-Aufgaben braucht man
 einen Verifikator.
+
+Hinweis: Die Beobachtung entstand ohne die heutigen
+Workspace-Mechanismen. Agenten bekommen Dateien gezielt über
+`@workspace/<pfad>` in der Nachricht oder über `context_files:` in den
+Conversation-Regeln (lädt Workspace-Dateien in den System-Prompt) und
+können selbst `@read(<pfad>)` und `@save(<pfad>)` verwenden. Es gelten
+dieselben Grenzen: nur innerhalb des Workspace, keine versteckten
+Pfade, Agent-Leselimit. `context_files:`, `@read()` und `@save()`
+wertet nur der Universal-Adapter aus (Agenten mit Preset). Das ersetzt
+keinen Verifikator, verbessert aber die Faktenbasis.
 
 ### Setup 4: Hybridmodell — Hypothesen + Verifikation
 
@@ -92,6 +128,10 @@ AI-Moderator → Claude + GPT + Gemini (Hypothesen, parallel)
                           ↓
                Claude + GPT + Gemini (Diskussion, sequentiell)
 ```
+
+AI-Moderator und Verifikator sind keine Conclave-Rollen, sondern ein
+externer Tool-Use-Agent (hier Claude Code), der Conclave über den
+MCP-Server steuert und selbst Dateien öffnet.
 
 - **Nachrichten:** 4 pro Aufgabe + Verifikationsrunde
 - **Token-Limit:** Nicht erreicht
@@ -138,28 +178,56 @@ mehrerer Perspektiven und bei Diskussionen.
 
 **Nie eine Endlos-Conversation für mehrere Aufgaben.**
 
+Es gibt keinen importierbaren Python-Client. Die Beispiele in diesem
+Abschnitt sind Pseudocode für die MCP-Tools des Conclave-MCP-Servers
+(`conclave_create_conversation(topic)`,
+`conclave_send_message(conversation_id, content)`,
+`conclave_orchestrate(conversation_id, sequence, parallel)`); daneben
+steht jeweils die CLI-Entsprechung.
+
 ```python
+# Pseudocode (MCP-Tools)
 # SCHLECHT: Alles in einer Conversation
-conv = conclave.create_conversation("Refactoring")
+conv = conclave_create_conversation(topic="Refactoring")
 # ... 117 Nachrichten später: Token-Limit, substanzloses Ergebnis
 
 # GUT: Eine Conversation pro Aufgabe
-conv1 = conclave.create_conversation("Aufgabe 1: Bestandsaufnahme")
+conv1 = conclave_create_conversation(topic="Aufgabe 1: Bestandsaufnahme")
 # ... 4 Nachrichten, Ergebnis als Dokument speichern
-conv2 = conclave.create_conversation("Aufgabe 2: Risikobewertung")
+conv2 = conclave_create_conversation(topic="Aufgabe 2: Risikobewertung")
 # ... 4 Nachrichten, baut auf Ergebnis von Aufgabe 1 auf
+```
+
+CLI:
+
+```powershell
+$conv1 = (conclave --json new | ConvertFrom-Json).conversation_id
+conclave topic $conv1 "Aufgabe 1: Bestandsaufnahme"
 ```
 
 ### 2. Parallel für Analyse, sequentiell für Diskussion
 
 ```python
+# Pseudocode (MCP-Tool conclave_orchestrate)
 # ANALYSE: Jeder liest unabhängig
-result = conclave.orchestrate(conv_id, ["Claude", "GPT", "Gemini"],
-                               parallel=True)
+result = conclave_orchestrate(conversation_id=conv_id,
+                              sequence=["Claude", "GPT", "Gemini"],
+                              parallel=True)
 
 # DISKUSSION: Jeder sieht die Vorgänger
-result = conclave.orchestrate(conv_id, ["Claude", "GPT", "Gemini"],
-                               parallel=False)
+result = conclave_orchestrate(conversation_id=conv_id,
+                              sequence=["Claude", "GPT", "Gemini"],
+                              parallel=False)
+```
+
+CLI:
+
+```powershell
+# ANALYSE: eine Gruppe, gleichzeitig ausgeführt
+conclave orchestrate-parallel $conv --groups Claude,GPT,Gemini
+
+# DISKUSSION: der Reihe nach
+conclave orchestrate $conv Claude GPT Gemini
 ```
 
 Paralleler Modus verhindert den Anker-Effekt: Der erste Agent
@@ -222,8 +290,9 @@ gehört in den ersten Prompt oder in die Chat-Rules, nicht in
 eine Verhandlung mit den Agenten.
 
 ```python
+# Pseudocode (MCP-Tool conclave_send_message; CLI: conclave message $conv "...")
 # GUT: Alles in einer Nachricht
-conclave.send_message(conv_id, """
+conclave_send_message(conversation_id=conv_id, content="""
 Rollen: Claude=Architekt, GPT=Entwickler. Feststehend.
 Regel: Max 15 Zeilen. Belegpflicht. Kein Fliesstext.
 Aufgabe: [konkrete Aufgabe]
@@ -231,13 +300,20 @@ Beginnt jetzt.
 """)
 
 # SCHLECHT: Rollen diskutieren lassen
-conclave.send_message(conv_id, "Wer möchte welche Rolle?")
+conclave_send_message(conversation_id=conv_id, content="Wer möchte welche Rolle?")
 # → 20 Nachrichten Verhandlung, 0 Ergebnis
 ```
 
 ---
 
 ## Token-Budget Rechner
+
+Die folgende Rechnung gilt **ohne Kürzung**, also für Agenten mit
+voller Historie (native Adapter). Agenten mit Preset erhalten pro
+Aufruf höchstens die erste User-Nachricht plus die letzten 24
+Nachrichten (`CONCLAVE_MAX_MESSAGES`, Default 25); bei ~300 Tokens
+pro Nachricht liegt der Kontext dort also bei höchstens ~7.500 Tokens
+zuzüglich System-Prompt.
 
 | Agenten | Nachrichten | ~Tokens/Nachricht | Kontext bei letztem Aufruf | Gesamt-Session |
 |---------|-------------|-------------------|---------------------------|----------------|
@@ -278,9 +354,10 @@ Wenn du ein Conclave-Setup planst, entscheide entlang dieser Achsen:
 1. **Chat vs. Tool-Use:** Brauche ich Faktenverifikation? → Verifikator einbinden
 2. **Fakten vs. Hypothesen:** Sollen die Agents behaupten oder vermuten? → "Ich vermute" erzwingt bessere Kalibrierung
 3. **Einzel vs. Hybrid:** Reicht ein Agent, oder brauche ich Perspektivenvielfalt? → Zwei Agenten mit verschiedenen Rollen
-4. **API vs. Web:** Muss der Agent Code lesen? → Web-Interface ist zuverlässiger
+4. **API vs. Web:** Muss der Agent Code lesen? → In den Durchläufen war das Web-Interface zuverlässiger; in Conclave Dateien gezielt per `@workspace/`, `context_files:` oder `@read()` bereitstellen
 
 > Chat-Agents können nicht lesen, aber sie können fragen.
+> (Beobachtung aus den Durchläufen ohne `@workspace/`, `@read()` und `context_files:`.)
 > Tool-Use-Agents können lesen, aber sie brauchen Fragen.
 > Web-Agents mit Extended Thinking können beides —
 > wenn man ihnen erlaubt, "ich weiss es nicht" zu sagen.

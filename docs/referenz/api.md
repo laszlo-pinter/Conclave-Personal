@@ -4,8 +4,10 @@
 
 Alle Endpoints außer `GET /`, `/static/*`, `GET /health`, `GET /api-docs` und
 `GET /openapi.json` verlangen ein Token (`Authorization: Bearer <token>` oder
-`X-API-Key`). POST-Anfragen brauchen `Content-Type: application/json` (auch ohne
-Inhalt: `{}`) oder den Header `X-Conclave-Client`. Anfragen mit nicht erlaubtem
+`X-API-Key`). Ohne Token funktionieren außerdem `HEAD` auf diese öffentlichen
+Pfade und `OPTIONS` (CORS-Preflight, `204`) auf allen Pfaden. POST-Anfragen
+brauchen `Content-Type: application/json` (auch ohne Inhalt: `{}`) oder den
+Header `X-Conclave-Client`, sonst `415`. Anfragen mit nicht erlaubtem
 `Host`-Header werden mit `421` abgelehnt. Details: [Sicherheit](../sicherheit.md).
 
 | Methode | Pfad | Beschreibung |
@@ -49,7 +51,7 @@ Inhalt: `{}`) oder den Header `X-Conclave-Client`. Anfragen mit nicht erlaubtem
 | `GET` | `/runs` | List Runs |
 | `GET` | `/runs/<run_id>` | Get Run |
 | `GET` | `/settings` | Gibt lokale Runtime-Settings ohne Secrets zurück. |
-| `PUT` | `/settings` | Aktualisiert einfache Runtime-Settings für die laufende Session. |
+| `PUT` | `/settings` | Aktualisiert Runtime-Settings: `workspace_path` nur für die laufende Session, `rate_limit` siehe unten. |
 | `POST` | `/backup` | Erstellt ein lokales ZIP-Backup von SQLite-DB und Workspace. |
 | `GET` | `/logs` | Letzte Einträge der Server-Logdatei (`limit` bis 1000, `level` DEBUG…CRITICAL). |
 | `GET` | `/backups` | Listet die ZIP-Backups im Backup-Verzeichnis (neueste zuerst). |
@@ -59,12 +61,16 @@ Inhalt: `{}`) oder den Header `X-Conclave-Client`. Anfragen mit nicht erlaubtem
 | `POST` | `/workspace/<path:filepath>` | Schreibt eine Datei in den Workspace. |
 | `DELETE` | `/workspace/<path:filepath>` | Löscht eine Datei aus dem Workspace. |
 
-*Generiert: 2026-08-11*
+*Stand: v0.2.0 (2026-10-26), abgeglichen mit `openapi.json`*
 
 ## Backup und Restore
 
-- `POST /backup` legt ein ZIP im Backup-Verzeichnis an (`CONCLAVE_BACKUP_DIR`,
-  sonst `backups/` neben der Datenbank) und liefert dessen Namen in `backup`.
+- `POST /backup` legt ein ZIP im Backup-Verzeichnis an und liefert dessen
+  Namen in `backup`. Backup-Verzeichnis: `CONCLAVE_BACKUP_DIR`, sonst bei
+  SQLite `backups/` neben der Datenbank, bei PostgreSQL
+  `<Elternordner des Workspace>/backups`. (Die CLI `conclave backup` ohne
+  `--dir` nutzt dagegen `CONCLAVE_BACKUP_DIR`, sonst immer
+  `<Elternordner des Workspace>/backups`.)
 - `GET /backups` listet die vorhandenen Backups (`name`, `size_bytes`,
   `modified_at`).
 - `POST /restore` akzeptiert nur einen Dateinamen aus dieser Liste:
@@ -92,5 +98,27 @@ Inhalt: `{}`) oder den Header `X-Conclave-Client`. Anfragen mit nicht erlaubtem
   (`default`, `config`, `env`, `session`), ob es aktiv ist, ob es änderbar ist
   und ob Änderungen in `config.toml` gespeichert werden.
 - `PUT /settings` mit `{"rate_limit": "300 per minute"}` (oder `"off"`) wirkt
-  sofort und wird in `[server] rate_limit` der `config.toml` gespeichert.
-  Ungültige Werte → `400`; ist `CONCLAVE_RATE_LIMIT` gesetzt → `409`.
+  sofort. Ist ein Config-Pfad bekannt (`persistent: true`), wird der Wert in
+  `[server] rate_limit` der `config.toml` gespeichert, sonst gilt er nur für
+  die laufende Session (Herkunft `session`).
+  Ungültige oder leere Werte → `400`; ist `CONCLAVE_RATE_LIMIT` gesetzt → `409`.
+- `workspace_path` in `PUT /settings` gilt nur für die laufende Session und
+  wird nicht gespeichert.
+
+## Fehlercodes
+
+Fehler kommen als JSON `{"error": "...", "type": "..."}`. Wichtige Codes:
+
+- `400` — ungültige Eingaben, leere Conversation, Provider-Client-Fehler (4xx)
+- `401` — Token fehlt oder ist falsch
+- `404` — Conversation, Participant, Agent, Run oder Datei nicht gefunden
+  (auch Invoke in einer unbekannten Conversation)
+- `409` — Konflikt (z. B. Agent/Participant existiert bereits, kein Rederecht,
+  Rate-Limit durch `CONCLAVE_RATE_LIMIT` gesperrt)
+- `415` — POST ohne JSON bzw. `X-Conclave-Client`; Binärdatei im Workspace
+- `421` — `Host`-Header nicht erlaubt
+- `429` — eigenes Rate-Limit überschritten (`RateLimitExceeded`) oder
+  Provider-Rate-Limit nach ausgeschöpften Retries (`ProviderRateLimit`)
+- `502` — Provider-Fehler (`ProviderUnavailable` u. a.), kein Adapter
+  (`AdapterNotFound`)
+- `504` — Provider-Timeout (`ProviderTimeout`)

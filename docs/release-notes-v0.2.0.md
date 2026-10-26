@@ -18,7 +18,7 @@ breaking changes for API clients - read **Upgrading** before updating.
 ## Upgrading
 
 ```bash
-pipx upgrade conclave-personal
+pip install --upgrade conclave-personal
 ```
 
 - **API token.** If `CONCLAVE_API_KEY` is not set, the server creates a random
@@ -38,7 +38,8 @@ pipx upgrade conclave-personal
   `{"backup": "<name>"}` (see the new `GET /backups`). `backup_path` is no longer
   supported. The workspace is kept by default; clearing it requires
   `"replace_workspace": true` and `"confirm": "replace-workspace"`. The CLI
-  command `conclave restore` still accepts any path.
+  command `conclave restore` still accepts any path and replaces the workspace
+  unless `--keep-workspace` is given.
 - **The UI only talks to the server it was loaded from** (`connect-src 'self'`).
   A different API URL in the key dialog is blocked by the browser.
 - **PostgreSQL users:** the encryption key is now resolved like for SQLite
@@ -67,6 +68,9 @@ pipx upgrade conclave-personal
   POST requests (see **Upgrading**). The token file is readable only by the
   current user.
 - Restore via the API is limited to the backup directory.
+- `context_files:` in the chat rules is now limited to the workspace: hidden
+  paths and the agent read limit apply, like for `@workspace/` and `@read()`.
+  Previously it could read files outside the workspace.
 - `CONCLAVE_DEBUG` (Werkzeug debugger) is rejected in `production` mode and with
   a non-loopback `CONCLAVE_HOST`.
 - `conclave-watch` only accepts `http(s)` API URLs.
@@ -77,7 +81,8 @@ pipx upgrade conclave-personal
   Previously one connection was shared by all request threads, and parallel
   requests failed under load.
 - `conclave-api`, `conclave server` and `conclave desktop` run on waitress.
-  The Flask development server is only used with `--debug`.
+  The Flask development server is only used with `--debug`
+  (`conclave server`/`conclave desktop`) or `CONCLAVE_DEBUG`.
 - Restoring a backup copies the database through the SQLite backup API into
   the live database instead of replacing the file, and rejects archives whose
   database fails the integrity check.
@@ -110,6 +115,19 @@ pipx upgrade conclave-personal
   removed, with a one-time warning naming the variable.
 - With a token configured, the UI page itself loads again (previously `GET /`
   and `/static/*` answered `401`).
+- `conclave server`/`conclave desktop` ignored `[database] path` from
+  `config.toml`; sequential orchestration in an unknown conversation returned
+  502 (now 404).
+- CLI commands and `conclave-api` used `/workspace` instead of the platform
+  workspace (`~/Conclave/workspace`) when `CONCLAVE_WORKSPACE` was unset. All
+  entry points now use the same default.
+- Provider errors returned `500`; they now map to `429` (rate limit), `504`
+  (timeout) and `502` (unavailable or other provider errors).
+- Invoking an agent in an unknown conversation returned `502`; it now returns
+  `404`.
+- The MCP server reads the API token on every request, so the Conclave server
+  may be started after the MCP client.
+- The OpenAPI spec reports the package version.
 
 ## Removed
 
@@ -136,15 +154,19 @@ pipx upgrade conclave-personal
 
 ## Verification
 
-The v0.2.0 release surface was verified locally with:
+The v0.2.0 release surface was verified with:
 
-- `python -m pytest` (1023 tests, including Playwright browser tests for XSS
-  protection, CSP, token login and the settings page)
-- 300 parallel requests against waitress and werkzeug without errors
-- `python -m build --sdist --wheel` and installation of the wheel in a fresh
-  environment (`conclave --help`, `conclave-api` with token file and CSP)
+- `python -m pytest` (1043 tests: 1041 passed, 2 skipped). The Playwright
+  browser tests for XSS protection, CSP, token login and the settings page
+  require `pip install -e ".[dev-all,dev-ui]"` and
+  `python -m playwright install chromium`.
+- 300 requests from 20 concurrent clients against waitress and werkzeug
+  without errors
+- `python -m build --sdist --wheel` and, manually, installation of the wheel in
+  a fresh environment (`conclave --help`, `conclave-api` with token file and
+  CSP)
 - `pip-audit` (no known vulnerabilities) and `bandit` (no findings of medium
-  severity or above)
+  severity or above), run locally; both also run in the CI job `security`
 - A manual end-to-end test of `conclave desktop` with real Anthropic and OpenAI
   agents: conversations, streaming, auto-loop, markdown rendering, workspace
   files, backups, API docs, the settings page and login without token

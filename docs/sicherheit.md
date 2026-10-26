@@ -12,8 +12,9 @@ Interface.
   `api.token` im Konfigurationsverzeichnis ab (Linux `0600`, Windows ACL nur
   für den aktuellen Benutzer). CLI-Werkzeuge (`conclave-watch`) und der
   MCP-Server lesen es von dort, wenn `CONCLAVE_API_KEY` leer ist.
-- Ohne Token erreichbar sind nur `GET /`, `/static/*`, `/health`, `/api-docs`
-  und `/openapi.json`.
+- Ohne Token erreichbar sind nur `GET`/`HEAD` auf `/`, `/static/*`, `/health`,
+  `/api-docs` und `/openapi.json` sowie CORS-Preflights (`OPTIONS`, leere
+  Antwort `204`).
 - `conclave desktop` und `conclave web` öffnen den Browser mit dem Token im
   URL-Fragment (`#token=…`). Fragmente werden nicht an den Server gesendet; die
   UI übernimmt das Token und entfernt es sofort aus der Adresszeile.
@@ -26,7 +27,10 @@ Interface.
   per einfachem Formular oder `fetch` ohne CORS-Preflight auslösen (CSRF).
 - Bindung an Nicht-Loopback-Adressen wie `0.0.0.0` ist nur mit
   `CONCLAVE_API_KEY` und `CONCLAVE_ALLOWED_HOSTS` erlaubt.
-- Im `production`-Modus muss `CONCLAVE_API_KEY` gesetzt sein.
+- Im `production`-Modus müssen `CONCLAVE_API_KEY` und ein
+  Verschlüsselungsschlüssel (`CONCLAVE_SECRET_KEY` oder eine vorhandene
+  Schlüsseldatei `secret.key` bzw. `CONCLAVE_SECRET_KEY_FILE`) gesetzt sein;
+  `CONCLAVE_DEBUG` wird dort abgelehnt.
 - Browser-Clients senden den API-Key als Bearer-Token.
 - CORS wird über `CONCLAVE_ALLOWED_ORIGINS` begrenzt.
 - `Origin: null` ist nicht Teil der Default-CORS-Allowlist und muss bewusst
@@ -38,6 +42,7 @@ Empfohlene lokale Produktion:
 ```powershell
 $env:CONCLAVE_MODE = "production"
 $env:CONCLAVE_API_KEY = "<starkes-lokales-token>"
+$env:CONCLAVE_SECRET_KEY = "<fernet-schluessel>"  # oder CONCLAVE_SECRET_KEY_FILE / vorhandene secret.key
 conclave desktop
 ```
 
@@ -48,7 +53,9 @@ conclave desktop
   (`renderMarkdown()` in `static/js/utils.js`).
 - Erlaubt sind nur Text- und Strukturelemente (Absätze, Listen, Tabellen,
   Code, Links). Skripte, Bilder, SVG, Formulare, `style`-, `id`- und
-  Event-Attribute werden entfernt.
+  Event-Attribute werden entfernt. Einzige Ausnahme sind GFM-Aufgabenlisten:
+  `input` bleibt nur als deaktivierte Checkbox erhalten, andere Eingabefelder
+  werden entfernt.
 - Links sind nur mit `http(s)`, `mailto` oder `#` erlaubt und öffnen mit
   `target="_blank"` und `rel="noopener noreferrer"`.
 - Ist DOMPurify nicht geladen, wird nie HTML ausgegeben, nur escapter Text.
@@ -85,12 +92,17 @@ conclave desktop
 
 ## Workspace
 
+- Workspace-Root ist `CONCLAVE_WORKSPACE`, sonst `~/Conclave/workspace` (für
+  alle Einstiegspunkte: CLI, `conclave-api`, Server, Desktop).
 - Workspace-Zugriffe bleiben innerhalb des konfigurierten Workspace-Roots.
 - Pfad-Traversal und absolute Ausbrüche werden blockiert.
 - Versteckte Pfade mit Komponenten wie `.private/` werden nicht gelesen oder
   angezeigt.
 - Dateigrößenlimits verhindern versehentliche Vollimporte großer Dateien in
   Agent-Kontexte.
+- `context_files:` in den Chat-Regeln unterliegt denselben Grenzen wie
+  `@workspace/` und `@read()`: nur Dateien im Workspace, keine versteckten
+  Pfade, Agent-Leselimit.
 - `POST /restore` stellt nur Backups aus dem Backup-Verzeichnis wieder her
   (Dateiname, keine Pfade) und leert den Workspace nur nach ausdrücklicher
   Bestätigung. ZIP-Inhalte werden auf Pfad-Traversal, Symlinks und Größe
@@ -102,6 +114,8 @@ conclave desktop
   und Key konfiguriert ist.
 - Tests und CI verwenden Mocks, Fakes oder lokale In-Memory-Komponenten.
 - Lokale Ollama-Modelle können ohne API-Key betrieben werden.
+- Provider-Fehler liefern `429` (Rate-Limit), `504` (Timeout) oder `502`
+  (nicht erreichbar, sonstige Fehler).
 - Custom-Provider-URLs werden gegen SSRF-Risiken geprüft. Private,
   reservierte, Loopback- und Link-Local-Ziele werden blockiert; DNS-Auflösung
   auf solche Ziele wird ebenfalls abgelehnt. Localhost ist nur für explizite
@@ -121,8 +135,9 @@ conclave desktop
 
 ## Release-Artefakte
 
-Vor einem Release werden Wheel und Source Distribution auf verbotene Inhalte
-geprüft:
+Der CI-Job `build` (`.github/workflows/ci.yml`) baut Wheel und Source
+Distribution bei jedem Push auf `main` und jedem Pull Request und prüft sie auf
+verbotene Inhalte:
 
 - keine Workspace-Daten
 - keine Datenbanken

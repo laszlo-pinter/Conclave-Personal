@@ -5,7 +5,9 @@
 **Vorbedingung:** Ein lokaler Workspace ist konfiguriert. Ohne
 `CONCLAVE_WORKSPACE` nutzt Conclave die Plattformdefaults aus
 `src/conclave/runtime/paths.py`: unter Windows `%USERPROFILE%\Conclave\workspace`,
-unter Linux `~/Conclave/workspace`.
+unter Linux `~/Conclave/workspace`. Das gilt für alle Einstiegspunkte
+(CLI-Kommandos, `conclave server`/`desktop`, `conclave-api`), siehe
+`application/workspace_security.py:workspace_root()`.
 
 ## 1. @workspace/datei — User referenziert Dateien
 
@@ -37,12 +39,13 @@ unter Linux `~/Conclave/workspace`.
 
 ## 3. @save(datei)...@endsave — Agent schreibt Dateien
 
-- **Datei:** `application/conversation_flow.py:_process_agent_directives()`
+- **Datei:** `application/conversation_flow.py:_process_agent_response()` -> `_process_agent_directives_for_context()`
+  (`_process_agent_directives()` ist nur ein Wrapper ohne Tool-Events, der im Runtime-Pfad nicht genutzt wird)
 - **Trigger:** Nach Agent-Antwort, vor Message-Persistierung
 - **Regex:** `@save\(([^)]+)\)\s*\n(.*?)(?:@endsave|$)` (DOTALL)
-- **Aktion:** Schreibt Content zwischen @save und @endsave in workspace/output/
+- **Aktion:** Schreibt Content zwischen @save und @endsave in workspace/output/. Fehlt `@endsave`, wird bis zum Ende der Antwort gespeichert.
 - **Security:** `resolve_output_path()` begrenzt Schreibzugriffe auf `workspace/output/`
-- **Scope:** Nur workspace/output/ (schreibend) — Rest ist schreibgeschützt
+- **Scope:** Nur workspace/output/ (schreibend) — für Agent-Directives ist der Rest schreibgeschützt. UI/API/CLI dürfen überall im Workspace schreiben (außer versteckten Pfaden), siehe Abschnitt 4.
 - **Limits:** `CONCLAVE_WORKSPACE_WRITE_LIMIT_BYTES`, Default `524288`
 - **Protokoll:** Der Schreibversuch erzeugt ein `tool_events`-DB-Ereignis
   mit `tool=workspace.save` und `status=succeeded|failed`.
@@ -56,7 +59,7 @@ unter Linux `~/Conclave/workspace`.
 
 - **GET /workspace** — Listet alle Dateien (Pfad, Größe, Änderungsdatum)
 - **GET /workspace/pfad** — Liest Dateiinhalt (UTF-8, 415 bei Binär)
-- **POST /workspace/pfad** — Schreibt Datei (Body: {content})
+- **POST /workspace/pfad** — Schreibt Datei (Body: {content}) an beliebiger Stelle im Workspace, nicht nur in `output/`
 - **DELETE /workspace/pfad** — Löscht Datei
 - **Security:** `resolve_workspace_path()` und `is_hidden_workspace_path()` in `application/workspace_security.py`
 - **Limits:** Lesen über UI/API: `CONCLAVE_WORKSPACE_UI_READ_LIMIT_BYTES`, Schreiben: `CONCLAVE_WORKSPACE_WRITE_LIMIT_BYTES`
@@ -65,9 +68,20 @@ unter Linux `~/Conclave/workspace`.
 ## 5. Workspace-Info im System-Prompt
 
 - **Datei:** `infrastructure/universal/adapter.py:_build_workspace_info()`
-- **Aktion:** Listet alle Dateien im Workspace als Teil des System-Prompts
 - **Inhalt:** Anleitung für @workspace (lesen), @read (Agent liest), @save (Agent schreibt)
-- **Trigger:** Bei jedem Provider-Call (in _build_system_prompt)
+- **Datei-Listing:** Standardmäßig AUS. Nur mit gesetztem `CONCLAVE_WORKSPACE_AUTOLIST` wird zusätzlich eine Liste aller nicht versteckten Workspace-Dateien angehängt.
+- **Trigger:** Bei jedem Provider-Call (in `_build_system_prompt`), sofern das Workspace-Verzeichnis existiert
+- **Scope:** Nur UniversalAdapter (Preset-Agents); die nativen Anthropic-/OpenAI-Adapter fügen keine Workspace-Info ein
+
+## 6. context_files — Kontextdateien aus den Chat-Regeln
+
+- **Datei:** `infrastructure/universal/adapter.py:_load_context_files()`
+- **Trigger:** Eine Zeile in den Chat-Regeln der Conversation, z. B. `context_files: a.md, b.md` (kommasepariert, Workspace-relative Pfade)
+- **Aktion:** Der Inhalt jeder Datei wird als `--- Kontext: <pfad> ---` in den System-Prompt eingefügt; die `context_files:`-Zeile selbst erscheint nicht in den Chat-Regeln des Prompts
+- **Security:** Gleiche Grenzen wie `@workspace`/`@read`: `resolve_workspace_path()` (kein absoluter Pfad, kein Ausbruch aus dem Workspace), `is_agent_visible()` (keine versteckten Pfade)
+- **Limits:** `CONCLAVE_WORKSPACE_AGENT_READ_LIMIT_BYTES`, Default `524288`
+- **Fehler:** Abgelehnte oder fehlende Einträge werden übersprungen und als Warnung geloggt
+- **Scope:** Nur UniversalAdapter (Preset-Agents); die nativen Adapter laden keine Kontextdateien
 
 ## Datenfluss
 
@@ -102,7 +116,8 @@ _process_agent_directives_for_context() → Datei in workspace/output/ geschrieb
   `GET /conversations/<id>/export`
 - Security: `src/conclave/application/workspace_security.py`
 - API: `src/conclave/api/app.py` Workspace-Endpunkte
-- System-Prompt: `src/conclave/infrastructure/universal/adapter.py:_build_workspace_info()`
+- System-Prompt: `src/conclave/infrastructure/universal/adapter.py:_build_workspace_info()`,
+  `_load_context_files()`
 - Tests: `tests/application/test_workspace_directives.py`, `tests/api/test_workspace_api.py`
 
-**Zuletzt verifiziert:** 2026-08-11 im Personal-Multiplattform-Schnitt
+**Zuletzt verifiziert:** 2026-10-26 (v0.2.0)
