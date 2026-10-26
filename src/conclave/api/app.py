@@ -808,6 +808,14 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     # ── Settings und Betrieb ───────────────────────────────────────────
 
+    def _actual_port() -> int:
+        """Tatsaechlich gebundener Port (vom WSGI-Server), sonst der konfigurierte."""
+        configured = getattr(config, "port", 8000) if config else 8000
+        try:
+            return int(request.environ.get("SERVER_PORT") or configured)
+        except (RuntimeError, ValueError):  # ausserhalb eines Requests / unlesbar
+            return configured
+
     def _settings_payload() -> dict:
         fallback_keys = {
             "anthropic": getattr(config, "anthropic_api_key", "") if config else "",
@@ -827,7 +835,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         return {
             "mode": getattr(config, "mode", "development") if config else "development",
             "host": getattr(config, "host", "127.0.0.1") if config else "127.0.0.1",
-            "port": getattr(config, "port", 8000) if config else 8000,
+            "port": _actual_port(),
             "db_provider": getattr(config, "db_provider", "sqlite") if config else "sqlite",
             "db_path": str(getattr(config, "db_path", "")) if config else "",
             "workspace_path": WORKSPACE,

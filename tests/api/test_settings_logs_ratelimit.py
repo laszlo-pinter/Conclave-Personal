@@ -189,3 +189,28 @@ def test_config_file_location_can_be_overridden(monkeypatch, tmp_path):
     config = ConclaveConfig.from_sources()
     assert config.config_path == target
     assert config.rate_limit == "7/minute"
+
+
+def test_settings_show_actual_server_port(handler):
+    app = create_app(handler, config=ConclaveConfig(port=8000))
+    app.config["TESTING"] = True
+    client = app.test_client()
+    resp = client.get("/settings", base_url="http://127.0.0.1:8123")
+    assert resp.get_json()["settings"]["port"] == 8123
+
+
+def test_settings_port_on_real_server(handler):
+    """Echter Server auf zufaelligem Port: angezeigt wird der gebundene Port, nicht config.port."""
+    import json as _json
+    import threading
+    import urllib.request
+    from werkzeug.serving import make_server
+
+    app = create_app(handler, config=ConclaveConfig(port=8000))
+    srv = make_server("127.0.0.1", 0, app, threaded=True)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{srv.server_port}/settings") as resp:
+            assert _json.loads(resp.read())["settings"]["port"] == srv.server_port
+    finally:
+        srv.shutdown()
