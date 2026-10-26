@@ -3,7 +3,7 @@
   "info": {
     "title": "Conclave API",
     "description": "Host-gesteuertes Multi-Model-Konversationssystem",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "servers": [
     {
@@ -26,29 +26,6 @@
         "responses": {
           "200": {
             "description": "Erfolg"
-          }
-        }
-      }
-    },
-    "/guard/notify": {
-      "post": {
-        "summary": "Leitet eine Benachrichtigung an den Guard-Service weiter.",
-        "tags": [
-          "guard"
-        ],
-        "operationId": "guard_notify",
-        "responses": {
-          "200": {
-            "description": "Erfolg"
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
           }
         }
       }
@@ -1508,6 +1485,20 @@
         }
       }
     },
+    "/logs": {
+      "get": {
+        "summary": "Letzte Eintraege der Server-Logdatei (fuer die Settings-Seite).",
+        "tags": [
+          "logs"
+        ],
+        "operationId": "get_logs",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        }
+      }
+    },
     "/backup": {
       "post": {
         "summary": "Erstellt ein lokales ZIP-Backup von SQLite-DB und Workspace.",
@@ -1550,9 +1541,23 @@
         }
       }
     },
+    "/backups": {
+      "get": {
+        "summary": "Listet die ZIP-Backups im Backup-Verzeichnis (neueste zuerst).",
+        "tags": [
+          "backups"
+        ],
+        "operationId": "list_backups",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        }
+      }
+    },
     "/restore": {
       "post": {
-        "summary": "Stellt SQLite-DB und Workspace aus einem lokalen ZIP-Backup wieder her.",
+        "summary": "Stellt SQLite-DB und Workspace aus einem ZIP-Backup im Backup-Verzeichnis wieder her.",
         "tags": [
           "restore"
         ],

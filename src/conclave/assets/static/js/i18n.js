@@ -139,7 +139,7 @@ const I18N = {
     'runs.error': 'Fehler',
     'settings.operation': 'Betrieb',
     'settings.title': 'Settings',
-    'settings.subtitle': 'Lokale Pfade, API-Zugang und Backups.',
+    'settings.subtitle': 'Lokale Pfade, API-Zugang, Backups, Rate-Limit und Server-Log.',
     'settings.runtime': 'Runtime',
     'settings.localWorkspace': 'Lokaler Workspace',
     'settings.workspacePath': 'Workspace-Pfad',
@@ -147,6 +147,20 @@ const I18N = {
     'settings.createBackup': 'Backup erstellen',
     'settings.backupRunning': 'Backup laeuft...',
     'settings.backupCreated': 'Backup erstellt',
+    'settings.rateLimit': 'Rate-Limit',
+    'settings.rateLimitLabel': 'Anfragen je Route und Client',
+    'settings.rateLimitHint': 'Wirkt sofort und wird in config.toml gespeichert. Beispiele: 120 per minute, 120/minute; 2000/hour, off',
+    'settings.rateLimitSession': 'Wirkt sofort, wird aber nicht gespeichert (keine config.toml bekannt).',
+    'settings.rateLimitLocked': 'Durch die Umgebungsvariable CONCLAVE_RATE_LIMIT festgelegt - hier nicht aenderbar.',
+    'settings.rateLimitSaved': 'Rate-Limit gespeichert',
+    'settings.rateLimitRequired': 'Rate-Limit angeben (zum Abschalten: off)',
+    'settings.logs': 'Server-Log',
+    'settings.logsAll': 'Alle',
+    'settings.logsWarnings': 'Warnungen',
+    'settings.logsErrors': 'Fehler',
+    'settings.logsRefresh': 'Aktualisieren',
+    'settings.logsEmpty': 'Keine Eintraege fuer diesen Filter.',
+    'settings.logsUnavailable': 'Keine Logdatei verfuegbar.',
     'settings.apiAccess': 'API-Zugang',
     'settings.apiAuth': 'API Auth',
     'settings.mode': 'Modus',
@@ -163,10 +177,10 @@ const I18N = {
     'auth.setKey': 'API-Key setzen',
     'auth.modalTitle': 'API-Key Einstellungen',
     'auth.serverUrl': 'API-Server URL',
-    'auth.serverDefault': 'Standard: http://localhost:8000',
+    'auth.serverDefault': 'Standard: Adresse dieser Seite. Andere Server blockiert die Content-Security-Policy.',
     'auth.keyLabel': 'API-Key (Bearer Token)',
-    'auth.keyPlaceholder': 'Leer lassen wenn keine Auth noetig',
-    'auth.keyHint': 'Wird lokal im Browser gespeichert (LocalStorage). Wird als Authorization: Bearer Header gesendet.',
+    'auth.keyPlaceholder': 'Token aus api.token oder CONCLAVE_API_KEY',
+    'auth.keyHint': 'conclave desktop setzt das Token automatisch. Wird lokal im Browser gespeichert (LocalStorage) und als Authorization: Bearer gesendet.',
     'auth.clear': 'Key loeschen',
     'auth.saved': 'Einstellungen gespeichert',
     'auth.removed': 'API-Key entfernt',
@@ -369,7 +383,7 @@ const I18N = {
     'runs.error': 'Error',
     'settings.operation': 'Operation',
     'settings.title': 'Settings',
-    'settings.subtitle': 'Local paths, API access, and backups.',
+    'settings.subtitle': 'Local paths, API access, backups, rate limit, and server log.',
     'settings.runtime': 'Runtime',
     'settings.localWorkspace': 'Local workspace',
     'settings.workspacePath': 'Workspace path',
@@ -377,6 +391,20 @@ const I18N = {
     'settings.createBackup': 'Create backup',
     'settings.backupRunning': 'Backup running...',
     'settings.backupCreated': 'Backup created',
+    'settings.rateLimit': 'Rate limit',
+    'settings.rateLimitLabel': 'Requests per route and client',
+    'settings.rateLimitHint': 'Takes effect immediately and is saved to config.toml. Examples: 120 per minute, 120/minute; 2000/hour, off',
+    'settings.rateLimitSession': 'Takes effect immediately but is not saved (no config.toml known).',
+    'settings.rateLimitLocked': 'Set by the CONCLAVE_RATE_LIMIT environment variable - cannot be changed here.',
+    'settings.rateLimitSaved': 'Rate limit saved',
+    'settings.rateLimitRequired': 'Enter a rate limit (use off to disable)',
+    'settings.logs': 'Server log',
+    'settings.logsAll': 'All',
+    'settings.logsWarnings': 'Warnings',
+    'settings.logsErrors': 'Errors',
+    'settings.logsRefresh': 'Refresh',
+    'settings.logsEmpty': 'No entries for this filter.',
+    'settings.logsUnavailable': 'No log file available.',
     'settings.apiAccess': 'API access',
     'settings.apiAuth': 'API auth',
     'settings.mode': 'Mode',
@@ -393,10 +421,10 @@ const I18N = {
     'auth.setKey': 'Set API key',
     'auth.modalTitle': 'API key settings',
     'auth.serverUrl': 'API server URL',
-    'auth.serverDefault': 'Default: http://localhost:8000',
+    'auth.serverDefault': 'Default: the address of this page. Other servers are blocked by the Content Security Policy.',
     'auth.keyLabel': 'API key (Bearer token)',
-    'auth.keyPlaceholder': 'Leave empty if auth is not required',
-    'auth.keyHint': 'Stored locally in browser LocalStorage. Sent as Authorization: Bearer header.',
+    'auth.keyPlaceholder': 'Token from api.token or CONCLAVE_API_KEY',
+    'auth.keyHint': 'conclave desktop sets the token automatically. Stored locally in browser LocalStorage and sent as Authorization: Bearer.',
     'auth.clear': 'Delete key',
     'auth.saved': 'Settings saved',
     'auth.removed': 'API key removed',
@@ -491,6 +519,7 @@ function applyTranslations(root = document) {
     el.textContent = t(el.dataset.i18n);
   });
   root.querySelectorAll('[data-i18n-html]').forEach(el => {
+    // safe-html: nur Uebersetzungen aus der eigenen Tabelle, ohne Platzhalter/API-Werte
     el.innerHTML = t(el.dataset.i18nHtml);
   });
   root.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
@@ -502,18 +531,18 @@ function applyTranslations(root = document) {
   localizeRuntimeLabels();
 }
 
-function _setButtonHtml(id, html) {
+function _setButtonText(id, text) {
   const el = document.getElementById(id);
   if (!el || el.querySelector('.spinner')) return;
-  el.innerHTML = html;
+  el.textContent = text;
 }
 
 function localizeRuntimeLabels() {
-  _setButtonHtml('btnInvoke', t('input.invoke'));
-  _setButtonHtml('btnStream', `&#9654; ${t('input.stream')}`);
-  _setButtonHtml('btnOrch', `&#8635; ${t('input.orchestrate')}`);
-  _setButtonHtml('btnAutoloop', `&#8734; ${t('input.autoloop')}`);
-  _setButtonHtml('btnFloorInvoke', t('floor.invoke'));
+  _setButtonText('btnInvoke', t('input.invoke'));
+  _setButtonText('btnStream', `▶ ${t('input.stream')}`);
+  _setButtonText('btnOrch', `↻ ${t('input.orchestrate')}`);
+  _setButtonText('btnAutoloop', `∞ ${t('input.autoloop')}`);
+  _setButtonText('btnFloorInvoke', t('floor.invoke'));
 
   const advanced = document.getElementById('advancedFields');
   const advancedBtn = document.getElementById('btnAdvanced');

@@ -5,6 +5,9 @@ Conclave MCP-Server — macht Conclave als Tool fuer Claude Code / Desktop verfu
 Starten:
     python -m conclave.mcp_server
 
+Das API-Token kommt aus CONCLAVE_API_KEY oder, falls leer, aus der lokalen
+Token-Datei des Servers (api.token im Konfigurationsverzeichnis).
+
 Oder in Claude Code settings.json:
     {
       "mcpServers": {
@@ -12,8 +15,7 @@ Oder in Claude Code settings.json:
           "command": "python",
           "args": ["-m", "conclave.mcp_server"],
           "env": {
-            "CONCLAVE_API_URL": "http://localhost:8000",
-            "CONCLAVE_API_KEY": ""
+            "CONCLAVE_API_URL": "http://localhost:8000"
           }
         }
       }
@@ -25,10 +27,13 @@ import json
 import httpx
 from mcp.server.fastmcp import FastMCP
 
+from conclave.runtime.api_token import read_token
+
 # ── Config ────────────────────────────────────────────────────────────────
 
 API_URL = os.environ.get("CONCLAVE_API_URL", "http://localhost:8000")
-API_KEY = os.environ.get("CONCLAVE_API_KEY", "")
+# Token: CONCLAVE_API_KEY, sonst die lokale Token-Datei des Servers (api.token).
+# Wird pro Anfrage gelesen, damit der MCP-Client auch vor dem ersten Serverstart laufen darf.
 
 mcp = FastMCP(
     "Conclave",
@@ -47,8 +52,9 @@ mcp = FastMCP(
 
 def _headers() -> dict:
     h = {"Content-Type": "application/json"}
-    if API_KEY:
-        h["Authorization"] = f"Bearer {API_KEY}"
+    token = read_token()
+    if token:
+        h["Authorization"] = f"Bearer {token}"
     return h
 
 

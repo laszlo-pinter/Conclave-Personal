@@ -21,6 +21,7 @@ Windows / PowerShell:
 
 ```powershell
 cd "<pfad-zum-checkout>\Conclave-Personal"
+python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e .
 ```
@@ -81,8 +82,22 @@ export OPENAI_API_KEY="sk-..."
 export DEEPSEEK_API_KEY="sk-..."
 ```
 
-Conclave zeigt Provider als verfügbar, wenn ein Agent einen eigenen Key hat
-oder ein Provider-Fallback über Environment Variable vorhanden ist.
+`/providers` meldet einen Provider als verfügbar, wenn ein Fallback-Key über
+Environment Variable oder Konfiguration vorhanden ist. Eigene Keys einzelner
+Agenten fließen dort nicht ein; sie erscheinen in der Agentenliste als
+Chip "Key" (ohne eigenen Key: "Env").
+
+Umschließende Anführungszeichen und Leerzeichen in den Werten entfernt
+Conclave automatisch und warnt dazu einmal pro Variable im Log. Wer die
+Variablen über den Windows-Dialog "Umgebungsvariablen" setzt, trägt als Namen
+nur `OPENAI_API_KEY` usw. ein, nicht `$env:OPENAI_API_KEY`.
+
+Wichtig: Server und CLI-Kommandos sind getrennte Prozesse. Der Server liest die
+Keys aus dem Terminal, in dem er gestartet wurde. CLI-Kommandos wie
+`conclave agent-new` oder `conclave invoke` laufen in einem eigenen Prozess und
+lesen die Keys aus ihrer eigenen Umgebung. Da der Server sein Terminal
+blockiert, laufen die Schritte ab Abschnitt 4 in einem zweiten Terminal;
+dort die venv aktivieren und die Keys ebenfalls setzen.
 
 ## 3. Server/UI Starten
 
@@ -100,16 +115,25 @@ conclave desktop --port 8001
 
 ## 4. Provider-Verfügbarkeit Prüfen
 
+Die API verlangt immer ein Token (ohne Token: 401). Ist `CONCLAVE_API_KEY`
+nicht gesetzt, legt der Server beim ersten Start die Datei `api.token` im
+Konfigurationsverzeichnis an und gibt ihren Pfad beim Start aus
+(`Conclave API-Token: …`): Windows `%APPDATA%\Conclave\api.token`, Linux
+`~/.config/conclave/api.token` (bzw. `$XDG_CONFIG_HOME/conclave/`); `CONCLAVE_API_TOKEN_FILE` überschreibt den
+Pfad. Läuft der Server mit `CONCLAVE_API_KEY`, diesen Wert als Token
+verwenden. POST-Anfragen brauchen zusätzlich `Content-Type: application/json`.
+
 Windows / PowerShell:
 
 ```powershell
-Invoke-RestMethod -Uri http://127.0.0.1:8001/providers | ConvertTo-Json -Depth 10
+$tok = Get-Content "$env:APPDATA\Conclave\api.token"
+Invoke-RestMethod -Uri http://127.0.0.1:8001/providers -Headers @{Authorization="Bearer $tok"} | ConvertTo-Json -Depth 10
 ```
 
 Linux / Bash:
 
 ```bash
-curl -s http://127.0.0.1:8001/providers | python -m json.tool
+curl -s -H "Authorization: Bearer $(cat ~/.config/conclave/api.token)" http://127.0.0.1:8001/providers | python -m json.tool
 ```
 
 Erwartung:
@@ -120,7 +144,8 @@ Erwartung:
 - `deepseek` hat `api_key_available: true`
 
 Wenn OpenAI `false` zeigt, wurde der Server ohne `OPENAI_API_KEY` gestartet.
-Terminal-Variable setzen und Server neu starten.
+Terminal-Variable setzen und Server neu starten. Diese Anzeige betrifft nur den
+Server (UI); für CLI-Aufrufe zählt die Umgebung des CLI-Terminals.
 
 ## 5. Agenten Anlegen
 
@@ -202,21 +227,32 @@ Linux / Bash:
 
 ### OpenAI Liefert 401
 
-Der laufende Server wurde ohne gültigen OpenAI-Key gestartet. Prüfen:
+Der Agent hat keinen eigenen Key, und der Prozess, der den Aufruf ausführt,
+hat keinen gültigen OpenAI-Key. Welcher Prozess das ist, hängt vom Weg ab:
+
+- **Aufruf aus der UI:** Der laufende Server wurde ohne gültigen OpenAI-Key
+  gestartet.
+- **Aufruf per CLI** (`conclave invoke`, `conclave orchestrate` …): Das
+  CLI-Terminal hat keinen gültigen `OPENAI_API_KEY`. Key dort setzen; ein
+  Server-Neustart hilft hier nicht.
+
+Server prüfen (Token wie in Abschnitt 4):
 
 Windows / PowerShell:
 
 ```powershell
-Invoke-RestMethod -Uri http://127.0.0.1:8001/providers | ConvertTo-Json -Depth 10
+$tok = Get-Content "$env:APPDATA\Conclave\api.token"
+Invoke-RestMethod -Uri http://127.0.0.1:8001/providers -Headers @{Authorization="Bearer $tok"} | ConvertTo-Json -Depth 10
 ```
 
 Linux / Bash:
 
 ```bash
-curl -s http://127.0.0.1:8001/providers | python -m json.tool
+curl -s -H "Authorization: Bearer $(cat ~/.config/conclave/api.token)" http://127.0.0.1:8001/providers | python -m json.tool
 ```
 
-Wenn `openai-responses` `api_key_available: false` zeigt:
+Wenn `openai-responses` `api_key_available: false` zeigt, Key setzen und
+Server neu starten:
 
 Windows / PowerShell:
 
@@ -225,6 +261,16 @@ $env:OPENAI_API_KEY="sk-..."
 python -m conclave.cli.main desktop --port 8001
 ```
 
+Linux / Bash:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+python -m conclave.cli.main desktop --port 8001
+```
+
+Zeigt `/providers` `true` und es kommt trotzdem 401, ist der Key selbst
+ungültig.
+
 ### DeepSeek Liefert 400 Wegen Modellname
 
 Die DeepSeek-API erwartet API-Model-IDs wie `deepseek-v4-flash` oder
@@ -232,13 +278,6 @@ Die DeepSeek-API erwartet API-Model-IDs wie `deepseek-v4-flash` oder
 sendbaren API-Identifier. Bestehende `DeepSeek-V3`-Agenten werden von Conclave
 auf `deepseek-v4-flash` gemappt, neue Agenten sollten direkt eine der
 angezeigten API-IDs verwenden.
-
-Linux / Bash:
-
-```bash
-export OPENAI_API_KEY="sk-..."
-python -m conclave.cli.main desktop --port 8001
-```
 
 ### Agent Wird Ohne Nachricht Aufgerufen
 

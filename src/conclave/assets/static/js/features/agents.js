@@ -4,8 +4,10 @@
 async function loadAgents(){
   try{const d=await req('GET','/agents');agents=d.agents||[];renderAgentList();renderAgentWorkbench();}
   catch{
+    // safe-html: statisches Markup + Uebersetzung ohne Platzhalter
     document.getElementById('agentList').innerHTML=`<div class="empty-list">${t('common.apiUnreachable')}</div>`;
     const wb=document.getElementById('agentWorkbench');
+    // safe-html: statisches Markup + Uebersetzung ohne Platzhalter
     if(wb) wb.innerHTML=`<div class="surface-empty">${t('common.apiUnreachable')}.</div>`;
   }
 }
@@ -13,14 +15,18 @@ async function loadAgents(){
 function renderAgentList(){
   const el=document.getElementById('agentList');
   if(!el) return;
+  // safe-html: statisches Markup + Uebersetzung ohne Platzhalter
   if(!agents.length){el.innerHTML=`<div class="empty-list">${t('agents.none')}</div>`;return;}
+  // safe-html: _agentCard() escaped alle Werte
   el.innerHTML=agents.map(a=>_agentCard(a)).join('');
 }
 
 function renderAgentWorkbench(){
   const el=document.getElementById('agentWorkbench');
   if(!el) return;
+  // safe-html: statisches Markup + Uebersetzung ohne Platzhalter
   if(!agents.length){el.innerHTML=`<div class="surface-empty">${t('agents.none')}</div>`;return;}
+  // safe-html: _agentCard() escaped alle Werte
   el.innerHTML=agents.map(a=>_agentCard(a,'agent-card-wide')).join('');
 }
 
@@ -51,7 +57,9 @@ async function loadProviders(){
   try{
     const d=await req('GET','/providers');
     const providers=d.providers||[];
+    // safe-html: statisches Markup + Uebersetzung ohne Platzhalter
     if(!providers.length){el.innerHTML=`<div class="surface-empty">${t('agents.noProviders')}</div>`;return;}
+    // safe-html: Werte via esc(), Status-Klassen und Texte fest
     el.innerHTML=providers.map(p=>`
       <div class="surface-item provider-item">
         <div class="surface-item-row">
@@ -60,7 +68,10 @@ async function loadProviders(){
         </div>
         <div class="provider-models">${(p.models||[]).slice(0,4).map(m=>`<span>${esc(m)}</span>`).join('')}</div>
       </div>`).join('');
-  }catch(e){el.innerHTML=`<div class="surface-empty">${esc(e.message)}</div>`;}
+  }catch(e){
+    // safe-html: Fehlertext via esc()
+    el.innerHTML=`<div class="surface-empty">${esc(e.message)}</div>`;
+  }
 }
 
 // presetsData ist jetzt in AppState
@@ -68,7 +79,8 @@ async function loadProviders(){
 async function loadPresets(){
   try{const d=await req('GET','/presets');presetsData=d.presets||[];}catch{presetsData=[];}
   const sel=document.getElementById('aPreset');
-  sel.innerHTML=presetsData.map(p=>`<option value="${p.name}">${esc(p.label||p.name)}</option>`).join('');
+  // safe-html: Werte via attr()/esc()
+  sel.innerHTML=presetsData.map(p=>`<option value="${attr(p.name)}">${esc(p.label||p.name)}</option>`).join('');
 }
 
 function onPresetChange(){
@@ -79,8 +91,10 @@ function onPresetChange(){
   const mSel=document.getElementById('aModel');
   const models=p.models||[];
   if(models.length){
-    mSel.innerHTML=models.map((m,i)=>`<option value="${m}">${m}${i===0?` (${t('agents.recommended')})`:''}</option>`).join('');
+    // safe-html: Modellnamen via attr()/esc(), Uebersetzung ohne Platzhalter
+    mSel.innerHTML=models.map((m,i)=>`<option value="${attr(m)}">${esc(m)}${i===0?` (${t('agents.recommended')})`:''}</option>`).join('');
   } else {
+    // safe-html: statisches Markup + Uebersetzung ohne Platzhalter
     mSel.innerHTML=`<option value="">${t('agents.modelInput')}</option>`;
   }
   // Erweiterte Felder setzen
@@ -163,7 +177,9 @@ async function saveAgent(){
   const message_format=document.getElementById('aMsgFormat').value;
   if(!id||!name){toast(t('common.requiredIdName'),'err');return;}
   const btn=document.getElementById('btnSaveAgent'),lbl=document.getElementById('btnSaveAgentLabel');
-  btn.disabled=true;lbl.innerHTML='<span class="spinner"></span>';
+  btn.disabled=true;
+  // safe-html: statisches Markup
+  lbl.innerHTML='<span class="spinner"></span>';
   const wasEditing=Boolean(editingAgentId);
   try{
     const body={id,name,provider,model,role,topic,system_prompt,preset,api_url,response_path,message_format};

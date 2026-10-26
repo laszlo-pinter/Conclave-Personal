@@ -1,6 +1,7 @@
 # src/conclave/api/app.py
 
 import json as _json
+import logging
 import os
 import time
 
@@ -31,20 +32,28 @@ from conclave.domain.errors import (
     NoFloorGranted,
     ParticipantAlreadyRegistered,
     ParticipantNotRegistered,
+    ProviderError,
+    ProviderRateLimit,
+    ProviderTimeout,
 )
 from conclave.domain.participant import ParticipantType
+from conclave.cli.bootstrap import rate_limit_disabled, validate_rate_limit
+from conclave.cli.config import DEFAULT_RATE_LIMIT
 from conclave.application.workspace_security import (
     agent_read_limit_bytes,
     assert_size_allowed,
     is_hidden_workspace_path,
     resolve_workspace_path,
+    workspace_root,
     text_size,
     ui_read_limit_bytes,
     write_limit_bytes,
 )
-from conclave.infrastructure.log import get_logger
+from conclave.infrastructure.log import active_log_file, get_logger, read_log_tail
+from conclave.runtime.toml_edit import set_toml_string
 from conclave.runtime.backup import create_backup_archive, restore_backup_archive
 from conclave.runtime.assets import get_asset_root
+from conclave.runtime.env import env_secret
 
 try:
     from flask_limiter import Limiter
@@ -55,28 +64,120 @@ except ImportError:
 
 logger = get_logger("api")
 
+# Alle Ressourcen kommen vom eigenen Server (B5). Inline-Skripte und <style>-Bloecke
+# sind verboten; nur style-Attribute sind erlaubt (die UI setzt Farben per Attribut).
+CONTENT_SECURITY_POLICY = "; ".join([
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self'",
+    "style-src-attr 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+])
+# Mikrofon nur fuer die eigene Seite (Spracheingabe in speech.js)
+PERMISSIONS_POLICY = "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+
+# Ohne Token erreichbar (B12): UI-Seite, statische Dateien, Healthcheck, API-Doku.
+PUBLIC_GET_PATHS = frozenset({"/", "/health", "/api-docs", "/openapi.json"})
+CLIENT_HEADER = "X-Conclave-Client"
+
+# Host-Allowlist gegen DNS-Rebinding (B2). Loopback-Namen sind immer erlaubt,
+# CONCLAVE_ALLOWED_HOSTS ergaenzt sie. Eintraege ohne Port gelten fuer jeden Port.
+DEFAULT_ALLOWED_HOSTS = "localhost,127.0.0.1,[::1]"
+
+
+def _split_host(value: str) -> tuple[str, str]:
+    """'Host'-Wert in (hostname, port) zerlegen; IPv6 in eckigen Klammern oder nackt."""
+    value = value.strip().lower()
+    if value.startswith("["):
+        host, _, rest = value[1:].partition("]")
+        if rest and not rest.startswith(":"):
+            return value, ""  # fehlerhaft, z. B. "[::1].evil" - passt auf keinen Eintrag
+        return host, rest[1:]
+    if value.count(":") == 1:
+        host, port = value.split(":")
+        return host, port
+    return value, ""
+
+
+def parse_allowed_hosts(raw: str) -> set[tuple[str, str]]:
+    entries = f"{DEFAULT_ALLOWED_HOSTS},{raw or ''}".split(",")
+    return {_split_host(entry) for entry in entries if entry.strip()}
+
+
+def is_host_allowed(host_header: str, allowed: set[tuple[str, str]]) -> bool:
+    host, port = _split_host(host_header or "")
+    return bool(host) and ((host, "") in allowed or (host, port) in allowed)
+
 
 def create_app(handler: CLIHandler, auth_service=None,
                agent_service=None, config=None, service=None) -> Flask:
     import pathlib
     asset_root = get_asset_root()
     app = Flask(__name__, static_folder=str(asset_root / "static"), static_url_path="/static")
-    WORKSPACE = os.environ.get("CONCLAVE_WORKSPACE", "/workspace")
+    WORKSPACE = str(workspace_root())
 
     def _refresh_registry():
         """Invalidiert den Adapter-Cache — Lazy Builder baut bei Bedarf neu."""
         if service and hasattr(service, '_registry') and service._registry:
             service._registry.invalidate()
 
+    # Rate-Limit pro Anfrage gelesen: Aenderungen ueber PUT /settings wirken sofort.
+    rate_limit_state = {
+        "value": getattr(config, "rate_limit", DEFAULT_RATE_LIMIT) if config else DEFAULT_RATE_LIMIT,
+        "source": getattr(config, "rate_limit_source", "default") if config else "default",
+    }
+
+    def _current_rate_limit() -> str:
+        value = rate_limit_state["value"]
+        return DEFAULT_RATE_LIMIT if rate_limit_disabled(value) else value
+
     if _has_limiter:
-        limiter = Limiter(get_remote_address, app=app, default_limits=["120 per minute"],
+        limiter = Limiter(get_remote_address, app=app, default_limits=[_current_rate_limit],
+                          default_limits_exempt_when=lambda: rate_limit_disabled(rate_limit_state["value"]),
                           storage_uri="memory://")
+
+    @app.errorhandler(429)
+    def _rate_limited(e):
+        return jsonify({"error": f"Zu viele Anfragen ({e.description}).", "type": "RateLimitExceeded"}), 429
+
+    _allowed_hosts = parse_allowed_hosts(
+        getattr(config, "allowed_hosts", "") or os.environ.get("CONCLAVE_ALLOWED_HOSTS", "")
+    )
+
+    @app.before_request
+    def _check_host():
+        if not is_host_allowed(request.host, _allowed_hosts):
+            return jsonify({"error": "Host nicht erlaubt.", "type": "InvalidHost"}), 421
+
+    @app.before_request
+    def _check_csrf():
+        # Ohne CORS-Preflight senden Browser Cross-Site nur GET/HEAD/POST mit
+        # "einfachem" Content-Type. PUT/DELETE loesen immer einen Preflight aus.
+        # Fuer POST erzwingen JSON oder ein eigener Header den Preflight (B3).
+        if request.method != "POST" or request.routing_exception is not None:
+            return  # unbekannte Routen liefern weiter 404/405
+        if request.mimetype == "application/json" or CLIENT_HEADER in request.headers:
+            return
+        return jsonify({
+            "error": f"Content-Type application/json oder Header {CLIENT_HEADER} erforderlich.",
+            "type": "UnsupportedMediaType",
+        }), 415
 
     @app.before_request
     def _authenticate():
         if request.method == "OPTIONS":
             return
         if auth_service is None:
+            return
+        if request.method in ("GET", "HEAD") and (
+            request.path in PUBLIC_GET_PATHS or request.path.startswith("/static/")
+        ):
             return
         token = None
         auth_header = request.headers.get("Authorization", "")
@@ -86,11 +187,6 @@ def create_app(handler: CLIHandler, auth_service=None,
             token = request.headers.get("X-API-Key")
         if not auth_service.validate_token(token):
             raise AuthenticationError()
-        # RBAC: nur wenn der AuthService Rollen-Pruefung unterstuetzt
-        if hasattr(auth_service, "check_permission") and hasattr(auth_service, "get_role"):
-            role = auth_service.get_role(token) or ""
-            if not auth_service.check_permission(role, request.method, request.path):
-                return jsonify({"error": "Forbidden", "type": "PermissionDenied"}), 403
 
     @app.before_request
     def _log_request_start():
@@ -100,7 +196,11 @@ def create_app(handler: CLIHandler, auth_service=None,
     @app.after_request
     def _log_request_end(response):
         duration_ms = (time.monotonic() - getattr(request, "_start_time", time.monotonic())) * 1000
-        logger.info(
+        # Erfolgreiche Lesezugriffe (statische Dateien, UI-Polling) nur auf DEBUG,
+        # damit Warnungen und Fehler im Server-Log nicht untergehen.
+        quiet = request.method in ("GET", "HEAD", "OPTIONS") and response.status_code < 400
+        logger.log(
+            logging.DEBUG if quiet else logging.INFO,
             "%s %s → %d (%.1f ms)",
             request.method, request.path, response.status_code, duration_ms,
             extra={"method": request.method, "path": request.path,
@@ -135,11 +235,14 @@ def create_app(handler: CLIHandler, auth_service=None,
     def _security_headers(response):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Content-Security-Policy"] = CONTENT_SECURITY_POLICY
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Permissions-Policy"] = PERMISSIONS_POLICY
         # CORS: nur explizit konfigurierte Origins, kein Wildcard-Reflect
         origin = request.headers.get("Origin", "")
         if origin and origin in _cors_allowed:
             response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-API-Key"
+            response.headers["Access-Control-Allow-Headers"] = f"Content-Type, Authorization, X-API-Key, {CLIENT_HEADER}"
             response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         return response
 
@@ -152,8 +255,7 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     def _notify_new_message(conversation_id: str, sequence: int, author: str = ""):
         """Schreibt eine Marker-Datei bei neuer Nachricht (fuer FileChanged Hook)."""
-        workspace = os.environ.get("CONCLAVE_WORKSPACE", "/workspace")
-        marker = pathlib.Path(workspace) / "conclave_notify.json"
+        marker = workspace_root() / "conclave_notify.json"
         try:
             marker.write_text(_json.dumps({
                 "event": "new_message",
@@ -172,40 +274,18 @@ def create_app(handler: CLIHandler, auth_service=None,
             return flask_send_file(str(ui_path), mimetype="text/html")
         return "UI nicht gefunden", 404
 
-    @app.post("/guard/notify")
-    def guard_notify():
-        """Leitet eine Benachrichtigung an den Guard-Service weiter.
-
-        Guard laeuft auf dem Host (nicht im Container).
-        CD kann auch direkt http://localhost:5001/notify aufrufen.
-        """
-        body = request.get_json() or {}
-        guard_url = os.environ.get("GUARD_URL", "http://host.docker.internal:5001")
-        try:
-            import urllib.request as _urlreq
-            data = _json.dumps(body).encode()
-            req = _urlreq.Request(f"{guard_url}/notify", data=data,
-                                  headers={"Content-Type": "application/json"}, method="POST")
-            with _urlreq.urlopen(req, timeout=10) as resp:
-                result = _json.loads(resp.read())
-            return jsonify(result), resp.status
-        except Exception as e:
-            return jsonify({
-                "error": f"Guard nicht erreichbar: {e}",
-                "hint": "Guard direkt erreichbar unter http://localhost:5001/notify"
-            }), 502
-
     @app.get("/api-docs")
     def swagger_ui():
         """Swagger UI — interaktive API-Dokumentation."""
         return """<!DOCTYPE html>
 <html><head>
 <title>Conclave API</title>
-<link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+<meta charset="utf-8">
+<link rel="stylesheet" href="/static/vendor/swagger-ui/swagger-ui.css">
 </head><body>
 <div id="swagger-ui"></div>
-<script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-<script>SwaggerUIBundle({url:'/static/openapi.json',dom_id:'#swagger-ui',deepLinking:true})</script>
+<script src="/static/vendor/swagger-ui/swagger-ui-bundle.js"></script>
+<script src="/static/js/swagger-init.js"></script>
 </body></html>""", 200, {"Content-Type": "text/html"}
 
     @app.get("/openapi.json")
@@ -272,6 +352,18 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     @app.errorhandler(AdapterNotFound)
     def _handle_adapter_not_found(e):
+        return _error_json(e, 502)
+
+    @app.errorhandler(ProviderRateLimit)
+    def _handle_provider_rate_limit(e):
+        return _error_json(e, 429)
+
+    @app.errorhandler(ProviderTimeout)
+    def _handle_provider_timeout(e):
+        return _error_json(e, 504)
+
+    @app.errorhandler(ProviderError)
+    def _handle_provider_error(e):  # ProviderUnavailable und sonstige Provider-Fehler
         return _error_json(e, 502)
 
     @app.errorhandler(ValueError)
@@ -372,7 +464,8 @@ def create_app(handler: CLIHandler, auth_service=None,
             )
         except (ValueError, Exception) as e:
             return jsonify({"error": str(e)}), 400
-        result = handler.update_agent(agent)
+        # Ohne neuen api_key bleibt der gespeicherte Key erhalten; entfernen nur ausdruecklich
+        result = handler.update_agent(agent, clear_api_key=body.get("clear_api_key") is True)
         if not result.success:
             return jsonify({"error": result.message}), 404
         _refresh_registry()
@@ -415,7 +508,7 @@ def create_app(handler: CLIHandler, auth_service=None,
             key_available = (
                 not requires_api_key
                 or bool(fallback_keys.get(name))
-                or bool(key_env and os.environ.get(key_env))
+                or bool(key_env and env_secret(key_env))
             )
             providers.append({
                 "name": name,
@@ -730,6 +823,14 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     # ── Settings und Betrieb ───────────────────────────────────────────
 
+    def _actual_port() -> int:
+        """Tatsaechlich gebundener Port (vom WSGI-Server), sonst der konfigurierte."""
+        configured = getattr(config, "port", 8000) if config else 8000
+        try:
+            return int(request.environ.get("SERVER_PORT") or configured)
+        except (RuntimeError, ValueError):  # ausserhalb eines Requests / unlesbar
+            return configured
+
     def _settings_payload() -> dict:
         fallback_keys = {
             "anthropic": getattr(config, "anthropic_api_key", "") if config else "",
@@ -744,12 +845,12 @@ def create_app(handler: CLIHandler, auth_service=None,
                 continue
             name = preset.get("name", "")
             key_env = preset.get("api_key_env", "")
-            provider_keys[name] = bool(fallback_keys.get(name)) or bool(key_env and os.environ.get(key_env))
+            provider_keys[name] = bool(fallback_keys.get(name)) or bool(key_env and env_secret(key_env))
 
         return {
             "mode": getattr(config, "mode", "development") if config else "development",
             "host": getattr(config, "host", "127.0.0.1") if config else "127.0.0.1",
-            "port": getattr(config, "port", 8000) if config else 8000,
+            "port": _actual_port(),
             "db_provider": getattr(config, "db_provider", "sqlite") if config else "sqlite",
             "db_path": str(getattr(config, "db_path", "")) if config else "",
             "workspace_path": WORKSPACE,
@@ -760,6 +861,14 @@ def create_app(handler: CLIHandler, auth_service=None,
                 "hidden_paths_visible": False,
             },
             "auth_required": bool(getattr(config, "api_key", "") if config else False),
+            "rate_limit": {
+                "value": rate_limit_state["value"],
+                "source": rate_limit_state["source"],
+                "active": _has_limiter and not rate_limit_disabled(rate_limit_state["value"]),
+                "editable": rate_limit_state["source"] != "env",
+                "persistent": bool(getattr(config, "config_path", None)),
+            },
+            "log_file": str(active_log_file() or ""),
             "provider_keys": provider_keys,
         }
 
@@ -781,55 +890,133 @@ def create_app(handler: CLIHandler, auth_service=None,
             WORKSPACE = workspace_path
             os.environ["CONCLAVE_WORKSPACE"] = workspace_path
             os.makedirs(WORKSPACE, exist_ok=True)
+        if "rate_limit" in body:
+            error = _update_rate_limit(body.get("rate_limit"))
+            if error:
+                return jsonify({"error": error[0], "type": error[1]}), error[2]
         return jsonify({"settings": _settings_payload()}), 200
+
+    def _update_rate_limit(value):
+        """Setzt das Rate-Limit sofort und speichert es in config.toml (falls bekannt)."""
+        if rate_limit_state["source"] == "env":
+            return ("Rate-Limit ist durch CONCLAVE_RATE_LIMIT festgelegt und hier nicht aenderbar.",
+                    "RateLimitLocked", 409)
+        value = str(value or "").strip()
+        problem = validate_rate_limit(value) if value else "Rate-Limit darf nicht leer sein (zum Abschalten: off)."
+        if problem:
+            return (problem, "InvalidRateLimit", 400)
+        config_path = getattr(config, "config_path", None)
+        if config_path:
+            try:
+                set_toml_string(pathlib.Path(config_path), "server", "rate_limit", value)
+            except (OSError, ValueError) as exc:
+                logger.error("config.toml nicht aktualisiert: %s", exc)
+                return ("Rate-Limit konnte nicht in config.toml gespeichert werden.", "ConfigWriteFailed", 500)
+        rate_limit_state.update(value=value, source="config" if config_path else "session")
+        if config is not None:
+            config.rate_limit = value
+        logger.info("Rate-Limit geaendert: %s", value)
+        return None
+
+    @app.get("/logs")
+    def get_logs():
+        """Letzte Eintraege der Server-Logdatei (fuer die Settings-Seite)."""
+        path = active_log_file()
+        if path is None or not path.is_file():
+            return jsonify({"available": False, "log_file": str(path or ""), "entries": [],
+                            "hint": "Keine Logdatei aktiv (Server ohne Datei-Logging gestartet)."}), 200
+        try:
+            limit = max(1, min(int(request.args.get("limit", 200)), 1000))
+        except ValueError:
+            return jsonify({"error": "limit muss eine Zahl sein."}), 400
+        level = request.args.get("level", "DEBUG").upper()
+        if level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+            return jsonify({"error": "level muss DEBUG, INFO, WARNING, ERROR oder CRITICAL sein."}), 400
+        return jsonify({"available": True, "log_file": str(path),
+                        "entries": read_log_tail(path, limit=limit, min_level=level)}), 200
+
+    def _backup_root() -> pathlib.Path:
+        backup_root_env = os.environ.get("CONCLAVE_BACKUP_DIR", "").strip()
+        if backup_root_env:
+            return pathlib.Path(backup_root_env)
+        if config and getattr(config, "db_provider", "sqlite") == "sqlite":
+            return pathlib.Path(config.db_path).parent / "backups"
+        return pathlib.Path(WORKSPACE).parent / "backups"
+
+    def _sqlite_db_path() -> pathlib.Path | None:
+        if config and getattr(config, "db_provider", "sqlite") == "sqlite":
+            return pathlib.Path(config.db_path)
+        return None
+
+    def _resolve_backup_name(name) -> pathlib.Path | None:
+        """Nur ein Dateiname (*.zip) direkt im Backup-Verzeichnis, keine Pfade (B4)."""
+        if not isinstance(name, str) or not name.lower().endswith(".zip"):
+            return None
+        if any(sep in name for sep in ("/", "\\", ":")) or name in (".", ".."):
+            return None
+        root = _backup_root().resolve()
+        path = (root / name).resolve()
+        try:
+            path.relative_to(root)
+        except ValueError:  # z. B. Symlink nach aussen
+            return None
+        return path
 
     @app.post("/backup")
     def create_backup():
         """Erstellt ein lokales ZIP-Backup von SQLite-DB und Workspace."""
-        backup_root_env = os.environ.get("CONCLAVE_BACKUP_DIR", "").strip()
-        backup_root = pathlib.Path(backup_root_env) if backup_root_env else None
-        if backup_root is None:
-            if config and getattr(config, "db_provider", "sqlite") == "sqlite":
-                backup_root = pathlib.Path(config.db_path).parent / "backups"
-            else:
-                backup_root = pathlib.Path(WORKSPACE).parent / "backups"
-        db_path = None
-        if config and getattr(config, "db_provider", "sqlite") == "sqlite":
-            db_path = pathlib.Path(config.db_path)
         backup_path = create_backup_archive(
-            db_path=db_path,
+            db_path=_sqlite_db_path(),
             workspace_root=pathlib.Path(WORKSPACE),
-            backup_dir=backup_root,
+            backup_dir=_backup_root(),
         )
-        return jsonify({"backup_path": str(backup_path), "format": "zip"}), 201
+        return jsonify({"backup": backup_path.name, "backup_path": str(backup_path), "format": "zip"}), 201
+
+    @app.get("/backups")
+    def list_backups():
+        """Listet die ZIP-Backups im Backup-Verzeichnis (neueste zuerst)."""
+        root = _backup_root()
+        files = sorted(root.glob("*.zip"), key=lambda f: f.stat().st_mtime, reverse=True) if root.is_dir() else []
+        return jsonify({
+            "backup_dir": str(root),
+            "backups": [{
+                "name": f.name,
+                "size_bytes": f.stat().st_size,
+                "modified_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(f.stat().st_mtime)),
+            } for f in files if f.is_file()],
+        }), 200
 
     @app.post("/restore")
     def restore_backup():
-        """Stellt SQLite-DB und Workspace aus einem lokalen ZIP-Backup wieder her."""
+        """Stellt SQLite-DB und Workspace aus einem ZIP-Backup im Backup-Verzeichnis wieder her."""
         body = request.get_json() or {}
-        backup_path = body.get("backup_path")
-        if not backup_path:
-            return jsonify({"error": "backup_path ist erforderlich."}), 400
-        path = pathlib.Path(str(backup_path))
+        if "backup_path" in body:
+            return jsonify({
+                "error": "backup_path wird nicht mehr unterstuetzt. Dateinamen aus GET /backups als 'backup' uebergeben.",
+                "status": "invalid_request",
+            }), 400
+        if not body.get("backup"):
+            return jsonify({"error": "backup ist erforderlich (Dateiname aus GET /backups).", "status": "invalid_request"}), 400
+        path = _resolve_backup_name(body.get("backup"))
+        if path is None:
+            return jsonify({"error": "Ungueltiger Backup-Name. Erlaubt ist nur ein Dateiname aus GET /backups.",
+                            "status": "invalid_request"}), 400
         if not path.is_file():
             return jsonify({"error": "Backup nicht gefunden."}), 404
-        backup_root_env = os.environ.get("CONCLAVE_BACKUP_DIR", "").strip()
-        backup_root = pathlib.Path(backup_root_env) if backup_root_env else None
-        if backup_root is None:
-            if config and getattr(config, "db_provider", "sqlite") == "sqlite":
-                backup_root = pathlib.Path(config.db_path).parent / "backups"
-            else:
-                backup_root = pathlib.Path(WORKSPACE).parent / "backups"
-        db_path = None
-        if config and getattr(config, "db_provider", "sqlite") == "sqlite":
-            db_path = pathlib.Path(config.db_path)
-        replace_workspace = bool(body.get("replace_workspace", True))
+        replace_workspace = body.get("replace_workspace", False)
+        if not isinstance(replace_workspace, bool):
+            return jsonify({"error": "replace_workspace muss true oder false sein.", "status": "invalid_request"}), 400
+        if replace_workspace and body.get("confirm") != "replace-workspace":
+            return jsonify({
+                "error": "Workspace leeren nur mit confirm: \"replace-workspace\".",
+                "status": "confirmation_required",
+            }), 400
         try:
             result = restore_backup_archive(
                 backup_path=path,
-                db_path=db_path,
+                db_path=_sqlite_db_path(),
                 workspace_root=pathlib.Path(WORKSPACE),
-                backup_dir=backup_root,
+                backup_dir=_backup_root(),
                 replace_workspace=replace_workspace,
             )
         except ValueError as exc:

@@ -43,9 +43,15 @@ class TestValidateProductionConfigEnforcement:
         errors = validate_production_config(config)
         assert any("CONCLAVE_API_KEY" in e for e in errors)
 
-    def test_non_loopback_host_with_api_key_passes_in_development(self):
-        config = ConclaveConfig(mode="development", host="0.0.0.0", api_key="dev-key")
+    def test_non_loopback_host_with_api_key_and_allowed_hosts_passes_in_development(self):
+        config = ConclaveConfig(mode="development", host="0.0.0.0", api_key="dev-key",
+                                allowed_hosts="conclave.lan")
         assert validate_production_config(config) == []
+
+    def test_non_loopback_host_requires_allowed_hosts(self):
+        config = ConclaveConfig(mode="development", host="0.0.0.0", api_key="dev-key")
+        errors = validate_production_config(config)
+        assert any("CONCLAVE_ALLOWED_HOSTS" in e for e in errors)
 
     def test_server_imports_validate(self):
         """server.py muss validate_production_config importieren und aufrufen."""

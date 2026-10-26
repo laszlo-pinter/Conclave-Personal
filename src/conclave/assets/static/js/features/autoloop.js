@@ -25,12 +25,15 @@ async function runAutoloop(){
   if(!stopSignal||stopSignal.length>128){toast(t('autoloop.invalidStopSignal'),'err');return;}
   closeOverlay('overlayAutoloop');
 
-  const btn=document.getElementById('btnAutoloop');btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Loop';
+  const btn=document.getElementById('btnAutoloop');btn.disabled=true;
+  // safe-html: statisches Markup
+  btn.innerHTML='<span class="spinner"></span> Loop';
   const el=document.getElementById('messages');
   const empty=document.getElementById('emptyMsg');if(empty)empty.style.display='none';
 
   // Status-Banner oben im Messages-Container
   const banner=document.createElement('div');banner.className='loop-banner';
+  // safe-html: statisches Markup + Uebersetzung ohne Platzhalter
   banner.innerHTML=`<span class="spinner"></span> <span id="loopStatus">${t('autoloop.starting')}</span>`;
   el.appendChild(banner);scrollBottom();
   const status=banner.querySelector('#loopStatus');
@@ -38,6 +41,7 @@ async function runAutoloop(){
   let liveDiv=null,liveContent=null,buf='';
   // Schliesst die gerade laufende Live-Card ab (Markdown rendern).
   const finishLive=()=>{
+    // safe-html: renderMarkdown() (DOMPurify)
     if(liveContent&&buf){liveContent.innerHTML=renderMarkdown(buf);liveContent.querySelectorAll('pre code').forEach(c=>hljs.highlightElement(c));}
     liveDiv=null;liveContent=null;buf='';
   };
@@ -75,7 +79,7 @@ async function runAutoloop(){
   }catch(e){
     finishLive();banner.remove();toast(e.message,'err');
   }finally{
-    btn.disabled=false;btn.innerHTML=`&#8734; ${t('input.autoloop')}`;
+    btn.disabled=false;btn.textContent=`∞ ${t('input.autoloop')}`;
   }
 }
 
@@ -91,7 +95,8 @@ function handleLoopEvent(ev,seq,ctx){
     // Live-Card vorbereiten, in die der Response-Text geschrieben wird.
     const c=colorFor(ev.participant);
     const div=document.createElement('div');div.className='msg model';div.style.borderLeftColor=c.bd;
-    div.innerHTML=`<div class="msg-header"><span class="msg-label" style="color:${c.tx}">${esc(pName)}</span><span class="msg-seq">${t('autoloop.round', {round: ev.round})} <span class="spinner"></span></span></div><div class="msg-content"></div>`;
+    // safe-html: Name und Uebersetzung mit Platzhalter via esc(), Farbe aus PALETTE
+    div.innerHTML=`<div class="msg-header"><span class="msg-label" style="color:${c.tx}">${esc(pName)}</span><span class="msg-seq">${esc(t('autoloop.round', {round: ev.round}))} <span class="spinner"></span></span></div><div class="msg-content"></div>`;
     ctx.el.insertBefore(div,ctx.el.lastElementChild);  // vor dem Banner einfuegen
     ctx.setLive(div,div.querySelector('.msg-content'));
     scrollBottom();

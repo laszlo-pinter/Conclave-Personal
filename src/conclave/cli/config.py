@@ -6,11 +6,22 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from conclave.runtime.paths import get_runtime_paths
+from conclave.runtime.env import env_secret
 
 
 _RUNTIME_PATHS = get_runtime_paths()
 DEFAULT_CONFIG_PATH = _RUNTIME_PATHS.config_dir / "config.toml"
+
+
+def default_config_path() -> Path:
+    """config.toml: CONCLAVE_CONFIG_FILE, sonst Plattform-Default (zur Aufrufzeit ermittelt)."""
+    override = os.environ.get("CONCLAVE_CONFIG_FILE", "").strip()
+    if override:
+        return Path(override).expanduser()
+    return get_runtime_paths().config_dir / "config.toml"
 DEFAULT_DB_PATH = _RUNTIME_PATHS.db_path
+# flask-limiter-Syntax, pro Route und Client-IP; "off" schaltet die Begrenzung ab
+DEFAULT_RATE_LIMIT = "120 per minute"
 
 
 @dataclass
@@ -23,6 +34,10 @@ class ConclaveConfig:
     host: str = "127.0.0.1"
     port: int = 8000
     debug: bool = False
+    rate_limit: str = DEFAULT_RATE_LIMIT
+    rate_limit_source: str = "default"  # "default" | "config" | "env"
+    # Gesetzt von from_sources; nur dann darf die UI Werte in config.toml speichern
+    config_path: Path | None = None
     # Logging
     log_level: str = "INFO"
     # API-Keys (Fallback, wenn nicht in DB)
@@ -31,18 +46,20 @@ class ConclaveConfig:
     gemini_api_key: str = ""
     # API-Authentifizierung
     api_key: str = ""
+    allowed_hosts: str = ""
     # Betriebsmodus
     mode: str = "development"  # "development" | "production"
 
     @classmethod
     def from_sources(
         cls,
-        config_path: Path = DEFAULT_CONFIG_PATH,
+        config_path: Path | None = None,
     ) -> "ConclaveConfig":
         """Lädt Config aus TOML, überlagert mit Env-Vars.
 
         Priorität: Env-Var > TOML > Default.
         """
+        config_path = config_path or default_config_path()
         # 1. TOML laden
         data: dict = {}
         if config_path.exists():
@@ -50,6 +67,7 @@ class ConclaveConfig:
                 data = tomllib.load(f)
 
         db_section = data.get("database", data.get("conclave", {}))
+        server_section = data.get("server", {})
         participants = data.get("participants", {})
 
         # TOML-Werte mit Defaults
@@ -70,11 +88,18 @@ class ConclaveConfig:
         port = int(os.environ.get("CONCLAVE_PORT", "8000"))
         debug = os.environ.get("CONCLAVE_DEBUG", "").lower() in ("1", "true")
         log_level = os.environ.get("CONCLAVE_LOG_LEVEL", "INFO")
+        if os.environ.get("CONCLAVE_RATE_LIMIT") is not None:
+            rate_limit, rate_limit_source = os.environ["CONCLAVE_RATE_LIMIT"].strip(), "env"
+        elif "rate_limit" in server_section:
+            rate_limit, rate_limit_source = str(server_section["rate_limit"]).strip(), "config"
+        else:
+            rate_limit, rate_limit_source = DEFAULT_RATE_LIMIT, "default"
 
-        anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        openai_api_key = os.environ.get("OPENAI_API_KEY", "")
-        gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
-        api_key = os.environ.get("CONCLAVE_API_KEY", "")
+        anthropic_api_key = env_secret("ANTHROPIC_API_KEY")
+        openai_api_key = env_secret("OPENAI_API_KEY")
+        gemini_api_key = env_secret("GEMINI_API_KEY")
+        api_key = env_secret("CONCLAVE_API_KEY")
+        allowed_hosts = os.environ.get("CONCLAVE_ALLOWED_HOSTS", "")
         mode = os.environ.get("CONCLAVE_MODE", "development")
         return cls(
             db_provider=provider,
@@ -84,17 +109,22 @@ class ConclaveConfig:
             host=host,
             port=port,
             debug=debug,
+            rate_limit=rate_limit,
+            rate_limit_source=rate_limit_source,
+            config_path=config_path,
             log_level=log_level,
             anthropic_api_key=anthropic_api_key,
             openai_api_key=openai_api_key,
             gemini_api_key=gemini_api_key,
             api_key=api_key,
+            allowed_hosts=allowed_hosts,
             mode=mode,
         )
 
 
-def load_config(config_path: Path = DEFAULT_CONFIG_PATH) -> ConclaveConfig:
+def load_config(config_path: Path | None = None) -> ConclaveConfig:
     """Rückwärtskompatible Funktion — delegiert an from_sources."""
+    config_path = config_path or default_config_path()
     if not config_path.exists():
         return ConclaveConfig()
 

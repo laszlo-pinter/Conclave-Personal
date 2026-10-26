@@ -2,9 +2,9 @@
 
 ## Ziel
 
-Die Conclave-UI wird für ein persönliches Multi-Agent-Arbeitswerkzeug neu
-geschnitten. Der bisherige Ansatz mit vielen Funktionen in einem Bedienraum
-wird durch fünf fachliche Arbeitsräume ersetzt.
+Die Conclave-UI ist für ein persönliches Multi-Agent-Arbeitswerkzeug
+geschnitten. Statt vieler Funktionen in einem Bedienraum gibt es fünf
+fachliche Arbeitsräume.
 
 Die UI ist keine Enterprise-Konsole. Sie ist ein lokales Arbeitsstudio für
 einzelne Nutzer.
@@ -13,7 +13,7 @@ einzelne Nutzer.
 
 - Studio
 - Agents
-- Workspace
+- Files (Seitenüberschrift "Workspace")
 - Runs
 - Settings
 
@@ -94,50 +94,54 @@ Startrollen:
 - Planner
 - Custom
 
-## 3. Workspace
+## 3. Files (Workspace)
 
 ### Zweck
 
-Workspace ist der lokale Datenraum für Kontext, Notizen und Outputs.
+Der Bereich "Files" (Seitenüberschrift "Workspace") ist der lokale
+Datenraum für Kontext, Notizen und Outputs.
 
 ### Inhalte
 
-- Dateiübersicht
-- Textdateien lesen
+- Dateibaum (ein vorhandener Ordner `output/` erscheint dort wie jeder
+  andere Ordner; eine eigene Output-Ansicht gibt es nicht)
 - Datei hochladen oder Text ablegen
-- `@workspace/...` Referenzen kopieren/einfügen
-- Output-Ordner anzeigen
-- Sichtbarkeit für Agenten erklären
+- Klick auf einen Dateinamen fügt `@workspace/<pfad>` in das Eingabefeld ein
+- Limit-Chips (UI-, Agent-Lese- und Schreiblimit) und Infotext erklären,
+  was Agenten sehen
+- Conversation exportieren
+
+Einen Datei-Viewer hat die UI nicht. Dateiinhalte lesen geht über die API
+oder die CLI (`conclave workspace read <pfad>`).
 
 ### Sicherheitsregeln
 
 - Agenten dürfen nicht aus dem Workspace ausbrechen.
 - Versteckte Ordner sind für Agenten unsichtbar.
-- Große Dateien brauchen Limits oder explizite Bestätigung.
+- Große Dateien werden durch Größenlimits begrenzt (ohne Bestätigungsdialog).
 - Kontext wird nicht automatisch vollständig geladen.
 
 ## 4. Runs
 
 ### Zweck
 
-Runs macht Arbeitsschritte sichtbar, die über einzelne Chat-Messages
-hinausgehen.
+Runs macht einzelne Modellaufrufe sichtbar, auch die innerhalb von
+Orchestrierung und Auto-Loop.
 
 ### Inhalte
 
-- Invoke-Historie
-- Orchestrierungsläufe
-- Auto-Loops
-- Status
-- Dauer
-- beteiligte Agenten
-- Fehler
-- Token-Usage
+- Run-Historie: ein Eintrag je Einzelaufruf (Typ `invoke` oder `stream`);
+  Orchestrierungen und Auto-Loops erscheinen als ihre einzelnen Aufrufe,
+  nicht als eigener Lauf
+- Spalten: Start, Status, Typ, Participants, Provider, Tokens, Fehler
+- Usage pro Conversation
+
+Dauer und Kosten werden nicht angezeigt.
 
 ### Ziel
 
-Der Nutzer soll sehen können, was gelaufen ist, was es gekostet hat und wo
-ein Lauf fehlgeschlagen ist.
+Der Nutzer sieht, was gelaufen ist, wie viele Tokens es verbraucht hat und
+wo ein Aufruf fehlgeschlagen ist.
 
 ## 5. Settings
 
@@ -147,87 +151,75 @@ Settings bündelt lokale App-Konfiguration.
 
 ### Inhalte
 
-- API-Keys
-- lokaler Datenpfad
-- Workspace-Pfad
-- Theme
-- Backup und Restore
-- lokaler Sicherheitsmodus
-- Server-Port
-- Desktop-/Browser-Startmodus
+Seite Settings:
 
-## Technischer Stand und Zielstruktur
+- Runtime-Infos (nur lesend): Modus, Server (Host und tatsächlich
+  gebundener Port), Datenbank, DB-Pfad, Workspace
+- Workspace-Pfad (änderbar)
+- Workspace-Limits
+- Backup erstellen
+- Rate-Limit (änderbar, wird in `config.toml` gespeichert)
+- Server-Log mit Filter nach Level
 
-Aktuell liegen die installierten UI-Ressourcen als Package-Data unter
-`src/conclave/assets/`. Der JavaScript-Einstieg ist noch flach:
+Sidebar:
 
-```text
-src/conclave/assets/static/js/
-  api.js
-  i18n.js
-  state.js
-  utils.js
-  main.js
-  features/
-    agents.js
-    auth.js
-    autoloop.js
-    conversations.js
-    export.js
-    floor.js
-    messages.js
-    participants.js
-    runs.js
-    settings.js
-    speech.js
-    usage.js
-    workspace.js
-```
+- Betriebsübersicht (API Auth, Status der Provider-Keys)
+- Dialog "API-Zugang" (Conclave-API-Token und Server-URL)
+- Sprachauswahl im Sidebar-Footer
 
-Zielstruktur für spätere UI-Aufräumarbeiten:
+Theme-Auswahl und Startmodus gibt es in der UI nicht. Ein Restore ist nur
+über CLI (`conclave restore`) oder API (`POST /restore`) möglich.
+
+## Technischer Stand
+
+Die installierten UI-Ressourcen liegen als Package-Data unter
+`src/conclave/assets/` (Einstieg `conclave-ui.html`):
 
 ```text
-src/conclave/assets/static/js/
-  core/
+src/conclave/assets/static/
+  css/
+    theme.css
+    layout.css
+    components.css
+  vendor/          # marked, DOMPurify, highlight.js, Swagger UI, Fonts, Lizenzen
+  js/
     api.js
+    i18n.js
     state.js
-    router.js
-    events.js
-    render.js
-  features/
-    studio/
-      conversations.js
-      session.js
-      participants.js
-      floor.js
-      orchestration.js
-      autoloop.js
-    agents/
+    utils.js
+    main.js
+    swagger-init.js
+    features/
       agents.js
-      providers.js
-      presets.js
-    workspace/
-      files.js
-      editor.js
-      references.js
-    runs/
+      auth.js
+      autoloop.js
+      conversations.js
+      export.js
+      floor.js
+      messages.js
+      participants.js
       runs.js
-      usage.js
-    settings/
       settings.js
-      keys.js
-      backup.js
+      speech.js
+      usage.js
+      workspace.js
 ```
 
-## Migrationsreihenfolge
+Die UI ist Vanilla-JavaScript ohne Build-Schritt:
 
-1. Globale Navigation auf die fünf Personal-Bereiche umstellen.
-2. Privacy-/DSGVO-Panel entfernen.
-3. Agentenverwaltung aus dem Studio herauslösen.
-4. Workspace als eigenen Bereich bauen.
-5. Usage, Invoke-, Orchestrierungs- und Auto-Loop-Historie in Runs sammeln.
-6. API-Key-Status, Datenpfade und Backup nach Settings verschieben.
-7. Inline-Handler und globale UI-Zustände schrittweise reduzieren.
+- `state.js` hält den zentralen Zustand als Pub/Sub-Objekt (`AppState` mit
+  `getState`, `setState`, `subscribe`). Ein Token aus dem URL-Fragment
+  (`#token=…`, von `conclave desktop`) wird übernommen und die Adresszeile
+  sofort bereinigt.
+- `main.js` verteilt Klicks zentral über `data-action`-Attribute
+  (Event-Delegation); es gibt keine Inline-Handler.
+- `utils.js` enthält `esc()` und `renderMarkdown()`: marked erzeugt HTML,
+  DOMPurify filtert es, bevor Modellausgaben angezeigt werden.
+- `api.js` sendet das Token als `Authorization: Bearer …`.
+- Alle Fremdbibliotheken und Fonts liegen unter `static/vendor/`; es wird
+  kein CDN geladen. Der Server setzt eine strikte Content-Security-Policy
+  (`script-src 'self'`, `style-src 'self'`, `connect-src 'self'` u.a.).
+- `swagger-init.js` initialisiert die API-Dokumentation unter `/api-docs`.
 
 ## UX-Regeln
 
@@ -235,6 +227,6 @@ src/conclave/assets/static/js/
 - Eine primäre Aufgabe pro Screen.
 - Keine DSGVO-Begriffe in der Personal-UI.
 - Agenten sind schnell testbar.
-- Workspace-Referenzen sind sichtbar und kopierbar.
-- Runs zeigen Zustand, Dauer, Agenten und Kosten.
+- Workspace-Referenzen sind sichtbar und per Klick einfügbar.
+- Runs zeigen Zeitpunkt, Status, Typ, Participants, Provider, Tokens und Fehler.
 - Fehler werden als handlungsnahe Meldungen dargestellt.

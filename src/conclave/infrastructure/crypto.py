@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import stat
 from pathlib import Path
+from conclave.runtime.env import env_secret
 
 try:
     from cryptography.fernet import Fernet, InvalidToken
@@ -46,7 +47,7 @@ class CryptoService:
         Die Key-Datei wird mit Berechtigungen 0o600 (nur Owner) angelegt.
         Vorrang hat die Umgebungsvariable CONCLAVE_SECRET_KEY (Base64-Fernet-Key).
         """
-        env_key = os.environ.get("CONCLAVE_SECRET_KEY")
+        env_key = env_secret("CONCLAVE_SECRET_KEY")
         if env_key:
             return CryptoService(env_key.encode())
 

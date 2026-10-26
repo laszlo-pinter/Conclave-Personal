@@ -36,7 +36,17 @@ def write_limit_bytes() -> int:
 
 
 def workspace_root() -> Path:
-    return Path(os.environ.get("CONCLAVE_WORKSPACE", "/workspace")).resolve()
+    """CONCLAVE_WORKSPACE, sonst der Plattform-Default (~/Conclave/workspace).
+
+    Frueher fiel alles ausser `conclave server/desktop` auf "/workspace" zurueck
+    (Docker-Altlast): CLI-Befehle und conclave-api nutzten dann einen anderen
+    Workspace als die Desktop-App.
+    """
+    configured = os.environ.get("CONCLAVE_WORKSPACE", "").strip()
+    if configured:
+        return Path(configured).expanduser().resolve()
+    from conclave.runtime.paths import get_runtime_paths
+    return get_runtime_paths().workspace_dir.resolve()
 
 
 @dataclass(frozen=True)

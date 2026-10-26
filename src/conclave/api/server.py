@@ -10,6 +10,9 @@ from conclave.cli.bootstrap import (
 from conclave.cli.config import ConclaveConfig
 from conclave.cli.handler import CLIHandler
 from conclave.infrastructure.auth import StaticKeyAuthService
+from conclave.runtime.api_token import load_or_create_token
+from conclave.runtime.env import env_secret
+from conclave.infrastructure.sqlite.connection import ThreadLocalConnection
 
 def _seed_agents(agent_service):
     """Registriert Standard-Agents aus Env-Vars beim Start (idempotent).
@@ -40,7 +43,7 @@ def _seed_agents(agent_service):
         preset = parts[2] if len(parts) > 2 else ""
         name = parts[3] if len(parts) > 3 else agent_id
         api_url = os.environ.get(f"{prefix}{agent_id}_API_URL", "")
-        api_key = os.environ.get(f"{prefix}{agent_id}_API_KEY", "")
+        api_key = env_secret(f"{prefix}{agent_id}_API_KEY")
         # Fallback: api_key_env aus dem Preset (z.B. DASHSCOPE_API_KEY,
         # DEEPSEEK_API_KEY) wenn kein per-Agent _API_KEY gesetzt ist.
         if not api_key and preset:
@@ -49,7 +52,7 @@ def _seed_agents(agent_service):
                 preset_data = get_preset(preset) or {}
                 key_env = preset_data.get("api_key_env", "")
                 if key_env:
-                    api_key = os.environ.get(key_env, "")
+                    api_key = env_secret(key_env)
             except Exception:
                 pass
         try:
@@ -92,11 +95,10 @@ def _build_postgres(config):
     from conclave.infrastructure.postgres.tool_event_repository import PostgresToolEventRepository
     from conclave.application.conversation_flow import ConversationFlowService
     from conclave.application.agent_service import AgentService
-    from pathlib import Path
-    from conclave.infrastructure.crypto import CryptoService
+    from conclave.cli.bootstrap import _load_crypto
 
-    default_key_path = Path.home() / ".conclave" / "secret.key"
-    crypto = CryptoService.load_or_generate(default_key_path)
+    # Wie SQLite: CONCLAVE_SECRET_KEY, CONCLAVE_SECRET_KEY_FILE, dann Plattform-Default (B8)
+    crypto = _load_crypto()
 
     service = ConversationFlowService(
         conversation_repository=PostgresConversationRepository(conn),
@@ -114,9 +116,8 @@ def _build_postgres(config):
 
 def _build_sqlite(config):
     """Baut alle Services mit SQLite."""
-    import sqlite3
-    conn = sqlite3.connect(str(config.db_path), check_same_thread=False)
-    conn.execute("PRAGMA journal_mode=WAL")
+    # Eine Verbindung je Thread statt einer geteilten Verbindung (B6)
+    conn = ThreadLocalConnection(config.db_path)
 
     from conclave.infrastructure.sqlite.schema import initialize_schema
     initialize_schema(conn)
@@ -127,7 +128,7 @@ def _build_sqlite(config):
     from conclave.infrastructure.sqlite.tool_event_repository import SQLiteToolEventRepository
 
     service = build_service(config=config, connection=conn)
-    service.set_audit_repository(SQLiteAuditRepository(conn))
+    service.set_audit_repository(SQLiteAuditRepository(conn, autocommit=True))
     service.set_run_repository(SQLiteRunRepository(conn))
     service.set_tool_event_repository(SQLiteToolEventRepository(conn, autocommit=True))
     agent_service = build_agent_service(config=config, connection=conn)
@@ -165,11 +166,33 @@ def _build_app(config: ConclaveConfig | None = None):
     }
     handler = CLIHandler(service, agent_service=agent_service,
                          provider_fallback_keys=provider_fallback_keys)
-    auth_service = StaticKeyAuthService(config.api_key) if config.api_key else None
+    # Token ist immer Pflicht (B2): ohne CONCLAVE_API_KEY wird die Token-Datei verwendet.
+    if not config.api_key:
+        config.api_key = load_or_create_token()
+    auth_service = StaticKeyAuthService(config.api_key)
 
-    return create_app(handler, auth_service=auth_service,
-                      agent_service=agent_service, config=config,
-                      service=service), config
+    app = create_app(handler, auth_service=auth_service,
+                     agent_service=agent_service, config=config,
+                     service=service)
+    if isinstance(conn, ThreadLocalConnection):
+        _finish_transactions_per_request(app, conn)
+    return app, config
+
+
+def _finish_transactions_per_request(app, conn) -> None:
+    """Keine offene Transaktion ueber das Ende einer Anfrage hinaus (B6).
+
+    Mit einer Verbindung je Thread wuerde ein vergessener Commit den Schreib-Lock
+    des Threads festhalten und alle anderen Schreiber blockieren.
+    """
+    @app.teardown_request
+    def _finish(exc):
+        if not conn.in_transaction:
+            return
+        if exc is None:
+            conn.commit()
+        else:
+            conn.rollback()
 
 
 def create_wsgi_app():
@@ -179,12 +202,18 @@ def create_wsgi_app():
 
 
 def main() -> None:
+    from conclave.infrastructure.log import LOG_FILE_NAME, configure_logging
+    from conclave.runtime.paths import get_runtime_paths
+
+    config = ConclaveConfig.from_sources()
+    configure_logging(config.log_level, get_runtime_paths().log_dir / LOG_FILE_NAME)
     try:
-        app, config = _build_app()
+        app, config = _build_app(config)
     except RuntimeError as e:
         print(f"FEHLER: {e}", file=sys.stderr)
         raise SystemExit(1)
-    app.run(host=config.host, port=config.port, debug=config.debug)
+    from conclave.runtime.serve import serve
+    serve(app, config.host, config.port, debug=config.debug)
 
 
 if __name__ == "__main__":

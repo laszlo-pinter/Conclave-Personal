@@ -34,7 +34,7 @@ function switchTab(tab){
   if(isAgents){loadAgents();loadProviders();}
   if(isWorkspace){loadWorkspace();}
   if(isRuns){loadRuns();loadConversationUsage();}
-  if(isSettings){loadSettings();}
+  if(isSettings){loadSettings();loadLogs();}
 }
 
 // ── Conversations ─────────────────────────────────────────────────────────
@@ -44,7 +44,9 @@ async function loadConversations(){
 
 function renderConvList(){
   const el=document.getElementById('convList');
+  // safe-html: statisches Markup + Uebersetzung ohne Platzhalter
   if(!conversations.length){el.innerHTML=`<div class="empty-list">${t('conv.none')}</div>`;return;}
+  // safe-html: Werte via esc()/attr()
   el.innerHTML=conversations.map(c=>{
     const title=c.topic||c.id.slice(0,8)+'…';
     const short=c.id.slice(0,8);
@@ -53,7 +55,7 @@ function renderConvList(){
     const convId=attr(c.id);
     return `<div class="conv-item${c.id===currentConvId?' active':''}" data-action="select-conversation" data-conversation-id="${convId}">
       <div class="conv-item-id" style="font-size:12px;font-weight:600;font-family:var(--font-ui);color:var(--text)">${esc(title)}</div>
-      <div class="conv-item-meta"><div class="conv-dot"></div><span class="copyable" data-action="copy-conversation-id" data-conversation-id="${convId}" title="${attr(t('copy.fullConv', {id: c.id}))}">${short}</span> · ${date}</div>
+      <div class="conv-item-meta"><div class="conv-dot"></div><span class="copyable" data-action="copy-conversation-id" data-conversation-id="${convId}" title="${attr(t('copy.fullConv', {id: c.id}))}">${esc(short)}</span> · ${esc(date)}</div>
       <button class="row-del" data-action="delete-conversation" data-conversation-id="${convId}">
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 1h2M4 3v7M8 3v7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
       </button>

@@ -25,13 +25,21 @@ conclave runs --conversation-id $conv
 
 Ziel: Eine technische Entscheidung strukturieren.
 
+Die Workflows 2–4 nutzen die Agenten `planner` und `reviewer`. Einmalig
+anlegen, falls sie noch nicht existieren:
+
+```powershell
+conclave agent-new planner --name "Planner" --provider openai-responses --preset openai-responses --model "<openai-model>" --role Planner
+conclave agent-new reviewer --name "Reviewer" --provider anthropic --preset anthropic --model "<anthropic-model>" --role Reviewer
+```
+
 ```powershell
 $conv = (conclave --json new | ConvertFrom-Json).conversation_id
 conclave topic $conv "ADR: SQLite vs Postgres für Personal Release"
 conclave add-participant $conv planner --name "Planner"
 conclave add-participant $conv reviewer --name "Reviewer"
 conclave message $conv "Vergleicht SQLite und Postgres für ein lokales Personal Tool. Liefert Empfehlung, Risiken und spätere Migrationsoption."
-conclave orchestrate-parallel $conv --groups planner reviewer
+conclave orchestrate-parallel $conv --groups planner,reviewer
 conclave message $conv "Fasse die Einwände zu einer ADR-Entscheidung zusammen."
 conclave invoke $conv planner
 ```
@@ -52,6 +60,12 @@ conclave invoke $conv reviewer
 
 Workspace-Dateien werden nicht automatisch importiert. Der Nutzer referenziert
 sie explizit.
+
+`conclave workspace write` und `conclave invoke` nutzen denselben Workspace wie
+die Desktop-App: `CONCLAVE_WORKSPACE`, sonst `~/Conclave/workspace`. Wurde der
+Workspace-Pfad nur in den Settings der laufenden App geändert (gilt für diese
+Server-Session), sieht die CLI ihn nicht; dann `CONCLAVE_WORKSPACE` im
+CLI-Terminal auf denselben Pfad setzen.
 
 ## 4. Menschliche Entscheidung Nach Mehreren Antworten
 

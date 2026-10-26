@@ -49,6 +49,8 @@ def get_runtime_paths(
         data_dir = data_root / "conclave"
         log_dir = state_root / "conclave" / "logs"
 
+    if env.get("CONCLAVE_LOG_DIR"):
+        log_dir = Path(env["CONCLAVE_LOG_DIR"])
     workspace_dir = Path(env.get("CONCLAVE_WORKSPACE") or home / "Conclave" / "workspace")
     db_path = Path(env.get("CONCLAVE_DB_PATH") or data_dir / "conclave.db")
     secret_key_path = Path(env.get("CONCLAVE_SECRET_KEY_FILE") or config_dir / "secret.key")

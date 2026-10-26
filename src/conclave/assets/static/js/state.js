@@ -1,9 +1,24 @@
 // static/js/state.js — Zentraler State mit pub/sub
 // Ersetzt die globalen let-Variablen durch ein reaktives State-Objekt.
 
+// Token aus dem URL-Fragment uebernehmen (#token=…, von `conclave desktop`).
+// Fragmente landen nicht in Server-Logs; die Adresszeile wird sofort bereinigt.
+// Ein Token aus dem Fragment gehoert zu diesem Server, daher API-URL zuruecksetzen.
+function _takeTokenFromFragment() {
+  const token = new URLSearchParams(window.location.hash.slice(1)).get('token')
+  if (!token) return ''
+  history.replaceState(null, '', window.location.pathname + window.location.search)
+  try {
+    localStorage.setItem('conclave_api_key', token)
+    localStorage.removeItem('conclave_api_url')
+  } catch {}
+  return token
+}
+const _fragmentToken = _takeTokenFromFragment()
+
 const _state = {
-  api: localStorage.getItem('conclave_api_url') || window.location.origin,
-  apiKey: localStorage.getItem('conclave_api_key') || '',
+  api: (!_fragmentToken && localStorage.getItem('conclave_api_url')) || window.location.origin,
+  apiKey: _fragmentToken || localStorage.getItem('conclave_api_key') || '',
   currentConvId: null,
   currentMessages: [],
   conversations: [],

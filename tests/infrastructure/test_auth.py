@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import patch
 
-from conclave.infrastructure.auth import RoleBasedAuthService, StaticKeyAuthService
+from conclave.infrastructure.auth import StaticKeyAuthService
 
 
 class TestStaticKeyAuthService:
@@ -35,15 +35,11 @@ class TestStaticKeyAuthService:
         compare.assert_called_once_with("my-secret-key", "my-secret-key")
 
 
-class TestRoleBasedAuthService:
-    def test_validates_tokens_with_constant_time_compare(self):
-        svc = RoleBasedAuthService({"viewer-token": "viewer", "owner-token": "owner"})
-        with patch("conclave.infrastructure.auth.hmac.compare_digest", side_effect=lambda a, b: a == b) as compare:
-            assert svc.validate_token("owner-token") is True
-        assert compare.call_count == 2
 
-    def test_get_role_uses_constant_time_compare(self):
-        svc = RoleBasedAuthService({"viewer-token": "viewer"})
-        with patch("conclave.infrastructure.auth.hmac.compare_digest", return_value=True) as compare:
-            assert svc.get_role("viewer-token") == "viewer"
-        compare.assert_called_once_with("viewer-token", "viewer-token")
+def test_rbac_is_removed():
+    """B10: Personal-Edition hat keine Rollen; toter RBAC-Code bleibt entfernt."""
+    import conclave.infrastructure.auth as auth
+
+    assert not hasattr(auth, "RoleBasedAuthService")
+    assert not hasattr(auth, "_ROLE_PERMISSIONS")
+    assert not hasattr(StaticKeyAuthService, "check_permission")

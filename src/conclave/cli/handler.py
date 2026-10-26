@@ -1,6 +1,6 @@
 # src/conclave/cli/handler.py
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 import asyncio
@@ -8,6 +8,7 @@ import os
 from datetime import datetime, timezone
 
 from conclave.application.agent_service import AgentService
+from conclave.runtime.env import env_secret
 from conclave.application.conversation_flow import ConversationFlowService
 from conclave.application.orchestrator import Orchestrator, ParallelOrchestrator
 from conclave.application.workspace_security import (
@@ -156,7 +157,7 @@ class CLIHandler:
             return ""
         preset = get_preset(preset_name) or {}
         key_env = preset.get("api_key_env", "")
-        return os.environ.get(key_env, "") if key_env else ""
+        return env_secret(key_env) if key_env else ""
 
     def _run_to_dict(self, run) -> dict:
         usage = None
@@ -290,10 +291,20 @@ class CLIHandler:
         except AgentAlreadyExists:
             return CLIResult(success=False, message=f"Agent '{agent.id}' existiert bereits.")
 
-    def update_agent(self, agent: Agent) -> CLIResult:
+    def update_agent(self, agent: Agent, *, clear_api_key: bool = False) -> CLIResult:
+        """Aktualisiert einen Agenten.
+
+        Ein leerer api_key bedeutet "gespeicherten Key behalten" - die UI zeigt
+        gespeicherte Keys nie an und schickt sie daher beim Bearbeiten nicht mit.
+        Entfernt wird ein Key nur mit clear_api_key=True.
+        """
         if not self._agent_service:
             return CLIResult(success=False, message="AgentService nicht verfügbar.")
         try:
+            if clear_api_key:
+                agent = replace(agent, api_key="")
+            elif not agent.api_key:
+                agent = replace(agent, api_key=self._agent_service.get_agent(agent.id).api_key)
             self._agent_service.update_agent(agent)
             return CLIResult(success=True, message=f"Agent '{agent.id}' aktualisiert.",
                              data={"id": agent.id})
@@ -315,13 +326,8 @@ class CLIHandler:
             return CLIResult(success=False, message="AgentService nicht verfügbar.")
         try:
             agent = self._agent_service.get_agent(agent_id)
-            updated = Agent(
-                id=agent.id, name=agent.name, provider=agent.provider,
-                model=agent.model, api_key=api_key,
-                role=agent.role, topic=agent.topic,
-                system_prompt=agent.system_prompt, created_at=agent.created_at,
-            )
-            self._agent_service.update_agent(updated)
+            # Alle uebrigen Felder (Preset, API-URL, Antwortpfad ...) bleiben erhalten
+            self._agent_service.update_agent(replace(agent, api_key=api_key))
             return CLIResult(success=True, message=f"API-Key für Agent '{agent_id}' gesetzt.",
                              data={"id": agent_id})
         except AgentNotFound:
@@ -559,6 +565,7 @@ class CLIHandler:
             return CLIResult(
                 success=False,
                 message=f"Conversation '{conversation_id}' nicht gefunden.",
+                data={"type": "ConversationNotFound", "status": 404},
             )
         except AdapterNotFound:
             return CLIResult(

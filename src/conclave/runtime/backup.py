@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sqlite3
 import stat
 import tempfile
 import zipfile
@@ -147,13 +148,33 @@ def _is_symlink(member: zipfile.ZipInfo) -> bool:
 
 
 def _restore_db(zf: zipfile.ZipFile, member: zipfile.ZipInfo, db_path: Path) -> None:
+    """Spielt die Backup-DB ueber die SQLite-Backup-API in die bestehende DB ein.
+
+    Die Datei wird nicht ersetzt: offene Verbindungen des laufenden Servers und
+    die WAL-Dateien bleiben gueltig und sehen die wiederhergestellten Daten ab
+    ihrer naechsten Transaktion. Die Backup-DB wird vorher auf Integritaet geprueft.
+    """
     db_path = db_path.expanduser().resolve()
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(delete=False, dir=str(db_path.parent), suffix=".restore") as tmp:
-        tmp_path = Path(tmp.name)
-        with zf.open(member, "r") as src:
-            shutil.copyfileobj(src, tmp)
-    os.replace(tmp_path, db_path)
+    with tempfile.TemporaryDirectory(dir=str(db_path.parent), prefix=".restore-") as tmp_dir:
+        tmp_path = Path(tmp_dir) / "restore.db"
+        with zf.open(member, "r") as src, open(tmp_path, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+        source = sqlite3.connect(str(tmp_path))
+        try:
+            try:
+                ok = source.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+            except sqlite3.DatabaseError as exc:
+                raise ValueError("Backup archive contains no valid SQLite database.") from exc
+            if not ok:
+                raise ValueError("Backup database failed the SQLite integrity check.")
+            target = sqlite3.connect(str(db_path), timeout=30)
+            try:
+                source.backup(target)
+            finally:
+                target.close()
+        finally:
+            source.close()
 
 
 def _restore_workspace_member(zf: zipfile.ZipFile, member: zipfile.ZipInfo, workspace_root: Path) -> None:

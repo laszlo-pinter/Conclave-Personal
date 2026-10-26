@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "conclave-personal"
-version = "0.1.20"
+version = "0.2.0"
 description = "Local personal multi-agent workspace for Windows and Linux."
 readme = "README.md"
 license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
@@ -28,6 +28,7 @@ dependencies = [
     "flask>=3.0",
     "flask-limiter>=4.0",
     "httpx>=0.27",
+    "waitress>=3.0.2",
 ]
 
 [project.urls]
@@ -35,18 +36,20 @@ Homepage = "https://github.com/laszlo-pinter/Conclave-Personal"
 Source = "https://github.com/laszlo-pinter/Conclave-Personal"
 Issues = "https://github.com/laszlo-pinter/Conclave-Personal/issues"
 Documentation = "https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/index.md"
-Changelog = "https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.1.20.md"
+Changelog = "https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.2.0.md"
 
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.40.0"]
 openai = ["openai>=1.0"]
-api = ["flask>=3.0", "flask-limiter>=4.0"]
+api = ["flask>=3.0", "flask-limiter>=4.0", "waitress>=3.0.2"]
 crypto = ["cryptography>=42.0"]
 postgres = ["psycopg2-binary>=2.9"]
 mcp = ["mcp>=1.0", "httpx>=0.27"]
 dev     = ["pytest>=9.0"]
 dev-api = ["pytest>=9.0", "flask>=3.0"]
-dev-all = ["pytest>=9.0", "pytest-asyncio>=1.0", "flask>=3.0", "flask-limiter>=4.0", "httpx>=0.27", "anthropic>=0.40.0", "openai>=1.0", "cryptography>=42.0", "psycopg2-binary>=2.9"]
+dev-ui  = ["pytest>=9.0", "playwright==1.64.1"]
+dev-security = ["pip-audit==2.10.1", "bandit==1.9.4"]
+dev-all = ["pytest>=9.0", "pytest-asyncio>=1.0", "flask>=3.0", "flask-limiter>=4.0", "waitress>=3.0.2", "httpx>=0.27", "anthropic>=0.40.0", "openai>=1.0", "cryptography>=42.0", "psycopg2-binary>=2.9"]
 
 [project.scripts]
 conclave = "conclave.cli.main:main"
@@ -72,6 +75,11 @@ where = ["src"]
     "assets/static/css/*.css",
     "assets/static/js/*.js",
     "assets/static/js/features/*.js",
+    "assets/static/vendor/*.js",
+    "assets/static/vendor/fonts/*",
+    "assets/static/vendor/highlight/*",
+    "assets/static/vendor/licenses/*",
+    "assets/static/vendor/swagger-ui/*",
     "assets/scripts/windows/*.ps1",
     "assets/scripts/linux/*",
 ]

@@ -71,6 +71,8 @@ const _actions = {
   'ws-upload-click':     () => document.getElementById('wsUpload').click(),
   'save-settings-workspace': () => saveSettingsWorkspace(),
   'create-backup':       () => createBackup(),
+  'save-rate-limit':     () => saveRateLimit(),
+  'refresh-logs':        () => loadLogs(),
 }
 
 document.addEventListener('click', (e) => {
@@ -87,6 +89,7 @@ function _bindStaticUiEvents() {
     if (el) el.addEventListener(event, handler)
   }
   on('languageSelect', 'change', (e) => setLanguage(e.target.value))
+  on('logLevel', 'change', () => loadLogs())
   on('wsUpload', 'change', (e) => uploadWsFile(e.target))
   on('fileInput', 'change', (e) => handleFile(e.target))
   on('pSel', 'change', () => onPSelChange())

@@ -176,6 +176,14 @@ class AuditRepository(Protocol):
         """Speichert einen Audit-Eintrag (Provider-Call, Fehler, Token-Verbrauch)."""
         ...
 
+    def list_by_conversation(self, conversation_id: str) -> list[AuditEntry]:
+        """Gibt alle Audit-Eintraege einer Conversation zurueck."""
+        ...
+
+    def list_by_date_range(self, start: datetime, end: datetime) -> list[AuditEntry]:
+        """Gibt Laufprotokoll-Eintraege in einem Zeitraum zurueck."""
+        ...
+
 
 @runtime_checkable
 class RunRepository(Protocol):
@@ -195,14 +203,6 @@ class RunRepository(Protocol):
 
     def list_by_conversation(self, conversation_id: str, limit: int = 100) -> list[Run]:
         """Gibt Runs einer Conversation absteigend nach Startzeit zurueck."""
-        ...
-
-    def list_by_conversation(self, conversation_id: str) -> list[AuditEntry]:
-        """Gibt alle Audit-Eintraege einer Conversation zurueck."""
-        ...
-
-    def list_by_date_range(self, start: datetime, end: datetime) -> list[AuditEntry]:
-        """Gibt Laufprotokoll-Eintraege in einem Zeitraum zurueck."""
         ...
 
 

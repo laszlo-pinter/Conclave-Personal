@@ -32,6 +32,13 @@ from typing import Any
 
 import httpx
 
+from conclave.application.workspace_security import (
+    agent_read_limit_bytes,
+    assert_size_allowed,
+    is_agent_visible,
+    resolve_workspace_path,
+    workspace_root,
+)
 from conclave.domain.conversation import Conversation
 from conclave.domain.message import MessageAuthorType
 from conclave.domain.model_response import TokenUsage
@@ -134,7 +141,7 @@ def _build_workspace_info() -> str:
     liefert stattdessen 'context_files:' in den Chat-Regeln. Wer das alte
     Voll-Listing will, setzt CONCLAVE_WORKSPACE_AUTOLIST=1.
     """
-    workspace = os.environ.get("CONCLAVE_WORKSPACE", "/workspace")
+    workspace = str(workspace_root())
     if not os.path.isdir(workspace):
         return ""
     info = (
@@ -178,7 +185,7 @@ def _load_context_files(conversation: Conversation) -> str:
     Format: Erste Zeile von rules = 'context_files: datei1.md, datei2.md'
     """
     rules = getattr(conversation, "rules", "") or ""
-    workspace = os.environ.get("CONCLAVE_WORKSPACE", "/workspace")
+    root = workspace_root()
     parts = []
     for line in rules.split("\n"):
         line = line.strip()
@@ -189,17 +196,20 @@ def _load_context_files(conversation: Conversation) -> str:
             filepath = filepath.strip()
             if not filepath:
                 continue
-            safe = os.path.normpath(filepath)
-            if safe.startswith(".."):
+            # Dieselben Grenzen wie @workspace/ und @read(): kein absoluter Pfad,
+            # kein Ausbruch aus dem Workspace, keine versteckten Pfade, Leselimit.
+            resolved = resolve_workspace_path(filepath, root)
+            if resolved is None or not resolved.path.is_file() or not is_agent_visible(resolved.path, root):
+                logger.warning("context_files: '%s' ignoriert (ausserhalb des Workspace, versteckt oder fehlt)", filepath)
                 continue
-            full = os.path.join(workspace, safe)
-            if os.path.isfile(full):
-                try:
-                    with open(full, "r", encoding="utf-8") as f:
-                        content = f.read()
-                    parts.append(f"--- Kontext: {filepath} ---\n{content}")
-                except Exception:
-                    pass
+            if not assert_size_allowed(resolved.path, agent_read_limit_bytes()):
+                logger.warning("context_files: '%s' ignoriert (groesser als das Agent-Leselimit)", filepath)
+                continue
+            try:
+                content = resolved.path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            parts.append(f"--- Kontext: {resolved.relative} ---\n{content}")
     return "\n\n".join(parts) if parts else ""
 
 

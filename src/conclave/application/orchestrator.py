@@ -59,6 +59,8 @@ class Orchestrator:
                     success=False,
                     responses=responses,
                     error=f"Conversation '{conversation_id}' nicht gefunden.",
+                    error_type="ConversationNotFound",
+                    status=404,
                 )
             except AdapterNotFound:
                 return OrchestratorResult(
@@ -117,6 +119,8 @@ class ParallelOrchestrator:
                     success=False,
                     responses=responses,
                     error=f"Conversation '{conversation_id}' nicht gefunden.",
+                    error_type="ConversationNotFound",
+                    status=404,
                 )
             snapshot = self._build_group_snapshot(conversation)
             results = await asyncio.gather(

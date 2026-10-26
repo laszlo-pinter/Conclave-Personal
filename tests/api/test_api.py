@@ -78,12 +78,12 @@ def client(handler):
 # ── POST /conversations ────────────────────────────────────────────────────
 
 def test_post_conversations_returns_201(client):
-    res = client.post("/conversations")
+    res = client.post("/conversations", json={})
     assert res.status_code == 201
 
 
 def test_post_conversations_returns_conversation_id(client):
-    res = client.post("/conversations")
+    res = client.post("/conversations", json={})
     body = json.loads(res.data)
     assert body["conversation_id"] == "conv-1"
 
@@ -191,12 +191,12 @@ def test_post_messages_passes_content(client, handler):
 # ── POST /conversations/<id>/participants/<pid>/invoke ─────────────────────
 
 def test_invoke_returns_200(client):
-    res = client.post("/conversations/conv-1/participants/p1/invoke")
+    res = client.post("/conversations/conv-1/participants/p1/invoke", json={})
     assert res.status_code == 200
 
 
 def test_invoke_returns_model_content(client):
-    res = client.post("/conversations/conv-1/participants/p1/invoke")
+    res = client.post("/conversations/conv-1/participants/p1/invoke", json={})
     body = json.loads(res.data)
     assert body["content"] == "Modellantwort"
     assert body["participant_id"] == "p1"
@@ -207,7 +207,7 @@ def test_invoke_failure_returns_502(client, handler):
         success=False,
         message="Kein Adapter.",
     )
-    res = client.post("/conversations/conv-1/participants/p1/invoke")
+    res = client.post("/conversations/conv-1/participants/p1/invoke", json={})
     assert res.status_code == 502
 
 
@@ -352,7 +352,7 @@ def test_post_grant_floor_returns_200(client, handler):
 
 def test_post_revoke_floor_returns_200(client, handler):
     handler.revoke_floor.return_value = CLIResult(success=True, message="Rederecht entzogen.", data={})
-    res = client.post("/conversations/conv-1/floor/revoke")
+    res = client.post("/conversations/conv-1/floor/revoke", json={})
     assert res.status_code == 200
 
 
@@ -361,11 +361,11 @@ def test_post_invoke_with_floor_returns_200(client, handler):
         success=True, message="Antwort erhalten.",
         data={"participant_id": "p1", "content": "Hallo", "sequence": 2}
     )
-    res = client.post("/conversations/conv-1/floor/invoke")
+    res = client.post("/conversations/conv-1/floor/invoke", json={})
     assert res.status_code == 200
 
 
 def test_post_invoke_with_floor_no_floor_returns_409(client, handler):
     handler.invoke_with_floor.return_value = CLIResult(success=False, message="Kein Rederecht.")
-    res = client.post("/conversations/conv-1/floor/invoke")
+    res = client.post("/conversations/conv-1/floor/invoke", json={})
     assert res.status_code == 409

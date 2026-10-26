@@ -1,8 +1,8 @@
 # Conclave Personal
 
 **Projekt-ID:** `conclave`
-**Arbeitsbranch:** `personal-multiplatform`
-**Phase:** Phase 13 - Release-Vorbereitung
+**Arbeitsbranch:** `main`
+**Phase:** v0.2.0 Alpha
 
 ## Ziel
 
@@ -18,8 +18,8 @@ Arbeit, macht Abläufe nachvollziehbar und hilft beim Vergleichen von
 Perspektiven. Der Mensch entscheidet immer, was stimmt, was extern geprüft
 werden muss und welcher nächste Schritt sinnvoll ist.
 
-Windows und Linux sind gleichwertige Zielplattformen. Docker bleibt optional,
-ist aber nicht der primäre Nutzerpfad.
+Windows und Linux sind gleichwertige Zielplattformen. Es gibt kein
+Docker-Setup; der Nutzerpfad ist die lokale Installation.
 
 ## Zielgruppe
 
@@ -37,7 +37,8 @@ ist aber nicht der primäre Nutzerpfad.
 5. Mehrere Perspektiven sichtbar machen, ohne Modellkonsens als Wahrheit zu
    behandeln.
 6. Runs, Usage und Ergebnisse nachvollziehen.
-7. Lokale Daten sichern und Backup-Archive validieren.
+7. Lokale Daten sichern und wiederherstellen (Archive werden beim Restore
+   geprüft).
 
 ## Produktbereiche
 
@@ -46,7 +47,9 @@ ist aber nicht der primäre Nutzerpfad.
 - **Agents:** Agenten, Rollen, Provider, Modelle, Presets und Tests.
 - **Workspace:** lokale Dateien, Kontext, Notizen und Agent-Outputs.
 - **Runs:** Laufhistorie, Fehler, Dauer und Usage.
-- **Settings:** API-Keys, Datenpfade, Theme, Backup, lokaler Sicherheitsmodus.
+- **Settings:** Runtime-Infos, Workspace-Pfad, API-Zugang (Token),
+  Status der Provider-Keys, Backup erstellen (Restore per CLI/API), Rate-Limit
+  und Server-Log. Die Sprachwahl liegt im Fuß der Seitenleiste.
 
 ## Nicht-Ziele
 
@@ -79,7 +82,7 @@ vorbereitet.
 
 ## Regeln
 
-Dieses Repository ist für v0.1.1 selbstbeschreibend. Für Beiträge gelten:
+Dieses Repository ist für v0.2.0 selbstbeschreibend. Für Beiträge gelten:
 
 - Personal-first: keine Enterprise-/DSGVO-Oberflächen wieder einführen.
 - Keine Feature-Ausweitung während Release-Stabilisierung ohne konkreten

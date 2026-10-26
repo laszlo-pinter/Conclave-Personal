@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 import sys
 
 from conclave.cli.bootstrap import build_agent_service, build_registry, build_service, validate_production_config
@@ -11,6 +12,7 @@ from conclave.domain.participant import ParticipantType
 from conclave.infrastructure.log import configure_logging, get_logger
 from conclave.runtime.browser import open_browser
 from conclave.runtime.desktop import prepare_launch_config
+from conclave.runtime.env import env_secret
 
 
 def _console_symbol(symbol: str, fallback: str, stream=None) -> str:
@@ -373,10 +375,8 @@ def run(argv: list[str] | None = None) -> int:
         existing = handler.get_agent(args.id)
         from datetime import datetime
         created_at = datetime.fromisoformat(existing.data["created_at"]) if existing.success else None
-        # api_key: explizit übergeben oder bestehenden aus DB behalten
-        api_key = args.api_key if args.api_key is not None else (
-            existing.data.get("api_key", "") if existing.success else ""
-        )
+        # api_key: explizit uebergeben; leer = gespeicherten Key behalten (handler.update_agent)
+        api_key = args.api_key or ""
         try:
             agent = Agent(id=args.id, name=args.name, provider=args.provider,
                           model=args.model, api_key=api_key,
@@ -547,9 +547,12 @@ def _server_url(host: str, port: int) -> str:
 
 
 def _run_web(args) -> int:
+    from conclave.runtime.api_token import read_token
+    from conclave.runtime.browser import url_with_token
+
     config = ConclaveConfig.from_sources()
     url = args.url or _server_url(config.host, config.port)
-    open_browser(url)
+    open_browser(url_with_token(url, read_token()))
     print(f"Conclave Web: {url}")
     return 0
 
@@ -563,22 +566,29 @@ def _run_server(args, should_open_browser: bool = False) -> int:
         debug=getattr(args, "debug", False),
         open_browser=should_open_browser,
     )
-    log_file = launch.paths.log_dir / "conclave-server.log"
+    from conclave.infrastructure.log import LOG_FILE_NAME
+    log_file = launch.paths.log_dir / LOG_FILE_NAME
     configure_logging(launch.config.log_level, log_file)
     get_logger("cli.server").info(
         "Server starting",
         extra={"method": "server", "path": str(log_file)},
     )
 
+    from conclave.api.server import _build_app
+    from conclave.runtime.api_token import token_path
+    from conclave.runtime.browser import url_with_token
+
+    app, config = _build_app(launch.config)
     if should_open_browser:
         import threading
-        threading.Timer(1.0, lambda: open_browser(launch.url)).start()
+        browser_url = url_with_token(launch.url, config.api_key)
+        threading.Timer(1.0, lambda: open_browser(browser_url)).start()
         print(f"Conclave Desktop: {launch.url}")
     print(f"Conclave Logs: {log_file}")
-
-    from conclave.api.server import _build_app
-    app, config = _build_app(launch.config)
-    app.run(host=config.host, port=config.port, debug=config.debug)
+    if not env_secret("CONCLAVE_API_KEY"):
+        print(f"Conclave API-Token: {token_path()}")
+    from conclave.runtime.serve import serve
+    serve(app, config.host, config.port, debug=config.debug)
     return 0
 
 

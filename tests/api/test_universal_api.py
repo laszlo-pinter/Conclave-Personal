@@ -111,7 +111,7 @@ class TestAgentTest:
             "id": "t1", "name": "Test", "provider": "anthropic",
             "model": "claude-sonnet-4-20250514",
         })
-        resp = client.post("/agents/t1/test")
+        resp = client.post("/agents/t1/test", json={})
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["success"] is True

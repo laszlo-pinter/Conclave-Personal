@@ -19,6 +19,7 @@ from conclave.infrastructure.sqlite.run_repository import SQLiteRunRepository
 from conclave.infrastructure.sqlite.schema import initialize_schema
 from conclave.infrastructure.sqlite.tool_event_repository import SQLiteToolEventRepository
 from conclave.runtime.paths import get_runtime_paths
+from conclave.runtime.env import env_secret
 
 DEFAULT_KEY_PATH = get_runtime_paths().secret_key_path
 
@@ -35,7 +36,7 @@ def _load_crypto(key_path: Path | None = None) -> CryptoService:
 
 def _secret_key_available(key_path: Path | None = None) -> bool:
     """Prueft ob ein Verschluesselungsschluessel verfuegbar ist."""
-    if os.environ.get("CONCLAVE_SECRET_KEY"):
+    if env_secret("CONCLAVE_SECRET_KEY"):
         return True
     return (key_path or _default_key_path()).exists()
 
@@ -50,11 +51,40 @@ def _is_loopback_host(host: str) -> bool:
         return False
 
 
+def rate_limit_disabled(value: str) -> bool:
+    return (value or "").strip().lower() in ("off", "none", "0", "")
+
+
+def validate_rate_limit(value: str) -> str | None:
+    """Fehlermeldung fuer einen ungueltigen Rate-Limit-Wert, sonst None."""
+    if rate_limit_disabled(value):
+        return None
+    try:
+        from limits import parse_many
+    except ImportError:  # flask-limiter nicht installiert: Begrenzung ist ohnehin aus
+        return None
+    try:
+        parse_many(value)
+    except ValueError:
+        return (f"Ungueltiges Rate-Limit '{value}' (CONCLAVE_RATE_LIMIT bzw. [server] rate_limit). "
+                "Beispiele: '120 per minute', '120/minute; 2000/hour', 'off'")
+    return None
+
+
 def validate_production_config(config: ConclaveConfig) -> list[str]:
     """Gibt Fehlerliste zurueck. Leer = Production-Boot erlaubt."""
     errors: list[str] = []
     if not _is_loopback_host(config.host) and not config.api_key:
         errors.append("CONCLAVE_API_KEY ist erforderlich wenn CONCLAVE_HOST nicht loopback ist")
+    if not _is_loopback_host(config.host) and not config.allowed_hosts:
+        errors.append("CONCLAVE_ALLOWED_HOSTS ist erforderlich wenn CONCLAVE_HOST nicht loopback ist")
+    if config.debug and not _is_loopback_host(config.host):
+        errors.append("CONCLAVE_DEBUG ist nur bei Loopback-CONCLAVE_HOST erlaubt (Werkzeug-Debugger)")
+    if config.debug and config.mode == "production":
+        errors.append("CONCLAVE_DEBUG ist im Production-Modus nicht erlaubt (Werkzeug-Debugger)")
+    rate_limit_error = validate_rate_limit(config.rate_limit)
+    if rate_limit_error:
+        errors.append(rate_limit_error)
 
     if config.mode != "production":
         return errors
@@ -180,7 +210,7 @@ def _fallback_key_for_agent(agent, config: ConclaveConfig) -> str:
     from conclave.infrastructure.universal.presets import get_preset
     preset = get_preset(preset_name) or {}
     key_env = preset.get("api_key_env", "")
-    return os.environ.get(key_env, "") if key_env else ""
+    return env_secret(key_env) if key_env else ""
 
 
 def build_registry(
