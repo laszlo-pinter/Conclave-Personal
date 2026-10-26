@@ -24,6 +24,22 @@ Conclave v0.2.0 is a security release based on the review of 2026-10-26
   `"replace_workspace": true` and `"confirm": "replace-workspace"`. The CLI
   restore command still accepts any path.
 
+## Removed
+
+- `POST /guard/notify` and `GUARD_URL` (left over from the Docker setup).
+- The unused role-based auth code (`RoleBasedAuthService`). The Personal
+  edition has one user with one token.
+
+## Configuration
+
+- PostgreSQL now resolves the encryption key like SQLite
+  (`CONCLAVE_SECRET_KEY`, `CONCLAVE_SECRET_KEY_FILE`, then the platform
+  default) instead of always using `~/.conclave/secret.key`. Installations that
+  used PostgreSQL with that file must move it or point
+  `CONCLAVE_SECRET_KEY_FILE` at it.
+- `CONCLAVE_DEBUG` is rejected in `production` mode and with a non-loopback
+  `CONCLAVE_HOST`.
+
 ## Security fixes
 
 - Model output is sanitized with DOMPurify before it is rendered (stored XSS).

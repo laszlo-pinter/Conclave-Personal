@@ -94,11 +94,10 @@ def _build_postgres(config):
     from conclave.infrastructure.postgres.tool_event_repository import PostgresToolEventRepository
     from conclave.application.conversation_flow import ConversationFlowService
     from conclave.application.agent_service import AgentService
-    from pathlib import Path
-    from conclave.infrastructure.crypto import CryptoService
+    from conclave.cli.bootstrap import _load_crypto
 
-    default_key_path = Path.home() / ".conclave" / "secret.key"
-    crypto = CryptoService.load_or_generate(default_key_path)
+    # Wie SQLite: CONCLAVE_SECRET_KEY, CONCLAVE_SECRET_KEY_FILE, dann Plattform-Default (B8)
+    crypto = _load_crypto()
 
     service = ConversationFlowService(
         conversation_repository=PostgresConversationRepository(conn),

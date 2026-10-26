@@ -1,6 +1,6 @@
 # API-Referenz
 
-**48 dokumentierte Endpoints** — öffentliche Personal-API.
+**47 dokumentierte Endpoints** — öffentliche Personal-API.
 
 Alle Endpoints außer `GET /`, `/static/*`, `GET /health`, `GET /api-docs` und
 `GET /openapi.json` verlangen ein Token (`Authorization: Bearer <token>` oder
@@ -11,7 +11,6 @@ Inhalt: `{}`) oder den Header `X-Conclave-Client`. Anfragen mit nicht erlaubtem
 | Methode | Pfad | Beschreibung |
 |---------|------|-------------|
 | `GET` | `/` | Serve Ui |
-| `POST` | `/guard/notify` | Leitet eine Benachrichtigung an den Guard-Service weiter. |
 | `GET` | `/api-docs` | Swagger UI — interaktive API-Dokumentation (lokal ausgeliefert, keine CDN-Ressourcen). |
 | `GET` | `/openapi.json` | OpenAPI 3.0 Spec als JSON. |
 | `GET` | `/health` | Healthcheck für lokale Runtime und Integrationen. |

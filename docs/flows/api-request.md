@@ -7,7 +7,7 @@ einen passenden Adapter.
 
 **Schritte:**
 
-1. **Authentifizierung** — `api/app.py:_authenticate()` prüft Bearer-Token oder X-API-Key. Bei RoleBasedAuthService zusätzlich `check_permission()`.
+1. **Prüfungen** — `api/app.py:_check_host()` prüft den `Host`-Header, `_check_csrf()` verlangt bei POST JSON oder `X-Conclave-Client`, `_authenticate()` prüft Bearer-Token oder X-API-Key.
 
 2. **Request-Routing** — `api/app.py:invoke_participant()` liest conversation_id und participant_id aus der URL.
 

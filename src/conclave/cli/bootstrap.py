@@ -77,6 +77,10 @@ def validate_production_config(config: ConclaveConfig) -> list[str]:
         errors.append("CONCLAVE_API_KEY ist erforderlich wenn CONCLAVE_HOST nicht loopback ist")
     if not _is_loopback_host(config.host) and not config.allowed_hosts:
         errors.append("CONCLAVE_ALLOWED_HOSTS ist erforderlich wenn CONCLAVE_HOST nicht loopback ist")
+    if config.debug and not _is_loopback_host(config.host):
+        errors.append("CONCLAVE_DEBUG ist nur bei Loopback-CONCLAVE_HOST erlaubt (Werkzeug-Debugger)")
+    if config.debug and config.mode == "production":
+        errors.append("CONCLAVE_DEBUG ist im Production-Modus nicht erlaubt (Werkzeug-Debugger)")
     rate_limit_error = validate_rate_limit(config.rate_limit)
     if rate_limit_error:
         errors.append(rate_limit_error)

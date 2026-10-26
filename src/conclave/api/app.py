@@ -170,11 +170,6 @@ def create_app(handler: CLIHandler, auth_service=None,
             token = request.headers.get("X-API-Key")
         if not auth_service.validate_token(token):
             raise AuthenticationError()
-        # RBAC: nur wenn der AuthService Rollen-Pruefung unterstuetzt
-        if hasattr(auth_service, "check_permission") and hasattr(auth_service, "get_role"):
-            role = auth_service.get_role(token) or ""
-            if not auth_service.check_permission(role, request.method, request.path):
-                return jsonify({"error": "Forbidden", "type": "PermissionDenied"}), 403
 
     @app.before_request
     def _log_request_start():
@@ -258,29 +253,6 @@ def create_app(handler: CLIHandler, auth_service=None,
         if ui_path.is_file():
             return flask_send_file(str(ui_path), mimetype="text/html")
         return "UI nicht gefunden", 404
-
-    @app.post("/guard/notify")
-    def guard_notify():
-        """Leitet eine Benachrichtigung an den Guard-Service weiter.
-
-        Guard laeuft auf dem Host (nicht im Container).
-        CD kann auch direkt http://localhost:5001/notify aufrufen.
-        """
-        body = request.get_json() or {}
-        guard_url = os.environ.get("GUARD_URL", "http://host.docker.internal:5001")
-        try:
-            import urllib.request as _urlreq
-            data = _json.dumps(body).encode()
-            req = _urlreq.Request(f"{guard_url}/notify", data=data,
-                                  headers={"Content-Type": "application/json"}, method="POST")
-            with _urlreq.urlopen(req, timeout=10) as resp:
-                result = _json.loads(resp.read())
-            return jsonify(result), resp.status
-        except Exception as e:
-            return jsonify({
-                "error": f"Guard nicht erreichbar: {e}",
-                "hint": "Guard direkt erreichbar unter http://localhost:5001/notify"
-            }), 502
 
     @app.get("/api-docs")
     def swagger_ui():

@@ -30,29 +30,6 @@
         }
       }
     },
-    "/guard/notify": {
-      "post": {
-        "summary": "Leitet eine Benachrichtigung an den Guard-Service weiter.",
-        "tags": [
-          "guard"
-        ],
-        "operationId": "guard_notify",
-        "responses": {
-          "200": {
-            "description": "Erfolg"
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        }
-      }
-    },
     "/api-docs": {
       "get": {
         "summary": "Swagger UI — interaktive API-Dokumentation.",
