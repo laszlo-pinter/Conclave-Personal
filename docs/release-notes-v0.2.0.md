@@ -1,106 +1,155 @@
-# Release Notes: v0.2.0 (draft)
+# Release Notes: v0.2.0
 
-Conclave v0.2.0 is a security release based on the review of 2026-10-26
-(`docs/refactoring-plan.md`). It contains breaking changes for API clients.
+Conclave v0.2.0 is a security and robustness release based on the code review
+of 2026-10-26 (`docs/refactoring-plan.md`). It closes a stored XSS in the
+desktop UI, requires a token for the local API, ships all UI assets with the
+package and makes the server safe under parallel requests. It also contains
+breaking changes for API clients - read **Upgrading** before updating.
 
-## Breaking changes
+## Highlights
 
-- **The local API always requires a token.** If `CONCLAVE_API_KEY` is not set,
-  the server creates a random token on first start and stores it in `api.token`
-  in the configuration directory (`CONCLAVE_API_TOKEN_FILE` overrides the path).
-  `conclave desktop` and `conclave web` pass it to the browser in the URL
-  fragment. `conclave-watch` and the MCP server read the token file
-  automatically when `CONCLAVE_API_KEY` is empty. Other scripts must send
+- Model output is sanitized before it is rendered in the browser.
+- The local API always requires a token; the desktop UI logs in automatically.
+- No external resources at runtime: fonts and libraries are part of the package,
+  and every response carries a Content-Security-Policy.
+- One SQLite connection per thread and a production WSGI server (waitress).
+- The settings page shows the server log and lets you change the rate limit.
+
+## Upgrading
+
+```bash
+pipx upgrade conclave-personal
+```
+
+- **API token.** If `CONCLAVE_API_KEY` is not set, the server creates a random
+  token on first start and stores it in `api.token` in the configuration
+  directory (Windows: `%APPDATA%\Conclave\`, Linux: `~/.config/conclave/`;
+  override with `CONCLAVE_API_TOKEN_FILE`). `conclave desktop` and
+  `conclave web` open the browser with the token, `conclave-watch` and the MCP
+  server read the token file automatically. Your own scripts must send
   `Authorization: Bearer <token>`.
-- **POST requests need `Content-Type: application/json`** (an empty body is
-  `{}`) or the header `X-Conclave-Client`. Otherwise the API answers `415`.
-- **The `Host` header is checked.** Only `localhost`, `127.0.0.1`, `[::1]` and
-  entries from `CONCLAVE_ALLOWED_HOSTS` are accepted; other hosts get `421`.
-  Binding to a non-loopback address requires `CONCLAVE_ALLOWED_HOSTS`.
-- **The UI only talks to the server it was loaded from** (`connect-src 'self'`).
-- **`POST /restore` only accepts a backup file name** from the backup directory
-  (`{"backup": "<name>"}`, see the new `GET /backups`). `backup_path` is no
-  longer supported. The workspace is kept by default; clearing it requires
+- **POST requests** need `Content-Type: application/json` (an empty body is
+  `{}`) or the header `X-Conclave-Client`; otherwise the API answers `415`.
+- **Host header.** Only `localhost`, `127.0.0.1`, `[::1]` and entries from
+  `CONCLAVE_ALLOWED_HOSTS` are accepted (`421` otherwise). Binding to a
+  non-loopback address now requires `CONCLAVE_API_KEY` and
+  `CONCLAVE_ALLOWED_HOSTS`.
+- **`POST /restore`** only accepts a backup file name from the backup directory:
+  `{"backup": "<name>"}` (see the new `GET /backups`). `backup_path` is no longer
+  supported. The workspace is kept by default; clearing it requires
   `"replace_workspace": true` and `"confirm": "replace-workspace"`. The CLI
-  restore command still accepts any path.
+  command `conclave restore` still accepts any path.
+- **The UI only talks to the server it was loaded from** (`connect-src 'self'`).
+  A different API URL in the key dialog is blocked by the browser.
+- **PostgreSQL users:** the encryption key is now resolved like for SQLite
+  (`CONCLAVE_SECRET_KEY`, `CONCLAVE_SECRET_KEY_FILE`, then the platform
+  default) instead of `~/.conclave/secret.key`. Move that file or point
+  `CONCLAVE_SECRET_KEY_FILE` at it, otherwise stored agent keys cannot be
+  decrypted.
+- **New dependency:** `waitress`.
 
-## CI
+## Security
 
-- New `security` job: `pip-audit` (dependencies) and `bandit` (source, medium
-  severity and above).
-- New `ui-browser` job runs the Playwright browser tests in Chromium.
-- All GitHub Actions are pinned to commit SHAs.
+- Model output is rendered through DOMPurify with a restrictive allowlist
+  (text and structure only; no scripts, images, SVG, forms, `style`/`id`/event
+  attributes). Links are limited to `http(s)`, `mailto` and `#` and open with
+  `noopener noreferrer`. Without DOMPurify only escaped text is shown.
+- All `innerHTML` sinks in the UI are audited and annotated; values from the API
+  are escaped (including quotes in attributes). A test rejects new sinks
+  without justification.
+- marked, highlight.js, DOMPurify, Swagger UI and the Syne / DM Sans fonts are
+  shipped with the package; Google Fonts, cdnjs and unpkg are no longer used.
+  Versions, licenses and checksums are listed in `THIRD_PARTY.md`.
+- Every response carries a Content-Security-Policy (no inline scripts, no
+  `eval`, no `<style>` blocks, no framing), `Referrer-Policy: no-referrer` and
+  a `Permissions-Policy`.
+- Mandatory API token, Host allowlist (DNS rebinding) and CSRF protection for
+  POST requests (see **Upgrading**). The token file is readable only by the
+  current user.
+- Restore via the API is limited to the backup directory.
+- `CONCLAVE_DEBUG` (Werkzeug debugger) is rejected in `production` mode and with
+  a non-loopback `CONCLAVE_HOST`.
 - `conclave-watch` only accepts `http(s)` API URLs.
+
+## Robustness
+
+- SQLite uses one connection per thread (WAL, `BEGIN IMMEDIATE`, busy timeout).
+  Previously one connection was shared by all request threads, and parallel
+  requests failed under load.
+- `conclave-api`, `conclave server` and `conclave desktop` run on waitress.
+  The Flask development server is only used with `--debug`.
+- Restoring a backup copies the database through the SQLite backup API into
+  the live database instead of replacing the file, and rejects archives whose
+  database fails the integrity check.
+- On Windows a second server instance no longer starts silently on a port that
+  is already in use; the server binds exclusively and exits with a clear error,
+  and `conclave desktop` picks a free port instead.
+
+## Settings page
+
+- **Server log** with level filter (`GET /logs`). Successful `GET` requests
+  (static files, UI polling) are logged at DEBUG, so warnings and errors stand
+  out. `conclave-api` now also writes the log file.
+- **Rate limit** (default `120 per minute` per route and client) is shown and
+  editable. Changes take effect immediately and are saved to `[server]
+  rate_limit` in `config.toml`; a value from `CONCLAVE_RATE_LIMIT` is shown
+  read-only. `off` disables the limit; exceeded limits return JSON with status
+  `429`.
+- The runtime card shows the port the server is actually bound to.
+
+## Bug fixes
+
+- **Editing an agent no longer deletes its stored API key.** Saving an agent in
+  the UI (or `conclave agent-edit`) without re-entering the key overwrote it
+  with an empty value. The key is now kept unless a new one is entered;
+  removing it requires `"clear_api_key": true`.
+- `conclave agent-set-key` no longer drops the agent's preset, API URL and
+  response path.
+- API keys from environment variables are read leniently: surrounding
+  whitespace and quotes (easily entered via the Windows environment dialog) are
+  removed, with a one-time warning naming the variable.
+- With a token configured, the UI page itself loads again (previously `GET /`
+  and `/static/*` answered `401`).
 
 ## Removed
 
 - `POST /guard/notify` and `GUARD_URL` (left over from the Docker setup).
-- The unused role-based auth code (`RoleBasedAuthService`). The Personal
-  edition has one user with one token.
+- The unused role-based auth code (`RoleBasedAuthService`).
 
-## Configuration
+## New environment variables
 
-- PostgreSQL now resolves the encryption key like SQLite
-  (`CONCLAVE_SECRET_KEY`, `CONCLAVE_SECRET_KEY_FILE`, then the platform
-  default) instead of always using `~/.conclave/secret.key`. Installations that
-  used PostgreSQL with that file must move it or point
-  `CONCLAVE_SECRET_KEY_FILE` at it.
-- `CONCLAVE_DEBUG` is rejected in `production` mode and with a non-loopback
-  `CONCLAVE_HOST`.
+| Variable | Purpose |
+|---|---|
+| `CONCLAVE_API_TOKEN_FILE` | Location of the generated API token |
+| `CONCLAVE_ALLOWED_HOSTS` | Additional allowed `Host` headers |
+| `CONCLAVE_RATE_LIMIT` | Rate limit (overrides `config.toml`) |
+| `CONCLAVE_SERVER_THREADS` | waitress threads (default 16) |
+| `CONCLAVE_LOG_DIR` | Directory of `conclave-server.log` |
+| `CONCLAVE_CONFIG_FILE` | Location of `config.toml` |
 
-## Settings page
+## CI
 
-- **Server log:** the settings page shows the latest entries of the server log
-  with a level filter (`GET /logs`). Successful `GET` requests (static files,
-  UI polling) are now logged at DEBUG so warnings and errors stand out.
-  `CONCLAVE_LOG_DIR` sets the log directory; `conclave-api` now also writes
-  the log file.
-- **Rate limit:** shown and editable in the settings. Changes take effect
-  immediately and are saved to `config.toml`; a value from
-  `CONCLAVE_RATE_LIMIT` is shown read-only.
+- New `security` job: `pip-audit` for all dependencies and `bandit` for the
+  source (medium severity and above).
+- New `ui-browser` job runs the Playwright browser tests in Chromium.
+- All GitHub Actions are pinned to commit SHAs.
 
-## Bug fixes
+## Verification
 
-- **Editing an agent no longer deletes its stored API key.** `PUT /agents/<id>`
-  used to overwrite the key with an empty value whenever the request did not
-  contain one, which is what the UI does on every save. The stored key is now
-  kept unless a new key is sent or `"clear_api_key": true` is set. The same
-  fix applies to `conclave agent-edit`.
-- `conclave agent-set-key` no longer drops the agent's preset, API URL and
-  response path.
-- API keys from environment variables are read leniently: surrounding
-  whitespace and quotes (as easily entered via the Windows environment
-  dialog) are removed, with a one-time warning naming the variable. This
-  applies to provider keys, `CONCLAVE_API_KEY` and `CONCLAVE_SECRET_KEY`.
-- On Windows, a second server instance no longer starts silently on a port
-  that is already in use (`SO_REUSEADDR` allowed double binding; the old
-  process kept receiving all requests). The server now binds exclusively and
-  exits with a clear error; `conclave desktop` picks a free port instead.
+The v0.2.0 release surface was verified locally with:
 
-## Security fixes
+- `python -m pytest` (1023 tests, including Playwright browser tests for XSS
+  protection, CSP, token login and the settings page)
+- 300 parallel requests against waitress and werkzeug without errors
+- `python -m build --sdist --wheel` and installation of the wheel in a fresh
+  environment (`conclave --help`, `conclave-api` with token file and CSP)
+- `pip-audit` (no known vulnerabilities) and `bandit` (no findings of medium
+  severity or above)
+- A manual end-to-end test of `conclave desktop` with real Anthropic and OpenAI
+  agents: conversations, streaming, auto-loop, markdown rendering, workspace
+  files, backups, API docs, the settings page and login without token
 
-- Model output is sanitized with DOMPurify before it is rendered (stored XSS).
-- All HTML sinks in the UI are audited; values from the API are escaped.
-- The UI no longer loads anything from Google Fonts, cdnjs or unpkg. marked,
-  highlight.js, DOMPurify, Swagger UI and the fonts are shipped with the package
-  (`THIRD_PARTY.md`).
-- Every response carries a Content-Security-Policy, `Referrer-Policy` and
-  `Permissions-Policy`.
-- With a token configured, the UI page itself loads again (previously `GET /`
-  and `/static/*` answered `401`).
+Conclave still does not verify the truth of model answers. The human decides.
+Always.
 
-## Robustness
-
-- SQLite uses one connection per thread with `BEGIN IMMEDIATE` and a busy
-  timeout. Previously one connection was shared across request threads, and
-  parallel requests failed under load.
-- `conclave-api`, `conclave server` and `conclave desktop` run on waitress
-  (new dependency). The Flask development server is only used with `--debug`.
-  `CONCLAVE_SERVER_THREADS` sets the thread count (default 16).
-- The rate limit (default `120 per minute` per route and client) is
-  configurable via `[server] rate_limit` in `config.toml` or
-  `CONCLAVE_RATE_LIMIT`; `off` disables it. Invalid values stop the server at
-  startup, and exceeded limits return JSON with status `429`.
-- Restoring a backup copies the database through the SQLite backup API into
-  the live database instead of replacing the file, and rejects archives whose
-  database fails the integrity check.
+v0.2.0 remains alpha.

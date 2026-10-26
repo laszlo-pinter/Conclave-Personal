@@ -30,6 +30,7 @@
 - [Ports & adapters](architektur/ports-adapter.md) - Interfaces, ProviderProfiles, ResilientAdapter
 
 ### Release
+- [Release Notes v0.2.0](release-notes-v0.2.0.md) - Security release: XSS protection, mandatory API token, CSP, per-thread SQLite, waitress
 - [Release Notes v0.1.20](release-notes-v0.1.20.md) - Live parallel orchestration responses in the desktop UI
 - [Release Notes v0.1.19](release-notes-v0.1.19.md) - Workspace tool-event provenance for read/write actions
 - [Release Notes v0.1.18](release-notes-v0.1.18.md) - Delete cleanup, runtime logs, DeepSeek fixes, and UI polish

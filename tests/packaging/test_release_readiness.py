@@ -17,6 +17,7 @@ def test_release_docs_exist():
     required = [
         "docs/sicherheit.md",
         "docs/beispiel-workflows.md",
+        "docs/release-notes-v0.2.0.md",
         "docs/release-notes-v0.1.20.md",
         "docs/release-notes-v0.1.19.md",
         "docs/release-notes-v0.1.18.md",
@@ -70,7 +71,7 @@ def test_readme_places_llm_origin_notice_as_section():
 
 def test_release_docs_use_publishable_distribution_name():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    release_notes = (ROOT / "docs/release-notes-v0.1.20.md").read_text(encoding="utf-8")
+    release_notes = (ROOT / "docs/release-notes-v0.2.0.md").read_text(encoding="utf-8")
     combined = readme + "\n" + release_notes
 
     assert "pipx install conclave-personal" in combined
@@ -86,6 +87,7 @@ def test_release_docs_use_publishable_distribution_name():
     assert "conclave-0.1.18-py3-none-any.whl" not in combined
     assert "conclave-0.1.19-py3-none-any.whl" not in combined
     assert "conclave-0.1.20-py3-none-any.whl" not in combined
+    assert "conclave-0.2.0-py3-none-any.whl" not in combined
 
 
 def test_readme_describes_published_install_path():
