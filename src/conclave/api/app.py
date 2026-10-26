@@ -33,6 +33,8 @@ from conclave.domain.errors import (
     ParticipantNotRegistered,
 )
 from conclave.domain.participant import ParticipantType
+from conclave.cli.bootstrap import rate_limit_disabled
+from conclave.cli.config import DEFAULT_RATE_LIMIT
 from conclave.application.workspace_security import (
     agent_read_limit_bytes,
     assert_size_allowed,
@@ -118,9 +120,14 @@ def create_app(handler: CLIHandler, auth_service=None,
         if service and hasattr(service, '_registry') and service._registry:
             service._registry.invalidate()
 
-    if _has_limiter:
-        limiter = Limiter(get_remote_address, app=app, default_limits=["120 per minute"],
+    rate_limit = getattr(config, "rate_limit", DEFAULT_RATE_LIMIT) if config else DEFAULT_RATE_LIMIT
+    if _has_limiter and not rate_limit_disabled(rate_limit):
+        limiter = Limiter(get_remote_address, app=app, default_limits=[rate_limit],
                           storage_uri="memory://")
+
+    @app.errorhandler(429)
+    def _rate_limited(e):
+        return jsonify({"error": f"Zu viele Anfragen ({e.description}).", "type": "RateLimitExceeded"}), 429
 
     _allowed_hosts = parse_allowed_hosts(
         getattr(config, "allowed_hosts", "") or os.environ.get("CONCLAVE_ALLOWED_HOSTS", "")

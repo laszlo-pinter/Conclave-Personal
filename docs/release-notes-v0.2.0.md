@@ -44,6 +44,10 @@ Conclave v0.2.0 is a security release based on the review of 2026-10-26
 - `conclave-api`, `conclave server` and `conclave desktop` run on waitress
   (new dependency). The Flask development server is only used with `--debug`.
   `CONCLAVE_SERVER_THREADS` sets the thread count (default 16).
+- The rate limit (default `120 per minute` per route and client) is
+  configurable via `[server] rate_limit` in `config.toml` or
+  `CONCLAVE_RATE_LIMIT`; `off` disables it. Invalid values stop the server at
+  startup, and exceeded limits return JSON with status `429`.
 - Restoring a backup copies the database through the SQLite backup API into
   the live database instead of replacing the file, and rejects archives whose
   database fails the integrity check.

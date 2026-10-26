@@ -16,6 +16,7 @@ Alle Konfiguration über Umgebungsvariablen. TOML-Config als Fallback.
 | CONCLAVE_HOST | 127.0.0.1 | Bind-Adresse |
 | CONCLAVE_PORT | 8000 | Server-Port |
 | CONCLAVE_LOG_LEVEL | INFO | DEBUG / INFO / WARNING / ERROR |
+| CONCLAVE_RATE_LIMIT | 120 per minute | Anfragen je Route und Client-IP, Syntax von flask-limiter (`120/minute; 2000/hour`), `off` schaltet ab. Auch als `[server] rate_limit` in der TOML-Config |
 | CONCLAVE_SERVER_THREADS | 16 | Threads des WSGI-Servers (waitress). Laufende Streams belegen je einen Thread |
 | CONCLAVE_WORKERS | 1 | Gunicorn Worker-Anzahl |
 
@@ -100,6 +101,12 @@ provider = "sqlite"
 # Linux:   $XDG_DATA_HOME/conclave/conclave.db
 path = "/pfad/zur/conclave.db"
 # dsn = "host=localhost dbname=conclave user=conclave password=..."
+
+[server]
+# Anfragen je Route und Client-IP (flask-limiter-Syntax). Mehrere Grenzen mit ";"
+# trennen, "off" schaltet die Begrenzung ab. Wirksam nach Neustart des Servers;
+# CONCLAVE_RATE_LIMIT hat Vorrang.
+rate_limit = "120 per minute"
 
 [participants]
 # Optionale Participant-Defaults

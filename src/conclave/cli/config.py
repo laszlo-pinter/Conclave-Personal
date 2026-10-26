@@ -11,6 +11,8 @@ from conclave.runtime.paths import get_runtime_paths
 _RUNTIME_PATHS = get_runtime_paths()
 DEFAULT_CONFIG_PATH = _RUNTIME_PATHS.config_dir / "config.toml"
 DEFAULT_DB_PATH = _RUNTIME_PATHS.db_path
+# flask-limiter-Syntax, pro Route und Client-IP; "off" schaltet die Begrenzung ab
+DEFAULT_RATE_LIMIT = "120 per minute"
 
 
 @dataclass
@@ -23,6 +25,7 @@ class ConclaveConfig:
     host: str = "127.0.0.1"
     port: int = 8000
     debug: bool = False
+    rate_limit: str = DEFAULT_RATE_LIMIT
     # Logging
     log_level: str = "INFO"
     # API-Keys (Fallback, wenn nicht in DB)
@@ -51,6 +54,7 @@ class ConclaveConfig:
                 data = tomllib.load(f)
 
         db_section = data.get("database", data.get("conclave", {}))
+        server_section = data.get("server", {})
         participants = data.get("participants", {})
 
         # TOML-Werte mit Defaults
@@ -71,6 +75,9 @@ class ConclaveConfig:
         port = int(os.environ.get("CONCLAVE_PORT", "8000"))
         debug = os.environ.get("CONCLAVE_DEBUG", "").lower() in ("1", "true")
         log_level = os.environ.get("CONCLAVE_LOG_LEVEL", "INFO")
+        rate_limit = os.environ.get(
+            "CONCLAVE_RATE_LIMIT", str(server_section.get("rate_limit", DEFAULT_RATE_LIMIT))
+        ).strip()
 
         anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         openai_api_key = os.environ.get("OPENAI_API_KEY", "")
@@ -86,6 +93,7 @@ class ConclaveConfig:
             host=host,
             port=port,
             debug=debug,
+            rate_limit=rate_limit,
             log_level=log_level,
             anthropic_api_key=anthropic_api_key,
             openai_api_key=openai_api_key,

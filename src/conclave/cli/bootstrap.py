@@ -50,6 +50,26 @@ def _is_loopback_host(host: str) -> bool:
         return False
 
 
+def rate_limit_disabled(value: str) -> bool:
+    return (value or "").strip().lower() in ("off", "none", "0", "")
+
+
+def validate_rate_limit(value: str) -> str | None:
+    """Fehlermeldung fuer einen ungueltigen Rate-Limit-Wert, sonst None."""
+    if rate_limit_disabled(value):
+        return None
+    try:
+        from limits import parse_many
+    except ImportError:  # flask-limiter nicht installiert: Begrenzung ist ohnehin aus
+        return None
+    try:
+        parse_many(value)
+    except ValueError:
+        return (f"Ungueltiges Rate-Limit '{value}' (CONCLAVE_RATE_LIMIT bzw. [server] rate_limit). "
+                "Beispiele: '120 per minute', '120/minute; 2000/hour', 'off'")
+    return None
+
+
 def validate_production_config(config: ConclaveConfig) -> list[str]:
     """Gibt Fehlerliste zurueck. Leer = Production-Boot erlaubt."""
     errors: list[str] = []
@@ -57,6 +77,9 @@ def validate_production_config(config: ConclaveConfig) -> list[str]:
         errors.append("CONCLAVE_API_KEY ist erforderlich wenn CONCLAVE_HOST nicht loopback ist")
     if not _is_loopback_host(config.host) and not config.allowed_hosts:
         errors.append("CONCLAVE_ALLOWED_HOSTS ist erforderlich wenn CONCLAVE_HOST nicht loopback ist")
+    rate_limit_error = validate_rate_limit(config.rate_limit)
+    if rate_limit_error:
+        errors.append(rate_limit_error)
 
     if config.mode != "production":
         return errors
