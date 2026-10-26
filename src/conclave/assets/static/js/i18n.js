@@ -491,6 +491,7 @@ function applyTranslations(root = document) {
     el.textContent = t(el.dataset.i18n);
   });
   root.querySelectorAll('[data-i18n-html]').forEach(el => {
+    // safe-html: nur Uebersetzungen aus der eigenen Tabelle, ohne Platzhalter/API-Werte
     el.innerHTML = t(el.dataset.i18nHtml);
   });
   root.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
@@ -502,18 +503,18 @@ function applyTranslations(root = document) {
   localizeRuntimeLabels();
 }
 
-function _setButtonHtml(id, html) {
+function _setButtonText(id, text) {
   const el = document.getElementById(id);
   if (!el || el.querySelector('.spinner')) return;
-  el.innerHTML = html;
+  el.textContent = text;
 }
 
 function localizeRuntimeLabels() {
-  _setButtonHtml('btnInvoke', t('input.invoke'));
-  _setButtonHtml('btnStream', `&#9654; ${t('input.stream')}`);
-  _setButtonHtml('btnOrch', `&#8635; ${t('input.orchestrate')}`);
-  _setButtonHtml('btnAutoloop', `&#8734; ${t('input.autoloop')}`);
-  _setButtonHtml('btnFloorInvoke', t('floor.invoke'));
+  _setButtonText('btnInvoke', t('input.invoke'));
+  _setButtonText('btnStream', `▶ ${t('input.stream')}`);
+  _setButtonText('btnOrch', `↻ ${t('input.orchestrate')}`);
+  _setButtonText('btnAutoloop', `∞ ${t('input.autoloop')}`);
+  _setButtonText('btnFloorInvoke', t('floor.invoke'));
 
   const advanced = document.getElementById('advancedFields');
   const advancedBtn = document.getElementById('btnAdvanced');

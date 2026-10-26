@@ -9,7 +9,9 @@ async function loadSettings(){
     const err=`<div class="surface-empty">${esc(e.message)}</div>`;
     const runtime=document.getElementById('settingsRuntime');
     const summary=document.getElementById('settingsSummary');
+    // safe-html: err enthaelt Fehlertext via esc()
     if(runtime) runtime.innerHTML=err;
+    // safe-html: err enthaelt Fehlertext via esc()
     if(summary) summary.innerHTML=err;
   }
 }
@@ -25,8 +27,9 @@ function renderSettings(settings){
   ];
   const runtime=document.getElementById('settingsRuntime');
   if(runtime){
+    // safe-html: Werte via esc()/attr()
     runtime.innerHTML=`<div class="settings-kv">${rows.map(([k,v])=>`
-      <div class="settings-kv-row"><span>${esc(k)}</span><strong title="${esc(v)}">${esc(v)}</strong></div>
+      <div class="settings-kv-row"><span>${esc(k)}</span><strong title="${attr(v)}">${esc(v)}</strong></div>
     `).join('')}</div>`;
   }
 
@@ -37,6 +40,7 @@ function renderSettings(settings){
     const ui=limits.ui_read_bytes?`${fmtBytes(limits.ui_read_bytes)} UI`:'UI';
     const agent=limits.agent_read_bytes?`${fmtBytes(limits.agent_read_bytes)} Agent`:'Agent';
     const write=limits.write_bytes?`${fmtBytes(limits.write_bytes)} Write`:'Write';
+    // safe-html: Groessen via fmtBytes() (nur Zahlen), sonst feste Texte
     policy.innerHTML=`<span>${ui}</span><span>${agent}</span><span>${write}</span><span>Hidden off</span>`;
   }
 
@@ -44,6 +48,7 @@ function renderSettings(settings){
   const summary=document.getElementById('settingsSummary');
   if(summary){
     const keyNames=Object.keys(keys);
+    // safe-html: Schluesselnamen via esc(), sonst Zahlen und Uebersetzungen ohne Platzhalter
     summary.innerHTML=`
       <div class="usage-card">
         <div class="usage-card-stats">

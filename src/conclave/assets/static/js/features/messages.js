@@ -4,7 +4,7 @@
 function renderMessages(msgs){
   msgs = msgs || [];
   AppState.setState({currentMessages: msgs});
-  const el=document.getElementById('messages');el.innerHTML='';msgs.forEach(m=>el.appendChild(buildMsg(m)));scrollBottom();
+  const el=document.getElementById('messages');el.replaceChildren();msgs.forEach(m=>el.appendChild(buildMsg(m)));scrollBottom();
 }
 
 function buildMsg(m){
@@ -16,7 +16,9 @@ function buildMsg(m){
   const content=stripToolEventRefs(m.content||'',m.tool_events||[]);
   const rendered=isUser?esc(content):renderMarkdown(content);
   const toolEventsHtml=renderToolEvents(m.tool_events||[]);
-  div.innerHTML=`<div class="msg-header"><span class="msg-label" style="color:${isUser?'var(--text-dim)':(c?.tx||'var(--accent)')}">${esc(pName)}</span><span class="msg-seq">#${m.sequence}</span>${dlBtn}</div><div class="msg-content">${rendered}</div>`;
+  // safe-html: Werte via esc()/attr(), Inhalt via renderMarkdown() (DOMPurify), Farben aus PALETTE
+  div.innerHTML=`<div class="msg-header"><span class="msg-label" style="color:${isUser?'var(--text-dim)':(c?.tx||'var(--accent)')}">${esc(pName)}</span><span class="msg-seq">#${esc(m.sequence)}</span>${dlBtn}</div><div class="msg-content">${rendered}</div>`;
+  // safe-html: renderToolEvents() escaped alle Werte
   if(toolEventsHtml) div.insertAdjacentHTML('beforeend',toolEventsHtml);
   // Code-Highlighting auf alle pre>code Bloecke
   if(!isUser) div.querySelectorAll('pre code').forEach(el=>hljs.highlightElement(el));
@@ -72,19 +74,24 @@ async function sendMsg(){
 async function invokeP(){
   const pid=document.getElementById('pSel').value;if(!pid){toast(t('participants.chooseRequired'),'err');return;}
   if(!AppState.getState('currentMessages').length){toast(t('input.writeFirst'),'err');return;}
-  const btn=document.getElementById('btnInvoke');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';
+  const btn=document.getElementById('btnInvoke');btn.disabled=true;
+  // safe-html: statisches Markup
+  btn.innerHTML='<span class="spinner"></span>';
   try{await req('POST',`/conversations/${currentConvId}/participants/${pid}/invoke`);const d=await req('GET',`/conversations/${currentConvId}`);renderMessages(d.messages||[]);toast(t('input.answerReceived'),'ok');}
   catch(e){toast(e.message,'err');}
-  finally{btn.disabled=false;btn.innerHTML=t('input.invoke');}
+  finally{btn.disabled=false;btn.textContent=t('input.invoke');}
 }
 
 async function streamP(){
   const pid=document.getElementById('pSel').value;if(!pid){toast(t('participants.chooseRequired'),'err');return;}
   if(!AppState.getState('currentMessages').length){toast(t('input.writeFirst'),'err');return;}
-  const btn=document.getElementById('btnStream');btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Stream';
+  const btn=document.getElementById('btnStream');btn.disabled=true;
+  // safe-html: statisches Markup
+  btn.innerHTML='<span class="spinner"></span> Stream';
   const el=document.getElementById('messages');
   const c=colorFor(pid),pName=participants.find(p=>p.id===pid)?.name||pid;
   const div=document.createElement('div');div.className='msg model';div.style.borderLeftColor=c.bd;
+  // safe-html: Name via esc(), Farbe aus PALETTE
   div.innerHTML=`<div class="msg-header"><span class="msg-label" style="color:${c.tx}">${esc(pName)}</span><span class="msg-seq"><span class="spinner"></span></span></div><div class="msg-content" id="sc"></div>`;
   el.appendChild(div);scrollBottom();
   const sc=document.getElementById('sc');const cursor=document.createElement('span');cursor.className='cursor';sc.appendChild(cursor);
@@ -104,13 +111,14 @@ async function streamP(){
     cursor.remove();
     // Markdown rendern nach Stream-Ende
     const sc2=div.querySelector('.msg-content');
+    // safe-html: renderMarkdown() (DOMPurify)
     if(sc2&&buf) {sc2.innerHTML=renderMarkdown(buf);sc2.querySelectorAll('pre code').forEach(el=>hljs.highlightElement(el));}
     const data=await req('GET',`/conversations/${currentConvId}`);
     const last=data.messages.at(-1);
     div.querySelector('.msg-seq').textContent=last?'#'+last.sequence:'';
     div.removeAttribute('id');toast(t('input.streamDone'),'ok');
   }catch(e){cursor.remove();toast(e.message,'err');}
-  btn.disabled=false;btn.innerHTML=`&#9654; ${t('input.stream')}`;
+  btn.disabled=false;btn.textContent=`▶ ${t('input.stream')}`;
 }
 
 function openOrch(){
@@ -125,7 +133,9 @@ async function runOrch(){
   if(!seq.length){toast(t('input.idsRequired'),'err');return;}
   if(!AppState.getState('currentMessages').length){toast(t('input.writeFirst'),'err');return;}
   closeOverlay('overlayOrch');
-  const btn=document.getElementById('btnOrch');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';
+  const btn=document.getElementById('btnOrch');btn.disabled=true;
+  // safe-html: statisches Markup
+  btn.innerHTML='<span class="spinner"></span>';
   if(parallel){
     await runParallelOrchStream(seq,btn);
     return;
@@ -135,19 +145,21 @@ async function runOrch(){
     const d=await req('GET',`/conversations/${currentConvId}`);renderMessages(d.messages||[]);
     toast(t('input.answers', {count: seq.length, parallel: ''}),`ok`);
   }catch(e){toast(e.message,'err');}
-  finally{btn.disabled=false;btn.innerHTML=`&#8635; ${t('input.orchestrate')}`;}
+  finally{btn.disabled=false;btn.textContent=`↻ ${t('input.orchestrate')}`;}
 }
 
 async function runParallelOrchStream(seq,btn){
   const el=document.getElementById('messages');
   const pending=new Map();
   const banner=document.createElement('div');banner.className='loop-banner';
+  // safe-html: statisches Markup + Uebersetzung ohne Platzhalter
   banner.innerHTML=`<span class="spinner"></span> <span id="orchLiveStatus">${t('orch.parallelStarting')}</span>`;
   el.appendChild(banner);
   seq.forEach((pid,slot)=>{
     const pName=participants.find(p=>p.id===pid)?.name||pid;
     const c=colorFor(pid);
     const div=document.createElement('div');div.className='msg model pending';div.style.borderLeftColor=c.bd;
+    // safe-html: Name via esc(), Farbe aus PALETTE, Uebersetzungen ohne Platzhalter
     div.innerHTML=`<div class="msg-header"><span class="msg-label" style="color:${c.tx}">${esc(pName)}</span><span class="msg-seq">${t('orch.pending')} <span class="spinner"></span></span></div><div class="msg-content">${esc(t('orch.working'))}</div>`;
     el.insertBefore(div,banner);
     pending.set(`1:${slot}`,div);
@@ -182,7 +194,7 @@ async function runParallelOrchStream(seq,btn){
     toast(e.message,'err');
   }finally{
     banner.remove();
-    btn.disabled=false;btn.innerHTML=`&#8635; ${t('input.orchestrate')}`;
+    btn.disabled=false;btn.textContent=`↻ ${t('input.orchestrate')}`;
   }
 }
 
@@ -193,6 +205,7 @@ function handleParallelOrchEvent(ev,ctx){
   }
   if(ev.event==='invoke'){
     const div=ctx.pending.get(`${ev.group}:${ev.slot}`);
+    // safe-html: Uebersetzung ohne Platzhalter + statisches Markup
     if(div)div.querySelector('.msg-seq').innerHTML=`${t('orch.pending')} <span class="spinner"></span>`;
     return;
   }
@@ -215,10 +228,12 @@ function renderParallelOrchResponse(div,ev){
   div.classList.remove('pending');
   div.querySelector('.msg-seq').textContent=ev.sequence?'#'+ev.sequence:'';
   const content=stripToolEventRefs(ev.content||'',ev.tool_events||[]);
+  // safe-html: renderMarkdown() (DOMPurify)
   div.querySelector('.msg-content').innerHTML=renderMarkdown(content);
   div.querySelectorAll('pre code').forEach(el=>hljs.highlightElement(el));
   div.querySelectorAll('.tool-events').forEach(el=>el.remove());
   const toolEventsHtml=renderToolEvents(ev.tool_events||[]);
+  // safe-html: renderToolEvents() escaped alle Werte
   if(toolEventsHtml)div.insertAdjacentHTML('beforeend',toolEventsHtml);
   scrollBottom();
 }

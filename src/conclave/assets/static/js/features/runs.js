@@ -7,10 +7,13 @@ async function loadRuns(){
     const d=await req('GET','/runs?limit=100');
     const runs=d.runs||[];
     if(!runs.length){
+      // safe-html: statisches Markup + Uebersetzung ohne Platzhalter
       listEl.innerHTML=`<div class="surface-empty">${t('runs.none')}</div>`;
+      // safe-html: statisches Markup + Uebersetzung ohne Platzhalter
       tableEl.innerHTML=`<div class="surface-empty">${t('runs.none')}</div>`;
       return;
     }
+    // safe-html: Werte via esc(), Status-Klassen fest
     listEl.innerHTML=runs.slice(0,12).map(r=>`
       <div class="surface-item">
         <div class="surface-item-row">
@@ -19,6 +22,7 @@ async function loadRuns(){
         </div>
         <div style="font-size:10px;color:var(--text-faint);margin-top:4px">${esc((r.participants||[]).join(', ')||'-')}</div>
       </div>`).join('');
+    // safe-html: Werte via esc()/fmt(), Uebersetzungen ohne Platzhalter
     tableEl.innerHTML=`
       <table class="usage-tbl">
         <thead><tr>
@@ -39,7 +43,9 @@ async function loadRuns(){
         }).join('')}</tbody>
       </table>`;
   }catch(e){
+    // safe-html: Fehlertext via esc()
     listEl.innerHTML=`<div class="surface-empty">${esc(e.message)}</div>`;
+    // safe-html: Fehlertext via esc(), Uebersetzung ohne Platzhalter
     tableEl.innerHTML=`<div class="surface-empty">${t('common.errorPrefix')}: ${esc(e.message)}</div>`;
   }
 }

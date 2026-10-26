@@ -76,3 +76,13 @@ def test_publish_workflow_builds_conclave_personal_artifacts():
     assert "python -m build --sdist --wheel" in text
     assert "dist/conclave_personal-0.1.20-py3-none-any.whl" in text
     assert "dist/conclave_personal-0.1.20.tar.gz" in text
+
+
+def test_ci_runs_ui_browser_tests_strictly():
+    text = _workflow_text()
+    job = text.split("  ui-browser:", 1)[1].split("\n  build:", 1)[0]
+
+    assert 'CONCLAVE_REQUIRE_BROWSER: "1"' in job
+    assert '".[dev-all,dev-ui]"' in job
+    assert "python -m playwright install --with-deps chromium" in job
+    assert "python -m pytest tests/ui" in job

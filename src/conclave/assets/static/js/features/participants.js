@@ -2,6 +2,7 @@
 
 // ── Participants ──────────────────────────────────────────────────────────
 function renderBadges(){
+  // safe-html: Name via esc(), Farben aus PALETTE
   document.getElementById('pBadges').innerHTML=participants.map(p=>{
     const c=colorFor(p.id);
     return `<span class="p-badge" style="background:${c.bg};border-color:${c.bd};color:${c.tx}">${esc(p.name)}</span>`;
@@ -13,8 +14,9 @@ function renderBadges(){
 
 function updatePSel(){
   const sel=document.getElementById('pSel'),models=participants.filter(p=>p.type==='model');
+  // safe-html: Werte via attr()/esc(), Uebersetzungen ohne Platzhalter
   sel.innerHTML=models.length
-    ?`<option value="">${t('participants.pick')}</option>`+models.map(p=>`<option value="${p.id}">${esc(p.name)} (${p.id})</option>`).join('')
+    ?`<option value="">${t('participants.pick')}</option>`+models.map(p=>`<option value="${attr(p.id)}">${esc(p.name)} (${esc(p.id)})</option>`).join('')
     :`<option value="">${t('participants.noModel')}</option>`;
 }
 
@@ -27,7 +29,8 @@ function onPSelChange(){
 function openAddParticipant(){
   document.getElementById('pFormId').value='';document.getElementById('pFormName').value='';document.getElementById('pFormType').value='model';
   const pick=document.getElementById('agentPick');
-  pick.innerHTML=`<option value="">${t('participants.manual')}</option>`+agents.map(a=>`<option value="${a.id}">${esc(a.name)} (${a.id})</option>`).join('');
+  // safe-html: Werte via attr()/esc(), Uebersetzung ohne Platzhalter
+  pick.innerHTML=`<option value="">${t('participants.manual')}</option>`+agents.map(a=>`<option value="${attr(a.id)}">${esc(a.name)} (${esc(a.id)})</option>`).join('');
   openOverlay('overlayParticipant');
 }
 

@@ -46,6 +46,7 @@ postgres = ["psycopg2-binary>=2.9"]
 mcp = ["mcp>=1.0", "httpx>=0.27"]
 dev     = ["pytest>=9.0"]
 dev-api = ["pytest>=9.0", "flask>=3.0"]
+dev-ui  = ["pytest>=9.0", "playwright==1.64.1"]
 dev-all = ["pytest>=9.0", "pytest-asyncio>=1.0", "flask>=3.0", "flask-limiter>=4.0", "httpx>=0.27", "anthropic>=0.40.0", "openai>=1.0", "cryptography>=42.0", "psycopg2-binary>=2.9"]
 
 [project.scripts]
@@ -72,6 +73,7 @@ where = ["src"]
     "assets/static/css/*.css",
     "assets/static/js/*.js",
     "assets/static/js/features/*.js",
+    "assets/static/vendor/*.js",
     "assets/scripts/windows/*.ps1",
     "assets/scripts/linux/*",
 ]

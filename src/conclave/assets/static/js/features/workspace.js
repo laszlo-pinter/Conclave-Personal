@@ -30,16 +30,22 @@ async function loadWorkspace(){
     renderWorkspaceLimits(d.limits||{});
     if(!files.length){
       const empty=`<div class="surface-empty">${t('workspace.none')}</div>`;
+      // safe-html: statisches Markup + Uebersetzung ohne Platzhalter
       if(el) el.innerHTML=empty;
+      // safe-html: statisches Markup + Uebersetzung ohne Platzhalter
       if(mainEl) mainEl.innerHTML=empty;
       return;
     }
     const tree=_renderFileTree(_buildFileTree(files));
+    // safe-html: _renderFileTree() escaped alle Werte
     if(el) el.innerHTML=tree;
+    // safe-html: _renderFileTree() escaped alle Werte
     if(mainEl) mainEl.innerHTML=tree;
   }catch(e){
     const err=`<div class="surface-empty">${esc(e.message)}</div>`;
+    // safe-html: err enthaelt Fehlertext via esc()
     if(el) el.innerHTML=err;
+    // safe-html: err enthaelt Fehlertext via esc()
     if(mainEl) mainEl.innerHTML=err;
   }
 }
@@ -50,6 +56,7 @@ function renderWorkspaceLimits(limits){
   const ui=limits.ui_read_bytes?`${fmtBytes(limits.ui_read_bytes)} UI`:'UI';
   const agent=limits.agent_read_bytes?`${fmtBytes(limits.agent_read_bytes)} Agent`:'Agent';
   const write=limits.write_bytes?`${fmtBytes(limits.write_bytes)} Write`:'Write';
+  // safe-html: Groessen via fmtBytes() (nur Zahlen), sonst feste Texte
   el.innerHTML=`<span>${ui}</span><span>${agent}</span><span>${write}</span><span>Hidden off</span>`;
 }
 
@@ -90,7 +97,7 @@ function _renderFileTree(node,prefix='',depth=0){
     const name=f.path.split('/').pop();
     html+=`<div class="surface-item" style="padding:3px 10px"><div class="surface-item-row">
       <span class="surface-item-label ws-file-ref" data-action="insert-workspace-ref" data-path="${attr(f.path)}" title="@workspace/${attr(f.path)}">${esc(name)}</span>
-      <span style="font-size:10px;color:var(--text-faint)">${(f.size/1024).toFixed(1)} KB</span>
+      <span style="font-size:10px;color:var(--text-faint)">${(Number(f.size)/1024).toFixed(1)} KB</span>
     </div></div>`;
   }
   return html;

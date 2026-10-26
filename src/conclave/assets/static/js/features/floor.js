@@ -9,10 +9,12 @@ function renderFloorUI(){
     const name=holder?holder.name:currentFloor;
     const c=colorFor(currentFloor);
     floorbar.classList.add('visible');
+    // safe-html: Name via esc(), Farbe aus PALETTE
     document.getElementById('floorHolder').innerHTML=`<span style="color:${c.tx};font-weight:600">${esc(name)}</span>`;
   } else {floorbar.classList.remove('visible');}
   if(models.length>0){
     floorPanel.classList.add('visible');
+    // safe-html: Werte via esc()/attr(), Farben aus PALETTE
     document.getElementById('floorGrantBtns').innerHTML=models.map(p=>{
       const c=colorFor(p.id),isActive=p.id===currentFloor;
       return `<button class="floor-grant-btn${isActive?' active':''}" style="${isActive?`background:${c.bg};border-color:${c.bd};color:${c.tx}`:''}" data-action="grant-floor" data-participant-id="${attr(p.id)}">&#127908; ${esc(p.name)}</button>`;
@@ -38,7 +40,9 @@ async function invokeWithFloor(){
   if(!currentFloor){toast(t('floor.noParticipant'),'err');return;}
   if(!AppState.getState('currentMessages').length){toast(t('input.writeFirst'),'err');return;}
   const btn=document.getElementById('btnFloorInvoke');
-  btn.disabled=true;btn.innerHTML=`<span class="spinner"></span> ${t('floor.answering')}`;
+  btn.disabled=true;
+  // safe-html: statisches Markup + Uebersetzung ohne Platzhalter
+  btn.innerHTML=`<span class="spinner"></span> ${t('floor.answering')}`;
   try{
     await req('POST',`/conversations/${currentConvId}/floor/invoke`);
     currentFloor=null;
@@ -46,6 +50,6 @@ async function invokeWithFloor(){
     renderMessages(conv.messages||[]);renderFloorUI();
     toast(t('input.answerReceived'),'ok');
   }catch(e){toast(e.message,'err');}
-  finally{btn.disabled=false;btn.innerHTML=t('floor.invoke');}
+  finally{btn.disabled=false;btn.textContent=t('floor.invoke');}
 }
 

@@ -24,6 +24,23 @@ $env:CONCLAVE_API_KEY = "<starkes-lokales-token>"
 conclave desktop
 ```
 
+## Browser-UI
+
+- Modellantworten gelten als nicht vertrauenswürdig. Markdown wird mit
+  `marked` in HTML gewandelt und anschließend mit DOMPurify gefiltert
+  (`renderMarkdown()` in `static/js/utils.js`).
+- Erlaubt sind nur Text- und Strukturelemente (Absätze, Listen, Tabellen,
+  Code, Links). Skripte, Bilder, SVG, Formulare, `style`-, `id`- und
+  Event-Attribute werden entfernt.
+- Links sind nur mit `http(s)`, `mailto` oder `#` erlaubt und öffnen mit
+  `target="_blank"` und `rel="noopener noreferrer"`.
+- Ist DOMPurify nicht geladen, wird nie HTML ausgegeben, nur escapter Text.
+- DOMPurify wird lokal ausgeliefert (`static/vendor/`, siehe `THIRD_PARTY.md`).
+- Jede `innerHTML`-/`insertAdjacentHTML`-Stelle braucht einen Kommentar
+  `// safe-html: <Begründung>`; `tests/ui/test_html_sinks.py` lässt neue Stellen
+  ohne Begründung scheitern. Werte aus API-Antworten werden mit `esc()`
+  (maskiert `& < > " '`) eingesetzt.
+
 ## Secrets
 
 - Provider-API-Keys gehören nicht in Git.
