@@ -3,29 +3,23 @@
 Conclave MCP-Server — macht Conclave als Tool fuer Claude Code / Desktop verfuegbar.
 
 Starten:
-    python -m conclave.mcp_server
+    conclave-mcp            (oder: python -m conclave.mcp_server)
+
+Benoetigt das Extra ``mcp`` (MCP Python SDK 2.x): pip install "conclave-personal[mcp]"
 
 Das API-Token kommt aus CONCLAVE_API_KEY oder, falls leer, aus der lokalen
 Token-Datei des Servers (api.token im Konfigurationsverzeichnis).
 
-Oder in Claude Code settings.json:
-    {
-      "mcpServers": {
-        "conclave": {
-          "command": "python",
-          "args": ["-m", "conclave.mcp_server"],
-          "env": {
-            "CONCLAVE_API_URL": "http://localhost:8000"
-          }
-        }
-      }
-    }
+In Claude Code:
+    claude mcp add Conclave -s user -e CONCLAVE_API_URL=http://localhost:8000 -- conclave-mcp
 """
 
 import os
-import json
+from importlib.metadata import PackageNotFoundError, version
+
 import httpx
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from conclave.runtime.api_token import read_token
 
@@ -35,8 +29,17 @@ API_URL = os.environ.get("CONCLAVE_API_URL", "http://localhost:8000")
 # Token: CONCLAVE_API_KEY, sonst die lokale Token-Datei des Servers (api.token).
 # Wird pro Anfrage gelesen, damit der MCP-Client auch vor dem ersten Serverstart laufen darf.
 
-mcp = FastMCP(
+
+def _package_version() -> str:
+    try:
+        return version("conclave-personal")
+    except PackageNotFoundError:  # Quellbaum ohne Installation
+        return "0.0.0"
+
+
+mcp = MCPServer(
     "Conclave",
+    version=_package_version(),
     instructions=(
         "Conclave ist ein host-gesteuertes Multi-Model-Konversationssystem. "
         "Du kannst damit mehrere KI-Modelle (Claude, GPT) in strukturierten "
@@ -58,22 +61,37 @@ def _headers() -> dict:
     return h
 
 
-def _get(path: str, params: dict | None = None) -> dict:
-    r = httpx.get(f"{API_URL}{path}", headers=_headers(), params=params, timeout=60)
-    r.raise_for_status()
+def _result(r: httpx.Response) -> dict:
+    """Antwort der Conclave-API; Fehler als ToolError mit Conclaves eigener Meldung."""
+    if r.is_error:
+        try:
+            body = r.json()
+        except ValueError:
+            body = None
+        detail = (body.get("error") if isinstance(body, dict) else None) or r.text
+        hint = " (Token pruefen: CONCLAVE_API_KEY oder api.token)" if r.status_code == 401 else ""
+        raise ToolError(f"Conclave-API {r.status_code}: {detail}{hint}")
     return r.json() if r.text else {}
+
+
+def _request(method: str, path: str, *, timeout: float, **kwargs) -> dict:
+    try:
+        r = httpx.request(method, f"{API_URL}{path}", headers=_headers(), timeout=timeout, **kwargs)
+    except httpx.HTTPError as exc:
+        raise ToolError(f"Conclave-Server unter {API_URL} nicht erreichbar: {exc}") from exc
+    return _result(r)
+
+
+def _get(path: str, params: dict | None = None) -> dict:
+    return _request("GET", path, params=params, timeout=60)
 
 
 def _post(path: str, body: dict | None = None) -> dict:
-    r = httpx.post(f"{API_URL}{path}", headers=_headers(), json=body or {}, timeout=120)
-    r.raise_for_status()
-    return r.json() if r.text else {}
+    return _request("POST", path, json=body or {}, timeout=120)
 
 
 def _delete(path: str, body: dict | None = None) -> dict:
-    r = httpx.request("DELETE", f"{API_URL}{path}", headers=_headers(), json=body, timeout=60)
-    r.raise_for_status()
-    return r.json() if r.text else {}
+    return _request("DELETE", path, json=body, timeout=60)
 
 
 # ── Tools: Conversations ──────────────────────────────────────────────────

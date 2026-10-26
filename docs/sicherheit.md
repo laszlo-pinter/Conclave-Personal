@@ -146,4 +146,4 @@ verbotene Inhalte:
 - keine Python-Caches
 - keine alten DSGVO-/Legal-Pfade
 
-Siehe auch: [Release Notes v0.2.0](release-notes-v0.2.0.md).
+Siehe auch: [Release Notes v0.2.1](release-notes-v0.2.1.md) und [v0.2.0](release-notes-v0.2.0.md).
