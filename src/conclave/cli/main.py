@@ -566,7 +566,8 @@ def _run_server(args, should_open_browser: bool = False) -> int:
         debug=getattr(args, "debug", False),
         open_browser=should_open_browser,
     )
-    log_file = launch.paths.log_dir / "conclave-server.log"
+    from conclave.infrastructure.log import LOG_FILE_NAME
+    log_file = launch.paths.log_dir / LOG_FILE_NAME
     configure_logging(launch.config.log_level, log_file)
     get_logger("cli.server").info(
         "Server starting",

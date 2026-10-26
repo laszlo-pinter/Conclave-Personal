@@ -202,8 +202,13 @@ def create_wsgi_app():
 
 
 def main() -> None:
+    from conclave.infrastructure.log import LOG_FILE_NAME, configure_logging
+    from conclave.runtime.paths import get_runtime_paths
+
+    config = ConclaveConfig.from_sources()
+    configure_logging(config.log_level, get_runtime_paths().log_dir / LOG_FILE_NAME)
     try:
-        app, config = _build_app()
+        app, config = _build_app(config)
     except RuntimeError as e:
         print(f"FEHLER: {e}", file=sys.stderr)
         raise SystemExit(1)

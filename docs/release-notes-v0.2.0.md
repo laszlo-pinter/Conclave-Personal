@@ -48,6 +48,17 @@ Conclave v0.2.0 is a security release based on the review of 2026-10-26
 - `CONCLAVE_DEBUG` is rejected in `production` mode and with a non-loopback
   `CONCLAVE_HOST`.
 
+## Settings page
+
+- **Server log:** the settings page shows the latest entries of the server log
+  with a level filter (`GET /logs`). Successful `GET` requests (static files,
+  UI polling) are now logged at DEBUG so warnings and errors stand out.
+  `CONCLAVE_LOG_DIR` sets the log directory; `conclave-api` now also writes
+  the log file.
+- **Rate limit:** shown and editable in the settings. Changes take effect
+  immediately and are saved to `config.toml`; a value from
+  `CONCLAVE_RATE_LIMIT` is shown read-only.
+
 ## Bug fixes
 
 - **Editing an agent no longer deletes its stored API key.** `PUT /agents/<id>`

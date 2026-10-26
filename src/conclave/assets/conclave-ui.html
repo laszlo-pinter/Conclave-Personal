@@ -254,7 +254,32 @@
           <div id="backupStatus" class="surface-info" data-i18n="common.ready">Bereit.</div>
           <button class="btn-full page-action" data-action="create-backup" data-i18n="settings.createBackup">Backup erstellen</button>
         </section>
+        <section class="workbench-section">
+          <div class="workbench-title" data-i18n="settings.rateLimit">Rate-Limit</div>
+          <div class="field">
+            <label for="settingsRateLimit" data-i18n="settings.rateLimitLabel">Anfragen je Route und Client</label>
+            <input type="text" id="settingsRateLimit" placeholder="120 per minute"/>
+          </div>
+          <div id="settingsRateLimitInfo" class="surface-info" data-i18n="settings.rateLimitHint">Beispiele: 120 per minute, 120/minute; 2000/hour, off</div>
+          <button class="btn-full page-action" id="btnSaveRateLimit" data-action="save-rate-limit" data-i18n="common.save">Speichern</button>
+        </section>
       </div>
+      <section class="workbench-section logs-section">
+        <div class="logs-head">
+          <div class="workbench-title" data-i18n="settings.logs">Server-Log</div>
+          <div class="logs-controls">
+            <select id="logLevel" aria-label="Log-Level">
+              <option value="DEBUG" data-i18n="settings.logsAll">Alle</option>
+              <option value="INFO">Info</option>
+              <option value="WARNING" data-i18n="settings.logsWarnings">Warnungen</option>
+              <option value="ERROR" data-i18n="settings.logsErrors">Fehler</option>
+            </select>
+            <button class="icon-text-btn" data-action="refresh-logs" data-i18n="settings.logsRefresh">Aktualisieren</button>
+          </div>
+        </div>
+        <div id="logFile" class="surface-info"></div>
+        <div id="logList" class="log-list" role="log"><div class="surface-empty" data-i18n="common.loading">Lade...</div></div>
+      </section>
     </div>
   </div>
 

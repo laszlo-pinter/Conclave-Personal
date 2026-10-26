@@ -1,6 +1,6 @@
 # API-Referenz
 
-**47 dokumentierte Endpoints** — öffentliche Personal-API.
+**48 dokumentierte Endpoints** — öffentliche Personal-API.
 
 Alle Endpoints außer `GET /`, `/static/*`, `GET /health`, `GET /api-docs` und
 `GET /openapi.json` verlangen ein Token (`Authorization: Bearer <token>` oder
@@ -51,6 +51,7 @@ Inhalt: `{}`) oder den Header `X-Conclave-Client`. Anfragen mit nicht erlaubtem
 | `GET` | `/settings` | Gibt lokale Runtime-Settings ohne Secrets zurück. |
 | `PUT` | `/settings` | Aktualisiert einfache Runtime-Settings für die laufende Session. |
 | `POST` | `/backup` | Erstellt ein lokales ZIP-Backup von SQLite-DB und Workspace. |
+| `GET` | `/logs` | Letzte Einträge der Server-Logdatei (`limit` bis 1000, `level` DEBUG…CRITICAL). |
 | `GET` | `/backups` | Listet die ZIP-Backups im Backup-Verzeichnis (neueste zuerst). |
 | `POST` | `/restore` | Stellt SQLite-DB und Workspace aus einem ZIP-Backup im Backup-Verzeichnis wieder her. |
 | `GET` | `/workspace` | Listet alle Dateien im Workspace. |
@@ -84,3 +85,12 @@ Inhalt: `{}`) oder den Header `X-Conclave-Client`. Anfragen mit nicht erlaubtem
   die UI beim Bearbeiten nur einen neu eingegebenen Key mit.
 - Ein neuer `api_key` ersetzt den gespeicherten.
 - Entfernen nur ausdrücklich mit `"clear_api_key": true`.
+
+## Settings: Rate-Limit
+
+- `GET /settings` liefert unter `rate_limit` den aktuellen Wert, die Herkunft
+  (`default`, `config`, `env`, `session`), ob es aktiv ist, ob es änderbar ist
+  und ob Änderungen in `config.toml` gespeichert werden.
+- `PUT /settings` mit `{"rate_limit": "300 per minute"}` (oder `"off"`) wirkt
+  sofort und wird in `[server] rate_limit` der `config.toml` gespeichert.
+  Ungültige Werte → `400`; ist `CONCLAVE_RATE_LIMIT` gesetzt → `409`.

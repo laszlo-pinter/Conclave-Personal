@@ -16,7 +16,8 @@ Alle Konfiguration über Umgebungsvariablen. TOML-Config als Fallback.
 | CONCLAVE_HOST | 127.0.0.1 | Bind-Adresse |
 | CONCLAVE_PORT | 8000 | Server-Port |
 | CONCLAVE_LOG_LEVEL | INFO | DEBUG / INFO / WARNING / ERROR |
-| CONCLAVE_RATE_LIMIT | 120 per minute | Anfragen je Route und Client-IP, Syntax von flask-limiter (`120/minute; 2000/hour`), `off` schaltet ab. Auch als `[server] rate_limit` in der TOML-Config |
+| CONCLAVE_RATE_LIMIT | 120 per minute | Anfragen je Route und Client-IP, Syntax von flask-limiter (`120/minute; 2000/hour`), `off` schaltet ab. Auch als `[server] rate_limit` in der TOML-Config oder in der UI unter Settings (wirkt sofort); die Umgebungsvariable hat Vorrang und sperrt die UI-Änderung |
+| CONCLAVE_LOG_DIR | plattformabhängig | Verzeichnis für `conclave-server.log` (z. B. getrennt für Testinstanzen) |
 | CONCLAVE_SERVER_THREADS | 16 | Threads des WSGI-Servers (waitress). Laufende Streams belegen je einen Thread |
 
 ## Datenbank

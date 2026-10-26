@@ -1,6 +1,7 @@
 # src/conclave/api/app.py
 
 import json as _json
+import logging
 import os
 import time
 
@@ -33,7 +34,7 @@ from conclave.domain.errors import (
     ParticipantNotRegistered,
 )
 from conclave.domain.participant import ParticipantType
-from conclave.cli.bootstrap import rate_limit_disabled
+from conclave.cli.bootstrap import rate_limit_disabled, validate_rate_limit
 from conclave.cli.config import DEFAULT_RATE_LIMIT
 from conclave.application.workspace_security import (
     agent_read_limit_bytes,
@@ -44,7 +45,8 @@ from conclave.application.workspace_security import (
     ui_read_limit_bytes,
     write_limit_bytes,
 )
-from conclave.infrastructure.log import get_logger
+from conclave.infrastructure.log import active_log_file, get_logger, read_log_tail
+from conclave.runtime.toml_edit import set_toml_string
 from conclave.runtime.backup import create_backup_archive, restore_backup_archive
 from conclave.runtime.assets import get_asset_root
 from conclave.runtime.env import env_secret
@@ -121,9 +123,19 @@ def create_app(handler: CLIHandler, auth_service=None,
         if service and hasattr(service, '_registry') and service._registry:
             service._registry.invalidate()
 
-    rate_limit = getattr(config, "rate_limit", DEFAULT_RATE_LIMIT) if config else DEFAULT_RATE_LIMIT
-    if _has_limiter and not rate_limit_disabled(rate_limit):
-        limiter = Limiter(get_remote_address, app=app, default_limits=[rate_limit],
+    # Rate-Limit pro Anfrage gelesen: Aenderungen ueber PUT /settings wirken sofort.
+    rate_limit_state = {
+        "value": getattr(config, "rate_limit", DEFAULT_RATE_LIMIT) if config else DEFAULT_RATE_LIMIT,
+        "source": getattr(config, "rate_limit_source", "default") if config else "default",
+    }
+
+    def _current_rate_limit() -> str:
+        value = rate_limit_state["value"]
+        return DEFAULT_RATE_LIMIT if rate_limit_disabled(value) else value
+
+    if _has_limiter:
+        limiter = Limiter(get_remote_address, app=app, default_limits=[_current_rate_limit],
+                          default_limits_exempt_when=lambda: rate_limit_disabled(rate_limit_state["value"]),
                           storage_uri="memory://")
 
     @app.errorhandler(429)
@@ -180,7 +192,11 @@ def create_app(handler: CLIHandler, auth_service=None,
     @app.after_request
     def _log_request_end(response):
         duration_ms = (time.monotonic() - getattr(request, "_start_time", time.monotonic())) * 1000
-        logger.info(
+        # Erfolgreiche Lesezugriffe (statische Dateien, UI-Polling) nur auf DEBUG,
+        # damit Warnungen und Fehler im Server-Log nicht untergehen.
+        quiet = request.method in ("GET", "HEAD", "OPTIONS") and response.status_code < 400
+        logger.log(
+            logging.DEBUG if quiet else logging.INFO,
             "%s %s → %d (%.1f ms)",
             request.method, request.path, response.status_code, duration_ms,
             extra={"method": request.method, "path": request.path,
@@ -822,6 +838,14 @@ def create_app(handler: CLIHandler, auth_service=None,
                 "hidden_paths_visible": False,
             },
             "auth_required": bool(getattr(config, "api_key", "") if config else False),
+            "rate_limit": {
+                "value": rate_limit_state["value"],
+                "source": rate_limit_state["source"],
+                "active": _has_limiter and not rate_limit_disabled(rate_limit_state["value"]),
+                "editable": rate_limit_state["source"] != "env",
+                "persistent": bool(getattr(config, "config_path", None)),
+            },
+            "log_file": str(active_log_file() or ""),
             "provider_keys": provider_keys,
         }
 
@@ -843,7 +867,50 @@ def create_app(handler: CLIHandler, auth_service=None,
             WORKSPACE = workspace_path
             os.environ["CONCLAVE_WORKSPACE"] = workspace_path
             os.makedirs(WORKSPACE, exist_ok=True)
+        if "rate_limit" in body:
+            error = _update_rate_limit(body.get("rate_limit"))
+            if error:
+                return jsonify({"error": error[0], "type": error[1]}), error[2]
         return jsonify({"settings": _settings_payload()}), 200
+
+    def _update_rate_limit(value):
+        """Setzt das Rate-Limit sofort und speichert es in config.toml (falls bekannt)."""
+        if rate_limit_state["source"] == "env":
+            return ("Rate-Limit ist durch CONCLAVE_RATE_LIMIT festgelegt und hier nicht aenderbar.",
+                    "RateLimitLocked", 409)
+        value = str(value or "").strip()
+        problem = validate_rate_limit(value) if value else "Rate-Limit darf nicht leer sein (zum Abschalten: off)."
+        if problem:
+            return (problem, "InvalidRateLimit", 400)
+        config_path = getattr(config, "config_path", None)
+        if config_path:
+            try:
+                set_toml_string(pathlib.Path(config_path), "server", "rate_limit", value)
+            except (OSError, ValueError) as exc:
+                logger.error("config.toml nicht aktualisiert: %s", exc)
+                return ("Rate-Limit konnte nicht in config.toml gespeichert werden.", "ConfigWriteFailed", 500)
+        rate_limit_state.update(value=value, source="config" if config_path else "session")
+        if config is not None:
+            config.rate_limit = value
+        logger.info("Rate-Limit geaendert: %s", value)
+        return None
+
+    @app.get("/logs")
+    def get_logs():
+        """Letzte Eintraege der Server-Logdatei (fuer die Settings-Seite)."""
+        path = active_log_file()
+        if path is None or not path.is_file():
+            return jsonify({"available": False, "log_file": str(path or ""), "entries": [],
+                            "hint": "Keine Logdatei aktiv (Server ohne Datei-Logging gestartet)."}), 200
+        try:
+            limit = max(1, min(int(request.args.get("limit", 200)), 1000))
+        except ValueError:
+            return jsonify({"error": "limit muss eine Zahl sein."}), 400
+        level = request.args.get("level", "DEBUG").upper()
+        if level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+            return jsonify({"error": "level muss DEBUG, INFO, WARNING, ERROR oder CRITICAL sein."}), 400
+        return jsonify({"available": True, "log_file": str(path),
+                        "entries": read_log_tail(path, limit=limit, min_level=level)}), 200
 
     def _backup_root() -> pathlib.Path:
         backup_root_env = os.environ.get("CONCLAVE_BACKUP_DIR", "").strip()

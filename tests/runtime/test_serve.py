@@ -93,6 +93,7 @@ def test_server_main_uses_runtime_serve(monkeypatch):
     config = MagicMock(host="127.0.0.1", port=8123, debug=False)
     app = MagicMock()
     with patch.object(server, "_build_app", return_value=(app, config)), \
+         patch("conclave.infrastructure.log.configure_logging"), \
          patch("conclave.runtime.serve.serve") as serve:
         server.main()
     serve.assert_called_once_with(app, "127.0.0.1", 8123, debug=False)

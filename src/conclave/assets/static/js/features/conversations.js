@@ -34,7 +34,7 @@ function switchTab(tab){
   if(isAgents){loadAgents();loadProviders();}
   if(isWorkspace){loadWorkspace();}
   if(isRuns){loadRuns();loadConversationUsage();}
-  if(isSettings){loadSettings();}
+  if(isSettings){loadSettings();loadLogs();}
 }
 
 // ── Conversations ─────────────────────────────────────────────────────────

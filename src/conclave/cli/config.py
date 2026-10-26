@@ -27,6 +27,9 @@ class ConclaveConfig:
     port: int = 8000
     debug: bool = False
     rate_limit: str = DEFAULT_RATE_LIMIT
+    rate_limit_source: str = "default"  # "default" | "config" | "env"
+    # Gesetzt von from_sources; nur dann darf die UI Werte in config.toml speichern
+    config_path: Path | None = None
     # Logging
     log_level: str = "INFO"
     # API-Keys (Fallback, wenn nicht in DB)
@@ -76,9 +79,12 @@ class ConclaveConfig:
         port = int(os.environ.get("CONCLAVE_PORT", "8000"))
         debug = os.environ.get("CONCLAVE_DEBUG", "").lower() in ("1", "true")
         log_level = os.environ.get("CONCLAVE_LOG_LEVEL", "INFO")
-        rate_limit = os.environ.get(
-            "CONCLAVE_RATE_LIMIT", str(server_section.get("rate_limit", DEFAULT_RATE_LIMIT))
-        ).strip()
+        if os.environ.get("CONCLAVE_RATE_LIMIT") is not None:
+            rate_limit, rate_limit_source = os.environ["CONCLAVE_RATE_LIMIT"].strip(), "env"
+        elif "rate_limit" in server_section:
+            rate_limit, rate_limit_source = str(server_section["rate_limit"]).strip(), "config"
+        else:
+            rate_limit, rate_limit_source = DEFAULT_RATE_LIMIT, "default"
 
         anthropic_api_key = env_secret("ANTHROPIC_API_KEY")
         openai_api_key = env_secret("OPENAI_API_KEY")
@@ -95,6 +101,8 @@ class ConclaveConfig:
             port=port,
             debug=debug,
             rate_limit=rate_limit,
+            rate_limit_source=rate_limit_source,
+            config_path=config_path,
             log_level=log_level,
             anthropic_api_key=anthropic_api_key,
             openai_api_key=openai_api_key,

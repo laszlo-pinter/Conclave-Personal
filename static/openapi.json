@@ -1485,6 +1485,20 @@
         }
       }
     },
+    "/logs": {
+      "get": {
+        "summary": "Letzte Eintraege der Server-Logdatei (fuer die Settings-Seite).",
+        "tags": [
+          "logs"
+        ],
+        "operationId": "get_logs",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        }
+      }
+    },
     "/backup": {
       "post": {
         "summary": "Erstellt ein lokales ZIP-Backup von SQLite-DB und Workspace.",
