@@ -1,6 +1,7 @@
 include README.md
 include PROJECT.md
 include LICENSE
+include THIRD_PARTY.md
 exclude conclave-ui.html
 recursive-include src/conclave/assets *
 include docs/index.md

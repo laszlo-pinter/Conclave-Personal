@@ -123,6 +123,11 @@ jobs:
           required_wheel = {
               "conclave/assets/conclave-ui.html",
               "conclave/assets/static/openapi.json",
+              "conclave/assets/static/vendor/purify.min.js",
+              "conclave/assets/static/vendor/marked.min.js",
+              "conclave/assets/static/vendor/highlight/highlight.min.js",
+              "conclave/assets/static/vendor/swagger-ui/swagger-ui-bundle.js",
+              "conclave/assets/static/vendor/fonts/fonts.css",
               entry_points[0],
           }
           missing = sorted(required_wheel - wheel_names)

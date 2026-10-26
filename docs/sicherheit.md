@@ -35,7 +35,21 @@ conclave desktop
 - Links sind nur mit `http(s)`, `mailto` oder `#` erlaubt und öffnen mit
   `target="_blank"` und `rel="noopener noreferrer"`.
 - Ist DOMPurify nicht geladen, wird nie HTML ausgegeben, nur escapter Text.
-- DOMPurify wird lokal ausgeliefert (`static/vendor/`, siehe `THIRD_PARTY.md`).
+- Alle Bibliotheken und Schriften (DOMPurify, marked, highlight.js, Swagger UI,
+  Syne, Syne Mono, DM Sans) werden lokal unter `static/vendor/` ausgeliefert;
+  Versionen, Lizenzen und Prüfsummen stehen in `THIRD_PARTY.md`. Zur Laufzeit
+  werden keine fremden Server kontaktiert.
+- Jede Antwort trägt eine Content-Security-Policy: Skripte, Styles, Schriften,
+  Bilder und Verbindungen nur vom eigenen Server (`'self'`, Bilder zusätzlich
+  `data:`), keine Inline-Skripte, kein `eval`, keine `<style>`-Blöcke, keine
+  Einbettung in fremde Seiten (`frame-ancestors 'none'`). Erlaubt sind nur
+  `style`-Attribute (`style-src-attr 'unsafe-inline'`).
+- Weitere Header: `Referrer-Policy: no-referrer`, `Permissions-Policy`
+  (Mikrofon nur für die eigene Seite wegen der Spracheingabe, Kamera und
+  Standort gesperrt).
+- Wegen `connect-src 'self'` spricht die UI nur mit dem Server, von dem sie
+  geladen wurde. Eine abweichende API-URL im Key-Dialog wird vom Browser
+  blockiert.
 - Jede `innerHTML`-/`insertAdjacentHTML`-Stelle braucht einen Kommentar
   `// safe-html: <Begründung>`; `tests/ui/test_html_sinks.py` lässt neue Stellen
   ohne Begründung scheitern. Werte aus API-Antworten werden mit `esc()`

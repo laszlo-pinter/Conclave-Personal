@@ -55,6 +55,24 @@ except ImportError:
 
 logger = get_logger("api")
 
+# Alle Ressourcen kommen vom eigenen Server (B5). Inline-Skripte und <style>-Bloecke
+# sind verboten; nur style-Attribute sind erlaubt (die UI setzt Farben per Attribut).
+CONTENT_SECURITY_POLICY = "; ".join([
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self'",
+    "style-src-attr 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+])
+# Mikrofon nur fuer die eigene Seite (Spracheingabe in speech.js)
+PERMISSIONS_POLICY = "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+
 
 def create_app(handler: CLIHandler, auth_service=None,
                agent_service=None, config=None, service=None) -> Flask:
@@ -135,6 +153,9 @@ def create_app(handler: CLIHandler, auth_service=None,
     def _security_headers(response):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Content-Security-Policy"] = CONTENT_SECURITY_POLICY
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Permissions-Policy"] = PERMISSIONS_POLICY
         # CORS: nur explizit konfigurierte Origins, kein Wildcard-Reflect
         origin = request.headers.get("Origin", "")
         if origin and origin in _cors_allowed:
@@ -201,11 +222,12 @@ def create_app(handler: CLIHandler, auth_service=None,
         return """<!DOCTYPE html>
 <html><head>
 <title>Conclave API</title>
-<link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+<meta charset="utf-8">
+<link rel="stylesheet" href="/static/vendor/swagger-ui/swagger-ui.css">
 </head><body>
 <div id="swagger-ui"></div>
-<script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-<script>SwaggerUIBundle({url:'/static/openapi.json',dom_id:'#swagger-ui',deepLinking:true})</script>
+<script src="/static/vendor/swagger-ui/swagger-ui-bundle.js"></script>
+<script src="/static/js/swagger-init.js"></script>
 </body></html>""", 200, {"Content-Type": "text/html"}
 
     @app.get("/openapi.json")

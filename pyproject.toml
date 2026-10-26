@@ -74,6 +74,10 @@ where = ["src"]
     "assets/static/js/*.js",
     "assets/static/js/features/*.js",
     "assets/static/vendor/*.js",
+    "assets/static/vendor/fonts/*",
+    "assets/static/vendor/highlight/*",
+    "assets/static/vendor/licenses/*",
+    "assets/static/vendor/swagger-ui/*",
     "assets/scripts/windows/*.ps1",
     "assets/scripts/linux/*",
 ]

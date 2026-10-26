@@ -8,11 +8,10 @@ ist der unguenstigste Fall und macht den Test unabhaengig vom CDN.
 Benoetigt Playwright mit Chromium (``pip install -e ".[dev-ui]"`` und
 ``python -m playwright install chromium``); sonst wird der Test uebersprungen.
 Mit ``CONCLAVE_REQUIRE_BROWSER=1`` (CI-Job ``ui-browser``) scheitert er
-stattdessen, damit er nicht unbemerkt ausfaellt.
+stattdessen (siehe conftest.py).
 """
 
 import json
-import os
 
 import pytest
 
@@ -88,32 +87,17 @@ EVALUATE = """() => {
 }"""
 
 
-def _browser_unavailable(reason: str):
-    if os.environ.get("CONCLAVE_REQUIRE_BROWSER") == "1":
-        pytest.fail(f"Browser-Test erforderlich, aber nicht ausfuehrbar: {reason}")
-    pytest.skip(reason)
-
-
 @pytest.fixture(scope="module")
-def rendered(tmp_path_factory):
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        _browser_unavailable("Playwright ist nicht installiert")
+def rendered(chromium, tmp_path_factory):
     harness = tmp_path_factory.mktemp("xss") / "harness.html"
     harness.write_text(_harness_html(), encoding="utf-8")
-    with sync_playwright() as pw:
-        try:
-            browser = pw.chromium.launch()
-        except Exception as exc:  # Chromium nicht installiert
-            _browser_unavailable(f"Chromium fuer Playwright nicht verfuegbar: {exc}")
-        try:
-            page = browser.new_page()
-            page.goto(harness.as_uri())
-            page.wait_for_timeout(500)  # onerror/onload-Handler laufen asynchron
-            return page.evaluate(EVALUATE)
-        finally:
-            browser.close()
+    page = chromium.new_page()
+    try:
+        page.goto(harness.as_uri())
+        page.wait_for_timeout(500)  # onerror/onload-Handler laufen asynchron
+        return page.evaluate(EVALUATE)
+    finally:
+        page.close()
 
 
 def test_dompurify_is_active(rendered):

@@ -6,7 +6,7 @@
 |---------|------|-------------|
 | `GET` | `/` | Serve Ui |
 | `POST` | `/guard/notify` | Leitet eine Benachrichtigung an den Guard-Service weiter. |
-| `GET` | `/api-docs` | Swagger UI — interaktive API-Dokumentation. |
+| `GET` | `/api-docs` | Swagger UI — interaktive API-Dokumentation (lokal ausgeliefert, keine CDN-Ressourcen). |
 | `GET` | `/openapi.json` | OpenAPI 3.0 Spec als JSON. |
 | `GET` | `/health` | Healthcheck für lokale Runtime und Integrationen. |
 | `POST` | `/conversations` | Create Conversation |

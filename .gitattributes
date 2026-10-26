@@ -1,0 +1,2 @@
+# Vendor-Dateien byte-genau halten (Pruefsummen in THIRD_PARTY.md)
+src/conclave/assets/static/vendor/** -text

@@ -31,6 +31,8 @@ def test_ci_builds_and_inspects_release_artifacts():
     assert "python -m build --sdist --wheel" in text
     assert "conclave/assets/conclave-ui.html" in text
     assert "conclave/assets/static/openapi.json" in text
+    assert "conclave/assets/static/vendor/purify.min.js" in text
+    assert "conclave/assets/static/vendor/marked.min.js" in text
     assert "entry_points.txt" in text
     assert "__pycache__" in text
     assert "workspace/" in text
