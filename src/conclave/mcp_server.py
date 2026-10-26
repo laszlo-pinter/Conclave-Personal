@@ -32,8 +32,8 @@ from conclave.runtime.api_token import read_token
 # ── Config ────────────────────────────────────────────────────────────────
 
 API_URL = os.environ.get("CONCLAVE_API_URL", "http://localhost:8000")
-# CONCLAVE_API_KEY, sonst die lokale Token-Datei des Servers (api.token)
-API_KEY = read_token()
+# Token: CONCLAVE_API_KEY, sonst die lokale Token-Datei des Servers (api.token).
+# Wird pro Anfrage gelesen, damit der MCP-Client auch vor dem ersten Serverstart laufen darf.
 
 mcp = FastMCP(
     "Conclave",
@@ -52,8 +52,9 @@ mcp = FastMCP(
 
 def _headers() -> dict:
     h = {"Content-Type": "application/json"}
-    if API_KEY:
-        h["Authorization"] = f"Bearer {API_KEY}"
+    token = read_token()
+    if token:
+        h["Authorization"] = f"Bearer {token}"
     return h
 
 

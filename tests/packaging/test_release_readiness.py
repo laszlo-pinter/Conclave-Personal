@@ -74,8 +74,9 @@ def test_release_docs_use_publishable_distribution_name():
     release_notes = (ROOT / "docs/release-notes-v0.2.0.md").read_text(encoding="utf-8")
     combined = readme + "\n" + release_notes
 
-    assert "pipx install conclave-personal" in combined
-    assert "pipx install conclave\n" not in combined
+    assert "pip install conclave-personal" in combined
+    assert "pipx" not in combined
+    assert "pip install conclave\n" not in combined
     assert "conclave-0.1.0-py3-none-any.whl" not in combined
     assert "conclave-0.1.1-py3-none-any.whl" not in combined
     assert "conclave-0.1.2-py3-none-any.whl" not in combined

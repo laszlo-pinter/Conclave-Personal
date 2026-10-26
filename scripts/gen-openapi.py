@@ -197,6 +197,12 @@ SCHEMAS = {
 }
 
 
+
+def _project_version() -> str:
+    import tomllib
+    data = tomllib.loads((Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8"))
+    return data["project"]["version"]
+
 def extract_routes(source: str) -> list[dict]:
     pattern = re.compile(
         r'@app\.(get|post|put|delete)\(["\']([^"\']+)["\']\)\s*\n'
@@ -281,7 +287,7 @@ def build_spec(routes: list[dict]) -> dict:
         "info": {
             "title": "Conclave API",
             "description": "Host-gesteuertes Multi-Model-Konversationssystem",
-            "version": "0.1.0",
+            "version": _project_version(),
         },
         "servers": [
             {"url": "http://localhost:8000", "description": "Lokal (localhost)"},

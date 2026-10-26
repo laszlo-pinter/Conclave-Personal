@@ -32,6 +32,9 @@ from conclave.domain.errors import (
     NoFloorGranted,
     ParticipantAlreadyRegistered,
     ParticipantNotRegistered,
+    ProviderError,
+    ProviderRateLimit,
+    ProviderTimeout,
 )
 from conclave.domain.participant import ParticipantType
 from conclave.cli.bootstrap import rate_limit_disabled, validate_rate_limit
@@ -41,6 +44,7 @@ from conclave.application.workspace_security import (
     assert_size_allowed,
     is_hidden_workspace_path,
     resolve_workspace_path,
+    workspace_root,
     text_size,
     ui_read_limit_bytes,
     write_limit_bytes,
@@ -116,7 +120,7 @@ def create_app(handler: CLIHandler, auth_service=None,
     import pathlib
     asset_root = get_asset_root()
     app = Flask(__name__, static_folder=str(asset_root / "static"), static_url_path="/static")
-    WORKSPACE = os.environ.get("CONCLAVE_WORKSPACE", "/workspace")
+    WORKSPACE = str(workspace_root())
 
     def _refresh_registry():
         """Invalidiert den Adapter-Cache — Lazy Builder baut bei Bedarf neu."""
@@ -251,8 +255,7 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     def _notify_new_message(conversation_id: str, sequence: int, author: str = ""):
         """Schreibt eine Marker-Datei bei neuer Nachricht (fuer FileChanged Hook)."""
-        workspace = os.environ.get("CONCLAVE_WORKSPACE", "/workspace")
-        marker = pathlib.Path(workspace) / "conclave_notify.json"
+        marker = workspace_root() / "conclave_notify.json"
         try:
             marker.write_text(_json.dumps({
                 "event": "new_message",
@@ -349,6 +352,18 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     @app.errorhandler(AdapterNotFound)
     def _handle_adapter_not_found(e):
+        return _error_json(e, 502)
+
+    @app.errorhandler(ProviderRateLimit)
+    def _handle_provider_rate_limit(e):
+        return _error_json(e, 429)
+
+    @app.errorhandler(ProviderTimeout)
+    def _handle_provider_timeout(e):
+        return _error_json(e, 504)
+
+    @app.errorhandler(ProviderError)
+    def _handle_provider_error(e):  # ProviderUnavailable und sonstige Provider-Fehler
         return _error_json(e, 502)
 
     @app.errorhandler(ValueError)

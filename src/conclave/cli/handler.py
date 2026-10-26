@@ -565,6 +565,7 @@ class CLIHandler:
             return CLIResult(
                 success=False,
                 message=f"Conversation '{conversation_id}' nicht gefunden.",
+                data={"type": "ConversationNotFound", "status": 404},
             )
         except AdapterNotFound:
             return CLIResult(
