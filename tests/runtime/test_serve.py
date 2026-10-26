@@ -12,16 +12,64 @@ from conclave.runtime import serve as serve_module
 waitress = pytest.importorskip("waitress")
 
 
+def _free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
 def test_serve_uses_waitress_by_default():
     app = MagicMock()
+    port = _free_port()
     with patch("waitress.serve") as waitress_serve:
-        serve_module.serve(app, "127.0.0.1", 8123)
+        serve_module.serve(app, "127.0.0.1", port)
     waitress_serve.assert_called_once()
     args, kwargs = waitress_serve.call_args
     assert args == (app,)
-    assert kwargs["host"] == "127.0.0.1" and kwargs["port"] == 8123
+    (sock,) = kwargs["sockets"]
+    try:
+        assert sock.getsockname() == ("127.0.0.1", port)
+    finally:
+        sock.close()
+    assert "host" not in kwargs and "port" not in kwargs
     assert kwargs["threads"] == serve_module.DEFAULT_THREADS
     app.run.assert_not_called()
+
+
+def _occupy(port):
+    """Lauschender Socket wie ein anderer Server (mit SO_REUSEADDR, wie waitress/werkzeug)."""
+    other = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    other.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    other.bind(("127.0.0.1", port))
+    other.listen()
+    return other
+
+
+def test_second_instance_cannot_bind_a_port_in_use():
+    """Regression: unter Windows liefen zwei Instanzen auf demselben Port."""
+    port = _free_port()
+    other = _occupy(port)
+    try:
+        with pytest.raises(OSError):
+            serve_module.bind_server_socket("127.0.0.1", port)
+        with patch("waitress.serve") as waitress_serve, pytest.raises(SystemExit, match="belegt"):
+            serve_module.serve(MagicMock(), "127.0.0.1", port)
+        waitress_serve.assert_not_called()
+    finally:
+        other.close()
+
+
+def test_port_check_reports_port_in_use():
+    from conclave.runtime.process import find_free_port, is_port_available
+
+    port = _free_port()
+    other = _occupy(port)
+    try:
+        assert is_port_available("127.0.0.1", port) is False
+        assert find_free_port("127.0.0.1", preferred=port) != port
+    finally:
+        other.close()
+    assert is_port_available("127.0.0.1", port) is True
 
 
 def test_debug_uses_flask_development_server():

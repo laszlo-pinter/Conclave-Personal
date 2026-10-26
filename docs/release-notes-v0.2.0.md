@@ -57,6 +57,10 @@ Conclave v0.2.0 is a security release based on the review of 2026-10-26
   fix applies to `conclave agent-edit`.
 - `conclave agent-set-key` no longer drops the agent's preset, API URL and
   response path.
+- On Windows, a second server instance no longer starts silently on a port
+  that is already in use (`SO_REUSEADDR` allowed double binding; the old
+  process kept receiving all requests). The server now binds exclusively and
+  exits with a clear error; `conclave desktop` picks a free port instead.
 
 ## Security fixes
 
