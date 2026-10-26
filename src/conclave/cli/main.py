@@ -374,10 +374,8 @@ def run(argv: list[str] | None = None) -> int:
         existing = handler.get_agent(args.id)
         from datetime import datetime
         created_at = datetime.fromisoformat(existing.data["created_at"]) if existing.success else None
-        # api_key: explizit übergeben oder bestehenden aus DB behalten
-        api_key = args.api_key if args.api_key is not None else (
-            existing.data.get("api_key", "") if existing.success else ""
-        )
+        # api_key: explizit uebergeben; leer = gespeicherten Key behalten (handler.update_agent)
+        api_key = args.api_key or ""
         try:
             agent = Agent(id=args.id, name=args.name, provider=args.provider,
                           model=args.model, api_key=api_key,

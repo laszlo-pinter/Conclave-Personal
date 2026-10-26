@@ -48,6 +48,16 @@ Conclave v0.2.0 is a security release based on the review of 2026-10-26
 - `CONCLAVE_DEBUG` is rejected in `production` mode and with a non-loopback
   `CONCLAVE_HOST`.
 
+## Bug fixes
+
+- **Editing an agent no longer deletes its stored API key.** `PUT /agents/<id>`
+  used to overwrite the key with an empty value whenever the request did not
+  contain one, which is what the UI does on every save. The stored key is now
+  kept unless a new key is sent or `"clear_api_key": true` is set. The same
+  fix applies to `conclave agent-edit`.
+- `conclave agent-set-key` no longer drops the agent's preset, API URL and
+  response path.
+
 ## Security fixes
 
 - Model output is sanitized with DOMPurify before it is rendered (stored XSS).

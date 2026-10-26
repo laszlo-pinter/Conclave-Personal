@@ -432,7 +432,8 @@ def create_app(handler: CLIHandler, auth_service=None,
             )
         except (ValueError, Exception) as e:
             return jsonify({"error": str(e)}), 400
-        result = handler.update_agent(agent)
+        # Ohne neuen api_key bleibt der gespeicherte Key erhalten; entfernen nur ausdruecklich
+        result = handler.update_agent(agent, clear_api_key=body.get("clear_api_key") is True)
         if not result.success:
             return jsonify({"error": result.message}), 404
         _refresh_registry()

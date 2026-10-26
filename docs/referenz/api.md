@@ -76,3 +76,11 @@ Inhalt: `{}`) oder den Header `X-Conclave-Client`. Anfragen mit nicht erlaubtem
 - Vor jedem Restore wird automatisch ein `conclave-pre-restore-*.zip` angelegt.
 - Die CLI (`conclave restore --backup <pfad>`) darf weiterhin beliebige Pfade
   verwenden.
+
+## Agent-Keys
+
+- `PUT /agents/<agent_id>` ohne `api_key` (oder mit leerem Wert) behält den
+  gespeicherten Key. Gespeicherte Keys werden nie ausgeliefert, daher schickt
+  die UI beim Bearbeiten nur einen neu eingegebenen Key mit.
+- Ein neuer `api_key` ersetzt den gespeicherten.
+- Entfernen nur ausdrücklich mit `"clear_api_key": true`.
