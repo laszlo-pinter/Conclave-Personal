@@ -68,7 +68,7 @@ def test_publish_workflow_uses_trusted_publishing():
     assert "environment:" in text
     assert "name: pypi" in text
     assert "id-token: write" in text
-    assert "pypa/gh-action-pypi-publish@release/v1" in text
+    assert "pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3" in text
     assert "secrets." not in text
 
 
@@ -88,3 +88,25 @@ def test_ci_runs_ui_browser_tests_strictly():
     assert '".[dev-all,dev-ui]"' in job
     assert "python -m playwright install --with-deps chromium" in job
     assert "python -m pytest tests/ui" in job
+
+
+def test_all_actions_are_pinned_to_commit_sha():
+    """AP 7: Actions nur ueber unveraenderliche Commit-SHAs (Lieferkette)."""
+    import re
+
+    for workflow in (WORKFLOW, PUBLISH_WORKFLOW):
+        for line in workflow.read_text(encoding="utf-8").splitlines():
+            if "uses:" not in line:
+                continue
+            ref = line.split("uses:", 1)[1].split("#", 1)[0].strip()
+            assert re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", ref), f"{workflow.name}: nicht gepinnt: {ref}"
+            assert "# v" in line, f"{workflow.name}: Versionskommentar fehlt: {line.strip()}"
+
+
+def test_ci_runs_security_checks():
+    text = _workflow_text()
+    job = text.split("  security:", 1)[1].split("\n  build:", 1)[0]
+
+    assert '".[dev-all,dev-ui,dev-security]"' in job
+    assert "python -m pip_audit --skip-editable" in job
+    assert "python -m bandit -r src/conclave --severity-level medium" in job

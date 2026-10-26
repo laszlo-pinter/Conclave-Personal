@@ -24,6 +24,14 @@ Conclave v0.2.0 is a security release based on the review of 2026-10-26
   `"replace_workspace": true` and `"confirm": "replace-workspace"`. The CLI
   restore command still accepts any path.
 
+## CI
+
+- New `security` job: `pip-audit` (dependencies) and `bandit` (source, medium
+  severity and above).
+- New `ui-browser` job runs the Playwright browser tests in Chromium.
+- All GitHub Actions are pinned to commit SHAs.
+- `conclave-watch` only accepts `http(s)` API URLs.
+
 ## Removed
 
 - `POST /guard/notify` and `GUARD_URL` (left over from the Docker setup).

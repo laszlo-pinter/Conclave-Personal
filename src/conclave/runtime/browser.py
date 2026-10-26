@@ -3,7 +3,8 @@ from urllib.parse import quote
 
 
 def server_url(host: str, port: int) -> str:
-    browser_host = "127.0.0.1" if host in ("0.0.0.0", "::") else host
+    # Vergleich, keine Bindung: Wildcard-Adressen im Browser durch Loopback ersetzen
+    browser_host = "127.0.0.1" if host in ("0.0.0.0", "::") else host  # nosec B104
     return f"http://{browser_host}:{port}"
 
 

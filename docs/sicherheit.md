@@ -107,6 +107,18 @@ conclave desktop
   auf solche Ziele wird ebenfalls abgelehnt. Localhost ist nur für explizite
   lokale Provider wie Ollama erlaubt.
 
+## CI-Prüfungen
+
+- `pip-audit` prüft alle installierten Abhängigkeiten auf bekannte
+  Schwachstellen, `bandit` den Quellcode (ab Schweregrad „medium“). Ausnahmen
+  stehen als `# nosec <ID>` mit Begründung direkt im Code.
+- Der Job `ui-browser` lädt die UI in Chromium und prüft XSS-Schutz, CSP und
+  Token-Login; `tests/ui/test_html_sinks.py` lehnt neue `innerHTML`-Stellen
+  ohne `// safe-html:`-Begründung ab.
+- Alle GitHub Actions sind auf Commit-SHAs gepinnt (Version als Kommentar).
+  Updates erfolgen bewusst: neue SHA per `git ls-remote --tags` ermitteln und
+  Kommentar mitpflegen.
+
 ## Release-Artefakte
 
 Vor einem Release werden Wheel und Source Distribution auf verbotene Inhalte

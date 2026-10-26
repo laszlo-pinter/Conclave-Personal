@@ -124,7 +124,8 @@ def _columns(connection: sqlite3.Connection, table: str) -> list[str]:
 
 
 def _count(connection: sqlite3.Connection, table: str) -> int:
-    return int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+    # table stammt aus PERSONAL_TABLES/COMPLIANCE_TABLES (Konstanten), nicht aus Eingaben
+    return int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])  # nosec B608
 
 
 def _collect_ignored_tables(
@@ -176,8 +177,9 @@ def _copy_personal_tables(
 
         copied = 0
         skipped = 0
+        # Tabelle aus PERSONAL_TABLES, Spalten nur solche des eigenen Zielschemas
         rows = source_conn.execute(
-            f"SELECT {', '.join(common)} FROM {table}"
+            f"SELECT {', '.join(common)} FROM {table}"  # nosec B608
         ).fetchall()
         insert_sql = (
             f"INSERT OR IGNORE INTO {table} ({', '.join(common)}) "

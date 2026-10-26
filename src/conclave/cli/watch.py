@@ -12,18 +12,27 @@ import argparse
 import json
 import sys
 import time
+import urllib.parse
 import urllib.request
 
 from conclave.runtime.api_token import read_token
 
 
+def is_http_url(url: str) -> bool:
+    parsed = urllib.parse.urlparse(url)
+    return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+
+
 def fetch_conversation(api: str, conv_id: str, api_key: str = "") -> dict | None:
+    if not is_http_url(api):
+        return None
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     req = urllib.request.Request(f"{api}/conversations/{conv_id}", headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        # Schema oben auf http(s) geprueft, kein file:// o. ae.
+        with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
             return json.loads(resp.read())
     except Exception:
         return None
@@ -53,6 +62,8 @@ def main() -> None:
     parser.add_argument("--full", action="store_true", help="Vollstaendige Nachrichten anzeigen (Default: erste Zeile)")
     parser.add_argument("--key", default="", help="API-Token (Default: CONCLAVE_API_KEY oder lokale Token-Datei)")
     args = parser.parse_args()
+    if not is_http_url(args.api):
+        parser.error("--api muss eine http(s)-URL sein")
     args.key = args.key or read_token()
 
     conv = fetch_conversation(args.api, args.conversation_id, args.key)
