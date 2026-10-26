@@ -12,6 +12,7 @@ from conclave.domain.participant import ParticipantType
 from conclave.infrastructure.log import configure_logging, get_logger
 from conclave.runtime.browser import open_browser
 from conclave.runtime.desktop import prepare_launch_config
+from conclave.runtime.env import env_secret
 
 
 def _console_symbol(symbol: str, fallback: str, stream=None) -> str:
@@ -583,7 +584,7 @@ def _run_server(args, should_open_browser: bool = False) -> int:
         threading.Timer(1.0, lambda: open_browser(browser_url)).start()
         print(f"Conclave Desktop: {launch.url}")
     print(f"Conclave Logs: {log_file}")
-    if not os.environ.get("CONCLAVE_API_KEY"):
+    if not env_secret("CONCLAVE_API_KEY"):
         print(f"Conclave API-Token: {token_path()}")
     from conclave.runtime.serve import serve
     serve(app, config.host, config.port, debug=config.debug)

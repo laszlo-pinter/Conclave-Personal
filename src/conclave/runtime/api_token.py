@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 
 from conclave.infrastructure.log import get_logger
+from conclave.runtime.env import env_secret
 from conclave.runtime.paths import get_runtime_paths
 
 logger = get_logger("runtime.api_token")
@@ -28,7 +29,7 @@ def token_path() -> Path:
 
 def read_token() -> str:
     """Token fuer Clients: ``CONCLAVE_API_KEY``, sonst Token-Datei, sonst leer."""
-    env_key = os.environ.get("CONCLAVE_API_KEY", "").strip()
+    env_key = env_secret("CONCLAVE_API_KEY")
     if env_key:
         return env_key
     path = token_path()

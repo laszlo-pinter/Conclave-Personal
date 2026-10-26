@@ -57,6 +57,10 @@ Conclave v0.2.0 is a security release based on the review of 2026-10-26
   fix applies to `conclave agent-edit`.
 - `conclave agent-set-key` no longer drops the agent's preset, API URL and
   response path.
+- API keys from environment variables are read leniently: surrounding
+  whitespace and quotes (as easily entered via the Windows environment
+  dialog) are removed, with a one-time warning naming the variable. This
+  applies to provider keys, `CONCLAVE_API_KEY` and `CONCLAVE_SECRET_KEY`.
 - On Windows, a second server instance no longer starts silently on a port
   that is already in use (`SO_REUSEADDR` allowed double binding; the old
   process kept receiving all requests). The server now binds exclusively and

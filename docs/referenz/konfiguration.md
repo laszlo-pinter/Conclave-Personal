@@ -40,6 +40,11 @@ Alle Konfiguration über Umgebungsvariablen. TOML-Config als Fallback.
 
 ## Provider API-Keys (Fallback)
 
+Werte werden beim Einlesen bereinigt: umschließende Leerzeichen und
+Anführungszeichen (`"sk-..."`) werden entfernt, im Log erscheint dann einmalig
+eine Warnung mit dem Variablennamen. Unter Windows den Namen ohne `$env:` und
+den Wert ohne Anführungszeichen eintragen.
+
 | Variable | Beschreibung |
 |----------|-------------|
 | ANTHROPIC_API_KEY | Fallback wenn Agent keinen eigenen Key hat |

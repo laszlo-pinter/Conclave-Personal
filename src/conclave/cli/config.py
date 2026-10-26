@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from conclave.runtime.paths import get_runtime_paths
+from conclave.runtime.env import env_secret
 
 
 _RUNTIME_PATHS = get_runtime_paths()
@@ -79,10 +80,10 @@ class ConclaveConfig:
             "CONCLAVE_RATE_LIMIT", str(server_section.get("rate_limit", DEFAULT_RATE_LIMIT))
         ).strip()
 
-        anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        openai_api_key = os.environ.get("OPENAI_API_KEY", "")
-        gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
-        api_key = os.environ.get("CONCLAVE_API_KEY", "")
+        anthropic_api_key = env_secret("ANTHROPIC_API_KEY")
+        openai_api_key = env_secret("OPENAI_API_KEY")
+        gemini_api_key = env_secret("GEMINI_API_KEY")
+        api_key = env_secret("CONCLAVE_API_KEY")
         allowed_hosts = os.environ.get("CONCLAVE_ALLOWED_HOSTS", "")
         mode = os.environ.get("CONCLAVE_MODE", "development")
         return cls(

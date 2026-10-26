@@ -47,6 +47,7 @@ from conclave.application.workspace_security import (
 from conclave.infrastructure.log import get_logger
 from conclave.runtime.backup import create_backup_archive, restore_backup_archive
 from conclave.runtime.assets import get_asset_root
+from conclave.runtime.env import env_secret
 
 try:
     from flask_limiter import Limiter
@@ -476,7 +477,7 @@ def create_app(handler: CLIHandler, auth_service=None,
             key_available = (
                 not requires_api_key
                 or bool(fallback_keys.get(name))
-                or bool(key_env and os.environ.get(key_env))
+                or bool(key_env and env_secret(key_env))
             )
             providers.append({
                 "name": name,
@@ -805,7 +806,7 @@ def create_app(handler: CLIHandler, auth_service=None,
                 continue
             name = preset.get("name", "")
             key_env = preset.get("api_key_env", "")
-            provider_keys[name] = bool(fallback_keys.get(name)) or bool(key_env and os.environ.get(key_env))
+            provider_keys[name] = bool(fallback_keys.get(name)) or bool(key_env and env_secret(key_env))
 
         return {
             "mode": getattr(config, "mode", "development") if config else "development",

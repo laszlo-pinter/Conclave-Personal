@@ -8,6 +8,7 @@ import os
 from datetime import datetime, timezone
 
 from conclave.application.agent_service import AgentService
+from conclave.runtime.env import env_secret
 from conclave.application.conversation_flow import ConversationFlowService
 from conclave.application.orchestrator import Orchestrator, ParallelOrchestrator
 from conclave.application.workspace_security import (
@@ -156,7 +157,7 @@ class CLIHandler:
             return ""
         preset = get_preset(preset_name) or {}
         key_env = preset.get("api_key_env", "")
-        return os.environ.get(key_env, "") if key_env else ""
+        return env_secret(key_env) if key_env else ""
 
     def _run_to_dict(self, run) -> dict:
         usage = None

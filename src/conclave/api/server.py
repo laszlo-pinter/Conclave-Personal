@@ -11,6 +11,7 @@ from conclave.cli.config import ConclaveConfig
 from conclave.cli.handler import CLIHandler
 from conclave.infrastructure.auth import StaticKeyAuthService
 from conclave.runtime.api_token import load_or_create_token
+from conclave.runtime.env import env_secret
 from conclave.infrastructure.sqlite.connection import ThreadLocalConnection
 
 def _seed_agents(agent_service):
@@ -42,7 +43,7 @@ def _seed_agents(agent_service):
         preset = parts[2] if len(parts) > 2 else ""
         name = parts[3] if len(parts) > 3 else agent_id
         api_url = os.environ.get(f"{prefix}{agent_id}_API_URL", "")
-        api_key = os.environ.get(f"{prefix}{agent_id}_API_KEY", "")
+        api_key = env_secret(f"{prefix}{agent_id}_API_KEY")
         # Fallback: api_key_env aus dem Preset (z.B. DASHSCOPE_API_KEY,
         # DEEPSEEK_API_KEY) wenn kein per-Agent _API_KEY gesetzt ist.
         if not api_key and preset:
@@ -51,7 +52,7 @@ def _seed_agents(agent_service):
                 preset_data = get_preset(preset) or {}
                 key_env = preset_data.get("api_key_env", "")
                 if key_env:
-                    api_key = os.environ.get(key_env, "")
+                    api_key = env_secret(key_env)
             except Exception:
                 pass
         try:

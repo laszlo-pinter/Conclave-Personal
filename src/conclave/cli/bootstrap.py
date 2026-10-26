@@ -19,6 +19,7 @@ from conclave.infrastructure.sqlite.run_repository import SQLiteRunRepository
 from conclave.infrastructure.sqlite.schema import initialize_schema
 from conclave.infrastructure.sqlite.tool_event_repository import SQLiteToolEventRepository
 from conclave.runtime.paths import get_runtime_paths
+from conclave.runtime.env import env_secret
 
 DEFAULT_KEY_PATH = get_runtime_paths().secret_key_path
 
@@ -35,7 +36,7 @@ def _load_crypto(key_path: Path | None = None) -> CryptoService:
 
 def _secret_key_available(key_path: Path | None = None) -> bool:
     """Prueft ob ein Verschluesselungsschluessel verfuegbar ist."""
-    if os.environ.get("CONCLAVE_SECRET_KEY"):
+    if env_secret("CONCLAVE_SECRET_KEY"):
         return True
     return (key_path or _default_key_path()).exists()
 
@@ -209,7 +210,7 @@ def _fallback_key_for_agent(agent, config: ConclaveConfig) -> str:
     from conclave.infrastructure.universal.presets import get_preset
     preset = get_preset(preset_name) or {}
     key_env = preset.get("api_key_env", "")
-    return os.environ.get(key_env, "") if key_env else ""
+    return env_secret(key_env) if key_env else ""
 
 
 def build_registry(
