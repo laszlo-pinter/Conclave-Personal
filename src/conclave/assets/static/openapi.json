@@ -1550,9 +1550,23 @@
         }
       }
     },
+    "/backups": {
+      "get": {
+        "summary": "Listet die ZIP-Backups im Backup-Verzeichnis (neueste zuerst).",
+        "tags": [
+          "backups"
+        ],
+        "operationId": "list_backups",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        }
+      }
+    },
     "/restore": {
       "post": {
-        "summary": "Stellt SQLite-DB und Workspace aus einem lokalen ZIP-Backup wieder her.",
+        "summary": "Stellt SQLite-DB und Workspace aus einem ZIP-Backup im Backup-Verzeichnis wieder her.",
         "tags": [
           "restore"
         ],

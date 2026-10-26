@@ -91,6 +91,10 @@ conclave desktop
   angezeigt.
 - Dateigrößenlimits verhindern versehentliche Vollimporte großer Dateien in
   Agent-Kontexte.
+- `POST /restore` stellt nur Backups aus dem Backup-Verzeichnis wieder her
+  (Dateiname, keine Pfade) und leert den Workspace nur nach ausdrücklicher
+  Bestätigung. ZIP-Inhalte werden auf Pfad-Traversal, Symlinks und Größe
+  geprüft; vor jedem Restore entsteht ein automatisches Backup.
 
 ## Provider
 

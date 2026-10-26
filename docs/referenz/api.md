@@ -1,6 +1,6 @@
 # API-Referenz
 
-**47 dokumentierte Endpoints** — öffentliche Personal-API.
+**48 dokumentierte Endpoints** — öffentliche Personal-API.
 
 Alle Endpoints außer `GET /`, `/static/*`, `GET /health`, `GET /api-docs` und
 `GET /openapi.json` verlangen ein Token (`Authorization: Bearer <token>` oder
@@ -52,10 +52,28 @@ Inhalt: `{}`) oder den Header `X-Conclave-Client`. Anfragen mit nicht erlaubtem
 | `GET` | `/settings` | Gibt lokale Runtime-Settings ohne Secrets zurück. |
 | `PUT` | `/settings` | Aktualisiert einfache Runtime-Settings für die laufende Session. |
 | `POST` | `/backup` | Erstellt ein lokales ZIP-Backup von SQLite-DB und Workspace. |
-| `POST` | `/restore` | Stellt SQLite-DB und Workspace aus einem lokalen ZIP-Backup wieder her. |
+| `GET` | `/backups` | Listet die ZIP-Backups im Backup-Verzeichnis (neueste zuerst). |
+| `POST` | `/restore` | Stellt SQLite-DB und Workspace aus einem ZIP-Backup im Backup-Verzeichnis wieder her. |
 | `GET` | `/workspace` | Listet alle Dateien im Workspace. |
 | `GET` | `/workspace/<path:filepath>` | Liest eine Datei aus dem Workspace. |
 | `POST` | `/workspace/<path:filepath>` | Schreibt eine Datei in den Workspace. |
 | `DELETE` | `/workspace/<path:filepath>` | Löscht eine Datei aus dem Workspace. |
 
 *Generiert: 2026-08-11*
+
+## Backup und Restore
+
+- `POST /backup` legt ein ZIP im Backup-Verzeichnis an (`CONCLAVE_BACKUP_DIR`,
+  sonst `backups/` neben der Datenbank) und liefert dessen Namen in `backup`.
+- `GET /backups` listet die vorhandenen Backups (`name`, `size_bytes`,
+  `modified_at`).
+- `POST /restore` akzeptiert nur einen Dateinamen aus dieser Liste:
+  `{"backup": "conclave-backup-20261026T120000Z.zip"}`. Pfade, `..`,
+  Laufwerksangaben und Symlinks aus dem Verzeichnis heraus werden mit `400`
+  abgelehnt; das frühere Feld `backup_path` wird nicht mehr unterstützt.
+- Standardmäßig bleibt der Workspace erhalten; Dateien aus dem Backup werden
+  hinzugefügt bzw. überschrieben. Den Workspace vorher leeren nur mit
+  `"replace_workspace": true` **und** `"confirm": "replace-workspace"`.
+- Vor jedem Restore wird automatisch ein `conclave-pre-restore-*.zip` angelegt.
+- Die CLI (`conclave restore --backup <pfad>`) darf weiterhin beliebige Pfade
+  verwenden.

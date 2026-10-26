@@ -18,6 +18,11 @@ Conclave v0.2.0 is a security release based on the review of 2026-10-26
   entries from `CONCLAVE_ALLOWED_HOSTS` are accepted; other hosts get `421`.
   Binding to a non-loopback address requires `CONCLAVE_ALLOWED_HOSTS`.
 - **The UI only talks to the server it was loaded from** (`connect-src 'self'`).
+- **`POST /restore` only accepts a backup file name** from the backup directory
+  (`{"backup": "<name>"}`, see the new `GET /backups`). `backup_path` is no
+  longer supported. The workspace is kept by default; clearing it requires
+  `"replace_workspace": true` and `"confirm": "replace-workspace"`. The CLI
+  restore command still accepts any path.
 
 ## Security fixes
 

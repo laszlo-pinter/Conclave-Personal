@@ -864,53 +864,88 @@ def create_app(handler: CLIHandler, auth_service=None,
             os.makedirs(WORKSPACE, exist_ok=True)
         return jsonify({"settings": _settings_payload()}), 200
 
+    def _backup_root() -> pathlib.Path:
+        backup_root_env = os.environ.get("CONCLAVE_BACKUP_DIR", "").strip()
+        if backup_root_env:
+            return pathlib.Path(backup_root_env)
+        if config and getattr(config, "db_provider", "sqlite") == "sqlite":
+            return pathlib.Path(config.db_path).parent / "backups"
+        return pathlib.Path(WORKSPACE).parent / "backups"
+
+    def _sqlite_db_path() -> pathlib.Path | None:
+        if config and getattr(config, "db_provider", "sqlite") == "sqlite":
+            return pathlib.Path(config.db_path)
+        return None
+
+    def _resolve_backup_name(name) -> pathlib.Path | None:
+        """Nur ein Dateiname (*.zip) direkt im Backup-Verzeichnis, keine Pfade (B4)."""
+        if not isinstance(name, str) or not name.lower().endswith(".zip"):
+            return None
+        if any(sep in name for sep in ("/", "\\", ":")) or name in (".", ".."):
+            return None
+        root = _backup_root().resolve()
+        path = (root / name).resolve()
+        try:
+            path.relative_to(root)
+        except ValueError:  # z. B. Symlink nach aussen
+            return None
+        return path
+
     @app.post("/backup")
     def create_backup():
         """Erstellt ein lokales ZIP-Backup von SQLite-DB und Workspace."""
-        backup_root_env = os.environ.get("CONCLAVE_BACKUP_DIR", "").strip()
-        backup_root = pathlib.Path(backup_root_env) if backup_root_env else None
-        if backup_root is None:
-            if config and getattr(config, "db_provider", "sqlite") == "sqlite":
-                backup_root = pathlib.Path(config.db_path).parent / "backups"
-            else:
-                backup_root = pathlib.Path(WORKSPACE).parent / "backups"
-        db_path = None
-        if config and getattr(config, "db_provider", "sqlite") == "sqlite":
-            db_path = pathlib.Path(config.db_path)
         backup_path = create_backup_archive(
-            db_path=db_path,
+            db_path=_sqlite_db_path(),
             workspace_root=pathlib.Path(WORKSPACE),
-            backup_dir=backup_root,
+            backup_dir=_backup_root(),
         )
-        return jsonify({"backup_path": str(backup_path), "format": "zip"}), 201
+        return jsonify({"backup": backup_path.name, "backup_path": str(backup_path), "format": "zip"}), 201
+
+    @app.get("/backups")
+    def list_backups():
+        """Listet die ZIP-Backups im Backup-Verzeichnis (neueste zuerst)."""
+        root = _backup_root()
+        files = sorted(root.glob("*.zip"), key=lambda f: f.stat().st_mtime, reverse=True) if root.is_dir() else []
+        return jsonify({
+            "backup_dir": str(root),
+            "backups": [{
+                "name": f.name,
+                "size_bytes": f.stat().st_size,
+                "modified_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(f.stat().st_mtime)),
+            } for f in files if f.is_file()],
+        }), 200
 
     @app.post("/restore")
     def restore_backup():
-        """Stellt SQLite-DB und Workspace aus einem lokalen ZIP-Backup wieder her."""
+        """Stellt SQLite-DB und Workspace aus einem ZIP-Backup im Backup-Verzeichnis wieder her."""
         body = request.get_json() or {}
-        backup_path = body.get("backup_path")
-        if not backup_path:
-            return jsonify({"error": "backup_path ist erforderlich."}), 400
-        path = pathlib.Path(str(backup_path))
+        if "backup_path" in body:
+            return jsonify({
+                "error": "backup_path wird nicht mehr unterstuetzt. Dateinamen aus GET /backups als 'backup' uebergeben.",
+                "status": "invalid_request",
+            }), 400
+        if not body.get("backup"):
+            return jsonify({"error": "backup ist erforderlich (Dateiname aus GET /backups).", "status": "invalid_request"}), 400
+        path = _resolve_backup_name(body.get("backup"))
+        if path is None:
+            return jsonify({"error": "Ungueltiger Backup-Name. Erlaubt ist nur ein Dateiname aus GET /backups.",
+                            "status": "invalid_request"}), 400
         if not path.is_file():
             return jsonify({"error": "Backup nicht gefunden."}), 404
-        backup_root_env = os.environ.get("CONCLAVE_BACKUP_DIR", "").strip()
-        backup_root = pathlib.Path(backup_root_env) if backup_root_env else None
-        if backup_root is None:
-            if config and getattr(config, "db_provider", "sqlite") == "sqlite":
-                backup_root = pathlib.Path(config.db_path).parent / "backups"
-            else:
-                backup_root = pathlib.Path(WORKSPACE).parent / "backups"
-        db_path = None
-        if config and getattr(config, "db_provider", "sqlite") == "sqlite":
-            db_path = pathlib.Path(config.db_path)
-        replace_workspace = bool(body.get("replace_workspace", True))
+        replace_workspace = body.get("replace_workspace", False)
+        if not isinstance(replace_workspace, bool):
+            return jsonify({"error": "replace_workspace muss true oder false sein.", "status": "invalid_request"}), 400
+        if replace_workspace and body.get("confirm") != "replace-workspace":
+            return jsonify({
+                "error": "Workspace leeren nur mit confirm: \"replace-workspace\".",
+                "status": "confirmation_required",
+            }), 400
         try:
             result = restore_backup_archive(
                 backup_path=path,
-                db_path=db_path,
+                db_path=_sqlite_db_path(),
                 workspace_root=pathlib.Path(WORKSPACE),
-                backup_dir=backup_root,
+                backup_dir=_backup_root(),
                 replace_workspace=replace_workspace,
             )
         except ValueError as exc:
