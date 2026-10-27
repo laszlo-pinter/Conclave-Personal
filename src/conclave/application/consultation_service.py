@@ -151,14 +151,15 @@ class ConsultationService:
 
     def _deliver(self, c: Consultation, d: ConsultationDelivery, answer: str) -> None:
         d.attempts += 1
+        author = f"{self._name(d.participant_id)} · Conclave"
         try:
-            if self._source.get_task(c.source_ref).has_marker(d.marker):
+            if self._source.get_task(c.source_ref).has_marker(d.marker, author=author):
                 logger.info("Consultation %s/%s: Kommentar existiert bereits", c.id, d.participant_id)
             else:
                 body = comment_body(answer, closing_line(self._name(d.participant_id), self._label(d.participant_id),
                                                          d.marker),
                                     self._max_chars, c.conversation_id or "")
-                self._sink.add_comment(c.source_ref, body, f"{self._name(d.participant_id)} · Conclave")
+                self._sink.add_comment(c.source_ref, body, author)
             d.status, d.error, d.delivered_at = DELIVERED, None, datetime.now(UTC)
         except Exception as exc:  # noqa: BLE001 - Zustellung einzeln, Retry ueber die API
             d.status, d.error = FAILED, f"{type(exc).__name__}: {exc}"[:300]
