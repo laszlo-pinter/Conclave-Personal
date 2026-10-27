@@ -1,4 +1,4 @@
-"""v0.2.2 / A7: Token-Angaben gestreamter Aufrufe von Preset-Agenten.
+"""v0.2.2: Streaming von Preset-Agenten - Token-Angaben (A7) und Stream-Formate.
 
 Bis v0.2.1 setzte UniversalAdapter.stream() die Usage weder neu noch zurueck;
 conversation_flow las sie nach dem Stream trotzdem aus. Gestreamte Aufrufe
@@ -53,10 +53,14 @@ class _StreamRecorder:
     def __init__(self, lines):
         self.lines = lines
         self.bodies = []
+        self.urls = []
+        self.params = []
 
     @contextmanager
-    def __call__(self, method, url, json=None, **kwargs):
+    def __call__(self, method, url, json=None, params=None, **kwargs):
         self.bodies.append(json)
+        self.urls.append(url)
+        self.params.append(params or {})
         recorder = self
 
         class _Resp:
@@ -154,3 +158,124 @@ def test_adapter_factory_passes_stream_usage_from_preset():
 
     assert build("deepseek")._stream_usage is True
     assert build("mistral")._stream_usage is False
+
+
+
+# ── Stream-Formate je Provider (v0.2.2) ───────────────────────────────────
+
+def _preset_adapter(preset, model="m"):
+    from conclave.cli.bootstrap import _make_universal_adapter
+    from conclave.domain.agent import Agent
+    return _make_universal_adapter(Agent(id="a", name="A", provider=preset, model=model, preset=preset, api_key="k"), "k")
+
+
+def _run_stream(adapter, lines):
+    from conclave.domain.conversation import Conversation
+    from conclave.domain.participant import Participant
+    conv = Conversation(id="c", topic="t")
+    part = Participant(id="a", conversation_id="c", participant_type=ParticipantType.MODEL, name="A")
+    recorder = _StreamRecorder(lines)
+    with patch("httpx.stream", recorder):
+        text = "".join(adapter.stream(conv, part))
+    usage = adapter.last_usage
+    return text, (usage.input_tokens, usage.output_tokens) if usage else None, recorder
+
+
+def _ev(name, data):
+    return [f"event: {name}", f"data: {json.dumps(data)}", ""]
+
+
+def test_anthropic_stream_yields_text_and_usage():
+    lines = (
+        _ev("message_start", {"type": "message_start", "message": {"id": "m1", "usage": {"input_tokens": 25, "output_tokens": 1}}})
+        + _ev("content_block_start", {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}})
+        + _ev("ping", {"type": "ping"})
+        + _ev("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Hallo"}})
+        + _ev("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": " Welt"}})
+        + _ev("content_block_stop", {"type": "content_block_stop", "index": 0})
+        + _ev("message_delta", {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 15}})
+        + _ev("message_stop", {"type": "message_stop"})
+    )
+    text, usage, rec = _run_stream(_preset_adapter("anthropic"), lines)
+    assert text == "Hallo Welt"
+    assert usage == (25, 15)
+    assert rec.bodies[0]["stream"] is True
+    assert "stream_options" not in rec.bodies[0]
+
+
+def test_gemini_stream_uses_sse_endpoint_and_yields_text_and_usage():
+    lines = [
+        "data: " + json.dumps({"candidates": [{"content": {"parts": [{"text": "Guten "}], "role": "model"}}]}),
+        "",
+        "data: " + json.dumps({"candidates": [{"content": {"parts": [{"text": "Tag"}], "role": "model"}, "finishReason": "STOP"}],
+                               "usageMetadata": {"promptTokenCount": 9, "candidatesTokenCount": 4, "totalTokenCount": 13}}),
+    ]
+    text, usage, rec = _run_stream(_preset_adapter("gemini", model="gemini-test"), lines)
+    assert text == "Guten Tag"
+    assert usage == (9, 4)
+    assert rec.urls[0].endswith("/models/gemini-test:streamGenerateContent")
+    assert rec.params[0]["alt"] == "sse"
+    assert "stream" not in rec.bodies[0]
+
+
+def test_openai_responses_stream_yields_text_and_usage():
+    lines = (
+        _ev("response.created", {"type": "response.created", "response": {"id": "r1"}})
+        + _ev("response.output_text.delta", {"type": "response.output_text.delta", "delta": "Hi"})
+        + _ev("response.output_text.delta", {"type": "response.output_text.delta", "delta": " there"})
+        + _ev("response.output_text.done", {"type": "response.output_text.done", "text": "Hi there"})
+        + _ev("response.completed", {"type": "response.completed",
+                                     "response": {"usage": {"input_tokens": 30, "output_tokens": 2}}})
+    )
+    text, usage, rec = _run_stream(_preset_adapter("openai-responses"), lines)
+    assert text == "Hi there"
+    assert usage == (30, 2)
+    assert rec.bodies[0]["stream"] is True
+
+
+def test_ollama_ndjson_stream_yields_text_and_usage():
+    lines = [
+        json.dumps({"model": "llama3.3", "message": {"role": "assistant", "content": "Lo"}, "done": False}),
+        json.dumps({"model": "llama3.3", "message": {"role": "assistant", "content": "kal"}, "done": False}),
+        json.dumps({"model": "llama3.3", "message": {"role": "assistant", "content": ""}, "done": True,
+                    "prompt_eval_count": 5, "eval_count": 3}),
+    ]
+    adapter = UniversalAdapter(api_url="http://localhost:11434/api/chat", model="llama3.3", provider_name="ollama",
+                               auth_format="none", response_path="message.content", usage_path="",
+                               usage_input_key="prompt_eval_count", usage_output_key="eval_count")
+    text, usage, _ = _run_stream(adapter, lines)
+    assert text == "Lokal"
+    assert usage == (5, 3)
+
+
+def test_openai_chat_stream_ignores_null_usage_until_last_chunk():
+    lines = _sse([_delta("A"), _delta("B"), {"choices": [], "usage": {"prompt_tokens": 3, "completion_tokens": 2}}])
+    text, usage, rec = _run_stream(_preset_adapter("openai"), lines)
+    assert text == "AB"
+    assert usage == (3, 2)
+    assert rec.bodies[0]["stream_options"] == {"include_usage": True}
+
+
+def test_claude_preset_stream_persists_answer_end_to_end(service, db_connection):
+    """Vorher kam beim Stream eines Claude-Preset-Agenten leerer Text an."""
+    registry = AdapterRegistry()
+    registry.register("claude", _preset_adapter("anthropic"))
+    service.set_adapter_registry(registry)
+    run_repo = SQLiteRunRepository(db_connection)
+    service.set_run_repository(run_repo)
+    conv = service.create_conversation()
+    service.register_participant(conversation_id=conv.id, participant_id="claude",
+                                 participant_type=ParticipantType.MODEL, name="Claude")
+    service.add_user_message(conv.id, "Frage")
+    lines = (
+        _ev("message_start", {"type": "message_start", "message": {"usage": {"input_tokens": 12, "output_tokens": 1}}})
+        + _ev("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Antwort"}})
+        + _ev("message_delta", {"type": "message_delta", "usage": {"output_tokens": 6}})
+    )
+    with patch("httpx.stream", _StreamRecorder(lines)):
+        streamed = "".join(service.stream_participant(conv.id, "claude"))
+    assert streamed == "Antwort"
+    saved = service.load_conversation(conv.id).messages[-1]
+    assert saved.content == "Antwort"
+    run = next(r for r in run_repo.list_by_conversation(conv.id) if r.kind == "stream")
+    assert (run.usage.input_tokens, run.usage.output_tokens) == (12, 6)
