@@ -66,6 +66,7 @@ async function runAutoloop(){
         let ev;try{ev=JSON.parse(payload);}catch{continue;}
         handleLoopEvent(ev,seq,{status,el,finishLive,
           setLive:(div,content)=>{liveDiv=div;liveContent=content;buf='';},
+          attachContext:(ctxData,messageId)=>attachContextChip(liveDiv,ctxData,messageId),
           appendBuf:(txt)=>{buf=txt;if(liveContent){liveContent.textContent=txt;scrollBottom();}},
         });
       }
@@ -104,6 +105,7 @@ function handleLoopEvent(ev,seq,ctx){
   }
   if(ev.event==='response'){
     ctx.appendBuf(ev.content||'');
+    ctx.attachContext(ev.context,ev.message_id);
     ctx.finishLive();
     return;
   }
