@@ -13,7 +13,7 @@ answer is correct. It gives users a structured workspace for comparing model
 outputs, tracking runs, and deliberately choosing the next step. The human
 decides. Always.
 
-> Status: v0.3.0 Alpha. The primary path is local, desktop-first, and designed
+> Status: v0.4.0 Alpha. The primary path is local, desktop-first, and designed
 > for individual users on Windows and Linux.
 
 ![Conclave Studio](https://raw.githubusercontent.com/laszlo-pinter/Conclave-Personal/main/docs/assets/screenshots/conclave-studio-desktop.png)
@@ -269,6 +269,12 @@ MCP server reads it from there on every request, so the server may also be
 started after the MCP client. If the server uses an explicit
 `CONCLAVE_API_KEY`, set the same value in the MCP `env` block.
 
+For [Kanzo](https://github.com/emanuele-em/kanzo) boards, `conclave_consult`
+asks the reviewers configured in `[kanzo] reviewers` for a second opinion on a
+ticket; the answers are posted as labelled comments on the ticket
+(`conclave_get_consultation` shows the status). See the
+[API reference](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/referenz/api.md#consultations).
+
 Tool results are returned as JSON text. Errors from the Conclave API (for
 example a missing token or an unreachable server) are reported to the model as
 tool errors with Conclave's own message.
@@ -300,6 +306,13 @@ the system prompt.
 
 An executable work step: invoke, stream, orchestration, or auto-loop.
 Runs expose status, errors, duration, and usage.
+
+### Consultation
+
+A second opinion on a ticket from a Kanzo board: Conclave reads the ticket,
+asks the configured reviewer models in parallel, and posts each answer as a
+labelled comment ("not verified"). The ticket content is treated as data;
+Conclave only reads tickets and writes comments.
 
 ### Context report
 
@@ -386,6 +399,7 @@ Important documents:
 - [Example workflows](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/beispiel-workflows.md)
 - [Security](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/sicherheit.md)
 - [Configuration](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/referenz/konfiguration.md)
+- [Release Notes v0.4.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.4.0.md)
 - [Release Notes v0.3.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.3.0.md)
 - [Release Notes v0.2.3](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.2.3.md)
 - [Release Notes v0.2.2](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.2.2.md)
@@ -406,13 +420,16 @@ Important documents:
 
 ## Known Limitations
 
-v0.3.0 remains alpha. Known limitations:
+v0.4.0 remains alpha. Known limitations:
 
 - Provider compatibility varies by API, model, account, and region.
 - Remote providers receive the data required for the model call.
 - Desktop mode starts the local web application in a browser.
 - Advanced multi-agent orchestration is partly experimental.
 - There is no native Windows installer, AppImage, or `.deb` package yet.
+- Consultation comments in Kanzo are labelled, but the label is not proof of
+  origin (Kanzo has no login). The human-only check covers agents using the MCP
+  tools; an agent that can read `api.token` can call the REST API directly.
 
 ## Release Verification
 
@@ -421,7 +438,7 @@ CI runs the jobs `test` (Ubuntu and Windows, Python 3.11 and 3.12),
 `bandit`), `postgres` (PostgreSQL 16 tests) and `build` (sdist and wheel,
 artifact inspection).
 
-The v0.3.0 surface was verified with these checks:
+The v0.4.0 surface was verified with these checks:
 
 - `python -m pytest` (the Playwright browser tests for XSS protection, CSP,
   token login, the settings page, the context chip and the preview only run
@@ -437,6 +454,9 @@ The v0.3.0 surface was verified with these checks:
   data and chat rules kept)
 - Streaming of preset agents against the real Anthropic, OpenAI (Responses and
   Chat Completions) and Gemini APIs: text and token usage (manual, v0.2.2)
+- Consultations end-to-end with a real Kanzo and real models (Anthropic
+  preset, OpenAI native): REST and MCP, human-only ticket, limit, injection
+  ticket, server restart mid-run (manual)
 - `conclave desktop` end-to-end with real providers (manual, v0.2.0)
 - `pip-audit` and `bandit` (run manually for this release, also in CI)
 - Artifact inspection without workspace data, databases, keys, logs, and old
