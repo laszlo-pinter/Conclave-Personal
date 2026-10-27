@@ -287,3 +287,8 @@ def test_build_prompt_separates_previous_output():
     assert "Alt" not in build_prompt(c, ticket)
     c.include_previous = True
     assert "Fruehere Modellausgaben" in build_prompt(c, ticket)
+
+
+def test_rules_tell_reviewers_they_have_no_file_access():
+    """Live-Test: Reviewer boten an, Dateien per @workspace zu pruefen - Consultations koennen das nicht."""
+    assert "keinen Zugriff auf Dateien" in RULES and "@workspace" in RULES
