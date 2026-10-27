@@ -15,15 +15,10 @@ class FakeAdapter:
         """responses: Liste von Ergebnissen. str = Erfolg, Exception = Fehler."""
         self._responses = list(responses)
         self._call_count = 0
-        self._last_usage = None
 
     @property
     def provider(self) -> str:
         return "test-provider"
-
-    @property
-    def last_usage(self):
-        return self._last_usage
 
     def complete(self, conversation, participant):
         self._call_count += 1
@@ -171,8 +166,6 @@ class TestProperties:
         adapter = ResilientAdapter(inner)
         assert adapter.provider == "test-provider"
 
-    def test_last_usage_delegates(self):
-        inner = FakeAdapter([])
-        inner._last_usage = "mock-usage"
-        adapter = ResilientAdapter(inner)
-        assert adapter.last_usage == "mock-usage"
+    def test_has_no_last_usage_attribute(self):
+        # Usage kommt nur noch als Rueckgabewert (Completion), nie als Adapter-Zustand (A4)
+        assert not hasattr(ResilientAdapter(FakeAdapter([])), "last_usage")

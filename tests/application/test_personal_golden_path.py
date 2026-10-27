@@ -1,8 +1,7 @@
-from types import SimpleNamespace
-
 from conclave.application.adapter_registry import AdapterRegistry
 from conclave.application.conversation_flow import ConversationFlowService
 from conclave.domain.agent import Agent
+from conclave.domain.model_response import Completion, TokenUsage
 from conclave.domain.participant import ParticipantType
 from conclave.infrastructure.sqlite.conversation_repository import SQLiteConversationRepository
 from conclave.infrastructure.sqlite.message_repository import SQLiteMessageRepository
@@ -15,14 +14,16 @@ class FakeProviderAdapter:
     _model = "fake-reviewer"
 
     def __init__(self):
-        self.last_usage = SimpleNamespace(input_tokens=11, output_tokens=7)
         self.seen_prompt = ""
 
     def complete(self, conversation, participant):
         self.seen_prompt = "\n".join(message.content for message in conversation.messages)
         assert "Workspace-Fakt" in self.seen_prompt
         assert participant.id == "writer"
-        return "@save(report.md)\n# Ergebnis\nWorkspace-Fakt verarbeitet.\n@endsave"
+        return Completion(
+            text="@save(report.md)\n# Ergebnis\nWorkspace-Fakt verarbeitet.\n@endsave",
+            usage=TokenUsage(input_tokens=11, output_tokens=7),
+        )
 
 
 def _new_service(db_connection):

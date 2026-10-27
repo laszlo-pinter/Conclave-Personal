@@ -12,8 +12,10 @@ from datetime import datetime
 
 from conclave.domain.agent import Agent
 from conclave.domain.audit import AuditEntry
+from conclave.domain.context_report import ContextReportRecord
 from conclave.domain.conversation import Conversation
 from conclave.domain.message import Message
+from conclave.domain.model_response import Completion
 from conclave.domain.participant import Participant
 from conclave.domain.run import Run
 from conclave.domain.tool_event import ToolEvent
@@ -47,6 +49,9 @@ class ModelAdapter(Protocol):
     Jeder LLM-Provider (Anthropic, OpenAI, Gemini, ...) implementiert
     dieses Interface. Der Adapter erhaelt die gesamte Conversation und
     den Participant fuer den er antwortet.
+
+    complete() liefert ein Completion (Text, Usage, Kontext-Report); einfache
+    Adapter duerfen weiterhin nur den Text (str) liefern - dann ohne Usage.
     """
 
     @property
@@ -54,7 +59,7 @@ class ModelAdapter(Protocol):
         """Provider-Name fuer Audit-Log (z.B. 'anthropic', 'openai', 'gemini')."""
         ...
 
-    def complete(self, conversation: Conversation, participant: Participant) -> str:
+    def complete(self, conversation: Conversation, participant: Participant) -> Completion | str:
         """Sendet die Conversation an den Provider und gibt die Antwort zurueck."""
         ...
 
@@ -68,14 +73,14 @@ class StreamingModelAdapter(Protocol):
         """Provider-Name fuer Audit-Log."""
         ...
 
-    def complete(self, conversation: Conversation, participant: Participant) -> str:
+    def complete(self, conversation: Conversation, participant: Participant) -> Completion | str:
         """Nicht-streamende Variante — gibt die vollstaendige Antwort zurueck."""
         ...
 
     def stream(
         self, conversation: Conversation, participant: Participant
-    ) -> Iterator[str]:
-        """Streamt die Antwort Token fuer Token als Iterator."""
+    ) -> Iterator[str | Completion]:
+        """Streamt die Antwort Token fuer Token; zum Abschluss optional ein Completion ohne Text."""
         ...
 
 
@@ -220,6 +225,27 @@ class ToolEventRepository(Protocol):
 
     def list_by_message(self, message_id: str) -> list[ToolEvent]:
         """Gibt alle Tool-Events einer Message zurueck."""
+        ...
+
+
+@runtime_checkable
+class ContextReportRepository(Protocol):
+    """Persistiert Kontext-Reports (welcher Kontext an den Provider ging)."""
+
+    def save(self, record: ContextReportRecord) -> None:
+        """Speichert einen Report."""
+        ...
+
+    def link_message(self, record_id: str, message_id: str) -> None:
+        """Verknuepft einen gespeicherten Report nachtraeglich mit der Antwort."""
+        ...
+
+    def get_by_message(self, message_id: str) -> ContextReportRecord | None:
+        """Report zu einer Modellantwort oder None."""
+        ...
+
+    def list_by_conversation(self, conversation_id: str) -> list[ContextReportRecord]:
+        """Alle Reports einer Conversation (auch fehlgeschlagene Aufrufe)."""
         ...
 
 

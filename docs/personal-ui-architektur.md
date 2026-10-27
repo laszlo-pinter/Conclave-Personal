@@ -55,6 +55,10 @@ Studio ist der primäre Arbeitsraum für aktive Conversations.
 - Orchestrierung
 - Auto-Loop
 - Conversation-Regeln
+- Kontext-Chip unter jeder Modellantwort (gesendete/ausgelassene Nachrichten,
+  Dateien, geschätzte und abgerechnete Token; Klick öffnet die Details)
+- Kontext-Vorschau vor dem Aufruf (Bedienleiste sowie Orchestrierungs- und
+  Auto-Loop-Dialog pro Teilnehmer), ohne Provider-Aufruf
 
 ### Nicht im Studio
 
@@ -82,6 +86,7 @@ Agents ist der Verwaltungsraum für wiederverwendbare KI-Teilnehmer.
 - API-Key-Status
 - Verbindungstest
 - Presets
+- Kürzungslimit „Max. Nachrichten“ (unter „Erweitert“)
 
 ### Rollen
 
@@ -193,6 +198,7 @@ src/conclave/assets/static/
       agents.js
       auth.js
       autoloop.js
+      context.js
       conversations.js
       export.js
       floor.js
@@ -216,6 +222,9 @@ Die UI ist Vanilla-JavaScript ohne Build-Schritt:
 - `utils.js` enthält `esc()` und `renderMarkdown()`: marked erzeugt HTML,
   DOMPurify filtert es, bevor Modellausgaben angezeigt werden.
 - `api.js` sendet das Token als `Authorization: Bearer …`.
+- `features/context.js` baut Kontext-Chip, Detailansicht und Vorschau
+  ausschließlich mit `createElement`/`textContent` (Dateinamen und Pfade sind
+  Nutzerdaten).
 - Alle Fremdbibliotheken und Fonts liegen unter `static/vendor/`; es wird
   kein CDN geladen. Der Server setzt eine strikte Content-Security-Policy
   (`script-src 'self'`, `style-src 'self'`, `connect-src 'self'` u.a.).

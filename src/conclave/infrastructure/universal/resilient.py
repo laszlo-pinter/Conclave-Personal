@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Iterator
+from dataclasses import replace
 
 import httpx
 
+from conclave.domain.context_report import ContextReport, attach_context_report
 from conclave.domain.conversation import Conversation
 from conclave.domain.errors import ProviderRateLimit, ProviderTimeout, ProviderUnavailable
-from conclave.domain.model_response import TokenUsage
+from conclave.domain.model_response import Completion
 from conclave.domain.participant import Participant
 from conclave.infrastructure.log import get_logger
 
@@ -52,22 +54,48 @@ class ResilientAdapter:
     def provider(self) -> str:
         return self._adapter.provider
 
-    @property
-    def last_usage(self) -> TokenUsage | None:
-        return self._adapter.last_usage
+    def context_report(self, conversation: Conversation, participant: Participant) -> ContextReport | None:
+        """Vorschau des inneren Adapters (None, wenn er keine anbietet)."""
+        preview = getattr(type(self._adapter), "context_report", None)
+        return preview(self._adapter, conversation, participant) if callable(preview) else None
 
-    def complete(self, conversation: Conversation, participant: Participant) -> str:
-        return self._with_retry(
-            lambda: self._adapter.complete(conversation, participant)
-        )
+    def complete(self, conversation: Conversation, participant: Participant) -> Completion:
+        attempts = 0
+        request = None
+        # Faehigkeit am Typ pruefen (nicht per hasattr am Objekt: Mocks haben jedes Attribut)
+        if callable(getattr(type(self._adapter), "prepare_request", None)):
+            # Anfrage genau einmal bauen: alle Versuche senden denselben Body,
+            # auch wenn sich context_files zwischen den Versuchen aendern.
+            request = self._adapter.prepare_request(conversation, participant)
+
+            def call():
+                nonlocal attempts
+                attempts += 1
+                return self._adapter.send(request)
+        else:
+            def call():
+                nonlocal attempts
+                attempts += 1
+                return self._adapter.complete(conversation, participant)
+
+        try:
+            result = self._with_retry(call)
+        except Exception as exc:
+            if request is not None:
+                # Auch der Report eines fehlgeschlagenen Aufrufs nennt alle Versuche
+                attach_context_report(exc, replace(request.report, attempts=max(attempts, 1)))
+            raise
+        if attempts > 1 and isinstance(result, Completion) and result.report is not None:
+            result = replace(result, report=replace(result.report, attempts=attempts))
+        return result
 
     def stream(
         self, conversation: Conversation, participant: Participant
-    ) -> Iterator[str]:
+    ) -> Iterator[str | Completion]:
         # Streaming: kein Retry — der Stream ist einmalig
         return self._adapter.stream(conversation, participant)
 
-    def _with_retry(self, fn: Callable) -> str:
+    def _with_retry(self, fn: Callable):
         last_exception = None
         for attempt in range(self._max_retries + 1):
             try:

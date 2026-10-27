@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from conclave.application.adapter_registry import AdapterRegistry
+from conclave.domain.model_response import Completion, TokenUsage
 from conclave.domain.participant import ParticipantType
 from conclave.infrastructure.sqlite.run_repository import SQLiteRunRepository
 
@@ -24,8 +25,7 @@ def test_invoke_creates_succeeded_run(service, db_connection):
     adapter = MagicMock()
     adapter.provider = "test"
     adapter._model = "model-x"
-    adapter.last_usage = SimpleNamespace(input_tokens=3, output_tokens=5)
-    adapter.complete.return_value = "Antwort"
+    adapter.complete.return_value = Completion(text="Antwort", usage=TokenUsage(input_tokens=3, output_tokens=5))
     conv_id, run_repo = _setup(service, db_connection, adapter)
 
     service.invoke_participant(conv_id, "model-a")

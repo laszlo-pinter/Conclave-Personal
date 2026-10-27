@@ -135,11 +135,12 @@ function openAgentForm(id){
     document.getElementById('aApiUrl').value=a.api_url||'';
     document.getElementById('aResponsePath').value=a.response_path||'';
     document.getElementById('aMsgFormat').value=a.message_format||'standard';
+    document.getElementById('aMaxMessages').value=a.max_messages??'';
     if(a.system_prompt) sysEdited=true;
     const ro=document.querySelector(`#roleGroup .radio-opt[data-role="${a.role||''}"]`);
     if(ro){document.querySelectorAll('#roleGroup .radio-opt').forEach(el=>el.className='radio-opt');ro.classList.add(ro.dataset.role?'sel-role':'sel-none');}
   } else {
-    ['aId','aName','aTopic','aSysPrompt','aApiKey','aApiUrl','aResponsePath'].forEach(id=>document.getElementById(id).value='');
+    ['aId','aName','aTopic','aSysPrompt','aApiKey','aApiUrl','aResponsePath','aMaxMessages'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('aPreset').value=presetsData.length?presetsData[0].name:'';
     onPresetChange();
   }
@@ -175,14 +176,17 @@ async function saveAgent(){
   const api_url=document.getElementById('aApiUrl').value.trim();
   const response_path=document.getElementById('aResponsePath').value.trim();
   const message_format=document.getElementById('aMsgFormat').value;
+  const maxRaw=document.getElementById('aMaxMessages').value.trim();
+  const max_messages=maxRaw===''?null:Number(maxRaw);
   if(!id||!name){toast(t('common.requiredIdName'),'err');return;}
+  if(max_messages!==null&&(!Number.isInteger(max_messages)||max_messages<0)){toast(t('agents.maxMessagesInvalid'),'err');return;}
   const btn=document.getElementById('btnSaveAgent'),lbl=document.getElementById('btnSaveAgentLabel');
   btn.disabled=true;
   // safe-html: statisches Markup
   lbl.innerHTML='<span class="spinner"></span>';
   const wasEditing=Boolean(editingAgentId);
   try{
-    const body={id,name,provider,model,role,topic,system_prompt,preset,api_url,response_path,message_format};
+    const body={id,name,provider,model,role,topic,system_prompt,preset,api_url,response_path,message_format,max_messages};
     if(api_key) body.api_key=api_key;
     if(editingAgentId) await req('PUT',`/agents/${editingAgentId}`,body);
     else await req('POST','/agents',body);

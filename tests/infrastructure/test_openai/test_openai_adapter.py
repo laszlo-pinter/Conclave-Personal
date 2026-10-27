@@ -14,6 +14,11 @@ from conclave.infrastructure.openai.adapter import OpenAIAdapter
 from conclave.application.ports import ModelAdapter
 
 
+
+def _text_chunks(stream):
+    """Nur die Text-Chunks eines Streams (ohne abschliessendes Completion)."""
+    return [chunk for chunk in stream if isinstance(chunk, str)]
+
 def make_conversation(*messages: tuple[MessageAuthorType, str]) -> Conversation:
     conversation_id = str(uuid.uuid4())
     conversation = Conversation(id=conversation_id)
@@ -62,7 +67,7 @@ def test_complete_returns_model_response():
         conversation = make_conversation((MessageAuthorType.USER, "Hallo!"))
         result = adapter.complete(conversation, make_participant())
 
-        assert result == "Hallo vom Modell"
+        assert result.text == "Hallo vom Modell"
 
 
 def test_messages_are_mapped_to_openai_format():
@@ -154,7 +159,7 @@ def test_stream_yields_tokens():
 
         adapter = OpenAIAdapter(api_key="test-key")
         conversation = make_conversation((MessageAuthorType.USER, "Hallo"))
-        tokens = list(adapter.stream(conversation, make_participant()))
+        tokens = _text_chunks(adapter.stream(conversation, make_participant()))
 
         assert tokens == ["Hal", "lo", " Welt"]
 
@@ -171,7 +176,7 @@ def test_stream_ignores_chunks_without_content():
 
         adapter = OpenAIAdapter(api_key="test-key")
         conversation = make_conversation((MessageAuthorType.USER, "Hallo"))
-        tokens = list(adapter.stream(conversation, make_participant()))
+        tokens = _text_chunks(adapter.stream(conversation, make_participant()))
 
         assert tokens == ["Token", "Ende"]
 
@@ -186,7 +191,7 @@ def test_stream_ignores_empty_choices():
 
         adapter = OpenAIAdapter(api_key="test-key")
         conversation = make_conversation((MessageAuthorType.USER, "Hallo"))
-        tokens = list(adapter.stream(conversation, make_participant()))
+        tokens = _text_chunks(adapter.stream(conversation, make_participant()))
 
         assert tokens == ["OK"]
 

@@ -104,6 +104,46 @@ jobs:
       - name: Static analysis (medium severity and above)
         run: python -m bandit -r src/conclave --severity-level medium
 
+  postgres:
+    name: PostgreSQL tests (PostgreSQL 16)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # postgres:16, per Digest gepinnt (Lieferkette, wie die Actions)
+        image: postgres@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97
+        env:
+          POSTGRES_USER: conclave
+          POSTGRES_PASSWORD: conclave-ci
+          POSTGRES_DB: conclave_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U conclave -d conclave_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CONCLAVE_MODE: development
+      CONCLAVE_TEST_POSTGRES_DSN: postgresql://conclave:conclave-ci@localhost:5432/conclave_test
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev-all]"
+
+      - name: Run PostgreSQL tests
+        run: python -m pytest tests/persistence -rs
+
   build:
     name: Build release artifacts
     runs-on: ubuntu-latest

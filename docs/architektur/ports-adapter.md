@@ -15,6 +15,7 @@ implizit über strukturelles Subtyping.
 | AuditRepository | Technische Provider-Aufrufe und Usage protokollieren | SQLiteAuditRepository, PostgresAuditRepository |
 | RunRepository | Personal-Runs und optionale Usage-Daten persistieren | SQLiteRunRepository, PostgresRunRepository |
 | ToolEventRepository | Tool-Events (`workspace.read`/`workspace.save`) speichern und je Conversation bzw. Message laden | SQLiteToolEventRepository, PostgresToolEventRepository |
+| ContextReportRepository | Kontext-Reports je Modellaufruf speichern, mit Message verknüpfen, je Message bzw. Conversation laden | SQLiteContextReportRepository, PostgresContextReportRepository |
 | ModelAdapter | Synchroner Provider-Aufruf | UniversalAdapter, AnthropicAdapter, OpenAIAdapter |
 | StreamingModelAdapter | Synchroner Provider-Aufruf mit Token-Streaming | UniversalAdapter, AnthropicAdapter, OpenAIAdapter |
 | AsyncModelAdapter | Async-Provider-Aufruf | AsyncAnthropicAdapter, AsyncOpenAIAdapter (derzeit nicht verdrahtet) |
@@ -27,6 +28,22 @@ Orchestrierung nutzt die synchronen Adapter und legt jeden Aufruf per
 (`ConversationFlowService.async_complete_participant()`). `ResilientAdapter`
 umhüllt jeden gebauten Adapter und implementiert `complete` (mit Retry) und
 `stream` (ohne Retry).
+
+`complete()` liefert ein `Completion(text, usage, report)` (`domain/model_response.py`);
+Streams liefern Text-Chunks und zum Abschluss ein `Completion` ohne Text.
+Einfache Adapter dürfen weiterhin nur `str` liefern, dann ohne Usage. Usage
+ist damit Rückgabewert, kein Adapter-Zustand: Gleichzeitige Aufrufe desselben
+Adapters vertauschen ihre Token-Zahlen nicht.
+
+Der `report` ist ein `ContextReport` (`domain/context_report.py`): gesendete
+und ausgelassene Nachrichten, wirksames Limit, Bausteine des System-Prompts,
+eingebundene/abgewiesene Dateien, geschätzte Token, Adapter, Versuche. Der
+UniversalAdapter baut Anfrage und Report genau einmal
+(`prepare_request()`), `ResilientAdapter` wiederholt nur das Senden dieser
+Anfrage. `context_report()` liefert die Vorschau ohne Provider-Aufruf.
+Den System-Prompt bauen alle Adapter über
+`infrastructure/system_prompt.py:assemble_system_prompt()`; die Auswahl der
+Nachrichten übernimmt `select_messages()` mit dem Agent-Limit `max_messages`.
 
 ## Provider-Matrix
 

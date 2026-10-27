@@ -58,6 +58,8 @@ const _actions = {
   'copy-topbar-id':      () => copyId(currentConvId,'Conv-ID'),
   'grant-floor':         (el) => grantFloor(el.dataset.participantId),
   'download-message':    (el) => downloadMsg(el),
+  'toggle-context':      (el) => toggleContextDetails(el),
+  'jump-to-message':     (el) => jumpToMessage(el),
   'sort-usage':          (el) => sortUsage(el.dataset.sortKey),
   'toggle-usage-detail': (el) => toggleUsageDetail(el),
   'toggle-workspace-dir':(el) => toggleWorkspaceDir(el),
@@ -93,6 +95,8 @@ function _bindStaticUiEvents() {
   on('wsUpload', 'change', (e) => uploadWsFile(e.target))
   on('fileInput', 'change', (e) => handleFile(e.target))
   on('pSel', 'change', () => onPSelChange())
+  on('orchSeq', 'input', () => scheduleSequencePreview('orchSeq', 'orchPreview'))
+  on('loopSeq', 'input', () => scheduleSequencePreview('loopSeq', 'loopPreview'))
   on('agentPick', 'change', () => fillFromAgent())
   on('msgInput', 'keydown', handleKey)
   on('msgInput', 'input', (e) => autoResize(e.target))

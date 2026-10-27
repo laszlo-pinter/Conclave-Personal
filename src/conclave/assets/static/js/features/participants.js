@@ -24,6 +24,7 @@ function onPSelChange(){
   const pid=document.getElementById('pSel').value;
   document.getElementById('btnInvoke').disabled=!pid;
   document.getElementById('btnStream').disabled=!pid;
+  schedulePreview();
 }
 
 function openAddParticipant(){

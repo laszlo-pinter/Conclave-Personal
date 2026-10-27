@@ -5,12 +5,14 @@ function renderMessages(msgs){
   msgs = msgs || [];
   AppState.setState({currentMessages: msgs});
   const el=document.getElementById('messages');el.replaceChildren();msgs.forEach(m=>el.appendChild(buildMsg(m)));scrollBottom();
+  schedulePreview();
 }
 
 function buildMsg(m){
   const isUser=m.author_type==='user',pid=m.author_id,c=pid?colorFor(pid):null;
   const pName=pid?(participants.find(p=>p.id===pid)?.name||pid):'User';
   const div=document.createElement('div');div.className=`msg ${isUser?'user':'model'}`;
+  div.dataset.seq=m.sequence;if(m.id)div.dataset.messageId=m.id;
   if(!isUser&&c) div.style.borderLeftColor=c.bd;
   const dlBtn=isUser?'':`<button class="msg-dl" data-action="download-message" data-name="${attr(pName)}" data-seq="${attr(m.sequence)}" title="${attr(t('download.response'))}">&#8615;</button>`;
   const content=stripToolEventRefs(m.content||'',m.tool_events||[]);
@@ -20,6 +22,7 @@ function buildMsg(m){
   div.innerHTML=`<div class="msg-header"><span class="msg-label" style="color:${isUser?'var(--text-dim)':(c?.tx||'var(--accent)')}">${esc(pName)}</span><span class="msg-seq">#${esc(m.sequence)}</span>${dlBtn}</div><div class="msg-content">${rendered}</div>`;
   // safe-html: renderToolEvents() escaped alle Werte
   if(toolEventsHtml) div.insertAdjacentHTML('beforeend',toolEventsHtml);
+  if(!isUser) attachContextChip(div,m.context,m.id);
   // Code-Highlighting auf alle pre>code Bloecke
   if(!isUser) div.querySelectorAll('pre code').forEach(el=>hljs.highlightElement(el));
   return div;
@@ -116,6 +119,8 @@ async function streamP(){
     const data=await req('GET',`/conversations/${currentConvId}`);
     const last=data.messages.at(-1);
     div.querySelector('.msg-seq').textContent=last?'#'+last.sequence:'';
+    if(last){div.dataset.seq=last.sequence;attachContextChip(div,last.context,last.id);}
+    schedulePreview();
     div.removeAttribute('id');toast(t('input.streamDone'),'ok');
   }catch(e){cursor.remove();toast(e.message,'err');}
   btn.disabled=false;btn.textContent=`▶ ${t('input.stream')}`;
@@ -123,6 +128,7 @@ async function streamP(){
 
 function openOrch(){
   document.getElementById('orchSeq').value=participants.filter(p=>p.type==='model').map(p=>p.id).join(', ');
+  refreshSequencePreview('orchSeq','orchPreview');
   document.getElementById('orchParallel').checked=true;
   openOverlay('overlayOrch');
 }
@@ -235,6 +241,8 @@ function renderParallelOrchResponse(div,ev){
   const toolEventsHtml=renderToolEvents(ev.tool_events||[]);
   // safe-html: renderToolEvents() escaped alle Werte
   if(toolEventsHtml)div.insertAdjacentHTML('beforeend',toolEventsHtml);
+  if(ev.sequence)div.dataset.seq=ev.sequence;
+  attachContextChip(div,ev.context,ev.message_id);
   scrollBottom();
 }
 

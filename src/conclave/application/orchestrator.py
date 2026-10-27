@@ -148,7 +148,8 @@ class ParallelOrchestrator:
                     updated = self._service.add_model_message(
                         conversation_id=conversation_id,
                         participant_id=pid,
-                        content=result,
+                        content=result.text,
+                        context_report_id=result.context_report_id,
                     )
                     last_message = updated.messages[-1]
                     responses.append(
@@ -185,8 +186,8 @@ class ParallelOrchestrator:
         participant_id: str,
         conversation: Conversation,
         snapshot: Conversation,
-    ) -> str:
-        return await self._service.async_complete_participant(
+    ):
+        return await self._service.async_complete_turn(
             conversation_id=conversation_id,
             participant_id=participant_id,
             conversation=conversation,

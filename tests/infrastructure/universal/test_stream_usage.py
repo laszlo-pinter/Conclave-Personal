@@ -12,6 +12,7 @@ from unittest.mock import patch
 import pytest
 
 from conclave.application.adapter_registry import AdapterRegistry
+from conclave.domain.model_response import Completion
 from conclave.domain.participant import ParticipantType
 from conclave.infrastructure.sqlite.run_repository import SQLiteRunRepository
 from conclave.infrastructure.universal.adapter import UniversalAdapter
@@ -102,13 +103,14 @@ def test_stream_after_complete_does_not_reuse_old_usage(conversation_with_agent)
     service, conv, adapter, run_repo = conversation_with_agent
     with patch("httpx.post", return_value=_completion(usage=(11, 22))):
         service.invoke_participant(conversation_id=conv.id, participant_id="p1")
-    assert adapter.last_usage.input_tokens == 11
+    invoke_run = next(r for r in run_repo.list_by_conversation(conv.id) if r.kind == "invoke")
+    assert invoke_run.usage.input_tokens == 11
 
     service.add_user_message(conv.id, "Noch eine Frage")
     with patch("httpx.stream", _StreamRecorder(_sse([_delta("Hal"), _delta("lo")]))):
         assert _stream_text(service, conv.id) == "Hallo"
 
-    assert adapter.last_usage is None
+    assert not hasattr(adapter, "last_usage")
     stream_run = next(r for r in run_repo.list_by_conversation(conv.id) if r.kind == "stream")
     assert stream_run.status == "succeeded"
     assert stream_run.usage is None or stream_run.usage.input_tokens is None
@@ -176,8 +178,11 @@ def _run_stream(adapter, lines):
     part = Participant(id="a", conversation_id="c", participant_type=ParticipantType.MODEL, name="A")
     recorder = _StreamRecorder(lines)
     with patch("httpx.stream", recorder):
-        text = "".join(adapter.stream(conv, part))
-    usage = adapter.last_usage
+        chunks = list(adapter.stream(conv, part))
+    final = chunks[-1]
+    assert isinstance(final, Completion) and final.text == ""
+    text = "".join(c for c in chunks if isinstance(c, str))
+    usage = final.usage
     return text, (usage.input_tokens, usage.output_tokens) if usage else None, recorder
 
 

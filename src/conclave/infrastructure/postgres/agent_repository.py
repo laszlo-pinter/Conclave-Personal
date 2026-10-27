@@ -19,8 +19,8 @@ class PostgresAgentRepository:
                 INSERT INTO agents
                     (id, name, provider, model, api_key_enc, role, topic,
                      system_prompt, preset, api_url, response_path,
-                     message_format, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     message_format, max_messages, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (id) DO UPDATE SET
                     name           = EXCLUDED.name,
                     provider       = EXCLUDED.provider,
@@ -32,13 +32,14 @@ class PostgresAgentRepository:
                     preset         = EXCLUDED.preset,
                     api_url        = EXCLUDED.api_url,
                     response_path  = EXCLUDED.response_path,
-                    message_format = EXCLUDED.message_format
+                    message_format = EXCLUDED.message_format,
+                    max_messages   = EXCLUDED.max_messages
                 """,
                 (
                     agent.id, agent.name, agent.provider, agent.model,
                     enc, agent.role, agent.topic, agent.system_prompt,
                     agent.preset, agent.api_url, agent.response_path,
-                    agent.message_format, agent.created_at,
+                    agent.message_format, agent.max_messages, agent.created_at,
                 ),
             )
         self._connection.commit()
@@ -47,7 +48,7 @@ class PostgresAgentRepository:
         with self._connection.cursor() as cur:
             cur.execute(
                 "SELECT id, name, provider, model, api_key_enc, role, topic, "
-                "system_prompt, created_at, preset, api_url, response_path, message_format "
+                "system_prompt, created_at, preset, api_url, response_path, message_format, max_messages "
                 "FROM agents WHERE id = %s",
                 (agent_id,),
             )
@@ -58,7 +59,7 @@ class PostgresAgentRepository:
         with self._connection.cursor() as cur:
             cur.execute(
                 "SELECT id, name, provider, model, api_key_enc, role, topic, "
-                "system_prompt, created_at, preset, api_url, response_path, message_format "
+                "system_prompt, created_at, preset, api_url, response_path, message_format, max_messages "
                 "FROM agents ORDER BY created_at ASC"
             )
             rows = cur.fetchall()
@@ -81,4 +82,5 @@ class PostgresAgentRepository:
             api_url=row[10] if len(row) > 10 else "",
             response_path=row[11] if len(row) > 11 else "",
             message_format=row[12] if len(row) > 12 else "standard",
+            max_messages=row[13] if len(row) > 13 else None,
         )

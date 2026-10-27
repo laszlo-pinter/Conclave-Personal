@@ -56,6 +56,7 @@ def initialize_schema(connection: sqlite3.Connection) -> None:
             api_url       TEXT NOT NULL DEFAULT '',
             response_path TEXT NOT NULL DEFAULT '',
             message_format TEXT NOT NULL DEFAULT 'standard',
+            max_messages INTEGER,
             created_at    TEXT NOT NULL
         )
     """)
@@ -132,6 +133,24 @@ def initialize_schema(connection: sqlite3.Connection) -> None:
             FOREIGN KEY(run_id) REFERENCES runs(id)
         )
     """)
+
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS context_reports (
+            id              TEXT PRIMARY KEY,
+            conversation_id TEXT NOT NULL,
+            participant_id  TEXT NOT NULL,
+            message_id      TEXT,
+            run_id          TEXT,
+            created_at      TEXT NOT NULL,
+            report_json     TEXT NOT NULL,
+            FOREIGN KEY(conversation_id) REFERENCES conversations(id),
+            FOREIGN KEY(message_id) REFERENCES messages(id),
+            FOREIGN KEY(run_id) REFERENCES runs(id)
+        )
+    """)
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_context_reports_message ON context_reports(message_id)"
+    )
 
     connection.commit()
 

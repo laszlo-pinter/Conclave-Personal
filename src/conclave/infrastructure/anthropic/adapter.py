@@ -9,9 +9,16 @@ except ImportError:
 
 from conclave.domain.conversation import Conversation
 from conclave.domain.message import MessageAuthorType
-from conclave.domain.model_response import TokenUsage
+from conclave.domain.context_report import (
+    ContextReport,
+    attach_context_report,
+    native_context_report,
+    select_messages,
+)
+from conclave.domain.model_response import Completion, TokenUsage
 from conclave.domain.participant import Participant
 from conclave.infrastructure.log import get_logger, request_logger
+from conclave.infrastructure.system_prompt import SystemPrompt, assemble_system_prompt
 
 logger = get_logger("infrastructure.anthropic")
 
@@ -28,6 +35,7 @@ class AnthropicAdapter:
         model: str = DEFAULT_MODEL,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         system_prompt: str | None = None,
+        max_messages: int | None = None,
     ):
         if anthropic is None:
             raise ImportError(
@@ -38,28 +46,32 @@ class AnthropicAdapter:
         self._model = model
         self._max_tokens = max_tokens
         self._system_prompt = system_prompt
-        self._last_usage: TokenUsage | None = None
+        # Ohne Limit (None/0) voller Verlauf wie bisher; sonst Kuerzung wie beim UniversalAdapter
+        self._max_messages = max_messages
 
     @property
     def provider(self) -> str:
         return "anthropic"
 
-    @property
-    def last_usage(self) -> TokenUsage | None:
-        return self._last_usage
+    def _build_system(self, conversation: Conversation) -> SystemPrompt:
+        """System-Prompt wie beim UniversalAdapter: Agent-Prompt, context_files, Regeln, Workspace."""
+        return assemble_system_prompt(self._system_prompt, conversation)
 
-    def _build_system(self, conversation: Conversation) -> str | None:
-        """System-Prompt: Agent-Prompt + Chat-Regeln."""
-        parts = []
-        if self._system_prompt:
-            parts.append(self._system_prompt)
-        rules = getattr(conversation, "rules", "")
-        if rules:
-            parts.append(f"Chat-Regeln:\n{rules}")
-        return "\n\n".join(parts) if parts else None
+    def _sent(self, conversation: Conversation) -> list:
+        return select_messages(conversation.messages, self._max_messages)
 
-    def complete(self, conversation: Conversation, participant: Participant) -> str:
-        messages = self._build_messages(conversation)
+    def _report(self, conversation: Conversation, system: SystemPrompt, sent: list | None = None):
+        return native_context_report(conversation, system, adapter="anthropic-native",
+                                     sent=sent if sent is not None else self._sent(conversation),
+                                     limit=self._max_messages)
+
+    def context_report(self, conversation: Conversation, participant: Participant) -> ContextReport:
+        """Vorschau ohne Provider-Aufruf."""
+        return self._report(conversation, self._build_system(conversation))
+
+    def complete(self, conversation: Conversation, participant: Participant) -> Completion:
+        sent = self._sent(conversation)
+        messages = self._build_messages(conversation, sent)
         system = self._build_system(conversation)
 
         kwargs = {
@@ -67,22 +79,28 @@ class AnthropicAdapter:
             "max_tokens": self._max_tokens,
             "messages": messages,
         }
-        if system:
-            kwargs["system"] = system
+        if system.text:
+            kwargs["system"] = system.text
 
-        with request_logger(logger, operation="anthropic.complete", model=self._model):
-            response = self._client.messages.create(**kwargs)
+        try:
+            with request_logger(logger, operation="anthropic.complete", model=self._model):
+                response = self._client.messages.create(**kwargs)
+        except Exception as exc:
+            attach_context_report(exc, self._report(conversation, system, sent))
+            raise
 
-        self._last_usage = TokenUsage(
+        usage = TokenUsage(
             input_tokens=response.usage.input_tokens,
             output_tokens=response.usage.output_tokens,
         )
-        return response.content[0].text
+        return Completion(text=response.content[0].text, usage=usage,
+                          report=self._report(conversation, system, sent))
 
     def stream(
         self, conversation: Conversation, participant: Participant
-    ) -> Iterator[str]:
-        messages = self._build_messages(conversation)
+    ) -> Iterator[str | Completion]:
+        sent = self._sent(conversation)
+        messages = self._build_messages(conversation, sent)
         system = self._build_system(conversation)
 
         kwargs = {
@@ -90,8 +108,8 @@ class AnthropicAdapter:
             "max_tokens": self._max_tokens,
             "messages": messages,
         }
-        if system:
-            kwargs["system"] = system
+        if system.text:
+            kwargs["system"] = system.text
 
         logger.debug("anthropic.stream start", extra={"model": self._model})
         with self._client.messages.stream(**kwargs) as stream:
@@ -103,15 +121,16 @@ class AnthropicAdapter:
                     yield event.delta.text
             # Usage nach Stream-Ende
             final = stream.get_final_message()
-            self._last_usage = TokenUsage(
+            usage = TokenUsage(
                 input_tokens=final.usage.input_tokens,
                 output_tokens=final.usage.output_tokens,
             )
+        yield Completion(usage=usage, report=self._report(conversation, system, sent))
 
-    def _build_messages(self, conversation: Conversation) -> list[dict]:
+    def _build_messages(self, conversation: Conversation, messages: list | None = None) -> list[dict]:
         """Wandelt Conclave-Messages in das Anthropic-Format um."""
         result = []
-        for message in conversation.messages:
+        for message in (conversation.messages if messages is None else messages):
             role = "user" if message.author_type == MessageAuthorType.USER else "assistant"
             result.append({"role": role, "content": message.content})
         return result

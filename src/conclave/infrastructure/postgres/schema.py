@@ -51,6 +51,7 @@ def initialize_schema(connection) -> None:
                 api_url       TEXT NOT NULL DEFAULT '',
                 response_path TEXT NOT NULL DEFAULT '',
                 message_format TEXT NOT NULL DEFAULT 'standard',
+                max_messages INTEGER,
                 created_at    TIMESTAMPTZ NOT NULL
             )
         """)
@@ -116,6 +117,20 @@ def initialize_schema(connection) -> None:
                 created_at      TIMESTAMPTZ NOT NULL
             )
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS context_reports (
+                id              TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL REFERENCES conversations(id),
+                participant_id  TEXT NOT NULL,
+                message_id      TEXT REFERENCES messages(id),
+                run_id          TEXT REFERENCES runs(id),
+                created_at      TIMESTAMPTZ NOT NULL,
+                report_json     TEXT NOT NULL
+            )
+        """)
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_context_reports_message ON context_reports(message_id)"
+        )
     connection.commit()
 
     # Migrationen fuer bestehende DBs (fuegt fehlende Spalten hinzu)
