@@ -110,3 +110,13 @@ def test_ci_runs_security_checks():
     assert '".[dev-all,dev-ui,dev-security]"' in job
     assert "python -m pip_audit --skip-editable" in job
     assert "python -m bandit -r src/conclave --severity-level medium" in job
+
+
+def test_ci_runs_postgres_tests_against_pinned_image():
+    text = _workflow_text()
+    job = text.split("  postgres:", 1)[1].split("\n  build:", 1)[0]
+
+    assert "image: postgres@sha256:" in job                     # Image per Digest gepinnt
+    assert "pg_isready" in job                                   # erst testen, wenn Postgres bereit ist
+    assert "CONCLAVE_TEST_POSTGRES_DSN:" in job
+    assert "python -m pytest tests/persistence" in job
