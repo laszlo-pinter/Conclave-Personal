@@ -25,7 +25,6 @@ import re
 from conclave.domain.errors import TaskFormatError
 from conclave.domain.ticket import Ticket, TicketComment
 
-TASK_REF = re.compile(r"^[a-z0-9][a-z0-9_-]*#\d+$")
 
 _HEADER = re.compile(r"^(?P<key>[a-z0-9][a-z0-9_-]*#\d+) (?P<rest>.*)$")
 _TAGS = re.compile(r" \{[^{}]*\}$")

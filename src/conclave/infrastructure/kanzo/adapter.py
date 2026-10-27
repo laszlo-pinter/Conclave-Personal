@@ -11,8 +11,8 @@ import asyncio
 import re
 
 from conclave.domain.errors import TaskNotFound, TaskSourceError
-from conclave.domain.ticket import Ticket
-from conclave.infrastructure.kanzo.parser import TASK_REF, parse_kanzo_task
+from conclave.domain.ticket import TASK_REF, Ticket
+from conclave.infrastructure.kanzo.parser import parse_kanzo_task
 from conclave.infrastructure.log import get_logger
 
 logger = get_logger("infrastructure.kanzo")

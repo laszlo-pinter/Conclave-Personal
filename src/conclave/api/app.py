@@ -37,6 +37,8 @@ from conclave.domain.errors import (
     ProviderTimeout,
 )
 from conclave.domain.participant import ParticipantType
+from conclave.application.consultations import ConsultationRequestError
+from conclave.domain.errors import TaskNotFound, TaskSourceError
 from conclave.cli.bootstrap import rate_limit_disabled, validate_rate_limit
 from conclave.cli.config import DEFAULT_RATE_LIMIT
 from conclave.application.workspace_security import (
@@ -116,7 +118,7 @@ def is_host_allowed(host_header: str, allowed: set[tuple[str, str]]) -> bool:
 
 
 def create_app(handler: CLIHandler, auth_service=None,
-               agent_service=None, config=None, service=None) -> Flask:
+               agent_service=None, config=None, service=None, consultations=None) -> Flask:
     import pathlib
     asset_root = get_asset_root()
     app = Flask(__name__, static_folder=str(asset_root / "static"), static_url_path="/static")
@@ -369,6 +371,18 @@ def create_app(handler: CLIHandler, auth_service=None,
     @app.errorhandler(ValueError)
     def _handle_value_error(e):
         return _error_json(e, 400)
+
+    @app.errorhandler(ConsultationRequestError)
+    def _handle_consultation_request(e):
+        return jsonify({"error": str(e), "type": e.type}), e.status
+
+    @app.errorhandler(TaskNotFound)
+    def _handle_task_not_found(e):
+        return _error_json(e, 404)
+
+    @app.errorhandler(TaskSourceError)
+    def _handle_task_source(e):  # Kanzo nicht erreichbar oder unbekanntes Format
+        return _error_json(e, 502)
 
     @app.errorhandler(HTTPException)
     def _handle_http_exception(e):
@@ -808,6 +822,38 @@ def create_app(handler: CLIHandler, auth_service=None,
             content_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
+
+    # ── Consultations (Zweitmeinung zu Kanzo-Tickets) ────────────────────
+
+    def _consultations():
+        if consultations is None:
+            raise ConsultationRequestError("Consultations sind in dieser Instanz nicht verfuegbar.",
+                                           503, "ConsultationsDisabled")
+        return consultations
+
+    @app.post("/consultations")
+    def create_consultation():
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return jsonify({"error": "JSON-Objekt erwartet.", "type": "ValidationError"}), 400
+        return jsonify(_consultations().create(body)), 202
+
+    @app.get("/consultations")
+    def list_consultations():
+        return jsonify(_consultations().list_for(request.args.get("source_ref", ""))), 200
+
+    @app.get("/consultations/<consultation_id>")
+    def get_consultation(consultation_id: str):
+        return jsonify(_consultations().get(consultation_id)), 200
+
+    @app.post("/consultations/<consultation_id>/retry")
+    def retry_consultation(consultation_id: str):
+        body = request.get_json(silent=True) or {}
+        rerun = body.get("rerun", False)
+        if not isinstance(rerun, bool):
+            return jsonify({"error": "rerun muss true oder false sein.", "type": "ValidationError"}), 400
+        result = _consultations().retry(consultation_id, rerun=rerun)
+        return jsonify(result), 202
 
     # ── Personal Export ─────────────────────────────────────────────────
 

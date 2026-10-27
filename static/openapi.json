@@ -1454,6 +1454,237 @@
         }
       }
     },
+    "/consultations": {
+      "post": {
+        "summary": "Create Consultation",
+        "tags": [
+          "consultations"
+        ],
+        "operationId": "create_consultation",
+        "responses": {
+          "200": {
+            "description": "Erfolg",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "status",
+                    "reviewers"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "task": {
+                      "type": "string"
+                    },
+                    "reviewers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "provider": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "task",
+                  "question"
+                ],
+                "properties": {
+                  "task": {
+                    "type": "string",
+                    "example": "api#12"
+                  },
+                  "question": {
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  "context": {
+                    "type": "string",
+                    "maxLength": 8000
+                  },
+                  "reviewers": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Teilmenge von [kanzo] reviewers; Standard: alle erlaubten"
+                  },
+                  "include_previous": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "channel": {
+                    "type": "string",
+                    "enum": [
+                      "rest",
+                      "mcp"
+                    ],
+                    "default": "rest"
+                  },
+                  "requested_by": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List Consultations",
+        "tags": [
+          "consultations"
+        ],
+        "operationId": "list_consultations",
+        "responses": {
+          "200": {
+            "description": "Erfolg",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "consultations"
+                  ],
+                  "properties": {
+                    "consultations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/consultations/{consultation_id}": {
+      "get": {
+        "summary": "Get Consultation",
+        "tags": [
+          "consultations"
+        ],
+        "operationId": "get_consultation",
+        "responses": {
+          "200": {
+            "description": "Erfolg",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "status",
+                    "deliveries"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "conversation_id": {
+                      "type": "string"
+                    },
+                    "deliveries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "retry_possible": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "consultation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/consultations/{consultation_id}/retry": {
+      "post": {
+        "summary": "Retry Consultation",
+        "tags": [
+          "consultations"
+        ],
+        "operationId": "retry_consultation",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "parameters": [
+          {
+            "name": "consultation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rerun": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "true: Modelle erneut aufrufen (neue Consultation)"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/conversations/{conversation_id}/export": {
       "get": {
         "summary": "Export Conversation",

@@ -291,6 +291,43 @@ def conclave_delete_file(filepath: str) -> dict:
     return {"deleted": filepath}
 
 
+# ── Tools: Consultations (Zweitmeinung zu Kanzo-Tickets) ──────────────────
+
+@mcp.tool()
+def conclave_consult(task: str, question: str, context: str = "", include_previous: bool = False,
+                     reviewers: list[str] | None = None) -> dict:
+    """Bittet Conclave um eine Zweitmeinung zu einem Kanzo-Ticket.
+
+    Conclave liest das Ticket selbst, fragt die erlaubten Reviewer-Modelle und
+    schreibt jede Antwort als gekennzeichneten Kommentar in das Ticket
+    ("Zweitmeinung von ... ueber Conclave, nicht geprueft"). Die Bearbeitung
+    laeuft im Hintergrund; den Stand liefert conclave_get_consultation.
+    Tickets, die nur fuer Menschen gedacht sind, werden abgelehnt.
+
+    Args:
+        task: Ticket-Referenz, z.B. "api#12"
+        question: Was die Reviewer beantworten sollen
+        context: Optionaler Zusatzkontext
+        include_previous: Fruehere Conclave-Kommentare des Tickets mitgeben (Standard: nein)
+        reviewers: Optional eine Teilmenge der erlaubten Reviewer (Agent-IDs)
+    """
+    body = {"task": task, "question": question, "context": context,
+            "include_previous": include_previous, "channel": "mcp", "requested_by": "mcp"}
+    if reviewers:
+        body["reviewers"] = reviewers
+    return _post("/consultations", body)
+
+
+@mcp.tool()
+def conclave_get_consultation(consultation_id: str) -> dict:
+    """Stand einer Consultation: Status, Reviewer mit Provider, Zustellungen.
+
+    Args:
+        consultation_id: ID aus conclave_consult
+    """
+    return _get(f"/consultations/{consultation_id}")
+
+
 # ── Entrypoint ────────────────────────────────────────────────────────────
 
 def main():

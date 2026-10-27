@@ -27,6 +27,7 @@ EXPECTED_TOOLS = {
     "conclave_get_messages", "conclave_invoke", "conclave_orchestrate", "conclave_list_agents",
     "conclave_get_usage", "conclave_export_conversation", "conclave_list_files",
     "conclave_read_file", "conclave_upload_file", "conclave_delete_file",
+    "conclave_consult", "conclave_get_consultation",
 }
 
 

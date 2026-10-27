@@ -165,6 +165,9 @@ class ConsultationService:
             logger.warning("Consultation %s/%s: Zustellung fehlgeschlagen: %s", c.id, d.participant_id, exc)
         self._repo.save_delivery(d)
 
+    def provider_label(self, pid: str) -> str:
+        return self._label(pid)
+
     def _label(self, pid: str) -> str:
         """Provider und Modell fuer die Schlusszeile (Offenlegung, Plan 4.5)."""
         registry = getattr(self._flow, "_registry", None)
