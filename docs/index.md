@@ -30,6 +30,7 @@
 - [Ports & adapters](architektur/ports-adapter.md) - Interfaces, ProviderProfiles, ResilientAdapter
 
 ### Release
+- [Release Notes v0.2.2](release-notes-v0.2.2.md) - Streaming for all preset formats, correct token usage
 - [Release Notes v0.2.1](release-notes-v0.2.1.md) - MCP server on the MCP Python SDK 2.x
 - [Release Notes v0.2.0](release-notes-v0.2.0.md) - Security release: XSS protection, mandatory API token, CSP, per-thread SQLite, waitress
 - [Release Notes v0.1.20](release-notes-v0.1.20.md) - Live parallel orchestration responses in the desktop UI

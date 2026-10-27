@@ -21,6 +21,7 @@ include docs/release-notes-v0.1.19.md
 include docs/release-notes-v0.1.20.md
 include docs/release-notes-v0.2.0.md
 include docs/release-notes-v0.2.1.md
+include docs/release-notes-v0.2.2.md
 include docs/sicherheit.md
 include docs/provider-smoke-test.md
 include docs/architektur/ports-adapter.md
