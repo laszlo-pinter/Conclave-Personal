@@ -354,6 +354,7 @@ class UniversalAdapter:
         timeout: int = 120,
         extra_body: dict | None = None,
         extracts_reasoning: bool = False,
+        stream_usage: bool = False,
     ) -> None:
         # Profile bestimmen: message_format > auth_format > standard
         profile_key = message_format
@@ -375,6 +376,9 @@ class UniversalAdapter:
         self._timeout = timeout
         self._extra_body = extra_body or {}
         self._extracts_reasoning = extracts_reasoning
+        # Usage im Stream per stream_options anfordern (nur OpenAI-kompatible
+        # Provider, die das Feld kennen; andere koennten es ablehnen).
+        self._stream_usage = stream_usage
         self._last_usage: TokenUsage | None = None
 
     @staticmethod
@@ -446,12 +450,16 @@ class UniversalAdapter:
     def stream(
         self, conversation: Conversation, participant: Participant
     ) -> Iterator[str]:
+        # Keine Token-Zahlen eines frueheren Aufrufs an diesen Stream weitergeben (A7).
+        self._last_usage = None
         messages = _format_messages(conversation, self._message_format, participant.id)
         system = _build_system_prompt(self._system_prompt, conversation)
         body = self._profile.build_body(messages, self._model, system)
         if self._extra_body:
             body.update(self._extra_body)
         body["stream"] = True
+        if self._stream_usage:
+            body["stream_options"] = {"include_usage": True}
         headers = self._profile.build_headers(self._api_key)
         url, params = self._profile.build_url(self._api_url, self._model, self._api_key)
 
@@ -467,11 +475,17 @@ class UniversalAdapter:
                     break
                 try:
                     chunk = __import__("json").loads(payload)
-                    delta = _extract_path(chunk, "choices[0].delta.content")
-                    if delta:
-                        yield delta
                 except Exception:
                     continue
+                # Usage kommt (falls ueberhaupt) im letzten Chunk, oft mit leerem choices.
+                if isinstance(chunk, dict) and chunk.get(self._usage_path or "usage"):
+                    self._extract_usage(chunk)
+                try:
+                    delta = _extract_path(chunk, "choices[0].delta.content")
+                except Exception:
+                    continue
+                if delta:
+                    yield delta
 
     def _extract_usage(self, data: dict) -> None:
         """Extrahiert Token-Usage aus der Response (optional)."""
