@@ -286,3 +286,26 @@ def test_busy_port_does_not_start_workers():
     finally:
         blocker.close()
     worker.start.assert_not_called()
+
+
+def test_worker_survives_errors_outside_the_processor(repo):
+    """Regression: eine Ausnahme beim claim (z. B. Datenbank) liess den Worker-Thread sterben."""
+    c = _new()
+    repo.save(c)
+    original = repo.claim
+    calls = []
+
+    def flaky_claim(cid):
+        calls.append(cid)
+        if len(calls) == 1:
+            raise RuntimeError("database is locked")
+        return original(cid)
+
+    repo.claim = flaky_claim
+    worker = ConsultationWorker(repo, rec := Recorder(repo))
+    worker.start()                      # recover() reiht c ein -> erster claim scheitert
+    assert worker.join()
+    worker.submit(c.id)                 # derselbe Worker-Thread muss noch arbeiten
+    assert worker.join()
+    worker.stop()
+    assert rec.runs == [c.id]

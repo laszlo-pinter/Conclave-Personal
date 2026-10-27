@@ -118,6 +118,8 @@ class ConsultationWorker:
                     self._run(consultation_id)
                 else:
                     self._deliver(consultation_id)
+            except Exception:  # noqa: BLE001 - z. B. Datenbankfehler beim claim: Worker darf nie sterben
+                logger.exception("Consultation-Worker: Auftrag %r fehlgeschlagen", item)
             finally:
                 self._queue.task_done()
 

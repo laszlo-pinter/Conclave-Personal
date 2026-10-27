@@ -512,12 +512,17 @@ class ConversationFlowService:
         conversation: Conversation,
         participant_id: str,
         content: str,
+        process_directives: bool = True,
     ):
-        processed, events = self._process_agent_response(
-            content=content,
-            conversation_id=conversation.id,
-            participant_id=participant_id,
-        )
+        if process_directives:
+            processed, events = self._process_agent_response(
+                content=content,
+                conversation_id=conversation.id,
+                participant_id=participant_id,
+            )
+        else:
+            # Consultations: @save/@read in Modellantworten bleiben Text (Injection ueber Tickets)
+            processed, events = content, []
         message = conversation.add_model_message(
             participant_id=participant_id,
             content=processed,
@@ -672,6 +677,7 @@ class ConversationFlowService:
         participant_id: str,
         content: str,
         context_report_id: str | None = None,
+        process_directives: bool = True,
     ):
         conversation = self.load_conversation(conversation_id)
 
@@ -685,7 +691,8 @@ class ConversationFlowService:
                 conversation_id=conversation_id,
             )
 
-        message = self._store_model_response(conversation, participant_id, content)
+        message = self._store_model_response(conversation, participant_id, content,
+                                             process_directives=process_directives)
         if context_report_id and self._context_report_repo is not None:
             self._context_report_repo.link_message(context_report_id, message.id)
         return conversation
