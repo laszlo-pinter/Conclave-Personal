@@ -131,3 +131,84 @@ function jumpToMessage(el){
   target.classList.add('flash');
   setTimeout(()=>target.classList.remove('flash'),1600);
 }
+
+// ── Vorschau vor dem Aufruf (K4) ─────────────────────────────────────────
+// Was der naechste Aufruf senden wuerde - ohne Provider-Aufruf, nichts wird gespeichert.
+
+const CONTEXT_PREVIEW_DELAY = 300;
+let _previewTimer=null,_previewToken=0;
+
+async function _fetchPreview(pid){
+  const data=await req('GET',`/conversations/${encodeURIComponent(currentConvId)}/participants/${encodeURIComponent(pid)}/context-preview`);
+  return data&&data.report;
+}
+
+function previewText(r){
+  const msgs=r.messages_sent<r.messages_total
+    ?t('context.preview.partial',{sent:_num(r.messages_sent),total:_num(r.messages_total)})
+    :t('context.preview.all',{total:_num(r.messages_total)});
+  return `${msgs} · ${t('context.tokens',{tokens:_num(r.estimated_tokens)})}`;
+}
+
+function _previewClasses(el,r){
+  const truncated=r.messages_sent<r.messages_total;
+  el.classList.toggle('truncated',truncated);
+  el.classList.toggle('strong',truncated&&r.messages_sent*2<r.messages_total);
+  el.classList.toggle('large',!r.truncation_limit&&r.estimated_tokens>=CONTEXT_LARGE_TOKENS);
+}
+
+// Entprellt: bei Teilnehmerwahl und nach neuen Nachrichten.
+function schedulePreview(){
+  clearTimeout(_previewTimer);
+  _previewTimer=setTimeout(refreshPreview,CONTEXT_PREVIEW_DELAY);
+}
+
+async function refreshPreview(){
+  const el=document.getElementById('ctxPreview');
+  if(!el)return;
+  const pid=document.getElementById('pSel')?.value;
+  const token=++_previewToken;
+  if(!pid||!currentConvId){el.hidden=true;return;}
+  try{
+    const r=await _fetchPreview(pid);
+    if(token!==_previewToken)return;            // veraltete Antwort
+    if(!r){el.hidden=true;return;}
+    el.textContent=previewText(r);
+    const large=!r.truncation_limit&&r.estimated_tokens>=CONTEXT_LARGE_TOKENS;
+    el.title=t(large?'context.largeHint':'context.preview.hint');
+    _previewClasses(el,r);
+    el.hidden=false;
+  }catch{
+    if(token===_previewToken)el.hidden=true;   // z. B. 409: Adapter ohne Vorschau
+  }
+}
+
+// Vorschau pro Teilnehmer fuer Orchestrierungs- und Auto-Loop-Dialog.
+const _seqTimers={},_seqTokens={};
+function scheduleSequencePreview(inputId,listId){
+  clearTimeout(_seqTimers[listId]);
+  _seqTimers[listId]=setTimeout(()=>refreshSequencePreview(inputId,listId),CONTEXT_PREVIEW_DELAY);
+}
+
+async function refreshSequencePreview(inputId,listId){
+  const list=document.getElementById(listId);
+  if(!list||!currentConvId)return;
+  const ids=[...new Set(document.getElementById(inputId).value.split(',').map(s=>s.trim()).filter(Boolean))].slice(0,20);
+  const token=(_seqTokens[listId]||0)+1;
+  _seqTokens[listId]=token;
+  const rows=await Promise.all(ids.map(async pid=>{
+    let r;
+    try{r=await _fetchPreview(pid);}catch{return null;}   // unbekannt oder ohne Vorschau: weglassen
+    if(!r)return null;
+    const row=_el('div','ctx-preview-row');
+    row.appendChild(_el('span','ctx-preview-name',participants.find(p=>p.id===pid)?.name||pid));
+    const val=_el('span','ctx-preview',previewText(r));
+    _previewClasses(val,r);
+    row.appendChild(val);
+    return row;
+  }));
+  if(_seqTokens[listId]!==token)return;
+  const shown=rows.filter(Boolean);
+  list.replaceChildren(...shown);
+  if(shown.length)list.prepend(_el('div','ctx-preview-title',t('context.preview.title')));
+}

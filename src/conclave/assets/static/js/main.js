@@ -95,6 +95,8 @@ function _bindStaticUiEvents() {
   on('wsUpload', 'change', (e) => uploadWsFile(e.target))
   on('fileInput', 'change', (e) => handleFile(e.target))
   on('pSel', 'change', () => onPSelChange())
+  on('orchSeq', 'input', () => scheduleSequencePreview('orchSeq', 'orchPreview'))
+  on('loopSeq', 'input', () => scheduleSequencePreview('loopSeq', 'loopPreview'))
   on('agentPick', 'change', () => fillFromAgent())
   on('msgInput', 'keydown', handleKey)
   on('msgInput', 'input', (e) => autoResize(e.target))

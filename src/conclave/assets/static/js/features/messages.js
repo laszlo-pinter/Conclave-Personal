@@ -5,6 +5,7 @@ function renderMessages(msgs){
   msgs = msgs || [];
   AppState.setState({currentMessages: msgs});
   const el=document.getElementById('messages');el.replaceChildren();msgs.forEach(m=>el.appendChild(buildMsg(m)));scrollBottom();
+  schedulePreview();
 }
 
 function buildMsg(m){
@@ -119,6 +120,7 @@ async function streamP(){
     const last=data.messages.at(-1);
     div.querySelector('.msg-seq').textContent=last?'#'+last.sequence:'';
     if(last){div.dataset.seq=last.sequence;attachContextChip(div,last.context,last.id);}
+    schedulePreview();
     div.removeAttribute('id');toast(t('input.streamDone'),'ok');
   }catch(e){cursor.remove();toast(e.message,'err');}
   btn.disabled=false;btn.textContent=`▶ ${t('input.stream')}`;
@@ -126,6 +128,7 @@ async function streamP(){
 
 function openOrch(){
   document.getElementById('orchSeq').value=participants.filter(p=>p.type==='model').map(p=>p.id).join(', ');
+  refreshSequencePreview('orchSeq','orchPreview');
   document.getElementById('orchParallel').checked=true;
   openOverlay('overlayOrch');
 }

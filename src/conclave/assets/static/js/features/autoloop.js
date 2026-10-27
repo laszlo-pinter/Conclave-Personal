@@ -11,6 +11,7 @@ function openAutoloop(){
   document.getElementById('loopRounds').value=6;
   document.getElementById('loopStop').value='@done';
   document.getElementById('loopRotation').value='none';
+  refreshSequencePreview('loopSeq','loopPreview');
   openOverlay('overlayAutoloop');
 }
 

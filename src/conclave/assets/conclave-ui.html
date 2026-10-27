@@ -306,6 +306,7 @@
       <button class="btn-act btn-stream" data-action="stream-p" id="btnStream" disabled>&#9654; <span data-i18n="input.stream">Stream</span></button>
       <button class="btn-act btn-orch" data-action="open-orch" id="btnOrch" disabled>&#8635; <span data-i18n="input.orchestrate">Orchestrieren</span></button>
       <button class="btn-act btn-loop" data-action="open-autoloop" id="btnAutoloop" disabled>&#8734; <span data-i18n="input.autoloop">Auto-Loop</span></button>
+      <span class="ctx-preview" id="ctxPreview" hidden></span>
       <div class="flex1"></div>
     </div>
   </div>
@@ -434,6 +435,7 @@
       <label data-i18n="orch.sequence">Reihenfolge</label>
       <input type="text" id="orchSeq" placeholder="z.B. claude1, gpt1, claude1"/>
       <div class="field-hint" data-i18n="orch.sequenceHint">Komma-getrennte IDs. Wiederholungen moeglich.</div>
+      <div class="ctx-preview-list" id="orchPreview"></div>
     </div>
     <div class="check-row">
       <input type="checkbox" id="orchParallel"/>
@@ -454,6 +456,7 @@
       <label data-i18n="autoloop.sequence">Reihenfolge</label>
       <input type="text" id="loopSeq" placeholder="z.B. claude1, gpt1"/>
       <div class="field-hint" data-i18n="autoloop.sequenceHint">Komma-getrennte IDs. Diese Sequenz wird pro Runde wiederholt; jeder Agent sieht die Antworten der anderen.</div>
+      <div class="ctx-preview-list" id="loopPreview"></div>
     </div>
     <div class="field">
       <label data-i18n="autoloop.rotation">Antwortreihenfolge</label>
