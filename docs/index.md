@@ -30,6 +30,7 @@
 - [Ports & adapters](architektur/ports-adapter.md) - Interfaces, ProviderProfiles, ResilientAdapter
 
 ### Release
+- [Release Notes v0.3.0](release-notes-v0.3.0.md) - Context transparency: context chip, preview before a call, per-agent message limit
 - [Release Notes v0.2.3](release-notes-v0.2.3.md) - Chat rules are saved with SQLite
 - [Release Notes v0.2.2](release-notes-v0.2.2.md) - Streaming for all preset formats, correct token usage
 - [Release Notes v0.2.1](release-notes-v0.2.1.md) - MCP server on the MCP Python SDK 2.x
