@@ -18,6 +18,7 @@ from conclave.domain.message import Message
 from conclave.domain.model_response import Completion
 from conclave.domain.participant import Participant
 from conclave.domain.run import Run
+from conclave.domain.ticket import Ticket
 from conclave.domain.tool_event import ToolEvent
 
 
@@ -246,6 +247,24 @@ class ContextReportRepository(Protocol):
 
     def list_by_conversation(self, conversation_id: str) -> list[ContextReportRecord]:
         """Alle Reports einer Conversation (auch fehlgeschlagene Aufrufe)."""
+        ...
+
+
+@runtime_checkable
+class TaskSource(Protocol):
+    """Liest Tickets aus einem externen Board (z. B. Kanzo). Inhalt ist fremd und unvertrauenswuerdig."""
+
+    def get_task(self, task_ref: str) -> Ticket:
+        """Laedt ein Ticket samt Kommentaren; wirft TaskNotFound oder TaskSourceError."""
+        ...
+
+
+@runtime_checkable
+class CommentSink(Protocol):
+    """Schreibt Kommentare in ein externes Board - die einzige schreibende Aktion dort."""
+
+    def add_comment(self, task_ref: str, body: str, author: str) -> None:
+        """Fuegt einen Kommentar hinzu; wirft TaskNotFound oder TaskSourceError."""
         ...
 
 
