@@ -70,7 +70,9 @@ def test_save_get_roundtrip(repo):
 
 def test_status_update_and_lists(repo):
     a, b, other = _new(), _new(), _new(ref="api#13")
-    for c in (a, b, other):
+    start = datetime.now(UTC)
+    for offset, c in enumerate((a, b, other)):
+        c.created_at = start + timedelta(seconds=offset)   # eindeutige Reihenfolge, keine Gleichstaende
         repo.save(c)
     a.status, a.conversation_id, a.finished_at = DONE, "conv-1", datetime.now(UTC)
     repo.save(a)
