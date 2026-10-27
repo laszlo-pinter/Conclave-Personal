@@ -12,6 +12,7 @@ from datetime import datetime
 
 from conclave.domain.agent import Agent
 from conclave.domain.audit import AuditEntry
+from conclave.domain.consultation import Consultation, ConsultationDelivery
 from conclave.domain.context_report import ContextReportRecord
 from conclave.domain.conversation import Conversation
 from conclave.domain.message import Message
@@ -247,6 +248,40 @@ class ContextReportRepository(Protocol):
 
     def list_by_conversation(self, conversation_id: str) -> list[ContextReportRecord]:
         """Alle Reports einer Conversation (auch fehlgeschlagene Aufrufe)."""
+        ...
+
+
+@runtime_checkable
+class ConsultationRepository(Protocol):
+    """Persistiert Consultations und ihre Zustellungen."""
+
+    def save(self, consultation: Consultation) -> None:
+        """Speichert oder aktualisiert eine Consultation."""
+        ...
+
+    def get(self, consultation_id: str) -> Consultation | None:
+        ...
+
+    def list_by_source_ref(self, source: str, source_ref: str) -> list[Consultation]:
+        """Consultations zu einem Ticket, neueste zuerst."""
+        ...
+
+    def list_by_status(self, status: str) -> list[Consultation]:
+        """Consultations mit einem Status, aelteste zuerst."""
+        ...
+
+    def count_since(self, source: str, source_ref: str, since: datetime) -> int:
+        """Anzahl der Consultations zu einem Ticket seit ``since`` (Obergrenze)."""
+        ...
+
+    def claim(self, consultation_id: str) -> bool:
+        """Atomar queued -> running; True nur fuer genau einen Aufrufer."""
+        ...
+
+    def save_delivery(self, delivery: ConsultationDelivery) -> None:
+        ...
+
+    def list_deliveries(self, consultation_id: str) -> list[ConsultationDelivery]:
         ...
 
 

@@ -115,6 +115,52 @@ def test_v023_database_migrates_without_data_loss(pg):
         cur.execute("SELECT column_name FROM information_schema.columns "
                     "WHERE table_name = 'agents' AND column_name = 'max_messages'")
         assert cur.fetchone() is not None
+        cur.execute("SELECT id FROM _migrations WHERE id = '009_consultations'")
+        assert cur.fetchone() is not None
+        cur.execute("SELECT to_regclass('consultations'), to_regclass('consultation_deliveries')")
+        assert all(cur.fetchone())
+
+
+def test_consultation_repository_roundtrip_and_atomic_claim(pg):
+    import threading
+
+    from conclave.domain.consultation import DELIVERED, RUNNING, Consultation, ConsultationDelivery
+    from conclave.infrastructure.postgres.consultation_repository import PostgresConsultationRepository
+    from conclave.infrastructure.postgres.schema import initialize_schema
+
+    initialize_schema(pg)
+    repo = PostgresConsultationRepository(pg)
+    c = Consultation.create(source="kanzo", source_ref="api#12", question="Frage", reviewers=["gpt"],
+                            channel="mcp", include_previous=True)
+    repo.save(c)
+    loaded = repo.get(c.id)
+    assert (loaded.reviewers, loaded.channel, loaded.include_previous) == (("gpt",), "mcp", True)
+
+    barrier = threading.Barrier(6)
+    results = []
+
+    def grab():
+        conn = psycopg2.connect(DSN)            # je Thread eine eigene Verbindung, wie mehrere Worker
+        conn.autocommit = True
+        barrier.wait()
+        results.append(PostgresConsultationRepository(conn).claim(c.id))
+        conn.close()
+
+    threads = [threading.Thread(target=grab) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert results.count(True) == 1
+    assert repo.get(c.id).status == RUNNING
+
+    d = ConsultationDelivery.create(consultation_id=c.id, participant_id="gpt", message_id="m1")
+    repo.save_delivery(d)
+    d.status = DELIVERED
+    repo.save_delivery(d)
+    assert repo.list_deliveries(c.id)[0].status == DELIVERED
+    with pytest.raises(psycopg2.errors.ForeignKeyViolation):
+        repo.save_delivery(ConsultationDelivery.create(consultation_id="gibtsnicht", participant_id="gpt"))
 
 
 @pytest.mark.parametrize("value", [None, 0, 12])
