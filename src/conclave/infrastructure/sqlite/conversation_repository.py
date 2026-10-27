@@ -16,12 +16,13 @@ class SQLiteConversationRepository:
     def save(self, conversation: Conversation) -> None:
         self._connection.execute(
             """
-            INSERT INTO conversations (id, status, topic, floor, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO conversations (id, status, topic, floor, rules, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 status     = excluded.status,
                 topic      = excluded.topic,
                 floor      = excluded.floor,
+                rules      = excluded.rules,
                 created_at = excluded.created_at
             """,
             (
@@ -29,6 +30,7 @@ class SQLiteConversationRepository:
                 conversation.status,
                 conversation.topic,
                 conversation.floor,
+                conversation.rules or "",
                 conversation.created_at.isoformat(),
             ),
         )
@@ -37,7 +39,7 @@ class SQLiteConversationRepository:
     def get_by_id(self, conversation_id: str) -> Conversation | None:
         cursor = self._connection.execute(
             """
-            SELECT id, status, topic, floor, created_at
+            SELECT id, status, topic, floor, created_at, rules
             FROM conversations
             WHERE id = ?
             """,
@@ -54,6 +56,7 @@ class SQLiteConversationRepository:
             topic=row[2] or "",
             floor=row[3],
             created_at=datetime.fromisoformat(row[4]),
+            rules=row[5] or "",
             messages=[],
             participants=[],
         )
@@ -87,7 +90,7 @@ class SQLiteConversationRepository:
     def list_all(self) -> list[Conversation]:
         rows = self._connection.execute(
             """
-            SELECT id, status, topic, floor, created_at
+            SELECT id, status, topic, floor, created_at, rules
             FROM conversations
             WHERE status <> 'archived'
             ORDER BY created_at DESC
@@ -101,6 +104,7 @@ class SQLiteConversationRepository:
                 topic=row[2] or "",
                 floor=row[3],
                 created_at=datetime.fromisoformat(row[4]),
+                rules=row[5] or "",
                 messages=[],
                 participants=[],
             )

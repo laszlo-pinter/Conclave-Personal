@@ -253,3 +253,24 @@ def test_save_conversation_does_not_persist_participants(db_connection):
         "ConversationRepository.save() hat Participants selbstständig persistiert – "
         "Persistenzverantwortung liegt beim ParticipantRepository."
     )
+
+
+def test_rules_are_persisted_and_loaded(db_connection):
+    """Regression: SQLite speicherte die Chat-Regeln (inkl. context_files) nie."""
+    repository = SQLiteConversationRepository(db_connection)
+    conversation = Conversation.create(topic="Mit Regeln")
+    conversation.rules = "context_files: plan.md\nSei knapp."
+    repository.save(conversation)
+
+    assert repository.load(conversation.id).rules == "context_files: plan.md\nSei knapp."
+    assert [c.rules for c in repository.list_all()] == ["context_files: plan.md\nSei knapp."]
+
+    conversation.rules = ""
+    repository.save(conversation)
+    assert repository.load(conversation.id).rules == ""
+
+
+def test_set_rules_survives_reload(service):
+    conversation = service.create_conversation()
+    service.set_rules(conversation.id, "Antworte auf Deutsch.")
+    assert service.load_conversation(conversation.id).rules == "Antworte auf Deutsch."
