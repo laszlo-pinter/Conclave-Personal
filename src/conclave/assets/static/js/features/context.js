@@ -66,6 +66,7 @@ async function toggleContextDetails(chip){
   try{
     const data=await req('GET',`/conversations/${encodeURIComponent(currentConvId)}/messages/${encodeURIComponent(id)}/context`);
     panel.replaceChildren(...renderContextDetails(data));
+    panel.scrollIntoView({behavior:'smooth',block:'nearest'});
   }catch(e){
     panel.textContent=`${t('common.errorPrefix')}: ${e.message}`;
   }
