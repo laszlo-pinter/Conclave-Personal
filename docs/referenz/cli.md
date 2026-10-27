@@ -73,10 +73,12 @@ Optionen für `agent-new` und `agent-edit`:
 | `--api-url` | leer | Eigene API-URL (überschreibt die Preset-URL) |
 | `--response-path` | leer | Pfad zur Antwort im Response-JSON |
 | `--message-format` | `standard` | Message-Format (`standard`, `anthropic`, `gemini`, `openai-responses`); `standard` übernimmt das Format des Presets |
+| `--max-messages` | leer | Kürzungslimit pro Aufruf: Zahl (`0` = keine Kürzung); leer = globaler Default (`CONCLAVE_MAX_MESSAGES`, nur Preset-Agents). Bei `agent-edit` setzt `default` auf den Default zurück |
 
 `agent-edit` überschreibt alle Felder: Nicht angegebene Optionen werden auf
-leer bzw. den Standardwert zurückgesetzt. Ausnahme ist `--api-key`: ohne
-Angabe (oder leer) bleibt der gespeicherte Key erhalten. `agent-set-key`
+leer bzw. den Standardwert zurückgesetzt. Ausnahmen sind `--api-key` und
+`--max-messages`: ohne Angabe bleiben der gespeicherte Key bzw. das
+gespeicherte Limit erhalten. `agent-set-key`
 ändert nur den Key und lässt alle anderen Felder unverändert.
 
 ## Workspace

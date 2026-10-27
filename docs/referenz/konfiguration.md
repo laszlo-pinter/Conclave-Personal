@@ -84,11 +84,11 @@ ID gibt (bestehende Agents werden nicht verändert):
 | Variable | Default | Beschreibung |
 |----------|---------|-------------|
 | CONCLAVE_WORKSPACE | plattformabhängig | Lokaler Workspace-Pfad. Ohne Wert gilt der Plattformdefault (siehe unten) für alle Einstiegspunkte (CLI-Kommandos, Server, Desktop, `conclave-api`) |
-| CONCLAVE_WORKSPACE_AUTOLIST | — | Gesetzt (nicht leer): Liste aller Workspace-Dateien im System-Prompt von Preset-Agents. Standardmäßig aus |
+| CONCLAVE_WORKSPACE_AUTOLIST | — | Gesetzt (nicht leer): Liste aller Workspace-Dateien im System-Prompt aller Agenten. Standardmäßig aus |
 | CONCLAVE_WORKSPACE_AGENT_READ_LIMIT_BYTES | 524288 | Max. Dateigröße für `@workspace/...`, `@read(...)` und `context_files:` in Agent-Kontexten |
 | CONCLAVE_WORKSPACE_UI_READ_LIMIT_BYTES | 2097152 | Max. Dateigröße für UI/API/CLI-Lesezugriffe |
 | CONCLAVE_WORKSPACE_WRITE_LIMIT_BYTES | 524288 | Max. Größe für Workspace-Schreibzugriffe und `@save(...)` |
-| CONCLAVE_MAX_MESSAGES | 25 | Max Messages pro Provider-Call (Token-Effizienz). Gilt nur für Preset-Agents (UniversalAdapter); die nativen Anthropic-/OpenAI-Adapter kürzen nicht |
+| CONCLAVE_MAX_MESSAGES | 25 | Max. Nachrichten pro Provider-Call für Preset-Agents (UniversalAdapter), wenn am Agenten kein eigenes Limit gesetzt ist. Die nativen Anthropic-/OpenAI-Adapter kürzen nur mit Agent-Limit. Pro Agent: Feld `max_messages` (leer = dieser Default, `0` = keine Kürzung) |
 
 Versteckte Pfade, also Komponenten mit führendem Punkt wie `.private/`,
 werden in UI/API/CLI, Agent-Directives und `context_files:` nicht angezeigt

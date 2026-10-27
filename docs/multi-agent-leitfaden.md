@@ -21,6 +21,25 @@ Tokens pro Aufruf — nur für den Kontext.
 - **Volle Historie** erhalten nur Agenten über die nativen Adapter:
   per CLI angelegte Agenten mit Provider `anthropic` oder `openai`
   ohne Preset.
+- **Pro Agent einstellbar:** Das Feld „Max. Nachrichten“ (UI unter
+  „Erweitert“, CLI `--max-messages`, API `max_messages`) überschreibt das
+  für beide Adapter-Arten: leer = Standard wie oben, `0` = keine Kürzung,
+  eine Zahl = höchstens so viele Nachrichten (die erste User-Nachricht
+  bleibt als Anker erhalten).
+
+**Sichtbar in der UI (ab v0.3.0):**
+
+- Unter jeder Modellantwort steht ein **Kontext-Chip**, z. B.
+  „Kontext: 25/80 Nachrichten · 2 Dateien · ca. 6.400 Token (abgerechnet
+  6.912)“. Orange heißt: Nachrichten wurden ausgelassen. Ein Klick zeigt
+  den ausgelassenen Bereich (mit Sprung dorthin), die Bausteine des
+  System-Prompts, eingebundene und abgewiesene Dateien sowie geschätzte und
+  abgerechnete Token.
+- **Vor dem Aufruf** zeigt die Bedienleiste, was der nächste Aufruf senden
+  würde („Nächster Aufruf: Agent sieht 25 von 80 Nachrichten“). Die Dialoge
+  für Orchestrierung und Auto-Loop zeigen das pro Teilnehmer.
+- Rot markiert ist ein großer Kontext ohne Kürzung (ab ca. 50.000 Token):
+  Dort entstehen die Kosten.
 
 Die Kürzung begrenzt den Kontext pro Aufruf, aber jede Antwort bleibt
 eine bezahlte Ausgabe, und bis zum Erreichen des Fensters wächst der
@@ -313,7 +332,8 @@ voller Historie (native Adapter). Agenten mit Preset erhalten pro
 Aufruf höchstens die erste User-Nachricht plus die letzten 24
 Nachrichten (`CONCLAVE_MAX_MESSAGES`, Default 25); bei ~300 Tokens
 pro Nachricht liegt der Kontext dort also bei höchstens ~7.500 Tokens
-zuzüglich System-Prompt.
+zuzüglich System-Prompt. Die tatsächlichen Werte pro Aufruf zeigt der
+Kontext-Chip unter jeder Antwort.
 
 | Agenten | Nachrichten | ~Tokens/Nachricht | Kontext bei letztem Aufruf | Gesamt-Session |
 |---------|-------------|-------------------|---------------------------|----------------|

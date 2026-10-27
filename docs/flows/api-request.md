@@ -23,7 +23,7 @@ Participant ist registriert, Agent hat einen passenden Adapter.
 
 8. **Workspace-Refs expandieren** — `conversation_flow.py:_expand_workspace_refs()` ersetzt `@workspace/datei` (auch `@workplace/datei`) in den Messages eines Snapshots durch erlaubte lokale Datei-Inhalte. `@read(...)` wird hier nicht verarbeitet, sondern erst nach der Modellantwort (Schritt 13).
 
-9. **Messages formatieren** — der jeweilige Adapter formatiert Conversation, Rollen und Modellparameter für den Provider.
+9. **Messages auswählen und formatieren** — `domain/context_report.py:select_messages()` wählt die gesendeten Nachrichten (Agent-Limit `max_messages`, sonst `CONCLAVE_MAX_MESSAGES` für Preset-Agents; native Adapter ohne Limit senden alles); der jeweilige Adapter formatiert sie mit Rollen und Modellparametern für den Provider.
 
 10. **System-Prompt bauen** — alle Adapter (UniversalAdapter und die nativen Anthropic-/OpenAI-Adapter) kombinieren System-Prompt des Agenten, Inhalte aus `context_files:`, Chat-Regeln und Workspace-Hinweise (`infrastructure/system_prompt.py:assemble_system_prompt()`). Das Agent-Feld `role` fließt in keinen Prompt ein.
 
@@ -37,7 +37,9 @@ Participant ist registriert, Agent hat einen passenden Adapter.
 
 13. **Audit-Log** — `conversation_flow.py:_audit()` protokolliert den Aufruf mit Provider, Modell und Tokens (nur wenn ein AuditRepository gesetzt ist, z. B. im Server).
 
-14. **Run und Usage persistieren** — `conversation_flow.py:_record_run()` speichert Status, Participant, Provider, Modell, Dauer und optionale Usage. Bei einem Fehler im Provider-Call werden Audit und Run mit Status `failed` geschrieben und der Fehler weitergereicht.
+14. **Run und Usage persistieren** — `conversation_flow.py:_record_run()` speichert Status, Participant, Provider, Modell, Dauer und optionale Usage aus dem `Completion` des Adapters. Bei einem Fehler im Provider-Call werden Audit und Run mit Status `failed` geschrieben und der Fehler weitergereicht.
+
+14a. **Kontext-Report speichern** — `conversation_flow.py:_save_context_report()` speichert den Report des Aufrufs mit Run und (nach Schritt 16) Message. Bei einem Fehler hängt der Adapter den Report an die Exception; er wird dann nur mit dem fehlgeschlagenen Run gespeichert.
 
 15. **Agent-Direktiven verarbeiten** — `_store_model_response()` -> `_process_agent_response()` -> `_process_agent_directives_for_context()` schreibt `@save(...)`-Blöcke in `workspace/output/` und ersetzt `@read(...)` durch den Dateiinhalt. Ist ein ToolEventRepository gesetzt (Server und CLI immer), wird ein `@save`-Block durch `[tool_event:<id>]` ersetzt und vor einem `@read`-Inhalt `[tool_event:<id>]` eingefügt.
 
@@ -66,4 +68,4 @@ Participant ist registriert, Agent hat einen passenden Adapter.
 - Fehler-Mapping: `src/conclave/api/app.py` (Error-Handler), `src/conclave/infrastructure/universal/resilient.py`
 - Tests: `tests/application/test_invoke_participant.py`, `tests/application/test_personal_golden_path.py`
 
-**Zuletzt verifiziert:** 2026-10-26 (v0.2.0)
+**Zuletzt verifiziert:** 2026-10-27 (v0.3.0)
