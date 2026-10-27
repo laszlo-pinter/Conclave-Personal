@@ -28,6 +28,7 @@ import os
 import re
 import socket
 from collections.abc import Iterator
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -39,9 +40,14 @@ from conclave.application.workspace_security import (
     resolve_workspace_path,
     workspace_root,
 )
+from conclave.domain.context_report import (
+    ContextReport,
+    build_context_report,
+    requested_context_files,
+)
 from conclave.domain.conversation import Conversation
 from conclave.domain.message import MessageAuthorType
-from conclave.domain.model_response import TokenUsage
+from conclave.domain.model_response import Completion, TokenUsage
 from conclave.domain.participant import Participant
 from conclave.infrastructure.log import get_logger
 from conclave.infrastructure.universal.profiles import (
@@ -103,6 +109,7 @@ def _format_messages(
     conversation: Conversation,
     message_format: str = "standard",
     current_participant_id: str = "",
+    messages: list | None = None,
 ) -> list[dict]:
     """Wandelt Conclave-Messages ins Provider-Format.
 
@@ -114,10 +121,12 @@ def _format_messages(
     gesendet. Messages anderer Agents werden als user-Messages mit [Name]-Prefix
     dargestellt, damit die API korrekt alterniert.
 
-    Nur die letzten MAX_MESSAGES werden gesendet, um Rate Limits zu schonen.
+    Nur die letzten MAX_MESSAGES werden gesendet, um Rate Limits zu schonen
+    (oder die bereits ausgewaehlten ``messages``).
     Der Projektkontext wird ueber Workspace-Hints im System-Prompt erhalten.
     """
-    messages = _smart_truncate(conversation.messages, MAX_MESSAGES)
+    if messages is None:
+        messages = _smart_truncate(conversation.messages, MAX_MESSAGES)
     result = []
     for msg in messages:
         author_id = getattr(msg, "author_id", None) or ""
@@ -197,53 +206,69 @@ def _build_workspace_info() -> str:
         return info
 
 
-def _load_context_files(conversation: Conversation) -> str:
-    """Laedt context_files aus der Conversation und gibt deren Inhalt zurueck.
+def _collect_context_files(conversation: Conversation) -> tuple[str, list[dict], list[dict]]:
+    """Laedt context_files aus der Conversation.
 
     context_files ist eine kommaseparierte Liste von Workspace-Pfaden
     im rules-Feld mit dem Prefix 'context_files:'.
     Format: Erste Zeile von rules = 'context_files: datei1.md, datei2.md'
+
+    Returns: (Text fuer den System-Prompt, eingebundene [{path, bytes}],
+    abgewiesene [{path, reason}])
     """
-    rules = getattr(conversation, "rules", "") or ""
     root = workspace_root()
     parts = []
-    for line in rules.split("\n"):
-        line = line.strip()
-        if not line.lower().startswith("context_files:"):
+    loaded: list[dict] = []
+    skipped: list[dict] = []
+    for filepath in requested_context_files(getattr(conversation, "rules", "") or ""):
+        # Dieselben Grenzen wie @workspace/ und @read(): kein absoluter Pfad,
+        # kein Ausbruch aus dem Workspace, keine versteckten Pfade, Leselimit.
+        resolved = resolve_workspace_path(filepath, root)
+        if resolved is None or not resolved.path.is_file() or not is_agent_visible(resolved.path, root):
+            logger.warning("context_files: '%s' ignoriert (ausserhalb des Workspace, versteckt oder fehlt)", filepath)
+            skipped.append({"path": filepath, "reason": "not_found_or_not_allowed"})
             continue
-        file_list = line[len("context_files:"):].strip()
-        for filepath in file_list.split(","):
-            filepath = filepath.strip()
-            if not filepath:
-                continue
-            # Dieselben Grenzen wie @workspace/ und @read(): kein absoluter Pfad,
-            # kein Ausbruch aus dem Workspace, keine versteckten Pfade, Leselimit.
-            resolved = resolve_workspace_path(filepath, root)
-            if resolved is None or not resolved.path.is_file() or not is_agent_visible(resolved.path, root):
-                logger.warning("context_files: '%s' ignoriert (ausserhalb des Workspace, versteckt oder fehlt)", filepath)
-                continue
-            if not assert_size_allowed(resolved.path, agent_read_limit_bytes()):
-                logger.warning("context_files: '%s' ignoriert (groesser als das Agent-Leselimit)", filepath)
-                continue
-            try:
-                content = resolved.path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
-                continue
-            parts.append(f"--- Kontext: {resolved.relative} ---\n{content}")
-    return "\n\n".join(parts) if parts else ""
+        if not assert_size_allowed(resolved.path, agent_read_limit_bytes()):
+            logger.warning("context_files: '%s' ignoriert (groesser als das Agent-Leselimit)", filepath)
+            skipped.append({"path": filepath, "reason": "too_large"})
+            continue
+        try:
+            content = resolved.path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            skipped.append({"path": filepath, "reason": "unreadable"})
+            continue
+        parts.append(f"--- Kontext: {resolved.relative} ---\n{content}")
+        loaded.append({"path": resolved.relative, "bytes": len(content.encode("utf-8"))})
+    return ("\n\n".join(parts) if parts else ""), loaded, skipped
 
 
-def _build_system_prompt(
+def _load_context_files(conversation: Conversation) -> str:
+    """Inhalt der context_files als Text (siehe _collect_context_files)."""
+    return _collect_context_files(conversation)[0]
+
+
+@dataclass(frozen=True)
+class _SystemPrompt:
+    text: str | None
+    parts: tuple[str, ...] = ()
+    context_files: tuple[dict, ...] = ()
+    skipped_context_files: tuple[dict, ...] = ()
+
+
+def _assemble_system_prompt(
     system_prompt: str | None, conversation: Conversation
-) -> str | None:
-    """Baut den kombinierten System-Prompt aus Agent-Prompt, Regeln, Kontext-Dateien und Workspace."""
+) -> _SystemPrompt:
+    """Baut den System-Prompt und merkt sich, welche Bausteine enthalten sind."""
     parts = []
+    names = []
     if system_prompt:
         parts.append(system_prompt)
+        names.append("agent_prompt")
     # Kontext-Dateien als statischer Kontext (spart Tokens vs. Chat-Messages)
-    context = _load_context_files(conversation)
+    context, loaded, skipped = _collect_context_files(conversation)
     if context:
         parts.append(context)
+        names.append("context_files")
     # Chat-Regeln (ohne context_files-Zeilen)
     rules = getattr(conversation, "rules", "") or ""
     clean_rules = "\n".join(
@@ -252,10 +277,24 @@ def _build_system_prompt(
     ).strip()
     if clean_rules:
         parts.append(f"Chat-Regeln:\n{clean_rules}")
+        names.append("rules")
     workspace_info = _build_workspace_info()
     if workspace_info:
         parts.append(workspace_info)
-    return "\n\n".join(parts) if parts else None
+        names.append("workspace_info")
+    return _SystemPrompt(
+        text="\n\n".join(parts) if parts else None,
+        parts=tuple(names),
+        context_files=tuple(loaded),
+        skipped_context_files=tuple(skipped),
+    )
+
+
+def _build_system_prompt(
+    system_prompt: str | None, conversation: Conversation
+) -> str | None:
+    """Baut den kombinierten System-Prompt aus Agent-Prompt, Regeln, Kontext-Dateien und Workspace."""
+    return _assemble_system_prompt(system_prompt, conversation).text
 
 
 def _is_private_target(host: str) -> bool:
@@ -334,6 +373,21 @@ def _provider_error_text(response) -> str:
 
 # ── Adapter ───────────────────────────────────────────────────────────────
 
+@dataclass(frozen=True)
+class PreparedRequest:
+    """Eine fertig gebaute Provider-Anfrage samt Kontext-Report.
+
+    Wird genau einmal gebaut; Wiederholungen (ResilientAdapter) und die
+    Vorschau verwenden dieselbe Anfrage.
+    """
+    url: str
+    params: dict | None
+    headers: dict
+    body: dict
+    report: ContextReport
+    stream: bool = False
+
+
 class UniversalAdapter:
     """Provider-agnostischer Adapter. Delegiert an ProviderProfile.
 
@@ -399,7 +453,6 @@ class UniversalAdapter:
         # Usage im Stream per stream_options anfordern (nur OpenAI-kompatible
         # Provider, die das Feld kennen; andere koennten es ablehnen).
         self._stream_usage = stream_usage
-        self._last_usage: TokenUsage | None = None
 
     @staticmethod
     def _extract_reasoning(data: dict) -> str:
@@ -420,19 +473,43 @@ class UniversalAdapter:
     def provider(self) -> str:
         return self._provider_name
 
-    @property
-    def last_usage(self) -> TokenUsage | None:
-        return self._last_usage
-
-    def complete(self, conversation: Conversation, participant: Participant) -> str:
-        messages = _format_messages(conversation, self._message_format, participant.id)
-        system = _build_system_prompt(self._system_prompt, conversation)
-        body = self._profile.build_body(messages, self._model, system)
+    def prepare_request(
+        self, conversation: Conversation, participant: Participant, *, stream: bool = False
+    ) -> PreparedRequest:
+        """Baut die Provider-Anfrage und den Kontext-Report daraus (ohne HTTP-Aufruf)."""
+        limit = MAX_MESSAGES
+        sent = _smart_truncate(conversation.messages, limit)
+        messages = _format_messages(conversation, self._message_format, participant.id, messages=sent)
+        system = _assemble_system_prompt(self._system_prompt, conversation)
+        body = self._profile.build_body(messages, self._model, system.text)
         if self._extra_body:
             body.update(self._extra_body)
-        headers = self._profile.build_headers(self._api_key)
         url, params = self._profile.build_url(self._api_url, self._model, self._api_key)
+        if stream:
+            # Provider-spezifisch: "stream"-Flag bzw. eigener Endpunkt (Gemini)
+            url, params, body = self._profile.prepare_stream(url, params, body)
+            if self._stream_usage:
+                body["stream_options"] = {"include_usage": True}
+        headers = self._profile.build_headers(self._api_key)
+        report = build_context_report(
+            all_messages=list(conversation.messages),
+            sent_messages=list(sent),
+            adapter="universal",
+            truncation_limit=limit,
+            system_parts=system.parts,
+            system_text=system.text,
+            context_files=system.context_files,
+            skipped_context_files=system.skipped_context_files,
+        )
+        return PreparedRequest(url=url, params=params, headers=headers, body=body,
+                               report=report, stream=stream)
 
+    def complete(self, conversation: Conversation, participant: Participant) -> Completion:
+        return self.send(self.prepare_request(conversation, participant))
+
+    def send(self, request: PreparedRequest) -> Completion:
+        """Fuehrt eine mit prepare_request() gebaute Anfrage aus."""
+        url, params, headers, body = request.url, request.params, request.headers, request.body
         logger.info("universal.complete request",
                     extra={"model": self._model, "provider": self._provider_name})
 
@@ -461,29 +538,21 @@ class UniversalAdapter:
                 f"Response: {str(data)[:500]}"
             )
 
-        self._extract_usage(data)
+        usage = self._extract_usage(data)
         text = str(text)
         if self._extracts_reasoning:
             text = self._wrap_reasoning(self._extract_reasoning(data), text)
-        return text
+        return Completion(text=text, usage=usage, report=request.report)
 
     def stream(
         self, conversation: Conversation, participant: Participant
-    ) -> Iterator[str]:
-        # Keine Token-Zahlen eines frueheren Aufrufs an diesen Stream weitergeben (A7).
-        self._last_usage = None
-        messages = _format_messages(conversation, self._message_format, participant.id)
-        system = _build_system_prompt(self._system_prompt, conversation)
-        body = self._profile.build_body(messages, self._model, system)
-        if self._extra_body:
-            body.update(self._extra_body)
-        url, params = self._profile.build_url(self._api_url, self._model, self._api_key)
-        # Provider-spezifisch: "stream"-Flag bzw. eigener Endpunkt (Gemini)
-        url, params, body = self._profile.prepare_stream(url, params, body)
-        if self._stream_usage:
-            body["stream_options"] = {"include_usage": True}
-        headers = self._profile.build_headers(self._api_key)
+    ) -> Iterator[str | Completion]:
+        """Liefert Text-Chunks und zum Abschluss ein Completion ohne Text (Usage, Report)."""
+        return self.send_stream(self.prepare_request(conversation, participant, stream=True))
 
+    def send_stream(self, request: PreparedRequest) -> Iterator[str | Completion]:
+        url, params, headers, body = request.url, request.params, request.headers, request.body
+        # Usage ist lokal pro Stream - nie die eines frueheren Aufrufs (A7).
         tokens: dict[str, int | None] = {"input": None, "output": None}
         with httpx.stream(
             "POST", url, json=body, headers=headers, params=params, timeout=self._timeout
@@ -499,9 +568,11 @@ class UniversalAdapter:
                 self._merge_stream_usage(tokens, usage_source)
                 if text:
                     yield text
+        usage = None
         if tokens["input"] is not None or tokens["output"] is not None:
-            self._last_usage = TokenUsage(input_tokens=tokens["input"] or 0,
-                                          output_tokens=tokens["output"] or 0)
+            usage = TokenUsage(input_tokens=tokens["input"] or 0,
+                               output_tokens=tokens["output"] or 0)
+        yield Completion(usage=usage, report=request.report)
 
     def _merge_stream_usage(self, tokens: dict, source: dict | None) -> None:
         """Uebernimmt Usage-Angaben eines Stream-Ereignisses (spaetere Werte gewinnen)."""
@@ -515,7 +586,7 @@ class UniversalAdapter:
             if isinstance(value, (int, float)):
                 tokens[slot] = int(value)
 
-    def _extract_usage(self, data: dict) -> None:
+    def _extract_usage(self, data: dict) -> TokenUsage | None:
         """Extrahiert Token-Usage aus der Response (optional)."""
         try:
             if self._usage_path:
@@ -527,11 +598,10 @@ class UniversalAdapter:
                 input_t = usage_obj.get(self._usage_input_key, 0)
                 output_t = usage_obj.get(self._usage_output_key, 0)
                 if input_t or output_t:
-                    self._last_usage = TokenUsage(
+                    return TokenUsage(
                         input_tokens=int(input_t),
                         output_tokens=int(output_t),
                     )
-                    return
         except Exception:
             pass
-        self._last_usage = None
+        return None

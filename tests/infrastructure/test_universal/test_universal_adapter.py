@@ -149,10 +149,10 @@ class TestComplete:
             message_format="standard",
         )
         result = adapter.complete(_conversation(), _participant())
-        assert result == "OpenAI sagt Hallo"
-        assert adapter.last_usage is not None
-        assert adapter.last_usage.input_tokens == 10
-        assert adapter.last_usage.output_tokens == 5
+        assert result.text == "OpenAI sagt Hallo"
+        assert result.usage is not None
+        assert result.usage.input_tokens == 10
+        assert result.usage.output_tokens == 5
 
     @patch("conclave.infrastructure.universal.adapter.httpx")
     def test_gemini_format(self, mock_httpx):
@@ -172,8 +172,8 @@ class TestComplete:
             usage_output_key="candidatesTokenCount",
         )
         result = adapter.complete(_conversation(), _participant())
-        assert result == "Gemini sagt Hallo"
-        assert adapter.last_usage.input_tokens == 8
+        assert result.text == "Gemini sagt Hallo"
+        assert result.usage.input_tokens == 8
 
     @patch("conclave.infrastructure.universal.adapter.httpx")
     def test_ollama_format(self, mock_httpx):
@@ -194,7 +194,7 @@ class TestComplete:
             provider_name="ollama",
         )
         result = adapter.complete(_conversation(), _participant())
-        assert result == "Llama sagt Hallo"
+        assert result.text == "Llama sagt Hallo"
 
     @patch("conclave.infrastructure.universal.adapter.httpx")
     def test_system_prompt_injected(self, mock_httpx):
@@ -351,7 +351,7 @@ class TestReasoningContent:
             extracts_reasoning=True,
         )
         result = adapter.complete(_conversation(), _participant())
-        assert result == "<think>\n2 + 2 ergibt 4.\n</think>\n\nDie Antwort ist 4."
+        assert result.text == "<think>\n2 + 2 ergibt 4.\n</think>\n\nDie Antwort ist 4."
 
     @patch("conclave.infrastructure.universal.adapter.httpx")
     def test_reasoning_unchanged_when_field_missing(self, mock_httpx):
@@ -367,8 +367,8 @@ class TestReasoningContent:
             extracts_reasoning=True,
         )
         result = adapter.complete(_conversation(), _participant())
-        assert result == "Antwort ohne Reasoning."
-        assert "<think>" not in result
+        assert result.text == "Antwort ohne Reasoning."
+        assert "<think>" not in result.text
 
     @patch("conclave.infrastructure.universal.adapter.httpx")
     def test_reasoning_unchanged_when_field_empty(self, mock_httpx):
@@ -387,8 +387,8 @@ class TestReasoningContent:
             extracts_reasoning=True,
         )
         result = adapter.complete(_conversation(), _participant())
-        assert result == "Antwort ohne Reasoning."
-        assert "<think>" not in result
+        assert result.text == "Antwort ohne Reasoning."
+        assert "<think>" not in result.text
 
     @patch("conclave.infrastructure.universal.adapter.httpx")
     def test_reasoning_ignored_when_flag_false(self, mock_httpx):
@@ -408,9 +408,9 @@ class TestReasoningContent:
             extracts_reasoning=False,  # Default
         )
         result = adapter.complete(_conversation(), _participant())
-        assert result == "Antwort."
-        assert "<think>" not in result
-        assert "Reasoning" not in result
+        assert result.text == "Antwort."
+        assert "<think>" not in result.text
+        assert "Reasoning" not in result.text
 
     @patch("conclave.infrastructure.universal.adapter.httpx")
     def test_reasoning_strips_whitespace(self, mock_httpx):
@@ -430,7 +430,7 @@ class TestReasoningContent:
         )
         result = adapter.complete(_conversation(), _participant())
         # Strip in _extract_reasoning sollte greifen
-        assert result.startswith("<think>\nreasoning mit leerzeichen\n</think>")
+        assert result.text.startswith("<think>\nreasoning mit leerzeichen\n</think>")
 
     def test_wrap_reasoning_helper(self):
         from conclave.infrastructure.universal.adapter import UniversalAdapter

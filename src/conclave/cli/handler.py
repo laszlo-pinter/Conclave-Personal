@@ -234,7 +234,8 @@ class CLIHandler:
             )]
             part = Participant(id=agent.id, conversation_id="test",
                                participant_type=ParticipantType.MODEL, name=agent.name)
-            response = adapter.complete(conv, part)
+            from conclave.domain.model_response import completion_text
+            response = completion_text(adapter.complete(conv, part))
             latency_ms = int((datetime.now(timezone.utc) - started).total_seconds() * 1000)
             return {
                 "success": True,

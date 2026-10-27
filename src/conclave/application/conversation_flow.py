@@ -30,6 +30,7 @@ from conclave.domain.errors import (
     NoFloorGranted,
     ParticipantNotRegistered,
 )
+from conclave.domain.model_response import Completion, completion_text
 from conclave.domain.participant import ParticipantType
 from conclave.domain.run import Run, UsageRecord
 from conclave.domain.tool_event import ToolEvent
@@ -137,8 +138,9 @@ class ConversationFlowService:
         self._run_repo.save(run)
 
     @staticmethod
-    def _usage_tokens(adapter) -> tuple[int | None, int | None]:
-        usage = getattr(adapter, "last_usage", None)
+    def _usage_tokens(result) -> tuple[int | None, int | None]:
+        """Token aus dem Rueckgabewert des Adapters (Completion); str liefert keine."""
+        usage = result.usage if isinstance(result, Completion) else None
         if usage is None:
             return None, None
         input_tokens = getattr(usage, "input_tokens", None)
@@ -489,8 +491,9 @@ class ConversationFlowService:
         try:
             with request_logger(logger, operation="invoke_with_floor",
                                 conversation_id=conversation_id, participant_id=participant_id):
-                response = adapter.complete(snapshot, participant)
-            input_tokens, output_tokens = self._usage_tokens(adapter)
+                result = adapter.complete(snapshot, participant)
+            response = completion_text(result)
+            input_tokens, output_tokens = self._usage_tokens(result)
             self._audit("invoke_with_floor", conversation_id, participant_id,
                         provider=provider, model=model, success=True,
                         input_tokens=input_tokens, output_tokens=output_tokens)
@@ -623,8 +626,9 @@ class ConversationFlowService:
         try:
             with request_logger(logger, operation="invoke_participant",
                                 conversation_id=conversation_id, participant_id=participant_id):
-                response = adapter.complete(snapshot, participant)
-            it, ot = self._usage_tokens(adapter)
+                result = adapter.complete(snapshot, participant)
+            response = completion_text(result)
+            it, ot = self._usage_tokens(result)
             self._audit("invoke_participant", conversation_id, participant_id,
                         provider=provider, model=model, success=True,
                         input_tokens=it, output_tokens=ot)
@@ -681,17 +685,23 @@ class ConversationFlowService:
                       extra={"conversation_id": conversation_id, "participant_id": participant_id})
 
         try:
+            result = None
             if isinstance(adapter, StreamingModelAdapter):
                 tokens: list[str] = []
                 for token in adapter.stream(snapshot, participant):
+                    if isinstance(token, Completion):
+                        # Abschluss des Streams: Usage und Report, kein Text
+                        result = token
+                        continue
                     tokens.append(token)
                     yield token
                 full_content = "".join(tokens)
             else:
-                full_content = adapter.complete(snapshot, participant)
+                result = adapter.complete(snapshot, participant)
+                full_content = completion_text(result)
                 yield full_content
 
-            input_tokens, output_tokens = self._usage_tokens(adapter)
+            input_tokens, output_tokens = self._usage_tokens(result)
             self._audit("stream_participant", conversation_id, participant_id,
                         provider=provider, model=model, success=True,
                         input_tokens=input_tokens, output_tokens=output_tokens)
@@ -774,14 +784,15 @@ class ConversationFlowService:
             with request_logger(logger, operation="async_invoke_participant",
                                 conversation_id=conversation_id, participant_id=participant_id):
                 if inspect.iscoroutinefunction(adapter.complete):
-                    response = await adapter.complete(snapshot, participant)
+                    result = await adapter.complete(snapshot, participant)
                 else:
                     # Sync-Adapter (anthropic, openai, universal, resilient) wuerde die
                     # Event-Loop blockieren -> asyncio.gather waere de-facto sequenziell.
                     # asyncio.to_thread legt den sync-Call in einen Worker-Thread, sodass
                     # mehrere Adapter in derselben Gruppe wirklich gleichzeitig laufen.
-                    response = await asyncio.to_thread(adapter.complete, snapshot, participant)
-            input_tokens, output_tokens = self._usage_tokens(adapter)
+                    result = await asyncio.to_thread(adapter.complete, snapshot, participant)
+            response = completion_text(result)
+            input_tokens, output_tokens = self._usage_tokens(result)
             self._audit("async_invoke_participant", conversation_id, participant_id,
                         provider=provider, model=model, success=True,
                         input_tokens=input_tokens, output_tokens=output_tokens)
@@ -834,20 +845,25 @@ class ConversationFlowService:
                       extra={"conversation_id": conversation_id, "participant_id": participant_id})
 
         tokens: list[str] = []
+        result = None
         try:
             if hasattr(adapter, "stream"):
                 async for token in adapter.stream(snapshot, participant):
+                    if isinstance(token, Completion):
+                        result = token
+                        continue
                     tokens.append(token)
                     yield token
             else:
                 if inspect.iscoroutinefunction(adapter.complete):
-                    full = await adapter.complete(snapshot, participant)
+                    result = await adapter.complete(snapshot, participant)
                 else:
-                    full = adapter.complete(snapshot, participant)
+                    result = adapter.complete(snapshot, participant)
+                full = completion_text(result)
                 tokens.append(full)
                 yield full
 
-            input_tokens, output_tokens = self._usage_tokens(adapter)
+            input_tokens, output_tokens = self._usage_tokens(result)
             self._audit("async_stream_participant", conversation_id, participant_id,
                         provider=provider, model=model, success=True,
                         input_tokens=input_tokens, output_tokens=output_tokens)
