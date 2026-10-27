@@ -49,6 +49,8 @@ SCHEMAS = {
             "id": {"type": "string"}, "name": {"type": "string"}, "provider": {"type": "string"},
             "model": {"type": "string"}, "preset": {"type": "string"}, "api_key": {"type": "string"},
             "api_url": {"type": "string"}, "system_prompt": {"type": "string"},
+            "max_messages": {"type": "integer", "minimum": 0, "nullable": True,
+                             "description": "Kuerzungslimit: null = globaler Default, 0 = keine Kuerzung"},
         }},
     },
     ("POST", "/conversations/<conversation_id>/orchestrate"): {

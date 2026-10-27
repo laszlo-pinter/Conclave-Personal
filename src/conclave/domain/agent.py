@@ -25,6 +25,9 @@ class Agent:
     response_path: str = ""           # JSONPath zur Antwort
     message_format: str = "standard"  # "standard" | "gemini" | "anthropic"
     created_at: datetime = None
+    # Kuerzungslimit: None = globaler Default (CONCLAVE_MAX_MESSAGES, nur Preset-Agenten),
+    # 0 = keine Kuerzung, sonst hoechstens so viele Nachrichten
+    max_messages: int | None = None
 
     def __post_init__(self) -> None:
         if not self.id.strip():
@@ -33,5 +36,9 @@ class Agent:
             raise ValueError("name must not be empty")
         if not self.provider.strip():
             raise ValueError("provider must not be empty")
+        if self.max_messages is not None and (
+            isinstance(self.max_messages, bool) or not isinstance(self.max_messages, int) or self.max_messages < 0
+        ):
+            raise ValueError("max_messages must be empty or a whole number >= 0")
         if self.created_at is None:
             object.__setattr__(self, "created_at", datetime.now(UTC))

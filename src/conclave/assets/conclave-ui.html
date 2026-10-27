@@ -391,6 +391,7 @@
     <div id="advancedFields" style="display:none">
       <div class="field"><label data-i18n="agents.apiUrl">API-URL</label><input type="text" id="aApiUrl" placeholder="Wird vom Preset gesetzt" data-i18n-placeholder="agents.urlFromPreset"/></div>
       <div class="field"><label data-i18n="agents.responsePath">Response-Path</label><input type="text" id="aResponsePath" placeholder="z.B. choices[0].message.content"/></div>
+      <div class="field"><label data-i18n="agents.maxMessages">Max. Nachrichten</label><input type="number" id="aMaxMessages" min="0" step="1" placeholder="Standard" data-i18n-placeholder="agents.maxMessagesPlaceholder"/><div class="field-hint" data-i18n="agents.maxMessagesHint">Wie viele Nachrichten der Agent pro Aufruf sieht. Leer = Standard, 0 = keine Kuerzung.</div></div>
       <div class="field"><label data-i18n="agents.messageFormat">Message-Format</label>
         <select id="aMsgFormat">
           <option value="standard">Standard (OpenAI/Mistral/Ollama)</option>

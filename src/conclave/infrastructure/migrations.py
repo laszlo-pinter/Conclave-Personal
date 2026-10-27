@@ -67,6 +67,11 @@ MIGRATIONS: list[Migration] = [
         description="Kontext-Reports je Modellaufruf (welcher Kontext an den Provider ging)",
         fn=lambda connection, is_postgres: _create_context_reports_table(connection, is_postgres),
     ),
+    Migration(
+        id="008_agent_max_messages",
+        description="Kuerzungslimit pro Agent (NULL = globaler Default, 0 = keine Kuerzung)",
+        sql="ALTER TABLE agents ADD COLUMN max_messages INTEGER",
+    ),
 ]
 
 

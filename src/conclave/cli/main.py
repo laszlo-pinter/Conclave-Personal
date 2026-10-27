@@ -164,6 +164,8 @@ def build_parser() -> argparse.ArgumentParser:
     agent_new.add_argument("--api-url",       default="", dest="api_url")
     agent_new.add_argument("--response-path", default="", dest="response_path")
     agent_new.add_argument("--message-format", default="standard", dest="message_format")
+    agent_new.add_argument("--max-messages", default=None, type=int, dest="max_messages",
+                           help="Kuerzungslimit (0 = keine Kuerzung, leer = globaler Default)")
 
     agent_edit = sub.add_parser("agent-edit", help="Agenten bearbeiten")
     agent_edit.add_argument("id")
@@ -179,6 +181,9 @@ def build_parser() -> argparse.ArgumentParser:
     agent_edit.add_argument("--api-url",       default="", dest="api_url")
     agent_edit.add_argument("--response-path", default="", dest="response_path")
     agent_edit.add_argument("--message-format", default="standard", dest="message_format")
+    agent_edit.add_argument("--max-messages", default=None, dest="max_messages",
+                            help="Kuerzungslimit: Zahl (0 = keine Kuerzung) oder 'default'; "
+                                 "weglassen = bestehenden Wert behalten")
 
     agent_del = sub.add_parser("agent-delete", help="Agenten löschen")
     agent_del.add_argument("id")
@@ -364,7 +369,8 @@ def run(argv: list[str] | None = None) -> int:
                           system_prompt=args.system_prompt,
                           preset=args.preset, api_url=args.api_url,
                           response_path=args.response_path,
-                          message_format=args.message_format)
+                          message_format=args.message_format,
+                          max_messages=args.max_messages)
         except ValueError as e:
             print(f"{_err(sys.stderr)} {e}", file=sys.stderr)
             return 1
@@ -377,6 +383,17 @@ def run(argv: list[str] | None = None) -> int:
         created_at = datetime.fromisoformat(existing.data["created_at"]) if existing.success else None
         # api_key: explizit uebergeben; leer = gespeicherten Key behalten (handler.update_agent)
         api_key = args.api_key or ""
+        # max_messages: weglassen = behalten, "default" = globaler Default, Zahl = Limit
+        if args.max_messages is None:
+            max_messages = existing.data.get("max_messages") if existing.success else None
+        elif str(args.max_messages).strip().lower() in ("default", ""):
+            max_messages = None
+        else:
+            try:
+                max_messages = int(args.max_messages)
+            except ValueError:
+                print(f"{_err(sys.stderr)} --max-messages: Zahl oder 'default' erwartet", file=sys.stderr)
+                return 1
         try:
             agent = Agent(id=args.id, name=args.name, provider=args.provider,
                           model=args.model, api_key=api_key,
@@ -385,6 +402,7 @@ def run(argv: list[str] | None = None) -> int:
                           preset=args.preset, api_url=args.api_url,
                           response_path=args.response_path,
                           message_format=args.message_format,
+                          max_messages=max_messages,
                           created_at=created_at)
         except ValueError as e:
             print(f"{_err(sys.stderr)} {e}", file=sys.stderr)

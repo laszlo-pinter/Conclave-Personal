@@ -110,6 +110,25 @@ def test_v023_database_migrates_without_data_loss(pg):
         assert cur.fetchone()[0] == 1
         cur.execute("SELECT id FROM _migrations WHERE id = '007_context_reports'")
         assert cur.fetchone() is not None
+        cur.execute("SELECT id FROM _migrations WHERE id = '008_agent_max_messages'")
+        assert cur.fetchone() is not None
+        cur.execute("SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'agents' AND column_name = 'max_messages'")
+        assert cur.fetchone() is not None
+
+
+@pytest.mark.parametrize("value", [None, 0, 12])
+def test_agent_max_messages_roundtrip(pg, value):
+    from conclave.domain.agent import Agent
+    from conclave.infrastructure.crypto import CryptoService
+    from conclave.infrastructure.postgres.agent_repository import PostgresAgentRepository
+    from conclave.infrastructure.postgres.schema import initialize_schema
+
+    initialize_schema(pg)
+    from cryptography.fernet import Fernet
+    repo = PostgresAgentRepository(pg, CryptoService(Fernet.generate_key()))
+    repo.save(Agent(id="a", name="A", provider="openai", model="m", max_messages=value))
+    assert repo.get("a").max_messages == value
 
 
 def test_context_reports_have_enforced_foreign_keys(env):

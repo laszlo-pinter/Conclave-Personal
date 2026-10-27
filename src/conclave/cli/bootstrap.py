@@ -279,10 +279,12 @@ def _make_adapter(agent_or_provider, api_key: str = "", model: str = "", system_
     try:
         if provider == "anthropic":
             from conclave.infrastructure.anthropic.adapter import AnthropicAdapter
-            return AnthropicAdapter(api_key=key, model=model, system_prompt=system_prompt)
+            return AnthropicAdapter(api_key=key, model=model, system_prompt=system_prompt,
+                                    max_messages=agent.max_messages if agent else None)
         elif provider == "openai":
             from conclave.infrastructure.openai.adapter import OpenAIAdapter
-            return OpenAIAdapter(api_key=key, model=model, system_prompt=system_prompt)
+            return OpenAIAdapter(api_key=key, model=model, system_prompt=system_prompt,
+                                 max_messages=agent.max_messages if agent else None)
     except ImportError:
         pass
 
@@ -328,5 +330,6 @@ def _make_universal_adapter(agent, api_key: str):
         usage_output_key=usage_output_key,
         extra_body=extra_body,
         extracts_reasoning=extracts_reasoning,
+        max_messages=agent.max_messages,
         stream_usage=stream_usage,
     )

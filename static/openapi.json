@@ -205,6 +205,12 @@
                   },
                   "system_prompt": {
                     "type": "string"
+                  },
+                  "max_messages": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "nullable": true,
+                    "description": "Kuerzungslimit: null = globaler Default, 0 = keine Kuerzung"
                   }
                 }
               }

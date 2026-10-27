@@ -131,6 +131,24 @@ def attach_context_report(exc: BaseException, report: ContextReport | None) -> N
         pass
 
 
+def select_messages(messages: list[Message], limit: int | None) -> list[Message]:
+    """Waehlt die gesendeten Nachrichten: erste User-Nachricht (Anker) + die letzten.
+
+    ``limit`` None oder 0 = keine Kuerzung. Die erste User-Nachricht enthaelt
+    oft die Aufgabenstellung und bleibt deshalb erhalten.
+    """
+    messages = list(messages)
+    if not limit or len(messages) <= limit:
+        return messages
+    if limit == 1:
+        return messages[-1:]
+    first_user = next((m for m in messages if m.author_type == MessageAuthorType.USER), None)
+    tail = messages[-(limit - 1):] if first_user else messages[-limit:]
+    if first_user is not None and first_user not in tail:
+        return [first_user] + tail
+    return tail
+
+
 def requested_context_files(rules: str) -> list[str]:
     """Pfade aus 'context_files: a.md, b.md'-Zeilen der Chat-Regeln."""
     paths = []
@@ -142,8 +160,9 @@ def requested_context_files(rules: str) -> list[str]:
     return paths
 
 
-def native_context_report(conversation, system, *, adapter: str) -> ContextReport:
-    """Report fuer native Adapter: voller Verlauf, keine Kuerzung.
+def native_context_report(conversation, system, *, adapter: str,
+                          sent: list[Message] | None = None, limit: int | None = None) -> ContextReport:
+    """Report fuer native Adapter: voller Verlauf, ausser ein Agent-Limit ist gesetzt.
 
     ``system`` ist der gebaute System-Prompt (text, parts, context_files,
     skipped_context_files) - derselbe wie beim UniversalAdapter.
@@ -151,8 +170,9 @@ def native_context_report(conversation, system, *, adapter: str) -> ContextRepor
     messages = list(conversation.messages)
     return build_context_report(
         all_messages=messages,
-        sent_messages=messages,
+        sent_messages=list(sent) if sent is not None else messages,
         adapter=adapter,
+        truncation_limit=limit or None,
         system_parts=system.parts,
         system_text=system.text,
         context_files=system.context_files,

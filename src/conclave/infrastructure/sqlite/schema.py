@@ -56,6 +56,7 @@ def initialize_schema(connection: sqlite3.Connection) -> None:
             api_url       TEXT NOT NULL DEFAULT '',
             response_path TEXT NOT NULL DEFAULT '',
             message_format TEXT NOT NULL DEFAULT 'standard',
+            max_messages INTEGER,
             created_at    TEXT NOT NULL
         )
     """)

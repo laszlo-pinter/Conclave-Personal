@@ -51,6 +51,7 @@ def initialize_schema(connection) -> None:
                 api_url       TEXT NOT NULL DEFAULT '',
                 response_path TEXT NOT NULL DEFAULT '',
                 message_format TEXT NOT NULL DEFAULT 'standard',
+                max_messages INTEGER,
                 created_at    TIMESTAMPTZ NOT NULL
             )
         """)

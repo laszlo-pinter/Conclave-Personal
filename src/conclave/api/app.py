@@ -407,6 +407,17 @@ def create_app(handler: CLIHandler, auth_service=None,
             return jsonify({"error": result.message}), 404
         return jsonify(result.data), 200
 
+    def _max_messages_from(body: dict, current=None):
+        """max_messages aus dem Request: fehlt das Feld, bleibt ``current``; null = Default."""
+        if "max_messages" not in body:
+            return current
+        value = body["max_messages"]
+        if value is None or value == "":
+            return None
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError("max_messages muss leer oder eine ganze Zahl >= 0 sein.")
+        return value
+
     @app.post("/agents")
     def create_agent():
         from conclave.domain.agent import Agent
@@ -427,6 +438,7 @@ def create_app(handler: CLIHandler, auth_service=None,
                 api_url=body.get("api_url", ""),
                 response_path=body.get("response_path", ""),
                 message_format=body.get("message_format", "standard"),
+                max_messages=_max_messages_from(body),
             )
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
@@ -448,6 +460,9 @@ def create_app(handler: CLIHandler, auth_service=None,
         try:
             existing = handler.get_agent(agent_id)
             created_at = None
+            # Ohne Angabe bleibt das gespeicherte Limit erhalten (wie beim API-Key)
+            max_messages = _max_messages_from(
+                body, existing.data.get("max_messages") if existing.success else None)
             if existing.success:
                 from datetime import datetime
                 created_at = datetime.fromisoformat(existing.data["created_at"])
@@ -460,6 +475,7 @@ def create_app(handler: CLIHandler, auth_service=None,
                 api_url=body.get("api_url", ""),
                 response_path=body.get("response_path", ""),
                 message_format=body.get("message_format", "standard"),
+                max_messages=max_messages,
                 created_at=created_at,
             )
         except (ValueError, Exception) as e:

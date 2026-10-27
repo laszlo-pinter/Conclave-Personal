@@ -144,6 +144,7 @@ class CLIHandler:
             "api_url": a.api_url,
             "response_path": a.response_path,
             "message_format": a.message_format,
+            "max_messages": a.max_messages,
             "created_at": a.created_at.isoformat(),
         }
 

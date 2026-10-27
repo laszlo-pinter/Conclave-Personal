@@ -33,7 +33,12 @@ from typing import Any
 
 import httpx
 
-from conclave.domain.context_report import ContextReport, attach_context_report, build_context_report
+from conclave.domain.context_report import (
+    ContextReport,
+    attach_context_report,
+    build_context_report,
+    select_messages,
+)
 from conclave.domain.conversation import Conversation
 from conclave.domain.message import MessageAuthorType
 from conclave.domain.model_response import Completion, TokenUsage
@@ -61,24 +66,8 @@ MAX_MESSAGES = int(os.environ.get("CONCLAVE_MAX_MESSAGES", "25"))
 
 
 def _smart_truncate(messages: list, max_messages: int) -> list:
-    """Behaelt erste User-Message (Kontext-Anker) + letzte N-1 Messages.
-
-    Wenn die Conversation laenger ist als max_messages, wird die erste
-    User-Message immer beibehalten (sie enthaelt oft die Aufgabenstellung),
-    gefolgt von den letzten max_messages-1 Messages.
-    """
-    if len(messages) <= max_messages:
-        return messages
-    # Erste User-Message finden
-    first_user = None
-    for msg in messages:
-        if getattr(msg, "author_type", None) == MessageAuthorType.USER:
-            first_user = msg
-            break
-    tail = messages[-(max_messages - 1):] if first_user else messages[-max_messages:]
-    if first_user and first_user not in tail:
-        return [first_user] + list(tail)
-    return list(tail)
+    """Behaelt erste User-Message (Kontext-Anker) + letzte N-1 Messages (siehe select_messages)."""
+    return select_messages(messages, max_messages)
 
 
 _STREAM_DONE = object()
@@ -287,6 +276,7 @@ class UniversalAdapter:
         extra_body: dict | None = None,
         extracts_reasoning: bool = False,
         stream_usage: bool = False,
+        max_messages: int | None = None,
     ) -> None:
         # Profile bestimmen: message_format > auth_format > standard
         profile_key = message_format
@@ -311,6 +301,8 @@ class UniversalAdapter:
         # Usage im Stream per stream_options anfordern (nur OpenAI-kompatible
         # Provider, die das Feld kennen; andere koennten es ablehnen).
         self._stream_usage = stream_usage
+        # None = globaler Default (CONCLAVE_MAX_MESSAGES), 0 = keine Kuerzung
+        self._max_messages = max_messages
 
     @staticmethod
     def _extract_reasoning(data: dict) -> str:
@@ -335,8 +327,8 @@ class UniversalAdapter:
         self, conversation: Conversation, participant: Participant, *, stream: bool = False
     ) -> PreparedRequest:
         """Baut die Provider-Anfrage und den Kontext-Report daraus (ohne HTTP-Aufruf)."""
-        limit = MAX_MESSAGES
-        sent = _smart_truncate(conversation.messages, limit)
+        limit = MAX_MESSAGES if self._max_messages is None else self._max_messages
+        sent = select_messages(conversation.messages, limit)
         messages = _format_messages(conversation, self._message_format, participant.id, messages=sent)
         system = _assemble_system_prompt(self._system_prompt, conversation)
         body = self._profile.build_body(messages, self._model, system.text)
@@ -353,7 +345,7 @@ class UniversalAdapter:
             all_messages=list(conversation.messages),
             sent_messages=list(sent),
             adapter="universal",
-            truncation_limit=limit,
+            truncation_limit=limit or None,
             system_parts=system.parts,
             system_text=system.text,
             context_files=system.context_files,
