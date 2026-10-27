@@ -70,7 +70,10 @@ Header `X-Conclave-Client`, sonst `415`. Anfragen mit nicht erlaubtem
 Zu jedem Modellaufruf speichert Conclave, welcher Kontext an den Provider ging.
 Gespeichert werden nur Metadaten (Anzahlen, Sequenznummern, Dateipfade und
 -größen), nie der Prompt selbst. Auch fehlgeschlagene Aufrufe bekommen einen
-Report, verknüpft mit dem Run, aber ohne Nachricht.
+Report, verknüpft mit dem Run, aber ohne Nachricht. Dasselbe Bild entsteht bei
+paralleler Orchestrierung, wenn eine Antwort zwar erzeugt, aber nicht mehr
+gespeichert werden konnte (der Report wird vor dem Speichern angelegt). Das ist
+kein Datenfehler.
 
 - `GET /conversations/<id>` und die Antworten von Invoke, Orchestrierung,
   Parallel-Stream (`response`-Events) und Auto-Loop (`response`-Events)

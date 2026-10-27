@@ -446,6 +446,12 @@ class CLIHandler:
                 message=f"Conversation '{conversation_id}' nicht gefunden.",
             )
 
+        # Eine Abfrage fuer alle Reports statt einer pro Nachricht
+        contexts = {
+            r.message_id: r.compact()
+            for r in self._service.list_context_reports(conversation_id)
+            if r.message_id
+        }
         return CLIResult(
             success=True,
             message=f"Conversation {conversation_id}",
@@ -461,7 +467,7 @@ class CLIHandler:
                         "author_type": m.author_type.value,
                         "author_id": m.author_id,
                         "content": m.content,
-                        "context": self._context_for_message(m.id),
+                        "context": contexts.get(m.id),
                         "tool_events": [
                             self._tool_event_to_dict(event)
                             for event in self._service.list_tool_events_by_message(m.id)
