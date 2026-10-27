@@ -72,6 +72,11 @@ MIGRATIONS: list[Migration] = [
         description="Kuerzungslimit pro Agent (NULL = globaler Default, 0 = keine Kuerzung)",
         sql="ALTER TABLE agents ADD COLUMN max_messages INTEGER",
     ),
+    Migration(
+        id="009_consultations",
+        description="Consultations (Zweitmeinung zu Kanzo-Tickets) und ihre Zustellungen",
+        fn=lambda connection, is_postgres: _create_consultations_tables(connection, is_postgres),
+    ),
 ]
 
 
@@ -205,6 +210,86 @@ def _create_context_reports_table(connection, is_postgres: bool) -> None:
             )
         """)
         connection.execute(index)
+
+
+def _create_consultations_tables(connection, is_postgres: bool) -> None:
+    indexes = (
+        "CREATE INDEX IF NOT EXISTS idx_consultations_ref ON consultations(source, source_ref, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_consultations_status ON consultations(status)",
+        "CREATE INDEX IF NOT EXISTS idx_deliveries_consultation ON consultation_deliveries(consultation_id)",
+    )
+    if is_postgres:
+        with connection.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS consultations (
+                    id               TEXT PRIMARY KEY,
+                    source           TEXT NOT NULL,
+                    source_ref       TEXT NOT NULL,
+                    question         TEXT NOT NULL,
+                    reviewers_json   TEXT NOT NULL,
+                    channel          TEXT NOT NULL,
+                    mode             TEXT NOT NULL,
+                    context          TEXT NOT NULL DEFAULT '',
+                    requested_by     TEXT NOT NULL DEFAULT '',
+                    include_previous BOOLEAN NOT NULL DEFAULT FALSE,
+                    status           TEXT NOT NULL,
+                    error            TEXT,
+                    conversation_id  TEXT,
+                    created_at       TIMESTAMPTZ NOT NULL,
+                    finished_at      TIMESTAMPTZ
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS consultation_deliveries (
+                    id              TEXT PRIMARY KEY,
+                    consultation_id TEXT NOT NULL REFERENCES consultations(id),
+                    participant_id  TEXT NOT NULL,
+                    message_id      TEXT,
+                    marker          TEXT NOT NULL,
+                    status          TEXT NOT NULL,
+                    attempts        INTEGER NOT NULL DEFAULT 0,
+                    error           TEXT,
+                    delivered_at    TIMESTAMPTZ
+                )
+            """)
+            for index in indexes:
+                cur.execute(index)
+    else:
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS consultations (
+                id               TEXT PRIMARY KEY,
+                source           TEXT NOT NULL,
+                source_ref       TEXT NOT NULL,
+                question         TEXT NOT NULL,
+                reviewers_json   TEXT NOT NULL,
+                channel          TEXT NOT NULL,
+                mode             TEXT NOT NULL,
+                context          TEXT NOT NULL DEFAULT '',
+                requested_by     TEXT NOT NULL DEFAULT '',
+                include_previous INTEGER NOT NULL DEFAULT 0,
+                status           TEXT NOT NULL,
+                error            TEXT,
+                conversation_id  TEXT,
+                created_at       TEXT NOT NULL,
+                finished_at      TEXT
+            )
+        """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS consultation_deliveries (
+                id              TEXT PRIMARY KEY,
+                consultation_id TEXT NOT NULL,
+                participant_id  TEXT NOT NULL,
+                message_id      TEXT,
+                marker          TEXT NOT NULL,
+                status          TEXT NOT NULL,
+                attempts        INTEGER NOT NULL DEFAULT 0,
+                error           TEXT,
+                delivered_at    TEXT,
+                FOREIGN KEY(consultation_id) REFERENCES consultations(id)
+            )
+        """)
+        for index in indexes:
+            connection.execute(index)
 
 
 # ── Runner ────────────────────────────────────────────────────────────────

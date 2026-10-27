@@ -84,6 +84,34 @@ conclave invoke $conv reviewer
 conclave runs --conversation-id $conv
 ```
 
+## 5. Zweitmeinung Zu Einem Kanzo-Ticket
+
+Ziel: Ein Coding-Agent oder du selbst holt zu einem Ticket aus
+[Kanzo](https://github.com/emanuele-em/kanzo) unabhängige Meinungen mehrerer
+Modelle ein; sie landen als gekennzeichnete Kommentare im Ticket.
+
+Einmalig in `config.toml` (Agent-IDs aus `conclave agents`):
+
+```toml
+[kanzo]
+reviewers = ["gpt", "claude"]
+```
+
+Dann über die API (Token aus `api.token`):
+
+```powershell
+$h = @{ Authorization = "Bearer $(Get-Content $env:APPDATA\Conclave\api.token)" }
+$c = Invoke-RestMethod -Method Post -Uri http://localhost:8000/consultations -Headers $h `
+  -ContentType "application/json" -Body '{"task": "api#12", "question": "Ist der Fix richtig?"}'
+Invoke-RestMethod -Uri "http://localhost:8000/consultations/$($c.id)" -Headers $h
+```
+
+Ein Coding-Agent mit dem Conclave-MCP-Server nutzt `conclave_consult` und
+`conclave_get_consultation`. Die Antworten stehen danach im Kanzo-Board unter
+dem Ticket, jeweils mit „Zweitmeinung von … über Conclave, nicht geprüft“.
+Die vollständigen Antworten und ihre Kosten zeigt Conclave in der
+Conversation `kanzo:api#12 · <id>`.
+
 ## Hinweise
 
 - `conclave desktop` ist der normale Einstieg.

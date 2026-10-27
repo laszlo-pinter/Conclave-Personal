@@ -140,6 +140,37 @@ def _build_sqlite(config):
     return service, agent_service, conn
 
 
+def _build_consultations(service, agent_service, conn, config):
+    """Consultations (Kanzo): Repository, Kanzo-Adapter, Ablauf, Worker, Anfragen."""
+    from conclave.application.consultation_service import ConsultationService
+    from conclave.application.consultation_worker import ConsultationWorker
+    from conclave.application.consultations import ConsultationRequests
+    from conclave.infrastructure.kanzo.adapter import KanzoMcpAdapter
+
+    if config.db_provider == "postgres":
+        from conclave.infrastructure.postgres.consultation_repository import PostgresConsultationRepository
+        repo = PostgresConsultationRepository(conn)
+    else:
+        from conclave.infrastructure.sqlite.consultation_repository import SQLiteConsultationRepository
+        repo = SQLiteConsultationRepository(conn, autocommit=True)
+
+    def reviewer_name(agent_id: str) -> str:
+        try:
+            return agent_service.get_agent(agent_id).name
+        except Exception:  # noqa: BLE001 - Anzeige-Name, Fallback auf die ID
+            return agent_id
+
+    kanzo = KanzoMcpAdapter(config.kanzo.url)
+    processor = ConsultationService(service, repo, kanzo, kanzo,
+                                    comment_max_chars=config.kanzo.comment_max_chars,
+                                    reviewer_name=reviewer_name)
+    worker = ConsultationWorker(repo, processor)
+    requests = ConsultationRequests(repo, worker, kanzo, allowed_reviewers=config.kanzo.reviewers,
+                                    max_per_hour=config.kanzo.max_per_hour,
+                                    provider_label=processor.provider_label)
+    return requests, worker
+
+
 def _build_app(config: ConclaveConfig | None = None):
     """Baut die Flask-App mit allen Services."""
     if config is None:
@@ -175,9 +206,12 @@ def _build_app(config: ConclaveConfig | None = None):
         config.api_key = load_or_create_token()
     auth_service = StaticKeyAuthService(config.api_key)
 
+    consultations, worker = _build_consultations(service, agent_service, conn, config)
     app = create_app(handler, auth_service=auth_service,
                      agent_service=agent_service, config=config,
-                     service=service)
+                     service=service, consultations=consultations)
+    # Gestartet wird der Worker erst in runtime.serve.serve() (nicht hier, nicht in create_app)
+    app.extensions["conclave_workers"] = [worker]
     if isinstance(conn, ThreadLocalConnection):
         _finish_transactions_per_request(app, conn)
     return app, config

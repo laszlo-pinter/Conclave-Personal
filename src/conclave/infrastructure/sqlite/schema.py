@@ -152,6 +152,43 @@ def initialize_schema(connection: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_context_reports_message ON context_reports(message_id)"
     )
 
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS consultations (
+            id               TEXT PRIMARY KEY,
+            source           TEXT NOT NULL,
+            source_ref       TEXT NOT NULL,
+            question         TEXT NOT NULL,
+            reviewers_json   TEXT NOT NULL,
+            channel          TEXT NOT NULL,
+            mode             TEXT NOT NULL,
+            context          TEXT NOT NULL DEFAULT '',
+            requested_by     TEXT NOT NULL DEFAULT '',
+            include_previous INTEGER NOT NULL DEFAULT 0,
+            status           TEXT NOT NULL,
+            error            TEXT,
+            conversation_id  TEXT,
+            created_at       TEXT NOT NULL,
+            finished_at      TEXT
+        )
+    """)
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS consultation_deliveries (
+            id              TEXT PRIMARY KEY,
+            consultation_id TEXT NOT NULL,
+            participant_id  TEXT NOT NULL,
+            message_id      TEXT,
+            marker          TEXT NOT NULL,
+            status          TEXT NOT NULL,
+            attempts        INTEGER NOT NULL DEFAULT 0,
+            error           TEXT,
+            delivered_at    TEXT,
+            FOREIGN KEY(consultation_id) REFERENCES consultations(id)
+        )
+    """)
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_consultations_ref ON consultations(source, source_ref, created_at)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_consultations_status ON consultations(status)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_deliveries_consultation ON consultation_deliveries(consultation_id)")
+
     connection.commit()
 
     # Migrationen fuer bestehende DBs (fuegt fehlende Spalten hinzu)

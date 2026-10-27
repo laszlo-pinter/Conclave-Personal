@@ -124,6 +124,39 @@ SCHEMAS = {
             "participant_id": {"type": "string"}, "report": {"type": "object"},
         }},
     },
+    ("POST", "/consultations"): {
+        "request": {"required": ["task", "question"], "properties": {
+            "task": {"type": "string", "example": "api#12"},
+            "question": {"type": "string", "maxLength": 4000},
+            "context": {"type": "string", "maxLength": 8000},
+            "reviewers": {"type": "array", "items": {"type": "string"},
+                          "description": "Teilmenge von [kanzo] reviewers; Standard: alle erlaubten"},
+            "include_previous": {"type": "boolean", "default": False},
+            "channel": {"type": "string", "enum": ["rest", "mcp"], "default": "rest"},
+            "requested_by": {"type": "string"},
+        }},
+        "response": {"required": ["id", "status", "reviewers"], "properties": {
+            "id": {"type": "string"}, "status": {"type": "string"}, "task": {"type": "string"},
+            "reviewers": {"type": "array", "items": {"type": "object", "properties": {
+                "id": {"type": "string"}, "provider": {"type": "string"}}}},
+        }},
+    },
+    ("GET", "/consultations/<consultation_id>"): {
+        "response": {"required": ["id", "status", "deliveries"], "properties": {
+            "id": {"type": "string"}, "status": {"type": "string"}, "error": {"type": "string"},
+            "conversation_id": {"type": "string"},
+            "deliveries": {"type": "array", "items": {"type": "object"}},
+            "retry_possible": {"type": "boolean"},
+        }},
+    },
+    ("GET", "/consultations"): {
+        "response": {"required": ["consultations"], "properties": {
+            "consultations": {"type": "array", "items": {"type": "object"}}}},
+    },
+    ("POST", "/consultations/<consultation_id>/retry"): {
+        "request": {"properties": {"rerun": {"type": "boolean", "default": False,
+                                             "description": "true: Modelle erneut aufrufen (neue Consultation)"}}},
+    },
     ("GET", "/conversations/<conversation_id>/tool-events"): {
         "response": {"required": ["tool_events"], "properties": {"tool_events": {"type": "array", "items": {
             "type": "object",

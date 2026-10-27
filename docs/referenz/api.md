@@ -1,6 +1,6 @@
 # API-Referenz
 
-**50 dokumentierte Endpoints** — öffentliche Personal-API.
+**54 dokumentierte Endpoints** — öffentliche Personal-API.
 
 Alle Endpoints außer `GET /`, `/static/*`, `GET /health`, `GET /api-docs` und
 `GET /openapi.json` verlangen ein Token (`Authorization: Bearer <token>` oder
@@ -38,6 +38,10 @@ Header `X-Conclave-Client`, sonst `415`. Anfragen mit nicht erlaubtem
 | `GET` | `/conversations/<conversation_id>/messages/<message_id>/context` | Vollständiger Kontext-Report einer Modellantwort (siehe unten). |
 | `GET` | `/conversations/<conversation_id>/participants/<participant_id>/context-preview` | Vorschau: welcher Kontext beim nächsten Aufruf gesendet würde, ohne Provider-Aufruf. |
 | `GET` | `/conversations/<conversation_id>/tool-events` | List Tool Events |
+| `POST` | `/consultations` | Zweitmeinung zu einem Kanzo-Ticket anfordern (`202`, siehe unten). |
+| `GET` | `/consultations` | Consultations zu einem Ticket (`?source_ref=api#12`, URL-kodiert). |
+| `GET` | `/consultations/<consultation_id>` | Status, Reviewer mit Provider, Zustellungen. |
+| `POST` | `/consultations/<consultation_id>/retry` | Offene Zustellungen erneut; `rerun: true` ruft die Modelle erneut auf. |
 | `POST` | `/conversations/<conversation_id>/participants` | Add Participant |
 | `DELETE` | `/conversations/<conversation_id>/participants/<participant_id>` | Delete Participant |
 | `POST` | `/conversations/<conversation_id>/messages` | Add Message |
@@ -98,6 +102,65 @@ kein Datenfehler.
   Report enthält danach `GET /conversations/<id>`.
 - Der Export (`GET /conversations/<id>/export`) enthält alle Reports unter
   `context_reports`.
+
+## Consultations
+
+Eine Consultation holt eine Zweitmeinung mehrerer Reviewer-Modelle zu einem
+Ticket aus [Kanzo](https://github.com/emanuele-em/kanzo) und schreibt jede
+Antwort als Kommentar in das Ticket. Voraussetzung: `[kanzo]` in
+`config.toml` mit `reviewers` (siehe [Konfiguration](konfiguration.md#consultations-kanzo));
+ohne Reviewer-Liste antworten die Endpunkte mit `503`
+(`ConsultationsDisabled`). Sicherheit: [Sicherheit](../sicherheit.md#consultations-kanzo).
+
+`POST /consultations`:
+
+```json
+{"task": "api#12", "question": "Ist der Fix richtig?",
+ "context": "optional", "reviewers": ["gpt"], "include_previous": false}
+```
+
+- `task` (Pflicht): Ticket-Referenz `projekt#nummer` (Kleinbuchstaben).
+- `question` (Pflicht, bis 4.000 Zeichen), `context` (optional, bis 8.000).
+- `reviewers`: Teilmenge von `[kanzo] reviewers`; Standard: alle erlaubten.
+- `include_previous`: frühere Conclave-Kommentare des Tickets mitgeben
+  (Standard `false`; dann als „frühere Modellausgabe“ gekennzeichnet).
+- `channel`: `rest` (Standard) oder `mcp`; das MCP-Tool setzt immer `mcp`.
+- Antwort `202` mit `id`, `status: "queued"` und `reviewers` (je Reviewer
+  Provider und Modell: an diese Provider geht der Ticket-Inhalt).
+
+Fehler: `400` (`ValidationError`, `ReviewerNotAllowed`), `403`
+(`HumanOnlyTicket`: Ticket nur für Menschen, Anfrage über `mcp`), `404`
+(Ticket unbekannt), `429` (`ConsultationLimit`: `[kanzo] max_per_hour` pro
+Ticket und Stunde erreicht), `502` (Kanzo nicht erreichbar oder unbekanntes
+Ausgabeformat), `503` (nicht eingerichtet). Bei diesen Fehlern wird nichts
+gespeichert.
+
+Ablauf im Hintergrund: Conclave legt die Conversation
+`kanzo:<task> · <id>` an, fragt alle Reviewer parallel und stellt jede Antwort
+als Kommentar zu. Status: `queued` → `running` → `done` | `failed`; nach einem
+Server-Neustart wird `running` zu `interrupted`. Jeder Kommentar endet mit einer
+Schlusszeile wie
+
+`— Zweitmeinung von GPT (openai, gpt-5.6) über Conclave, nicht geprüft · consultation <id>/gpt`
+
+Lange Antworten werden vorher auf `[kanzo] comment_max_chars` gekürzt (mit
+Verweis auf die Conversation); die Schlusszeile bleibt immer erhalten.
+
+`GET /consultations/<id>` liefert zusätzlich `deliveries` (je Reviewer
+`status` `pending`/`delivered`/`failed`, `attempts`, `error`, `marker`) und
+`retry_possible`.
+
+`POST /consultations/<id>/retry`:
+
+- ohne Body bzw. `{"rerun": false}`: offene oder fehlgeschlagene Zustellungen
+  gespeicherter Antworten erneut zustellen, **ohne** Modellaufrufe. Gibt es
+  keine gespeicherte Antwort: `409` (`NothingToDeliver`).
+- `{"rerun": true}`: legt eine neue Consultation mit denselben Angaben an
+  (ruft die Modelle erneut auf, zählt zur Obergrenze).
+- Läuft die Consultation noch: `409` (`ConsultationBusy`).
+
+Nach einem Neustart stellt Conclave gespeicherte, aber nicht zugestellte
+Antworten automatisch zu. Modelle werden nie automatisch erneut aufgerufen.
 
 ## Backup und Restore
 

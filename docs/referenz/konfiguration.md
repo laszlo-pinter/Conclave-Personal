@@ -141,6 +141,8 @@ Aus der TOML-Datei werden nur diese Schlüssel gelesen; alles andere ist nur
   Vorrang hat `CONCLAVE_DB_PATH`, dann `path`, dann der Plattformdefault
   (für alle Einstiegspunkte).
 - `[server]` `rate_limit`
+- `[kanzo]` `url`, `reviewers`, `max_per_hour`, `comment_max_chars`
+  (Consultations, siehe unten)
 - `[participants]` (Altbestand, siehe unten)
 
 ```toml
@@ -158,6 +160,13 @@ path = "/pfad/zur/conclave.db"
 # CONCLAVE_RATE_LIMIT hat Vorrang.
 rate_limit = "120 per minute"
 
+[kanzo]
+# Consultations: Zweitmeinung zu Kanzo-Tickets (siehe unten)
+url = "http://localhost:4242/mcp"
+reviewers = ["gpt", "claude"]
+max_per_hour = 3
+comment_max_chars = 2000
+
 [participants.claude]
 # Altbestand: wird einmalig als Agent in die DB übernommen
 name = "Claude"
@@ -171,3 +180,21 @@ beim Start einmalig als Agent in die Datenbank übernommen, falls es noch
 keinen Agent mit dieser ID gibt. Gelesen werden nur `name`, `provider`,
 `model` und `system_prompt`; API-Keys kommen nicht aus der TOML-Datei.
 Danach werden Agents über UI, API oder CLI verwaltet.
+
+## Consultations (Kanzo)
+
+Consultations holen eine Zweitmeinung zu einem Ticket aus
+[Kanzo](https://github.com/emanuele-em/kanzo) (siehe
+[API-Referenz](api.md#consultations)). Eingestellt wird das nur in
+`config.toml`; die API nimmt keine Ziel-Adresse an.
+
+| Schlüssel | Default | Bedeutung |
+|---|---|---|
+| `url` | `http://localhost:4242/mcp` | Kanzos MCP-Endpunkt (`mcp_http = true` in Kanzos Konfiguration, das ist dort der Default). Umgebungsvariable `CONCLAVE_KANZO_URL` hat Vorrang. Nur `http://` oder `https://`. |
+| `reviewers` | leer | Agent-IDs, die als Reviewer erlaubt sind – also wer Ticket-Inhalte zu sehen bekommt. **Leer = Consultations sind aus.** |
+| `max_per_hour` | `3` | Höchstens so viele Consultations pro Ticket und Stunde (gezählt beim Anlegen). |
+| `comment_max_chars` | `2000` | Kommentare werden auf diese Länge gekürzt (mindestens 200), die Schlusszeile kommt danach. |
+
+Die Consultations laufen in einem Hintergrund-Thread des Servers
+(`conclave desktop`, `conclave server`, `conclave-api`). Für die Verbindung zu
+Kanzo braucht der Server das MCP-SDK: `pip install "conclave-personal[mcp]"`.

@@ -12,12 +12,14 @@ from datetime import datetime
 
 from conclave.domain.agent import Agent
 from conclave.domain.audit import AuditEntry
+from conclave.domain.consultation import Consultation, ConsultationDelivery
 from conclave.domain.context_report import ContextReportRecord
 from conclave.domain.conversation import Conversation
 from conclave.domain.message import Message
 from conclave.domain.model_response import Completion
 from conclave.domain.participant import Participant
 from conclave.domain.run import Run
+from conclave.domain.ticket import Ticket
 from conclave.domain.tool_event import ToolEvent
 
 
@@ -246,6 +248,58 @@ class ContextReportRepository(Protocol):
 
     def list_by_conversation(self, conversation_id: str) -> list[ContextReportRecord]:
         """Alle Reports einer Conversation (auch fehlgeschlagene Aufrufe)."""
+        ...
+
+
+@runtime_checkable
+class ConsultationRepository(Protocol):
+    """Persistiert Consultations und ihre Zustellungen."""
+
+    def save(self, consultation: Consultation) -> None:
+        """Speichert oder aktualisiert eine Consultation."""
+        ...
+
+    def get(self, consultation_id: str) -> Consultation | None:
+        ...
+
+    def list_by_source_ref(self, source: str, source_ref: str) -> list[Consultation]:
+        """Consultations zu einem Ticket, neueste zuerst."""
+        ...
+
+    def list_by_status(self, status: str) -> list[Consultation]:
+        """Consultations mit einem Status, aelteste zuerst."""
+        ...
+
+    def count_since(self, source: str, source_ref: str, since: datetime) -> int:
+        """Anzahl der Consultations zu einem Ticket seit ``since`` (Obergrenze)."""
+        ...
+
+    def claim(self, consultation_id: str) -> bool:
+        """Atomar queued -> running; True nur fuer genau einen Aufrufer."""
+        ...
+
+    def save_delivery(self, delivery: ConsultationDelivery) -> None:
+        ...
+
+    def list_deliveries(self, consultation_id: str) -> list[ConsultationDelivery]:
+        ...
+
+
+@runtime_checkable
+class TaskSource(Protocol):
+    """Liest Tickets aus einem externen Board (z. B. Kanzo). Inhalt ist fremd und unvertrauenswuerdig."""
+
+    def get_task(self, task_ref: str) -> Ticket:
+        """Laedt ein Ticket samt Kommentaren; wirft TaskNotFound oder TaskSourceError."""
+        ...
+
+
+@runtime_checkable
+class CommentSink(Protocol):
+    """Schreibt Kommentare in ein externes Board - die einzige schreibende Aktion dort."""
+
+    def add_comment(self, task_ref: str, body: str, author: str) -> None:
+        """Fuegt einen Kommentar hinzu; wirft TaskNotFound oder TaskSourceError."""
         ...
 
 

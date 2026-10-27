@@ -128,3 +128,17 @@ class ProviderUnavailable(ProviderError):
     def __init__(self, provider: str, status_code: int):
         self.status_code = status_code
         super().__init__(provider, f"Temporaer nicht erreichbar (HTTP {status_code}).")
+
+
+class TaskSourceError(ConclaveError):
+    """Ticket-Quelle (z. B. Kanzo) nicht erreichbar oder lieferte einen Fehler."""
+
+
+class TaskNotFound(TaskSourceError):
+    def __init__(self, task_ref: str, detail: str = ""):
+        self.task_ref = task_ref
+        super().__init__(f"Task '{task_ref}' was not found{': ' + detail if detail else '.'}")
+
+
+class TaskFormatError(TaskSourceError):
+    """Antwort der Ticket-Quelle hat ein unbekanntes Format - im Zweifel ablehnen."""
