@@ -9,7 +9,7 @@ except ImportError:
 
 from conclave.domain.conversation import Conversation
 from conclave.domain.message import MessageAuthorType
-from conclave.domain.context_report import native_context_report
+from conclave.domain.context_report import ContextReport, attach_context_report, native_context_report
 from conclave.domain.model_response import Completion, TokenUsage
 from conclave.domain.participant import Participant
 from conclave.infrastructure.log import get_logger, request_logger
@@ -52,6 +52,10 @@ class AnthropicAdapter:
     def _report(self, conversation: Conversation, system: SystemPrompt):
         return native_context_report(conversation, system, adapter="anthropic-native")
 
+    def context_report(self, conversation: Conversation, participant: Participant) -> ContextReport:
+        """Vorschau ohne Provider-Aufruf."""
+        return self._report(conversation, self._build_system(conversation))
+
     def complete(self, conversation: Conversation, participant: Participant) -> Completion:
         messages = self._build_messages(conversation)
         system = self._build_system(conversation)
@@ -64,8 +68,12 @@ class AnthropicAdapter:
         if system.text:
             kwargs["system"] = system.text
 
-        with request_logger(logger, operation="anthropic.complete", model=self._model):
-            response = self._client.messages.create(**kwargs)
+        try:
+            with request_logger(logger, operation="anthropic.complete", model=self._model):
+                response = self._client.messages.create(**kwargs)
+        except Exception as exc:
+            attach_context_report(exc, self._report(conversation, system))
+            raise
 
         usage = TokenUsage(
             input_tokens=response.usage.input_tokens,

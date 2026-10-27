@@ -9,7 +9,7 @@ except ImportError:
 
 from conclave.domain.conversation import Conversation
 from conclave.domain.message import MessageAuthorType
-from conclave.domain.context_report import native_context_report
+from conclave.domain.context_report import ContextReport, attach_context_report, native_context_report
 from conclave.domain.model_response import Completion, TokenUsage
 from conclave.domain.participant import Participant
 from conclave.infrastructure.log import get_logger, request_logger
@@ -51,15 +51,23 @@ class OpenAIAdapter:
     def _report(self, conversation: Conversation, instructions: SystemPrompt):
         return native_context_report(conversation, instructions, adapter="openai-native")
 
+    def context_report(self, conversation: Conversation, participant: Participant) -> ContextReport:
+        """Vorschau ohne Provider-Aufruf."""
+        return self._report(conversation, self._build_instructions(conversation))
+
     def complete(self, conversation: Conversation, participant: Participant) -> Completion:
         input_msgs = self._build_input(conversation)
         instructions = self._build_instructions(conversation)
-        with request_logger(logger, operation="openai.complete", model=self._model):
-            response = self._client.responses.create(
-                model=self._model,
-                input=input_msgs,
-                **({"instructions": instructions.text} if instructions.text else {}),
-            )
+        try:
+            with request_logger(logger, operation="openai.complete", model=self._model):
+                response = self._client.responses.create(
+                    model=self._model,
+                    input=input_msgs,
+                    **({"instructions": instructions.text} if instructions.text else {}),
+                )
+        except Exception as exc:
+            attach_context_report(exc, self._report(conversation, instructions))
+            raise
         usage = TokenUsage(
             input_tokens=response.usage.input_tokens,
             output_tokens=response.usage.output_tokens,

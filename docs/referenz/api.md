@@ -1,6 +1,6 @@
 # API-Referenz
 
-**48 dokumentierte Endpoints** — öffentliche Personal-API.
+**50 dokumentierte Endpoints** — öffentliche Personal-API.
 
 Alle Endpoints außer `GET /`, `/static/*`, `GET /health`, `GET /api-docs` und
 `GET /openapi.json` verlangen ein Token (`Authorization: Bearer <token>` oder
@@ -35,6 +35,8 @@ Header `X-Conclave-Client`, sonst `415`. Anfragen mit nicht erlaubtem
 | `POST` | `/conversations/<conversation_id>/floor/revoke` | Revoke Floor |
 | `POST` | `/conversations/<conversation_id>/floor/invoke` | Invoke With Floor |
 | `GET` | `/conversations/<conversation_id>` | Get Conversation |
+| `GET` | `/conversations/<conversation_id>/messages/<message_id>/context` | Vollständiger Kontext-Report einer Modellantwort (siehe unten). |
+| `GET` | `/conversations/<conversation_id>/participants/<participant_id>/context-preview` | Vorschau: welcher Kontext beim nächsten Aufruf gesendet würde, ohne Provider-Aufruf. |
 | `GET` | `/conversations/<conversation_id>/tool-events` | List Tool Events |
 | `POST` | `/conversations/<conversation_id>/participants` | Add Participant |
 | `DELETE` | `/conversations/<conversation_id>/participants/<participant_id>` | Delete Participant |
@@ -62,6 +64,37 @@ Header `X-Conclave-Client`, sonst `415`. Anfragen mit nicht erlaubtem
 | `DELETE` | `/workspace/<path:filepath>` | Löscht eine Datei aus dem Workspace. |
 
 *Stand: v0.2.0 (2026-10-26), abgeglichen mit `openapi.json`*
+
+## Kontext-Reports
+
+Zu jedem Modellaufruf speichert Conclave, welcher Kontext an den Provider ging.
+Gespeichert werden nur Metadaten (Anzahlen, Sequenznummern, Dateipfade und
+-größen), nie der Prompt selbst. Auch fehlgeschlagene Aufrufe bekommen einen
+Report, verknüpft mit dem Run, aber ohne Nachricht.
+
+- `GET /conversations/<id>` und die Antworten von Invoke, Orchestrierung,
+  Parallel-Stream (`response`-Events) und Auto-Loop (`response`-Events)
+  enthalten pro Modellantwort ein kompaktes `context`-Objekt (`null` bei
+  User-Nachrichten und älteren Antworten):
+  `messages_sent`, `messages_total`, `truncated`, `omitted_sequences`,
+  `files` (`context_files` plus per `@workspace/` eingefügte Dateien),
+  `read_results` (frühere `@read()`-Ergebnisse im gesendeten Verlauf),
+  `skipped_files`, `estimated_tokens` (Schätzung, ca. 3,5 Zeichen pro Token),
+  `billed_input_tokens`/`billed_output_tokens` (vom Provider abgerechnet,
+  `null` wenn nicht gemeldet), `adapter`, `attempts`.
+- `GET /conversations/<id>/messages/<message_id>/context` liefert den
+  vollständigen Report (`report`, `usage`, `run_id`). `404`, wenn Conversation,
+  Nachricht oder Report fehlen (`type`: `ConversationNotFound`,
+  `MessageNotFound`, `ContextReportNotFound`).
+- `GET /conversations/<id>/participants/<pid>/context-preview` berechnet den
+  Report für den nächsten Aufruf, ohne den Provider aufzurufen und ohne etwas zu
+  speichern. `404` bei unbekannter Conversation, unbekanntem Participant oder
+  fehlendem Adapter; `409` (`PreviewUnavailable`), wenn der Adapter keine
+  Vorschau anbietet.
+- Der Einzel-Stream (`.../stream`) liefert weiterhin nur Text-Tokens; den
+  Report enthält danach `GET /conversations/<id>`.
+- Der Export (`GET /conversations/<id>/export`) enthält alle Reports unter
+  `context_reports`.
 
 ## Backup und Restore
 

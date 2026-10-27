@@ -407,6 +407,7 @@ class CLIHandler:
                 "content": message.content,
                 "sequence": message.sequence,
                 "message_id": message.id,
+                "context": self._context_for_message(message.id),
                 "tool_events": [
                     self._tool_event_to_dict(event)
                     for event in self._service.list_tool_events_by_message(message.id)
@@ -460,6 +461,7 @@ class CLIHandler:
                         "author_type": m.author_type.value,
                         "author_id": m.author_id,
                         "content": m.content,
+                        "context": self._context_for_message(m.id),
                         "tool_events": [
                             self._tool_event_to_dict(event)
                             for event in self._service.list_tool_events_by_message(m.id)
@@ -589,6 +591,7 @@ class CLIHandler:
                 "content": message.content,
                 "sequence": message.sequence,
                 "message_id": message.id,
+                "context": self._context_for_message(message.id),
                 "tool_events": [
                     self._tool_event_to_dict(event)
                     for event in self._service.list_tool_events_by_message(message.id)
@@ -627,6 +630,7 @@ class CLIHandler:
                         "content": r.content,
                         "sequence": r.sequence,
                         "message_id": r.message_id,
+                        "context": self._context_for_message(r.message_id),
                         "tool_events": [
                             self._tool_event_to_dict(event)
                             for event in self._service.list_tool_events_by_message(r.message_id)
@@ -670,6 +674,7 @@ class CLIHandler:
                         "content": r.content,
                         "sequence": r.sequence,
                         "message_id": r.message_id,
+                        "context": self._context_for_message(r.message_id),
                         "tool_events": [
                             self._tool_event_to_dict(event)
                             for event in self._service.list_tool_events_by_message(r.message_id)
@@ -728,13 +733,14 @@ class CLIHandler:
 
             async def _complete_one(slot: int, participant_id: str) -> dict:
                 try:
-                    content = await self._service.async_complete_participant(
+                    turn = await self._service.async_complete_turn(
                         conversation_id=conversation_id,
                         participant_id=participant_id,
                         conversation=conversation,
                         snapshot=snapshot,
                     )
-                    return {"ok": True, "slot": slot, "participant": participant_id, "content": content}
+                    return {"ok": True, "slot": slot, "participant": participant_id,
+                            "content": turn.text, "context_report_id": turn.context_report_id}
                 except Exception as exc:
                     status = 400 if isinstance(exc, EmptyConversation) else 502
                     if isinstance(exc, ConversationNotFound):
@@ -775,6 +781,7 @@ class CLIHandler:
                         conversation_id=conversation_id,
                         participant_id=participant_id,
                         content=result["content"],
+                        context_report_id=result.get("context_report_id"),
                     )
                 except (ConversationNotFound, ParticipantNotRegistered, EmptyConversation) as exc:
                     group_error = {
@@ -804,6 +811,7 @@ class CLIHandler:
                     "content": message.content,
                     "sequence": message.sequence,
                     "message_id": message.id,
+                    "context": self._context_for_message(message.id),
                     "tool_events": [
                         self._tool_event_to_dict(event)
                         for event in self._service.list_tool_events_by_message(message.id)
@@ -881,6 +889,7 @@ class CLIHandler:
                     "participant": pid,
                     "content": content,
                     "message_id": result.data.get("message_id", ""),
+                    "context": result.data.get("context"),
                     "tool_events": result.data.get("tool_events", []),
                     "round_sequence": round_sequence,
                 }
@@ -896,6 +905,46 @@ class CLIHandler:
                     return
 
         yield {"event": "stop", "reason": "max_rounds", "rounds": max_rounds}
+
+    def _context_for_message(self, message_id: str) -> dict | None:
+        record = self._service.get_context_report_for_message(message_id)
+        return record.compact() if record else None
+
+    def message_context(self, conversation_id: str, message_id: str) -> CLIResult:
+        """Vollstaendiger Kontext-Report einer Modellantwort."""
+        try:
+            conversation = self._service.load_conversation(conversation_id)
+        except ConversationNotFound:
+            return CLIResult(success=False, message=f"Conversation '{conversation_id}' nicht gefunden.",
+                             data={"type": "ConversationNotFound", "status": 404})
+        if not any(m.id == message_id for m in conversation.messages):
+            return CLIResult(success=False, message=f"Nachricht '{message_id}' nicht gefunden.",
+                             data={"type": "MessageNotFound", "status": 404})
+        record = self._service.get_context_report_for_message(message_id)
+        if record is None:
+            return CLIResult(success=False, message="Zu dieser Nachricht gibt es keinen Kontext-Report.",
+                             data={"type": "ContextReportNotFound", "status": 404})
+        return CLIResult(success=True, message="Kontext-Report", data=record.to_dict())
+
+    def context_preview(self, conversation_id: str, participant_id: str) -> CLIResult:
+        """Was der naechste Aufruf senden wuerde - ohne Provider-Aufruf."""
+        from conclave.domain.errors import AdapterNotFound
+        try:
+            report = self._service.preview_context(conversation_id, participant_id)
+        except ConversationNotFound:
+            return CLIResult(success=False, message=f"Conversation '{conversation_id}' nicht gefunden.",
+                             data={"type": "ConversationNotFound", "status": 404})
+        except ParticipantNotRegistered:
+            return CLIResult(success=False, message=f"Participant '{participant_id}' nicht registriert.",
+                             data={"type": "ParticipantNotRegistered", "status": 404})
+        except AdapterNotFound:
+            return CLIResult(success=False, message=f"Kein Adapter für Participant '{participant_id}' registriert.",
+                             data={"type": "AdapterNotFound", "status": 404})
+        if report is None:
+            return CLIResult(success=False, message="Dieser Adapter bietet keine Vorschau.",
+                             data={"type": "PreviewUnavailable", "status": 409})
+        return CLIResult(success=True, message="Kontext-Vorschau",
+                         data={"participant_id": participant_id, "report": report.to_dict()})
 
     def stream_participant(
         self, conversation_id: str, participant_id: str

@@ -97,6 +97,31 @@ SCHEMAS = {
             },
         }}}},
     },
+    ("GET", "/conversations/<conversation_id>/messages/<message_id>/context"): {
+        "response": {"required": ["report"], "properties": {
+            "id": {"type": "string"}, "run_id": {"type": "string"}, "message_id": {"type": "string"},
+            "participant_id": {"type": "string"},
+            "usage": {"type": "object", "properties": {
+                "input_tokens": {"type": "integer"}, "output_tokens": {"type": "integer"}}},
+            "report": {"type": "object", "properties": {
+                "messages_total": {"type": "integer"}, "messages_sent": {"type": "integer"},
+                "omitted_sequences": {"type": "array", "items": {"type": "integer"}},
+                "anchor_sequence": {"type": "integer"}, "truncation_limit": {"type": "integer"},
+                "system_parts": {"type": "array", "items": {"type": "string"}},
+                "context_files": {"type": "array", "items": {"type": "object"}},
+                "skipped_context_files": {"type": "array", "items": {"type": "object"}},
+                "inline_files": {"type": "array", "items": {"type": "object"}},
+                "read_results": {"type": "array", "items": {"type": "object"}},
+                "estimated_tokens": {"type": "integer"}, "adapter": {"type": "string"},
+                "attempts": {"type": "integer"},
+            }},
+        }},
+    },
+    ("GET", "/conversations/<conversation_id>/participants/<participant_id>/context-preview"): {
+        "response": {"required": ["participant_id", "report"], "properties": {
+            "participant_id": {"type": "string"}, "report": {"type": "object"},
+        }},
+    },
     ("GET", "/conversations/<conversation_id>/tool-events"): {
         "response": {"required": ["tool_events"], "properties": {"tool_events": {"type": "array", "items": {
             "type": "object",

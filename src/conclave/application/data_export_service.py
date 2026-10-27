@@ -41,6 +41,8 @@ class DataExportService:
             "topic": conversation.topic,
             "created_at": conversation.created_at.isoformat(),
             "tool_events": [self._tool_event_to_dict(event) for event in events],
+            # Auch Reports fehlgeschlagener Aufrufe (ohne message_id)
+            "context_reports": [r.to_dict() for r in self._flow.list_context_reports(conversation_id)],
             "messages": [
                 {
                     "id": m.id,

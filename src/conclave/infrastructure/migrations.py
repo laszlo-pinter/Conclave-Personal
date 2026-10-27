@@ -62,6 +62,11 @@ MIGRATIONS: list[Migration] = [
         description="Tool-Events fuer deterministische Backend-Aktionen",
         fn=lambda connection, is_postgres: _create_tool_events_table(connection, is_postgres),
     ),
+    Migration(
+        id="007_context_reports",
+        description="Kontext-Reports je Modellaufruf (welcher Kontext an den Provider ging)",
+        fn=lambda connection, is_postgres: _create_context_reports_table(connection, is_postgres),
+    ),
 ]
 
 
@@ -161,6 +166,40 @@ def _create_tool_events_table(connection, is_postgres: bool) -> None:
                 FOREIGN KEY(run_id) REFERENCES runs(id)
             )
         """)
+
+
+def _create_context_reports_table(connection, is_postgres: bool) -> None:
+    index = "CREATE INDEX IF NOT EXISTS idx_context_reports_message ON context_reports(message_id)"
+    if is_postgres:
+        with connection.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS context_reports (
+                    id              TEXT PRIMARY KEY,
+                    conversation_id TEXT NOT NULL REFERENCES conversations(id),
+                    participant_id  TEXT NOT NULL,
+                    message_id      TEXT REFERENCES messages(id),
+                    run_id          TEXT REFERENCES runs(id),
+                    created_at      TIMESTAMPTZ NOT NULL,
+                    report_json     TEXT NOT NULL
+                )
+            """)
+            cur.execute(index)
+    else:
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS context_reports (
+                id              TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                participant_id  TEXT NOT NULL,
+                message_id      TEXT,
+                run_id          TEXT,
+                created_at      TEXT NOT NULL,
+                report_json     TEXT NOT NULL,
+                FOREIGN KEY(conversation_id) REFERENCES conversations(id),
+                FOREIGN KEY(message_id) REFERENCES messages(id),
+                FOREIGN KEY(run_id) REFERENCES runs(id)
+            )
+        """)
+        connection.execute(index)
 
 
 # ── Runner ────────────────────────────────────────────────────────────────

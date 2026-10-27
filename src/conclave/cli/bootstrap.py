@@ -133,6 +133,8 @@ def build_service(
     )
     service.set_run_repository(SQLiteRunRepository(connection))
     service.set_tool_event_repository(SQLiteToolEventRepository(connection, autocommit=True))
+    from conclave.infrastructure.sqlite.context_report_repository import SQLiteContextReportRepository
+    service.set_context_report_repository(SQLiteContextReportRepository(connection, autocommit=True))
     return service
 
 

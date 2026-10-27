@@ -605,6 +605,20 @@ def create_app(handler: CLIHandler, auth_service=None,
             return jsonify({"error": result.message}), 404
         return jsonify(result.data), 200
 
+    @app.get("/conversations/<conversation_id>/messages/<message_id>/context")
+    def get_message_context(conversation_id: str, message_id: str):
+        result = handler.message_context(conversation_id, message_id)
+        if not result.success:
+            return _cli_error_json(result, 404)
+        return jsonify(result.data), 200
+
+    @app.get("/conversations/<conversation_id>/participants/<participant_id>/context-preview")
+    def get_context_preview(conversation_id: str, participant_id: str):
+        result = handler.context_preview(conversation_id, participant_id)
+        if not result.success:
+            return _cli_error_json(result, 404)
+        return jsonify(result.data), 200
+
     @app.get("/conversations/<conversation_id>/tool-events")
     def list_tool_events(conversation_id: str):
         result = handler.list_tool_events(conversation_id)

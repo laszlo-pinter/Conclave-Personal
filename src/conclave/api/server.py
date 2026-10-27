@@ -108,6 +108,8 @@ def _build_postgres(config):
     service.set_audit_repository(PostgresAuditRepository(conn))
     service.set_run_repository(PostgresRunRepository(conn))
     service.set_tool_event_repository(PostgresToolEventRepository(conn))
+    from conclave.infrastructure.postgres.context_report_repository import PostgresContextReportRepository
+    service.set_context_report_repository(PostgresContextReportRepository(conn))
 
     agent_service = AgentService(PostgresAgentRepository(conn, crypto))
 
@@ -131,6 +133,8 @@ def _build_sqlite(config):
     service.set_audit_repository(SQLiteAuditRepository(conn, autocommit=True))
     service.set_run_repository(SQLiteRunRepository(conn))
     service.set_tool_event_repository(SQLiteToolEventRepository(conn, autocommit=True))
+    from conclave.infrastructure.sqlite.context_report_repository import SQLiteContextReportRepository
+    service.set_context_report_repository(SQLiteContextReportRepository(conn, autocommit=True))
     agent_service = build_agent_service(config=config, connection=conn)
 
     return service, agent_service, conn

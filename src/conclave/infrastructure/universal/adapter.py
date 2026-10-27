@@ -33,7 +33,7 @@ from typing import Any
 
 import httpx
 
-from conclave.domain.context_report import ContextReport, build_context_report
+from conclave.domain.context_report import ContextReport, attach_context_report, build_context_report
 from conclave.domain.conversation import Conversation
 from conclave.domain.message import MessageAuthorType
 from conclave.domain.model_response import Completion, TokenUsage
@@ -362,8 +362,17 @@ class UniversalAdapter:
         return PreparedRequest(url=url, params=params, headers=headers, body=body,
                                report=report, stream=stream)
 
+    def context_report(self, conversation: Conversation, participant: Participant) -> ContextReport:
+        """Vorschau: Report der Anfrage, die jetzt gesendet wuerde (kein HTTP-Aufruf)."""
+        return self.prepare_request(conversation, participant).report
+
     def complete(self, conversation: Conversation, participant: Participant) -> Completion:
-        return self.send(self.prepare_request(conversation, participant))
+        request = self.prepare_request(conversation, participant)
+        try:
+            return self.send(request)
+        except Exception as exc:
+            attach_context_report(exc, request.report)
+            raise
 
     def send(self, request: PreparedRequest) -> Completion:
         """Fuehrt eine mit prepare_request() gebaute Anfrage aus."""
@@ -409,6 +418,13 @@ class UniversalAdapter:
         return self.send_stream(self.prepare_request(conversation, participant, stream=True))
 
     def send_stream(self, request: PreparedRequest) -> Iterator[str | Completion]:
+        try:
+            yield from self._send_stream(request)
+        except Exception as exc:
+            attach_context_report(exc, request.report)
+            raise
+
+    def _send_stream(self, request: PreparedRequest) -> Iterator[str | Completion]:
         url, params, headers, body = request.url, request.params, request.headers, request.body
         # Usage ist lokal pro Stream - nie die eines frueheren Aufrufs (A7).
         tokens: dict[str, int | None] = {"input": None, "output": None}

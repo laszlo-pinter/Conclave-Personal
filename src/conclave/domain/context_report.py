@@ -7,7 +7,9 @@ nie der Prompt selbst.
 from __future__ import annotations
 
 import re
-from dataclasses import asdict, dataclass
+import uuid
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 from conclave.domain.message import Message, MessageAuthorType
@@ -47,6 +49,86 @@ class ContextReport:
         for key in ("system_parts", "context_files", "skipped_context_files", "inline_files", "read_results"):
             data[key] = list(data[key])
         return data
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ContextReport":
+        known = {f: data[f] for f in cls.__dataclass_fields__ if f in data}
+        omitted = known.get("omitted_sequences")
+        known["omitted_sequences"] = tuple(omitted) if omitted else None
+        for key in ("system_parts", "context_files", "skipped_context_files", "inline_files", "read_results"):
+            if key in known:
+                known[key] = tuple(known[key] or ())
+        return cls(**known)
+
+
+@dataclass
+class ContextReportRecord:
+    """Gespeicherter Report eines Modellaufrufs, verknuepft mit Run und (bei Erfolg) Nachricht."""
+    id: str
+    conversation_id: str
+    participant_id: str
+    report: ContextReport
+    run_id: str | None = None
+    message_id: str | None = None
+    input_tokens: int | None = None    # vom Provider abgerechnet
+    output_tokens: int | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+    @staticmethod
+    def create(*, conversation_id: str, participant_id: str, report: ContextReport,
+               run_id: str | None = None, message_id: str | None = None,
+               input_tokens: int | None = None, output_tokens: int | None = None) -> "ContextReportRecord":
+        return ContextReportRecord(
+            id=str(uuid.uuid4()), conversation_id=conversation_id, participant_id=participant_id,
+            report=report, run_id=run_id, message_id=message_id,
+            input_tokens=input_tokens, output_tokens=output_tokens,
+        )
+
+    def payload(self) -> dict[str, Any]:
+        """Inhalt der Spalte report_json."""
+        return {"report": self.report.to_dict(),
+                "usage": {"input_tokens": self.input_tokens, "output_tokens": self.output_tokens}}
+
+    def compact(self) -> dict[str, Any]:
+        """Kurzform fuer Nachrichtenlisten und SSE-Events (Kontext-Chip)."""
+        r = self.report
+        return {
+            "messages_sent": r.messages_sent,
+            "messages_total": r.messages_total,
+            "truncated": r.truncated,
+            "omitted_sequences": list(r.omitted_sequences) if r.omitted_sequences else None,
+            "files": len(r.context_files) + len(r.inline_files),
+            "read_results": len(r.read_results),
+            "skipped_files": len(r.skipped_context_files),
+            "estimated_tokens": r.estimated_tokens,
+            "billed_input_tokens": self.input_tokens,
+            "billed_output_tokens": self.output_tokens,
+            "adapter": r.adapter,
+            "attempts": r.attempts,
+        }
+
+    def to_dict(self) -> dict[str, Any]:
+        """Vollstaendige Form fuer GET .../messages/<id>/context."""
+        return {
+            "id": self.id,
+            "conversation_id": self.conversation_id,
+            "participant_id": self.participant_id,
+            "run_id": self.run_id,
+            "message_id": self.message_id,
+            "created_at": self.created_at.isoformat(),
+            "usage": {"input_tokens": self.input_tokens, "output_tokens": self.output_tokens},
+            "report": self.report.to_dict(),
+        }
+
+
+def attach_context_report(exc: BaseException, report: ContextReport | None) -> None:
+    """Haengt den Report an eine Exception, damit auch fehlgeschlagene Aufrufe ihn speichern."""
+    if report is None or getattr(exc, "context_report", None) is not None:
+        return
+    try:
+        exc.context_report = report  # type: ignore[attr-defined]
+    except (AttributeError, TypeError):
+        pass
 
 
 def requested_context_files(rules: str) -> list[str]:

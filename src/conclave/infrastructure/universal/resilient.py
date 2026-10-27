@@ -14,6 +14,7 @@ from dataclasses import replace
 
 import httpx
 
+from conclave.domain.context_report import ContextReport, attach_context_report
 from conclave.domain.conversation import Conversation
 from conclave.domain.errors import ProviderRateLimit, ProviderTimeout, ProviderUnavailable
 from conclave.domain.model_response import Completion
@@ -53,8 +54,14 @@ class ResilientAdapter:
     def provider(self) -> str:
         return self._adapter.provider
 
+    def context_report(self, conversation: Conversation, participant: Participant) -> ContextReport | None:
+        """Vorschau des inneren Adapters (None, wenn er keine anbietet)."""
+        preview = getattr(type(self._adapter), "context_report", None)
+        return preview(self._adapter, conversation, participant) if callable(preview) else None
+
     def complete(self, conversation: Conversation, participant: Participant) -> Completion:
         attempts = 0
+        request = None
         # Faehigkeit am Typ pruefen (nicht per hasattr am Objekt: Mocks haben jedes Attribut)
         if callable(getattr(type(self._adapter), "prepare_request", None)):
             # Anfrage genau einmal bauen: alle Versuche senden denselben Body,
@@ -71,7 +78,13 @@ class ResilientAdapter:
                 attempts += 1
                 return self._adapter.complete(conversation, participant)
 
-        result = self._with_retry(call)
+        try:
+            result = self._with_retry(call)
+        except Exception as exc:
+            if request is not None:
+                # Auch der Report eines fehlgeschlagenen Aufrufs nennt alle Versuche
+                attach_context_report(exc, replace(request.report, attempts=max(attempts, 1)))
+            raise
         if attempts > 1 and isinstance(result, Completion) and result.report is not None:
             result = replace(result, report=replace(result.report, attempts=attempts))
         return result
