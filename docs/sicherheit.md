@@ -121,6 +121,46 @@ conclave desktop
   auf solche Ziele wird ebenfalls abgelehnt. Localhost ist nur für explizite
   lokale Provider wie Ollama erlaubt.
 
+## Consultations (Kanzo)
+
+Consultations lesen ein Ticket aus Kanzo, geben es an Remote-Provider und
+schreiben deren Antworten als Kommentar zurück. Ticket-Inhalte sind fremd und
+werden als Daten behandelt:
+
+- **Daten-Block:** Das Ticket steht im Prompt zwischen einer zufälligen
+  Begrenzung, die der Ticket-Inhalt nicht vorzeitig schließen kann; die Regeln
+  der Conversation sagen, dass sein Inhalt keine Anweisung ist.
+- **Keine Wirkung über das Kommentieren hinaus:** Conclave ruft in Kanzo nur
+  `get_task` und `add_comment` auf. Es setzt bei Consultations keine
+  `@workspace/`-Dateien in den Prompt ein und führt `@save`/`@read` aus
+  Reviewer-Antworten nicht aus – sonst könnte ein Ticket Workspace-Inhalte in
+  einen Kommentar schleusen oder Dateien schreiben lassen.
+- **Kennzeichnung:** Jeder Kommentar endet mit „Zweitmeinung von … über
+  Conclave, nicht geprüft“ samt Provider, Modell und Kennung. Zeilen, die diese
+  Schlusszeile nachahmen, werden aus der Antwort entfernt.
+- **Kein Echtheitsnachweis:** Kanzo hat keine Anmeldung; Autor und
+  Schlusszeile kann jeder schreiben. Die Kennzeichnung schützt vor
+  Verwechslung, nicht vor Täuschung – Kommentaren mit dieser Kennzeichnung
+  nicht mehr vertrauen als anderen Kommentaren.
+- **Keine Rückkopplung:** Frühere Conclave-Kommentare fließen nur mit
+  `include_previous: true` in neue Consultations ein, dann ausdrücklich als
+  „frühere Modellausgabe“.
+- **Tickets nur für Menschen:** Tickets mit Kanzos `human`-Markierung werden
+  über das MCP-Tool (Kanal `mcp`) abgelehnt. **Grenze:** Der Kanal schützt nur
+  vor Agenten, die über die MCP-Tools gehen. Ein Agent, der `api.token` lesen
+  kann, kann die REST-API direkt aufrufen. Getrennte Zugänge für Mensch und
+  Agent gibt es noch nicht.
+- **Feste Adresse:** Die Kanzo-Adresse steht nur in `config.toml`
+  (`[kanzo] url`); die API nimmt keine Ziel-URL an (SSRF).
+- **Grenzen:** Reviewer nur aus `[kanzo] reviewers` (wer Ticket-Inhalte sieht),
+  höchstens `max_per_hour` Consultations pro Ticket und Stunde, Kommentare
+  gekürzt. Nach einem Neustart werden Modelle nie automatisch erneut aufgerufen.
+- **Datenabfluss:** Der Ticket-Inhalt geht an die Provider der Reviewer; die
+  Antwort von `POST /consultations` und jeder Kommentar nennen sie. Mit
+  `kanzo sync` landen die Kommentare im Git-Repository des Kanzo-Boards.
+- Conclave spricht Kanzo (AGPL-3.0) nur über MCP an und enthält keinen Code
+  aus Kanzo.
+
 ## CI-Prüfungen
 
 - `pip-audit` prüft alle installierten Abhängigkeiten auf bekannte
