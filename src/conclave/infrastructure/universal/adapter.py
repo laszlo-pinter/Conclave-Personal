@@ -79,6 +79,26 @@ def _smart_truncate(messages: list, max_messages: int) -> list:
     return list(tail)
 
 
+_STREAM_DONE = object()
+
+
+def _parse_stream_line(line: str):
+    """Eine Zeile eines Streams: SSE ("data: {...}", "[DONE]") oder NDJSON (Ollama)."""
+    line = line.strip()
+    if not line or line.startswith(("event:", ":", "id:", "retry:")):
+        return None
+    if line.startswith("data:"):
+        line = line[5:].strip()
+        if line == "[DONE]":
+            return _STREAM_DONE
+    if not line.startswith("{"):
+        return None
+    try:
+        return __import__("json").loads(line)
+    except ValueError:
+        return None
+
+
 def _format_messages(
     conversation: Conversation,
     message_format: str = "standard",
@@ -354,6 +374,7 @@ class UniversalAdapter:
         timeout: int = 120,
         extra_body: dict | None = None,
         extracts_reasoning: bool = False,
+        stream_usage: bool = False,
     ) -> None:
         # Profile bestimmen: message_format > auth_format > standard
         profile_key = message_format
@@ -375,6 +396,9 @@ class UniversalAdapter:
         self._timeout = timeout
         self._extra_body = extra_body or {}
         self._extracts_reasoning = extracts_reasoning
+        # Usage im Stream per stream_options anfordern (nur OpenAI-kompatible
+        # Provider, die das Feld kennen; andere koennten es ablehnen).
+        self._stream_usage = stream_usage
         self._last_usage: TokenUsage | None = None
 
     @staticmethod
@@ -446,32 +470,50 @@ class UniversalAdapter:
     def stream(
         self, conversation: Conversation, participant: Participant
     ) -> Iterator[str]:
+        # Keine Token-Zahlen eines frueheren Aufrufs an diesen Stream weitergeben (A7).
+        self._last_usage = None
         messages = _format_messages(conversation, self._message_format, participant.id)
         system = _build_system_prompt(self._system_prompt, conversation)
         body = self._profile.build_body(messages, self._model, system)
         if self._extra_body:
             body.update(self._extra_body)
-        body["stream"] = True
-        headers = self._profile.build_headers(self._api_key)
         url, params = self._profile.build_url(self._api_url, self._model, self._api_key)
+        # Provider-spezifisch: "stream"-Flag bzw. eigener Endpunkt (Gemini)
+        url, params, body = self._profile.prepare_stream(url, params, body)
+        if self._stream_usage:
+            body["stream_options"] = {"include_usage": True}
+        headers = self._profile.build_headers(self._api_key)
 
+        tokens: dict[str, int | None] = {"input": None, "output": None}
         with httpx.stream(
             "POST", url, json=body, headers=headers, params=params, timeout=self._timeout
         ) as response:
             response.raise_for_status()
             for line in response.iter_lines():
-                if not line.startswith("data: "):
-                    continue
-                payload = line[6:]
-                if payload == "[DONE]":
+                event = _parse_stream_line(line)
+                if event is _STREAM_DONE:
                     break
-                try:
-                    chunk = __import__("json").loads(payload)
-                    delta = _extract_path(chunk, "choices[0].delta.content")
-                    if delta:
-                        yield delta
-                except Exception:
+                if not isinstance(event, dict):
                     continue
+                text, usage_source = self._profile.parse_stream_event(event)
+                self._merge_stream_usage(tokens, usage_source)
+                if text:
+                    yield text
+        if tokens["input"] is not None or tokens["output"] is not None:
+            self._last_usage = TokenUsage(input_tokens=tokens["input"] or 0,
+                                          output_tokens=tokens["output"] or 0)
+
+    def _merge_stream_usage(self, tokens: dict, source: dict | None) -> None:
+        """Uebernimmt Usage-Angaben eines Stream-Ereignisses (spaetere Werte gewinnen)."""
+        if not isinstance(source, dict):
+            return
+        usage = _extract_path(source, self._usage_path) if self._usage_path else source
+        if not isinstance(usage, dict):
+            return
+        for slot, key in (("input", self._usage_input_key), ("output", self._usage_output_key)):
+            value = usage.get(key)
+            if isinstance(value, (int, float)):
+                tokens[slot] = int(value)
 
     def _extract_usage(self, data: dict) -> None:
         """Extrahiert Token-Usage aus der Response (optional)."""

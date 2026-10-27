@@ -306,6 +306,7 @@ def _make_universal_adapter(agent, api_key: str):
     usage_output_key = preset.get("usage_output_key", "completion_tokens")
     extra_body = preset.get("extra_body", {})
     extracts_reasoning = preset.get("extracts_reasoning", False)
+    stream_usage = preset.get("stream_usage", False)
     model = preset.get("model_aliases", {}).get(agent.model, agent.model)
 
     if not api_url:
@@ -325,4 +326,5 @@ def _make_universal_adapter(agent, api_key: str):
         usage_output_key=usage_output_key,
         extra_body=extra_body,
         extracts_reasoning=extracts_reasoning,
+        stream_usage=stream_usage,
     )

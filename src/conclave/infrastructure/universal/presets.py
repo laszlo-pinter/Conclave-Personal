@@ -10,6 +10,7 @@ from __future__ import annotations
 PRESETS: dict[str, dict] = {
     "openai": {
         "name": "openai",
+        "stream_usage": True,  # akzeptiert stream_options.include_usage
         "label": "OpenAI (Chat Completions)",
         "description": "Kompatibler Chat-Completions-Pfad fuer GPT-Modelle.",
         "api_key_env": "OPENAI_API_KEY",
@@ -102,6 +103,7 @@ PRESETS: dict[str, dict] = {
     },
     "openai-no-thinking": {
         "name": "openai-no-thinking",
+        "stream_usage": True,  # akzeptiert stream_options.include_usage
         "label": "OpenAI (Chat Completions, Thinking disabled)",
         "description": "OpenAI-kompatible Endpunkte mit explizit deaktiviertem Thinking-Parameter.",
         "api_key_env": "OPENAI_API_KEY",
@@ -118,6 +120,7 @@ PRESETS: dict[str, dict] = {
     },
     "qwen-dashscope": {
         "name": "qwen-dashscope",
+        "stream_usage": True,  # akzeptiert stream_options.include_usage
         "label": "Qwen via DashScope (Singapore, Thinking off)",
         "description": "Qwen-Modelle ueber DashScope im OpenAI-kompatiblen Modus.",
         "requires_api_key": True,
@@ -134,6 +137,7 @@ PRESETS: dict[str, dict] = {
     },
     "qwen-dashscope-thinking": {
         "name": "qwen-dashscope-thinking",
+        "stream_usage": True,  # akzeptiert stream_options.include_usage
         "label": "Qwen via DashScope (Singapore, Thinking on, QwQ)",
         "description": "Qwen mit aktiviertem Reasoning ueber DashScope.",
         "requires_api_key": True,
@@ -151,6 +155,7 @@ PRESETS: dict[str, dict] = {
     },
     "deepseek": {
         "name": "deepseek",
+        "stream_usage": True,  # akzeptiert stream_options.include_usage
         "label": "DeepSeek (offizielle API)",
         "description": "DeepSeek V4 Flash/Pro ueber die offizielle Chat-Completions-API.",
         "requires_api_key": True,

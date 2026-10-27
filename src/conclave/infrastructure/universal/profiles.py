@@ -37,6 +37,22 @@ class ProviderProfile(Protocol):
         """Extrahiert den Antworttext aus der API-Response."""
         ...
 
+    def prepare_stream(self, url: str, params: dict, body: dict) -> tuple[str, dict, dict]:
+        """Richtet URL, Query-Parameter und Body fuer eine Streaming-Anfrage ein."""
+        ...
+
+    def parse_stream_event(self, event: dict) -> tuple[str | None, dict | None]:
+        """Zerlegt ein Stream-Ereignis in (Textstueck, Objekt mit Usage-Angaben).
+
+        Das Usage-Objekt wird vom Adapter mit den konfigurierten Usage-Schluesseln
+        (usage_path, usage_input_key, usage_output_key) ausgewertet.
+        """
+        ...
+
+
+def _stream_with_flag(url: str, params: dict, body: dict) -> tuple[str, dict, dict]:
+    return url, params, {**body, "stream": True}
+
 
 # ── Path Extraction (shared) ────────────────────────────────────────────
 
@@ -94,6 +110,15 @@ class StandardProfile:
     def extract_response(self, data: dict, response_path: str) -> str | None:
         return _extract_path(data, response_path)
 
+    prepare_stream = staticmethod(_stream_with_flag)
+
+    def parse_stream_event(self, event: dict) -> tuple[str | None, dict | None]:
+        # OpenAI-kompatibel: choices[0].delta.content; Ollama (/api/chat): message.content
+        text = _extract_path(event, "choices[0].delta.content")
+        if text is None:
+            text = _extract_path(event, "message.content")
+        return text, event
+
 
 class AnthropicProfile:
     """Anthropic Messages API — x-api-key, anthropic-version, max_tokens, system als Top-Level."""
@@ -138,6 +163,21 @@ class AnthropicProfile:
         ]
         return "\n".join(texts) if texts else None
 
+    prepare_stream = staticmethod(_stream_with_flag)
+
+    def parse_stream_event(self, event: dict) -> tuple[str | None, dict | None]:
+        # Messages-API-SSE: message_start (Input-Token), content_block_delta (Text),
+        # message_delta (Output-Token, kumuliert)
+        kind = event.get("type")
+        if kind == "content_block_delta":
+            delta = event.get("delta") or {}
+            return (delta.get("text") if delta.get("type") == "text_delta" else None), None
+        if kind == "message_start":
+            return None, event.get("message")
+        if kind == "message_delta":
+            return None, event
+        return None, None
+
 
 class OpenAIResponsesProfile:
     """OpenAI Responses API — input statt messages, output-Array mit type='message'."""
@@ -172,6 +212,17 @@ class OpenAIResponsesProfile:
                     parts.append(content["text"])
         return "\n".join(parts) if parts else None
 
+    prepare_stream = staticmethod(_stream_with_flag)
+
+    def parse_stream_event(self, event: dict) -> tuple[str | None, dict | None]:
+        # Responses-API-SSE: response.output_text.delta (Text), response.completed (Usage)
+        kind = event.get("type")
+        if kind == "response.output_text.delta":
+            return event.get("delta"), None
+        if kind == "response.completed":
+            return None, event.get("response")
+        return None, None
+
 
 class GeminiProfile:
     """Google Gemini — model in URL, key als Query-Parameter, eigenes Message-Format."""
@@ -199,6 +250,15 @@ class GeminiProfile:
 
     def extract_response(self, data: dict, response_path: str) -> str | None:
         return _extract_path(data, response_path)
+
+    def prepare_stream(self, url: str, params: dict, body: dict) -> tuple[str, dict, dict]:
+        # Eigener Endpunkt; ein "stream"-Feld im Body wuerde Gemini ablehnen.
+        return url.replace(":generateContent", ":streamGenerateContent"), {**params, "alt": "sse"}, body
+
+    def parse_stream_event(self, event: dict) -> tuple[str | None, dict | None]:
+        parts = _extract_path(event, "candidates[0].content.parts") or []
+        text = "".join(p.get("text", "") for p in parts if isinstance(p, dict)) or None
+        return text, event
 
 
 # ── Profile Registry ─────────────────────────────────────────────────────

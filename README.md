@@ -13,7 +13,7 @@ answer is correct. It gives users a structured workspace for comparing model
 outputs, tracking runs, and deliberately choosing the next step. The human
 decides. Always.
 
-> Status: v0.2.1 Alpha. The primary path is local, desktop-first, and designed
+> Status: v0.2.2 Alpha. The primary path is local, desktop-first, and designed
 > for individual users on Windows and Linux.
 
 ![Conclave Studio](https://raw.githubusercontent.com/laszlo-pinter/Conclave-Personal/main/docs/assets/screenshots/conclave-studio-desktop.png)
@@ -379,6 +379,7 @@ Important documents:
 - [Example workflows](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/beispiel-workflows.md)
 - [Security](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/sicherheit.md)
 - [Configuration](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/referenz/konfiguration.md)
+- [Release Notes v0.2.2](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.2.2.md)
 - [Release Notes v0.2.1](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.2.1.md)
 - [Release Notes v0.2.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.2.0.md)
 - [Release Notes v0.1.20](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.1.20.md)
@@ -396,7 +397,7 @@ Important documents:
 
 ## Known Limitations
 
-v0.2.1 remains alpha. Known limitations:
+v0.2.2 remains alpha. Known limitations:
 
 - Provider compatibility varies by API, model, account, and region.
 - Remote providers receive the data required for the model call.
@@ -410,8 +411,8 @@ CI runs the jobs `test` (Ubuntu and Windows, Python 3.11 and 3.12),
 `ui-browser` (Playwright browser tests in Chromium), `security` (`pip-audit`,
 `bandit`) and `build` (sdist and wheel, artifact inspection).
 
-The v0.2.1 surface was verified with these checks (v0.2.1 changes only the
-MCP server; the other checks were run for v0.2.0):
+The v0.2.2 surface was verified with these checks (v0.2.2 changes only streaming
+of preset agents; the other checks were run for v0.2.0 and v0.2.1):
 
 - `python -m pytest` (the Playwright browser tests for XSS protection, CSP,
   token login and the settings page only run with the browser test setup
@@ -422,6 +423,8 @@ MCP server; the other checks were run for v0.2.0):
 - `conclave-api` from the installed wheel (token file, CSP header, `/health`)
 - `conclave-mcp` from the installed wheel: MCP handshake and tool listing over
   stdio (MCP Python SDK 2.x); MCP tests run in CI
+- Streaming of preset agents against the real Anthropic, OpenAI (Responses and
+  Chat Completions) and Gemini APIs: text and token usage (manual)
 - `conclave desktop` end-to-end with real providers (manual)
 - `pip-audit` and `bandit` (run manually for this release, also in CI)
 - Artifact inspection without workspace data, databases, keys, logs, and old
