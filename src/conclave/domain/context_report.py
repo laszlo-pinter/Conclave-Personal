@@ -60,24 +60,21 @@ def requested_context_files(rules: str) -> list[str]:
     return paths
 
 
-def native_context_report(conversation, *, agent_prompt: str | None, system_text: str | None,
-                          adapter: str) -> ContextReport:
-    """Report fuer native Adapter: voller Verlauf, System-Prompt = Agent-Prompt + Regeln.
+def native_context_report(conversation, system, *, adapter: str) -> ContextReport:
+    """Report fuer native Adapter: voller Verlauf, keine Kuerzung.
 
-    Native Adapter laden keine context_files; die Eintraege landen roh in den
-    Regeln und werden hier als abgewiesen ausgewiesen.
+    ``system`` ist der gebaute System-Prompt (text, parts, context_files,
+    skipped_context_files) - derselbe wie beim UniversalAdapter.
     """
-    rules = getattr(conversation, "rules", "") or ""
-    parts = [name for name, present in (("agent_prompt", agent_prompt), ("rules", rules)) if present]
     messages = list(conversation.messages)
     return build_context_report(
         all_messages=messages,
         sent_messages=messages,
         adapter=adapter,
-        system_parts=parts,
-        system_text=system_text,
-        skipped_context_files=[{"path": p, "reason": "adapter_unsupported"}
-                               for p in requested_context_files(rules)],
+        system_parts=system.parts,
+        system_text=system.text,
+        context_files=system.context_files,
+        skipped_context_files=system.skipped_context_files,
     )
 
 

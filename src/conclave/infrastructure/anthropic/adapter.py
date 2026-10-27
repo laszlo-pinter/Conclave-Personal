@@ -13,6 +13,7 @@ from conclave.domain.context_report import native_context_report
 from conclave.domain.model_response import Completion, TokenUsage
 from conclave.domain.participant import Participant
 from conclave.infrastructure.log import get_logger, request_logger
+from conclave.infrastructure.system_prompt import SystemPrompt, assemble_system_prompt
 
 logger = get_logger("infrastructure.anthropic")
 
@@ -44,19 +45,12 @@ class AnthropicAdapter:
     def provider(self) -> str:
         return "anthropic"
 
-    def _build_system(self, conversation: Conversation) -> str | None:
-        """System-Prompt: Agent-Prompt + Chat-Regeln."""
-        parts = []
-        if self._system_prompt:
-            parts.append(self._system_prompt)
-        rules = getattr(conversation, "rules", "")
-        if rules:
-            parts.append(f"Chat-Regeln:\n{rules}")
-        return "\n\n".join(parts) if parts else None
+    def _build_system(self, conversation: Conversation) -> SystemPrompt:
+        """System-Prompt wie beim UniversalAdapter: Agent-Prompt, context_files, Regeln, Workspace."""
+        return assemble_system_prompt(self._system_prompt, conversation)
 
-    def _report(self, conversation: Conversation, system: str | None):
-        return native_context_report(conversation, agent_prompt=self._system_prompt,
-                                     system_text=system, adapter="anthropic-native")
+    def _report(self, conversation: Conversation, system: SystemPrompt):
+        return native_context_report(conversation, system, adapter="anthropic-native")
 
     def complete(self, conversation: Conversation, participant: Participant) -> Completion:
         messages = self._build_messages(conversation)
@@ -67,8 +61,8 @@ class AnthropicAdapter:
             "max_tokens": self._max_tokens,
             "messages": messages,
         }
-        if system:
-            kwargs["system"] = system
+        if system.text:
+            kwargs["system"] = system.text
 
         with request_logger(logger, operation="anthropic.complete", model=self._model):
             response = self._client.messages.create(**kwargs)
@@ -91,8 +85,8 @@ class AnthropicAdapter:
             "max_tokens": self._max_tokens,
             "messages": messages,
         }
-        if system:
-            kwargs["system"] = system
+        if system.text:
+            kwargs["system"] = system.text
 
         logger.debug("anthropic.stream start", extra={"model": self._model})
         with self._client.messages.stream(**kwargs) as stream:

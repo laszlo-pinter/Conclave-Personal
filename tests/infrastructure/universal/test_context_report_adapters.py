@@ -224,7 +224,7 @@ def test_parallel_flow_records_each_run_with_its_own_usage(service, db_connectio
     assert sorted(r.usage.input_tokens for r in runs) == [111, 222]
 
 
-def test_native_anthropic_adapter_sends_full_history_and_reports_it():
+def _native_anthropic():
     from conclave.infrastructure.anthropic.adapter import AnthropicAdapter
     adapter = AnthropicAdapter(api_key="k", system_prompt="P")
     response = MagicMock()
@@ -232,6 +232,11 @@ def test_native_anthropic_adapter_sends_full_history_and_reports_it():
     response.usage.input_tokens, response.usage.output_tokens = 40, 3
     adapter._client = MagicMock()
     adapter._client.messages.create.return_value = response
+    return adapter
+
+
+def test_native_anthropic_adapter_sends_full_history_and_reports_it(workspace):
+    adapter = _native_anthropic()
     msgs = [_msg(i) for i in range(1, 41)]
     result = adapter.complete(_conv(msgs, rules="context_files: ziel.md\nSei nett."), PART)
     assert result.text == "Antwort"
@@ -240,8 +245,36 @@ def test_native_anthropic_adapter_sends_full_history_and_reports_it():
     assert report.adapter == "anthropic-native"
     assert (report.messages_total, report.messages_sent) == (40, 40)
     assert report.truncation_limit is None
-    assert report.system_parts == ("agent_prompt", "rules")
-    assert report.skipped_context_files == ({"path": "ziel.md", "reason": "adapter_unsupported"},)
+
+
+def test_native_anthropic_adapter_loads_context_files_and_workspace_hints(workspace):
+    """A11: native Adapter bekommen denselben System-Prompt wie der UniversalAdapter."""
+    adapter = _native_anthropic()
+    conv = _conv([_msg(1)], rules="context_files: ziel.md, gross.md\nSei nett.")
+    result = adapter.complete(conv, PART)
+    system = adapter._client.messages.create.call_args.kwargs["system"]
+    assert "ZIEL-ALT" in system
+    assert "context_files:" not in system              # nicht mehr roh in den Regeln
+    assert "Chat-Regeln:\nSei nett." in system
+    assert "@read(" in system and "@save(" in system
+    assert result.report.system_parts == ("agent_prompt", "context_files", "rules", "workspace_info")
+    assert result.report.context_files == ({"path": "ziel.md", "bytes": len("ZIEL-ALT")},)
+    assert result.report.skipped_context_files == ({"path": "gross.md", "reason": "too_large"},)
+
+
+def test_native_openai_adapter_loads_context_files_and_workspace_hints(workspace):
+    from conclave.infrastructure.openai.adapter import OpenAIAdapter
+    adapter = OpenAIAdapter(api_key="k")
+    response = MagicMock(output_text="OK")
+    response.usage.input_tokens, response.usage.output_tokens = 5, 1
+    adapter._client = MagicMock()
+    adapter._client.responses.create.return_value = response
+    result = adapter.complete(_conv([_msg(1)], rules="context_files: ziel.md, ../weg.md"), PART)
+    instructions = adapter._client.responses.create.call_args.kwargs["instructions"]
+    assert "ZIEL-ALT" in instructions
+    assert "context_files:" not in instructions
+    assert "@read(" in instructions
+    assert result.report.skipped_context_files == ({"path": "../weg.md", "reason": "not_found_or_not_allowed"},)
 
 
 def test_native_openai_stream_ends_with_completion():

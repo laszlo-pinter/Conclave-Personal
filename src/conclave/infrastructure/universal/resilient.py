@@ -19,7 +19,6 @@ from conclave.domain.errors import ProviderRateLimit, ProviderTimeout, ProviderU
 from conclave.domain.model_response import Completion
 from conclave.domain.participant import Participant
 from conclave.infrastructure.log import get_logger
-from conclave.infrastructure.universal.adapter import UniversalAdapter
 
 logger = get_logger("infrastructure.resilient")
 
@@ -56,7 +55,8 @@ class ResilientAdapter:
 
     def complete(self, conversation: Conversation, participant: Participant) -> Completion:
         attempts = 0
-        if isinstance(self._adapter, UniversalAdapter):
+        # Faehigkeit am Typ pruefen (nicht per hasattr am Objekt: Mocks haben jedes Attribut)
+        if callable(getattr(type(self._adapter), "prepare_request", None)):
             # Anfrage genau einmal bauen: alle Versuche senden denselben Body,
             # auch wenn sich context_files zwischen den Versuchen aendern.
             request = self._adapter.prepare_request(conversation, participant)

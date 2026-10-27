@@ -67,21 +67,21 @@ unter Linux `~/Conclave/workspace`. Das gilt für alle Einstiegspunkte
 
 ## 5. Workspace-Info im System-Prompt
 
-- **Datei:** `infrastructure/universal/adapter.py:_build_workspace_info()`
+- **Datei:** `infrastructure/system_prompt.py:build_workspace_info()`
 - **Inhalt:** Anleitung für @workspace (lesen), @read (Agent liest), @save (Agent schreibt)
 - **Datei-Listing:** Standardmäßig AUS. Nur mit gesetztem `CONCLAVE_WORKSPACE_AUTOLIST` wird zusätzlich eine Liste aller nicht versteckten Workspace-Dateien angehängt.
-- **Trigger:** Bei jedem Provider-Call (in `_build_system_prompt`), sofern das Workspace-Verzeichnis existiert
-- **Scope:** Nur UniversalAdapter (Preset-Agents); die nativen Anthropic-/OpenAI-Adapter fügen keine Workspace-Info ein
+- **Trigger:** Bei jedem Provider-Call (in `assemble_system_prompt`), sofern das Workspace-Verzeichnis existiert
+- **Scope:** Alle Adapter (Preset-Agents und native Anthropic-/OpenAI-Adapter)
 
 ## 6. context_files — Kontextdateien aus den Chat-Regeln
 
-- **Datei:** `infrastructure/universal/adapter.py:_load_context_files()`
+- **Datei:** `infrastructure/system_prompt.py:collect_context_files()`
 - **Trigger:** Eine Zeile in den Chat-Regeln der Conversation, z. B. `context_files: a.md, b.md` (kommasepariert, Workspace-relative Pfade)
 - **Aktion:** Der Inhalt jeder Datei wird als `--- Kontext: <pfad> ---` in den System-Prompt eingefügt; die `context_files:`-Zeile selbst erscheint nicht in den Chat-Regeln des Prompts
 - **Security:** Gleiche Grenzen wie `@workspace`/`@read`: `resolve_workspace_path()` (kein absoluter Pfad, kein Ausbruch aus dem Workspace), `is_agent_visible()` (keine versteckten Pfade)
 - **Limits:** `CONCLAVE_WORKSPACE_AGENT_READ_LIMIT_BYTES`, Default `524288`
 - **Fehler:** Abgelehnte oder fehlende Einträge werden übersprungen und als Warnung geloggt
-- **Scope:** Nur UniversalAdapter (Preset-Agents); die nativen Adapter laden keine Kontextdateien
+- **Scope:** Alle Adapter (Preset-Agents und native Anthropic-/OpenAI-Adapter)
 
 ## Datenfluss
 
@@ -116,8 +116,8 @@ _process_agent_directives_for_context() → Datei in workspace/output/ geschrieb
   `GET /conversations/<id>/export`
 - Security: `src/conclave/application/workspace_security.py`
 - API: `src/conclave/api/app.py` Workspace-Endpunkte
-- System-Prompt: `src/conclave/infrastructure/universal/adapter.py:_build_workspace_info()`,
-  `_load_context_files()`
+- System-Prompt: `src/conclave/infrastructure/system_prompt.py:build_workspace_info()`,
+  `collect_context_files()`, `assemble_system_prompt()`
 - Tests: `tests/application/test_workspace_directives.py`, `tests/api/test_workspace_api.py`
 
 **Zuletzt verifiziert:** 2026-10-26 (v0.2.0)

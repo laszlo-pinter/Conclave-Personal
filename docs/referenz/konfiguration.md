@@ -95,8 +95,9 @@ werden in UI/API/CLI, Agent-Directives und `context_files:` nicht angezeigt
 oder gelesen.
 
 `context_files:` ist eine Zeile in den Chat-Regeln einer Conversation, z. B.
-`context_files: notizen.md, docs/plan.md`. Preset-Agents (UniversalAdapter)
-bekommen den Inhalt dieser Dateien in den System-Prompt. Geladen werden nur
+`context_files: notizen.md, docs/plan.md`. Alle Agenten (Preset-Agents und
+native Anthropic-/OpenAI-Agenten) bekommen den Inhalt dieser Dateien in den
+System-Prompt. Geladen werden nur
 Dateien innerhalb des Workspace, nicht versteckt und höchstens
 `CONCLAVE_WORKSPACE_AGENT_READ_LIMIT_BYTES` groß; abgelehnte Einträge werden
 als Warnung geloggt.

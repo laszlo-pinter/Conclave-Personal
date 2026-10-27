@@ -25,7 +25,7 @@ Participant ist registriert, Agent hat einen passenden Adapter.
 
 9. **Messages formatieren** — der jeweilige Adapter formatiert Conversation, Rollen und Modellparameter für den Provider.
 
-10. **System-Prompt bauen** — der UniversalAdapter kombiniert System-Prompt des Agenten, Inhalte aus `context_files:`, Chat-Regeln und Workspace-Hinweise (`_build_system_prompt()`). Die nativen Adapter nutzen nur System-Prompt und Chat-Regeln. Das Agent-Feld `role` fließt in keinen Prompt ein.
+10. **System-Prompt bauen** — alle Adapter (UniversalAdapter und die nativen Anthropic-/OpenAI-Adapter) kombinieren System-Prompt des Agenten, Inhalte aus `context_files:`, Chat-Regeln und Workspace-Hinweise (`infrastructure/system_prompt.py:assemble_system_prompt()`). Das Agent-Feld `role` fließt in keinen Prompt ein.
 
 11. **Provider-Call** — zwei Wege, beide in `ResilientAdapter` gekapselt:
     - Preset/Universal (Agent mit `preset` oder `api_url`): `ResilientAdapter.complete()` -> `UniversalAdapter.complete()` -> `ProviderProfile.build_body/headers/url()` -> HTTP-Call über httpx.

@@ -13,6 +13,7 @@ from conclave.domain.context_report import native_context_report
 from conclave.domain.model_response import Completion, TokenUsage
 from conclave.domain.participant import Participant
 from conclave.infrastructure.log import get_logger, request_logger
+from conclave.infrastructure.system_prompt import SystemPrompt, assemble_system_prompt
 
 logger = get_logger("infrastructure.openai")
 
@@ -43,18 +44,12 @@ class OpenAIAdapter:
     def provider(self) -> str:
         return "openai"
 
-    def _build_instructions(self, conversation: Conversation) -> str | None:
-        parts = []
-        if self._system_prompt:
-            parts.append(self._system_prompt)
-        rules = getattr(conversation, "rules", "")
-        if rules:
-            parts.append(f"Chat-Regeln:\n{rules}")
-        return "\n\n".join(parts) if parts else None
+    def _build_instructions(self, conversation: Conversation) -> SystemPrompt:
+        """System-Prompt wie beim UniversalAdapter: Agent-Prompt, context_files, Regeln, Workspace."""
+        return assemble_system_prompt(self._system_prompt, conversation)
 
-    def _report(self, conversation: Conversation, instructions: str | None):
-        return native_context_report(conversation, agent_prompt=self._system_prompt,
-                                     system_text=instructions, adapter="openai-native")
+    def _report(self, conversation: Conversation, instructions: SystemPrompt):
+        return native_context_report(conversation, instructions, adapter="openai-native")
 
     def complete(self, conversation: Conversation, participant: Participant) -> Completion:
         input_msgs = self._build_input(conversation)
@@ -63,7 +58,7 @@ class OpenAIAdapter:
             response = self._client.responses.create(
                 model=self._model,
                 input=input_msgs,
-                **({"instructions": instructions} if instructions else {}),
+                **({"instructions": instructions.text} if instructions.text else {}),
             )
         usage = TokenUsage(
             input_tokens=response.usage.input_tokens,
@@ -81,7 +76,7 @@ class OpenAIAdapter:
         stream = self._client.responses.create(
             model=self._model,
             input=input_msgs,
-            **({"instructions": instructions} if instructions else {}),
+            **({"instructions": instructions.text} if instructions.text else {}),
             stream=True,
         )
         usage = None
