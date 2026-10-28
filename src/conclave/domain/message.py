@@ -3,6 +3,8 @@ from datetime import datetime, UTC
 from enum import Enum
 import uuid
 
+from conclave.domain.principal import Role
+
 
 class MessageAuthorType(str, Enum):
     """Unterscheidet User-Eingaben von Model-Antworten."""
@@ -16,6 +18,10 @@ class Message:
 
     Sequence wird atomar von der DB vergeben (nicht im Speicher berechnet).
     author_id ist None fuer User-Messages, Participant-ID fuer Model-Messages.
+    origin: ueber welchen Zugang eine User-Message kam (``human``/``agent``, Z4);
+    None fuer Model-Messages und fuer alte Nachrichten (unbekannt).
+    author_type bleibt ``user``, sonst hielten Modelle Agent-Nachrichten fuer
+    ihre eigenen Antworten.
     """
     id: str
     conversation_id: str
@@ -24,12 +30,14 @@ class Message:
     content: str
     sequence: int
     created_at: datetime
+    origin: Role | None = None
 
     @staticmethod
     def create_user_message(
         conversation_id: str,
         content: str,
         sequence: int,
+        origin: Role | None = None,
     ) -> "Message":
         """Erzeugt eine User-Message mit neuer UUID."""
         return Message(
@@ -40,6 +48,7 @@ class Message:
             content=content,
             sequence=sequence,
             created_at=datetime.now(UTC),
+            origin=origin,
         )
 
     @staticmethod

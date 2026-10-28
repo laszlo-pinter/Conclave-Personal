@@ -1,6 +1,6 @@
 # API-Referenz
 
-**54 dokumentierte Endpoints** — öffentliche Personal-API.
+**55 dokumentierte Endpoints** — öffentliche Personal-API.
 
 Alle Endpoints außer `GET /`, `/static/*`, `GET /health`, `GET /api-docs` und
 `GET /openapi.json` verlangen ein Token (`Authorization: Bearer <token>` oder
@@ -10,12 +10,36 @@ brauchen `Content-Type: application/json` (auch ohne Inhalt: `{}`) oder den
 Header `X-Conclave-Client`, sonst `415`. Anfragen mit nicht erlaubtem
 `Host`-Header werden mit `421` abgelehnt. Details: [Sicherheit](../sicherheit.md).
 
+## Mensch- und Agent-Zugang
+
+Das Token bestimmt die Rolle: Mensch-Token (`CONCLAVE_API_KEY`/`api.token`)
+oder Agent-Token (`CONCLAVE_AGENT_KEY`/`agent.token`).
+`GET /auth/whoami` liefert `{"role": "human"}` bzw. `{"role": "agent"}`.
+
+Mit dem Agent-Token sind nur die Routen erlaubt, die die MCP-Tools brauchen:
+
+- `GET /auth/whoami`
+- `GET`/`POST /conversations`, `GET /conversations/<id>`,
+  `POST /conversations/<id>/topic`, `GET /conversations/<id>/export`
+- `POST /conversations/<id>/participants` (nur `type: "model"`),
+  `POST /conversations/<id>/messages`,
+  `POST /conversations/<id>/participants/<pid>/invoke`,
+  `POST /conversations/<id>/orchestrate`,
+  `POST /conversations/<id>/orchestrate-parallel`
+- `GET /agents`, `GET /usage`
+- `GET /workspace`, `GET`/`POST /workspace/<path>`
+- `POST /consultations`, `GET /consultations/<id>`
+
+Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
+`{"type": "HumanOnly", "error": "Nur für den Menschen-Zugang."}`.
+
 | Methode | Pfad | Beschreibung |
 |---------|------|-------------|
 | `GET` | `/` | Serve Ui |
 | `GET` | `/api-docs` | Swagger UI — interaktive API-Dokumentation (lokal ausgeliefert, keine CDN-Ressourcen). |
 | `GET` | `/openapi.json` | OpenAPI 3.0 Spec als JSON. |
 | `GET` | `/health` | Healthcheck für lokale Runtime und Integrationen. |
+| `GET` | `/auth/whoami` | Rolle des anfragenden Tokens: `human` oder `agent`. |
 | `POST` | `/conversations` | Create Conversation |
 | `GET` | `/conversations` | List Conversations |
 | `GET` | `/agents` | List Agents |
@@ -89,6 +113,11 @@ kein Datenfehler.
   `skipped_files`, `estimated_tokens` (Schätzung, ca. 3,5 Zeichen pro Token),
   `billed_input_tokens`/`billed_output_tokens` (vom Provider abgerechnet,
   `null` wenn nicht gemeldet), `adapter`, `attempts`.
+- Jede Nachricht hat `origin` (in `GET /conversations/<id>`, im Export und in
+  der Antwort von `POST /conversations/<id>/messages`): `human` oder `agent`,
+  je nach Token der Anfrage, nie aus dem Body. `null` heißt unbekannt
+  (Modellantworten, ältere Nachrichten, Wege ohne Token wie die CLI).
+  `author_type` bleibt für Nachrichten von Agenten `user`.
 - `GET /conversations/<id>/messages/<message_id>/context` liefert den
   vollständigen Report (`report`, `usage`, `run_id`). `404`, wenn Conversation,
   Nachricht oder Report fehlen (`type`: `ConversationNotFound`,
@@ -124,12 +153,15 @@ ohne Reviewer-Liste antworten die Endpunkte mit `503`
 - `reviewers`: Teilmenge von `[kanzo] reviewers`; Standard: alle erlaubten.
 - `include_previous`: frühere Conclave-Kommentare des Tickets mitgeben
   (Standard `false`; dann als „frühere Modellausgabe“ gekennzeichnet).
-- `channel`: `rest` (Standard) oder `mcp`; das MCP-Tool setzt immer `mcp`.
+- Kein Feld `channel`: Der Kanal (`human` oder `agent`) ergibt sich aus dem
+  Token. Ein `channel` im Body ergibt `400` (`ChannelNotAllowed`); bis v0.4.0
+  gab es dort `rest`/`mcp`.
 - Antwort `202` mit `id`, `status: "queued"` und `reviewers` (je Reviewer
   Provider und Modell: an diese Provider geht der Ticket-Inhalt).
 
-Fehler: `400` (`ValidationError`, `ReviewerNotAllowed`), `403`
-(`HumanOnlyTicket`: Ticket nur für Menschen, Anfrage über `mcp`), `404`
+Fehler: `400` (`ValidationError`, `ReviewerNotAllowed`, `ChannelNotAllowed`),
+`403` (`HumanOnlyTicket`: Ticket nur für Menschen, Anfrage mit dem
+Agent-Token), `404`
 (Ticket unbekannt), `429` (`ConsultationLimit`: `[kanzo] max_per_hour` pro
 Ticket und Stunde erreicht), `502` (Kanzo nicht erreichbar oder unbekanntes
 Ausgabeformat), `503` (nicht eingerichtet). Bei diesen Fehlern wird nichts
@@ -208,8 +240,12 @@ Antworten automatisch zu. Modelle werden nie automatisch erneut aufgerufen.
 
 Fehler kommen als JSON `{"error": "...", "type": "..."}`. Wichtige Codes:
 
-- `400` — ungültige Eingaben, leere Conversation, Provider-Client-Fehler (4xx)
+- `400` — ungültige Eingaben, leere Conversation, Provider-Client-Fehler (4xx);
+  bei Participants ein `type` außer `model`/`user`
 - `401` — Token fehlt oder ist falsch
+- `403` — `HumanOnly`: Route nur mit dem Mensch-Token (siehe
+  [Mensch- und Agent-Zugang](#mensch--und-agent-zugang)); `HumanOnlyTicket`:
+  Consultation auf ein Ticket nur für Menschen mit dem Agent-Token
 - `404` — Conversation, Participant, Agent, Run oder Datei nicht gefunden
   (auch Invoke in einer unbekannten Conversation)
 - `409` — Konflikt (z. B. Agent/Participant existiert bereits, kein Rederecht,

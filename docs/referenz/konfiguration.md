@@ -46,10 +46,21 @@ wenige Werte ein Fallback (siehe [TOML-Config](#toml-config)).
 |----------|---------|-------------|
 | CONCLAVE_SECRET_KEY | — | Fernet-Key (base64). Nicht ändern nach Erstanlage! |
 | CONCLAVE_SECRET_KEY_FILE | plattformabhängig | Datei für lokalen Fernet-Key |
-| CONCLAVE_API_KEY | — | API-Token (Bearer). Leer: Token aus `CONCLAVE_API_TOKEN_FILE`, beim ersten Serverstart erzeugt |
-| CONCLAVE_API_TOKEN_FILE | `<config_dir>/api.token` | Datei für das automatisch erzeugte API-Token (nur Benutzer lesbar) |
+| CONCLAVE_API_KEY | — | Mensch-Token (Bearer) für UI, REST-API und CLI. Leer: Token aus `CONCLAVE_API_TOKEN_FILE`, beim ersten Serverstart erzeugt. Nie in eine MCP- oder Agent-Konfiguration eintragen |
+| CONCLAVE_API_TOKEN_FILE | `<config_dir>/api.token` | Datei für das automatisch erzeugte Mensch-Token (nur Benutzer lesbar) |
+| CONCLAVE_AGENT_KEY | — | Agent-Token für den MCP-Server und andere Agenten (eingeschränkte Rechte). Leer: Token aus `CONCLAVE_AGENT_TOKEN_FILE`, beim ersten Serverstart erzeugt. Gleich dem Mensch-Token: kein Agent-Zugang |
+| CONCLAVE_AGENT_TOKEN_FILE | `<config_dir>/agent.token` | Datei für das automatisch erzeugte Agent-Token (nur Benutzer lesbar) |
 | CONCLAVE_ALLOWED_HOSTS | — | Zusätzlich erlaubte `Host`-Header (kommasepariert, optional mit Port). `localhost`, `127.0.0.1`, `[::1]` sind immer erlaubt. Pflicht bei Nicht-Loopback-`CONCLAVE_HOST` |
 | CONCLAVE_ALLOWED_ORIGINS | `http://localhost,http://localhost:8000,http://127.0.0.1,http://127.0.0.1:8000` | CORS-Allowlist (kommasepariert, exakte Origins) |
+
+Neue Tokens beginnen mit `cvh_` (Mensch) bzw. `cva_` (Agent); die Rolle
+ergibt sich aber allein daraus, in welcher Variable bzw. Datei das Token steht.
+Ein älteres `api.token` ohne Präfix bleibt gültig. Pfad und
+MCP-Einrichtungsbefehl zeigt `conclave token show --agent`.
+
+`CONCLAVE_AGENT_KEY` und `CONCLAVE_AGENT_TOKEN_FILE` sind reserviert und werden
+nicht als Agent-Definition `CONCLAVE_AGENT_<ID>` gelesen (bis v0.4.0 entstand
+daraus ein Agent mit der ID `KEY` bzw. `TOKEN_FILE`).
 
 ## Provider API-Keys (Fallback)
 

@@ -7,27 +7,38 @@ Starten:
 
 Benoetigt das Extra ``mcp`` (MCP Python SDK 2.x): pip install "conclave-personal[mcp]"
 
-Das API-Token kommt aus CONCLAVE_API_KEY oder, falls leer, aus der lokalen
-Token-Datei des Servers (api.token im Konfigurationsverzeichnis).
+Der MCP-Server nutzt den Agent-Zugang (seit v0.5.0): das Token aus
+CONCLAVE_AGENT_KEY oder, falls leer, aus agent.token im Konfigurationsverzeichnis.
+api.token (Mensch-Token) liest er nie. CONCLAVE_API_KEY gilt nur noch als
+Rueckfall fuer alte Einrichtungen; liefert der Server dafuer die Rolle "human",
+steht eine Warnung auf stderr. Den passenden Befehl zeigt `conclave token show --agent`.
 
 In Claude Code:
     claude mcp add Conclave -s user -e CONCLAVE_API_URL=http://localhost:8000 -- conclave-mcp
 """
 
 import os
+import sys
+import threading
 from importlib.metadata import PackageNotFoundError, version
 
 import httpx
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from conclave.runtime.api_token import read_token
+from conclave.runtime.api_token import read_agent_token
+from conclave.runtime.env import env_secret
 
 # ── Config ────────────────────────────────────────────────────────────────
 
 API_URL = os.environ.get("CONCLAVE_API_URL", "http://localhost:8000")
-# Token: CONCLAVE_API_KEY, sonst die lokale Token-Datei des Servers (api.token).
+# Token: CONCLAVE_AGENT_KEY, sonst agent.token, sonst (alt) CONCLAVE_API_KEY - nie api.token.
 # Wird pro Anfrage gelesen, damit der MCP-Client auch vor dem ersten Serverstart laufen darf.
+
+
+def read_token() -> str:
+    """Token fuer den MCP-Server: der Agent-Zugang, nie die Datei api.token."""
+    return read_agent_token() or env_secret("CONCLAVE_API_KEY")
 
 
 def _package_version() -> str:
@@ -69,12 +80,51 @@ def _result(r: httpx.Response) -> dict:
         except ValueError:
             body = None
         detail = (body.get("error") if isinstance(body, dict) else None) or r.text
-        hint = " (Token pruefen: CONCLAVE_API_KEY oder api.token)" if r.status_code == 401 else ""
+        hint = " (Token pruefen: CONCLAVE_AGENT_KEY oder agent.token)" if r.status_code == 401 else ""
         raise ToolError(f"Conclave-API {r.status_code}: {detail}{hint}")
     return r.json() if r.text else {}
 
 
+_role_lock = threading.Lock()
+_role_checked = False
+
+HUMAN_TOKEN_WARNING = (
+    "WARNUNG: conclave-mcp nutzt das Mensch-Token. Agenten haben damit vollen Zugang zu Conclave "
+    "(Einstellungen, Loeschen, Backups). Bitte CONCLAVE_AGENT_KEY setzen bzw. CONCLAVE_API_KEY aus der "
+    "MCP-Konfiguration entfernen - der Befehl steht in `conclave token show --agent`."
+)
+
+
+def _check_role() -> None:
+    """Einmal pro Prozess: GET /auth/whoami. Bei Rolle human eine deutliche Warnung auf stderr (4.2)."""
+    global _role_checked
+    with _role_lock:
+        if _role_checked:
+            return
+        _role_checked = True
+    try:
+        r = httpx.get(f"{API_URL}/auth/whoami", headers=_headers(), timeout=10)
+    except httpx.HTTPError:
+        r = None
+    if r is None or r.status_code not in (200, 404):
+        # Server noch nicht da oder Token falsch: beim naechsten Aufruf erneut pruefen
+        with _role_lock:
+            _role_checked = False
+        return
+    if r.status_code == 404:
+        print("WARNUNG: Der Conclave-Server kennt keine getrennten Zugaenge (aelter als v0.5.0).",
+              file=sys.stderr, flush=True)
+    elif r.status_code == 200:
+        try:
+            role = r.json().get("role")
+        except (ValueError, AttributeError):
+            return
+        if role == "human":
+            print(HUMAN_TOKEN_WARNING, file=sys.stderr, flush=True)
+
+
 def _request(method: str, path: str, *, timeout: float, **kwargs) -> dict:
+    _check_role()
     try:
         r = httpx.request(method, f"{API_URL}{path}", headers=_headers(), timeout=timeout, **kwargs)
     except httpx.HTTPError as exc:
@@ -88,10 +138,6 @@ def _get(path: str, params: dict | None = None) -> dict:
 
 def _post(path: str, body: dict | None = None) -> dict:
     return _request("POST", path, json=body or {}, timeout=120)
-
-
-def _delete(path: str, body: dict | None = None) -> dict:
-    return _request("DELETE", path, json=body, timeout=60)
 
 
 # ── Tools: Conversations ──────────────────────────────────────────────────
@@ -126,15 +172,7 @@ def conclave_get_conversation(conversation_id: str) -> dict:
     return _get(f"/conversations/{conversation_id}")
 
 
-@mcp.tool()
-def conclave_delete_conversation(conversation_id: str) -> dict:
-    """Loescht eine Conversation inkl. aller Messages.
-
-    Args:
-        conversation_id: Die ID der Conversation
-    """
-    _delete(f"/conversations/{conversation_id}")
-    return {"deleted": conversation_id}
+# Loeschen (Conversations, Workspace-Dateien) darf nur der Mensch (E2), daher kein Tool dafuer.
 
 
 # ── Tools: Participants ───────────────────────────────────────────────────
@@ -280,17 +318,6 @@ def conclave_upload_file(filepath: str, content: str) -> dict:
     return _post(f"/workspace/{filepath}", {"content": content})
 
 
-@mcp.tool()
-def conclave_delete_file(filepath: str) -> dict:
-    """Loescht eine Datei aus dem Conclave-Workspace.
-
-    Args:
-        filepath: Relativer Pfad im Workspace
-    """
-    _delete(f"/workspace/{filepath}")
-    return {"deleted": filepath}
-
-
 # ── Tools: Consultations (Zweitmeinung zu Kanzo-Tickets) ──────────────────
 
 @mcp.tool()
@@ -312,7 +339,7 @@ def conclave_consult(task: str, question: str, context: str = "", include_previo
         reviewers: Optional eine Teilmenge der erlaubten Reviewer (Agent-IDs)
     """
     body = {"task": task, "question": question, "context": context,
-            "include_previous": include_previous, "channel": "mcp", "requested_by": "mcp"}
+            "include_previous": include_previous, "requested_by": "mcp"}
     if reviewers:
         body["reviewers"] = reviewers
     return _post("/consultations", body)

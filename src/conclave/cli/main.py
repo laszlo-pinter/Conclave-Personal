@@ -232,6 +232,14 @@ def build_parser() -> argparse.ArgumentParser:
     migrate_p.add_argument("--backup-dir", default=None, dest="backup_dir", help="Ordner fuer das Ziel-DB-Backup")
     migrate_p.add_argument("--dry-run", action="store_true", help="Nur pruefen und Bericht ausgeben")
 
+    token_p = sub.add_parser("token", help="API-Tokens anzeigen (Pfad, MCP-Einrichtung)")
+    token_sub = token_p.add_subparsers(dest="token_command", required=True)
+    token_show = token_sub.add_parser("show", help="Pfad des Tokens und Einrichtungsbefehl anzeigen")
+    token_show.add_argument("--agent", action="store_true",
+                            help="Agent-Token fuer den MCP-Server statt des Mensch-Tokens")
+    token_show.add_argument("--reveal", action="store_true",
+                            help="Den Token-Wert ausgeben (nur auf ausdrueckliche Anfrage)")
+
     watch = sub.add_parser("watch", help="Conversation live beobachten (pollt auf neue Nachrichten)")
     watch.add_argument("conversation_id")
     watch.add_argument("--interval", type=int, default=5, help="Poll-Intervall in Sekunden (Default: 5)")
@@ -252,6 +260,8 @@ def run(argv: list[str] | None = None) -> int:
         return _run_server(args, should_open_browser=True)
     if args.command == "migrate-personal":
         return _run_migrate_personal(args)
+    if args.command == "token":
+        return _run_token_show(args)
 
     config = ConclaveConfig.from_sources()
     errors = validate_production_config(config)
@@ -607,6 +617,45 @@ def _run_server(args, should_open_browser: bool = False) -> int:
         print(f"Conclave API-Token: {token_path()}")
     from conclave.runtime.serve import serve
     serve(app, config.host, config.port, debug=config.debug)
+    return 0
+
+
+def _run_token_show(args) -> int:
+    """Zeigt Pfad und Einrichtung eines Tokens; den Wert nur mit --reveal (Z5)."""
+    from conclave.runtime import api_token
+
+    config = ConclaveConfig.from_sources()
+    url = _server_url(config.host, config.port)
+    if not args.agent:
+        source = "CONCLAVE_API_KEY" if env_secret("CONCLAVE_API_KEY") else str(api_token.token_path())
+        print(f"Mensch-Token: {source}")
+        print("Fuer UI, REST-API und CLI. Nie in eine MCP- oder Agent-Konfiguration eintragen.")
+        if args.reveal:
+            print(api_token.read_token() or "(noch kein Token - Server einmal starten)")
+        return 0
+
+    if env_secret("CONCLAVE_AGENT_KEY"):
+        token, source = env_secret("CONCLAVE_AGENT_KEY"), "CONCLAVE_AGENT_KEY"
+    else:
+        path = api_token.agent_token_path()
+        existed = path.exists()
+        token, source = api_token.load_or_create_agent_token(path), str(path)
+        if not existed:
+            source += " (neu angelegt)"
+    print(f"Agent-Token: {source}")
+    print("Hinweis: Setzt der Server CONCLAVE_AGENT_KEY in seiner eigenen Umgebung, gilt nur dieser Wert.")
+    print()
+    print("MCP-Server in Claude Code einrichten (liest agent.token selbst):")
+    print(f"  claude mcp add Conclave -s user -e CONCLAVE_API_URL={url} -- conclave-mcp")
+    print()
+    print("Oder mit dem Token in der MCP-Konfiguration (anderer Benutzer/Rechner):")
+    value = token if args.reveal else "<Inhalt von agent.token>"
+    print(f"  claude mcp add Conclave -s user -e CONCLAVE_API_URL={url} -e CONCLAVE_AGENT_KEY={value} -- conclave-mcp")
+    if not args.reveal:
+        print()
+        print("Den Wert zeigt `conclave token show --agent --reveal`.")
+    print()
+    print("Alte Einrichtungen mit CONCLAVE_API_KEY bitte umstellen: Mit dem Mensch-Token hat ein Agent vollen Zugang.")
     return 0
 
 

@@ -77,6 +77,17 @@ MIGRATIONS: list[Migration] = [
         description="Consultations (Zweitmeinung zu Kanzo-Tickets) und ihre Zustellungen",
         fn=lambda connection, is_postgres: _create_consultations_tables(connection, is_postgres),
     ),
+    Migration(
+        id="010_consultation_channels",
+        description="Consultation-Kanal beschreibt den Zugang: rest -> human, mcp -> agent (E3)",
+        sql="UPDATE consultations SET channel = 'human' WHERE channel = 'rest'; "
+            "UPDATE consultations SET channel = 'agent' WHERE channel = 'mcp'",
+    ),
+    Migration(
+        id="011_message_origin",
+        description="Herkunft von User-Nachrichten (human/agent, NULL = unbekannt)",
+        sql="ALTER TABLE messages ADD COLUMN origin TEXT",
+    ),
 ]
 
 

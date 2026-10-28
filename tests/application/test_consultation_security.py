@@ -118,7 +118,7 @@ def test_task_ref_variants_cannot_bypass_the_limit(env, ref):
 
 def test_ambiguous_ticket_format_fails_closed_at_post(env):
     env.kanzo.add(FakeTask("api", 7, "T", human=True, description="status: todo, created 2026-10-27 20:12 UTC"))
-    resp = env.client.post("/consultations", json={"task": "api#7", "question": "?", "channel": "mcp"})
+    resp = env.client.post("/consultations", json={"task": "api#7", "question": "?"})
     assert resp.status_code == 502 and "TaskFormatError" in resp.get_json()["type"]
     assert env.repo.list_by_source_ref("kanzo", "api#7") == []
 

@@ -11,6 +11,7 @@
 ### Workflows
 - [Example workflows](beispiel-workflows.md) - Writing, architecture, workspace context, and multi-agent runs
 - [Provider smoke test](provider-smoke-test.md) - Check Claude, Gemini, GPT, and DeepSeek locally
+- [Working with Kanzo](mit-kanzo-arbeiten.md) - Work packages on a Kanzo board, second opinions from Conclave
 
 ### Product UI
 - [Personal UI architecture](personal-ui-architektur.md) - Studio, Agents, Workspace, Runs, Settings
@@ -30,6 +31,7 @@
 - [Ports & adapters](architektur/ports-adapter.md) - Interfaces, ProviderProfiles, ResilientAdapter
 
 ### Release
+- [Release Notes v0.5.0](release-notes-v0.5.0.md) - Separate human and agent access
 - [Release Notes v0.4.0](release-notes-v0.4.0.md) - Consultations: second opinions on Kanzo tickets
 - [Release Notes v0.3.0](release-notes-v0.3.0.md) - Context transparency: context chip, preview before a call, per-agent message limit
 - [Release Notes v0.2.3](release-notes-v0.2.3.md) - Chat rules are saved with SQLite

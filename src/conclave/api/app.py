@@ -6,7 +6,7 @@ import os
 import time
 
 try:
-    from flask import Flask, Response, jsonify, request, stream_with_context, send_file as flask_send_file
+    from flask import Flask, Response, g, jsonify, request, stream_with_context, send_file as flask_send_file
     from werkzeug.exceptions import HTTPException
 except ImportError:
     raise ImportError(
@@ -37,6 +37,8 @@ from conclave.domain.errors import (
     ProviderTimeout,
 )
 from conclave.domain.participant import ParticipantType
+from conclave.domain.principal import HUMAN_PRINCIPAL
+from conclave.api.access import HUMAN_ONLY_ERROR, agent_may
 from conclave.application.consultations import ConsultationRequestError
 from conclave.domain.errors import TaskNotFound, TaskSourceError
 from conclave.cli.bootstrap import rate_limit_disabled, validate_rate_limit
@@ -176,6 +178,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         if request.method == "OPTIONS":
             return
         if auth_service is None:
+            g.principal = HUMAN_PRINCIPAL      # ohne Auth (nur Tests/Entwicklung): voller Zugang
             return
         if request.method in ("GET", "HEAD") and (
             request.path in PUBLIC_GET_PATHS or request.path.startswith("/static/")
@@ -187,8 +190,21 @@ def create_app(handler: CLIHandler, auth_service=None,
             token = auth_header[7:]
         else:
             token = request.headers.get("X-API-Key")
-        if not auth_service.validate_token(token):
+        principal = auth_service.authenticate(token)
+        if principal is None:
             raise AuthenticationError()
+        g.principal = principal
+
+    @app.before_request
+    def _check_agent_access():
+        # Z2: Agenten duerfen nur, was auf der Allowlist steht (Default deny).
+        principal = g.get("principal")
+        if principal is None or not principal.is_agent or request.method == "OPTIONS":
+            return
+        if request.url_rule is None:
+            return  # unbekannte Route: 404/405 wie bei allen anderen
+        if not agent_may(request.method, request.url_rule.rule):
+            return jsonify(HUMAN_ONLY_ERROR), 403
 
     @app.before_request
     def _log_request_start():
@@ -302,6 +318,11 @@ def create_app(handler: CLIHandler, auth_service=None,
     def health():
         """Healthcheck fuer lokale Runtime und Integrationen."""
         return jsonify({"status": "ok", "product": "conclave-personal"}), 200
+
+    @app.get("/auth/whoami")
+    def whoami():
+        """Rolle des anfragenden Tokens: human oder agent."""
+        return jsonify({"role": g.principal.role}), 200
 
     # ── Error Handler ────────────────────────────────────────────────────
 
@@ -666,7 +687,12 @@ def create_app(handler: CLIHandler, auth_service=None,
         ptype_str = body.get("type", "model")
 
         if not participant_id or not name:
-            return jsonify({"error": "participant_id und name sind erforderlich."}), 400
+            return jsonify({"error": "participant_id und name sind erforderlich.", "type": "ValidationError"}), 400
+        if ptype_str not in ("model", "user"):
+            return jsonify({"error": "type muss 'model' oder 'user' sein.", "type": "ValidationError"}), 400
+        # Z2b: Agenten treten nie als Mensch auf, also keine Participants vom Typ user.
+        if g.principal.is_agent and ptype_str != "model":
+            return jsonify(HUMAN_ONLY_ERROR), 403
 
         ptype = ParticipantType.MODEL if ptype_str == "model" else ParticipantType.USER
         result = handler.add_participant(
@@ -696,7 +722,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         if not content:
             return jsonify({"error": "content ist erforderlich."}), 400
 
-        result = handler.add_message(conversation_id, content)
+        result = handler.add_message(conversation_id, content, origin=g.principal.role)  # Z4
         if not result.success:
             return jsonify({"error": result.message}), 404
         return jsonify(result.data), 201
@@ -836,7 +862,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         body = request.get_json(silent=True)
         if not isinstance(body, dict):
             return jsonify({"error": "JSON-Objekt erwartet.", "type": "ValidationError"}), 400
-        return jsonify(_consultations().create(body)), 202
+        return jsonify(_consultations().create(body, g.principal)), 202
 
     @app.get("/consultations")
     def list_consultations():
@@ -852,7 +878,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         rerun = body.get("rerun", False)
         if not isinstance(rerun, bool):
             return jsonify({"error": "rerun muss true oder false sein.", "type": "ValidationError"}), 400
-        result = _consultations().retry(consultation_id, rerun=rerun)
+        result = _consultations().retry(consultation_id, g.principal, rerun=rerun)
         return jsonify(result), 202
 
     # ── Personal Export ─────────────────────────────────────────────────

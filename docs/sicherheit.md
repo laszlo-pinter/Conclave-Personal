@@ -10,8 +10,9 @@ Interface.
 - Die API verlangt immer ein Token. Ist `CONCLAVE_API_KEY` nicht gesetzt,
   erzeugt der Server beim ersten Start ein zufälliges Token und legt es in
   `api.token` im Konfigurationsverzeichnis ab (Linux `0600`, Windows ACL nur
-  für den aktuellen Benutzer). CLI-Werkzeuge (`conclave-watch`) und der
-  MCP-Server lesen es von dort, wenn `CONCLAVE_API_KEY` leer ist.
+  für den aktuellen Benutzer). CLI-Werkzeuge (`conclave web`, `conclave-watch`)
+  lesen es von dort, wenn `CONCLAVE_API_KEY` leer ist. Agenten bekommen ein
+  eigenes Token, siehe [Mensch- und Agent-Zugang](#mensch--und-agent-zugang).
 - Ohne Token erreichbar sind nur `GET`/`HEAD` auf `/`, `/static/*`, `/health`,
   `/api-docs` und `/openapi.json` sowie CORS-Preflights (`OPTIONS`, leere
   Antwort `204`).
@@ -45,6 +46,82 @@ $env:CONCLAVE_API_KEY = "<starkes-lokales-token>"
 $env:CONCLAVE_SECRET_KEY = "<fernet-schluessel>"  # oder CONCLAVE_SECRET_KEY_FILE / vorhandene secret.key
 conclave desktop
 ```
+
+## Mensch- und Agent-Zugang
+
+Seit v0.5.0 unterscheidet Conclave am **Token**, wer anfragt. Angaben in der
+Anfrage spielen dafür keine Rolle.
+
+- **Mensch-Token:** `CONCLAVE_API_KEY` bzw. `api.token`. Gilt für die UI, die
+  REST-API und die CLI. Neue Tokens beginnen mit `cvh_`; ein älteres
+  `api.token` ohne Präfix bleibt gültig und zählt als Mensch.
+- **Agent-Token:** `CONCLAVE_AGENT_KEY` bzw. `agent.token` (neben `api.token`,
+  gleiche Dateirechte), Präfix `cva_`. Der MCP-Server liest nur dieses Token,
+  nie `api.token`. Ist es gleich dem Mensch-Token, gibt es keinen
+  Agent-Zugang.
+- **Rolle prüfen:** `GET /auth/whoami` liefert `{"role": "human"|"agent"}`.
+  Bekommt der MCP-Server `human`, schreibt er eine Warnung nach stderr.
+- **Rechte des Agent-Zugangs:** nur die Routen, die die MCP-Tools brauchen
+  (Liste in `api/access.py`); alles andere ergibt `403`
+  `{"type": "HumanOnly"}`. Neue Routen sind für Agenten gesperrt, bis sie
+  bewusst freigegeben werden. Agenten dürfen nicht löschen, keine Einstellungen,
+  Agents, Backups oder Logs sehen oder ändern, keine Consultations wiederholen
+  und nur Participants vom Typ `model` anlegen.
+- **Herkunft:** Nachrichten über `POST /conversations/<id>/messages` tragen
+  `origin: human|agent` aus dem Token (UI: „über Agent“). Ältere Nachrichten
+  und Wege ohne Token (CLI) haben `origin: null` (unbekannt). Für die Modelle
+  bleiben Agent-Nachrichten normale User-Nachrichten.
+- **Consultations:** Der Kanal (`human`/`agent`) kommt aus dem Token; `channel`
+  im Body ergibt `400`. Tickets „nur für Menschen“ lehnen API und Worker für
+  alles außer `human` ab, über MCP wie über direkte REST-Aufrufe.
+
+### Grenze: gleicher Betriebssystem-Benutzer
+
+Agenten wie Claude Code laufen unter demselben Benutzer wie Conclave. Ein Agent
+mit Shell kann deshalb jede Datei lesen, die Conclave lesen kann, auch
+`api.token`, und damit den Mensch-Zugang nutzen, ebenso über Befehle, die das
+Token selbst lesen (z. B. `conclave token show --reveal`). Getrennte Tokens
+allein sind also **keine harte Grenze**. Sie schützen vor Agenten, die den
+vorgesehenen Weg über MCP gehen, und vor dem bequemen Umweg. Eine harte Grenze
+entsteht erst mit einer Sperre im Agent-Host; dafür muss der MCP-Server
+`api.token` nicht mehr lesen.
+
+Claude Desktop ohne Dateisystem-Zugriff (kein Dateisystem-MCP) erreicht
+Conclave nur über die MCP-Tools und damit nur mit dem Agent-Zugang.
+
+**Beispiel Claude Code** (Benutzereinstellungen `~/.claude/settings.json`,
+geprüft gegen die Claude-Code-Doku zu Berechtigungen und Sandbox, Stand
+Oktober 2026):
+
+```json
+{
+  "permissions": {
+    "deny": [
+      "Read(~/AppData/Roaming/Conclave/api.token)",
+      "Read(~/AppData/Roaming/Conclave/secret.key)",
+      "Read(~/.config/conclave/api.token)",
+      "Read(~/.config/conclave/secret.key)"
+    ]
+  }
+}
+```
+
+- `~/` steht für das Benutzerverzeichnis; absolute Pfade beginnen mit `//`
+  (unter Windows z. B. `//c/Users/<name>/...`). Die Zeilen für Windows
+  (`%APPDATA%\Conclave`) und Linux/macOS (`~/.config/conclave`) dürfen beide
+  stehen bleiben. Wer `CONCLAVE_API_TOKEN_FILE`, `CONCLAVE_SECRET_KEY_FILE`
+  oder (Linux/macOS) `XDG_CONFIG_HOME` setzt, trägt die dort gesetzten Pfade ein.
+- `secret.key` gehört dazu: Mit ihm und der Datenbank ließen sich die
+  gespeicherten Provider-Keys entschlüsseln.
+- `Read`-Deny-Regeln gelten für die Datei-Tools von Claude Code und für
+  Shell-Befehle, die Claude Code als Dateizugriff erkennt (`cat`, `head`,
+  `sed` …). Sie gelten **nicht** für Programme, die Dateien selbst öffnen,
+  etwa ein Python-Skript.
+- Für eine Sperre, die alle Prozesse trifft, braucht es die Sandbox von Claude
+  Code (`"sandbox": {"enabled": true}`; die `Read`-Deny-Regeln fließen dort ein,
+  zusätzlich `sandbox.filesystem.denyRead`). Die Sandbox gibt es auf macOS,
+  Linux und WSL2. **Unter nativem Windows laufen Befehle ohne Sandbox** – dort
+  bleibt die Trennung eine Absprache plus Deny-Regel, keine harte Grenze.
 
 ## Browser-UI
 
@@ -146,10 +223,11 @@ werden als Daten behandelt:
   `include_previous: true` in neue Consultations ein, dann ausdrücklich als
   „frühere Modellausgabe“.
 - **Tickets nur für Menschen:** Tickets mit Kanzos `human`-Markierung werden
-  über das MCP-Tool (Kanal `mcp`) abgelehnt. **Grenze:** Der Kanal schützt nur
-  vor Agenten, die über die MCP-Tools gehen. Ein Agent, der `api.token` lesen
-  kann, kann die REST-API direkt aufrufen. Getrennte Zugänge für Mensch und
-  Agent gibt es noch nicht.
+  mit dem Agent-Token abgelehnt, über das MCP-Tool wie über einen direkten
+  REST-Aufruf (`403 HumanOnlyTicket`); der Kanal kommt aus dem Token
+  (seit v0.5.0). Die bekannte Lücke aus v0.4.0 ist damit geschlossen, soweit
+  die [Grenze des gleichen Benutzers](#grenze-gleicher-betriebssystem-benutzer)
+  reicht: Ein Agent, der `api.token` lesen kann, hat den Mensch-Zugang.
 - **Feste Adresse:** Die Kanzo-Adresse steht nur in `config.toml`
   (`[kanzo] url`); die API nimmt keine Ziel-URL an (SSRF).
 - **Grenzen:** Reviewer nur aus `[kanzo] reviewers` (wer Ticket-Inhalte sieht),

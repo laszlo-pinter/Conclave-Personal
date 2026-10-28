@@ -10,7 +10,7 @@ from conclave.cli.bootstrap import (
 from conclave.cli.config import ConclaveConfig
 from conclave.cli.handler import CLIHandler
 from conclave.infrastructure.auth import StaticKeyAuthService
-from conclave.runtime.api_token import load_or_create_token
+from conclave.runtime.api_token import load_or_create_agent_token, load_or_create_token
 from conclave.runtime.env import env_secret
 from conclave.infrastructure.sqlite.connection import ThreadLocalConnection
 
@@ -29,8 +29,10 @@ def _seed_agents(agent_service):
     # CONCLAVE_AGENT_<ID>_API_URL und _API_KEY werden vom Seed selbst gelesen,
     # duerfen aber nicht als eigene Agents geseeded werden.
     config_suffixes = ("_API_URL", "_API_KEY")
+    # Gleiches Praefix, aber keine Agents: das Agent-Token (Z1) und sein Dateipfad.
+    reserved = {"CONCLAVE_AGENT_KEY", "CONCLAVE_AGENT_TOKEN_FILE"}
     for key, value in os.environ.items():
-        if not key.startswith(prefix):
+        if not key.startswith(prefix) or key in reserved:
             continue
         if any(key.endswith(s) for s in config_suffixes):
             continue
@@ -204,7 +206,10 @@ def _build_app(config: ConclaveConfig | None = None):
     # Token ist immer Pflicht (B2): ohne CONCLAVE_API_KEY wird die Token-Datei verwendet.
     if not config.api_key:
         config.api_key = load_or_create_token()
-    auth_service = StaticKeyAuthService(config.api_key)
+    # Agent-Token (Z1): ohne CONCLAVE_AGENT_KEY die Datei agent.token, angelegt wie api.token.
+    if not config.agent_api_key:
+        config.agent_api_key = load_or_create_agent_token()
+    auth_service = StaticKeyAuthService(config.api_key, config.agent_api_key)
 
     consultations, worker = _build_consultations(service, agent_service, conn, config)
     app = create_app(handler, auth_service=auth_service,

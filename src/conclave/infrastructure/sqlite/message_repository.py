@@ -42,11 +42,11 @@ class SQLiteMessageRepository:
         cursor = self._connection.execute(
             """
             INSERT INTO messages (
-                id, conversation_id, author_type, author_id, content, sequence, created_at
+                id, conversation_id, author_type, author_id, content, sequence, created_at, origin
             )
             VALUES (?, ?, ?, ?, ?,
                 COALESCE((SELECT MAX(sequence) FROM messages WHERE conversation_id = ?), 0) + 1,
-                ?)
+                ?, ?)
             """,
             (
                 message.id,
@@ -56,6 +56,7 @@ class SQLiteMessageRepository:
                 self._encrypt(message.content),
                 message.conversation_id,
                 message.created_at.isoformat(),
+                message.origin,
             ),
         )
         # Gesetzte Sequence zuruecklesen
@@ -76,7 +77,8 @@ class SQLiteMessageRepository:
                 author_id,
                 content,
                 sequence,
-                created_at
+                created_at,
+                origin
             FROM messages
             WHERE conversation_id = ?
             ORDER BY sequence
@@ -95,6 +97,7 @@ class SQLiteMessageRepository:
                     content=self._decrypt(row[4]),
                     sequence=row[5],
                     created_at=datetime.fromisoformat(row[6]),
+                    origin=row[7],
                 )
             )
         return messages

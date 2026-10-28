@@ -7,6 +7,7 @@ recursive-include src/conclave/assets *
 include docs/index.md
 include docs/beispiel-workflows.md
 include docs/multi-agent-leitfaden.md
+include docs/mit-kanzo-arbeiten.md
 include docs/personal-ui-architektur.md
 include docs/release-notes-v0.1.0.md
 include docs/release-notes-v0.1.1.md
@@ -25,6 +26,7 @@ include docs/release-notes-v0.2.2.md
 include docs/release-notes-v0.2.3.md
 include docs/release-notes-v0.3.0.md
 include docs/release-notes-v0.4.0.md
+include docs/release-notes-v0.5.0.md
 include docs/sicherheit.md
 include docs/provider-smoke-test.md
 include docs/architektur/ports-adapter.md

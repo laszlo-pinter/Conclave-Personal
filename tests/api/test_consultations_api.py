@@ -24,6 +24,10 @@ from conclave.cli.handler import CLIHandler  # noqa: E402
 from conclave.domain.consultation import DELIVERED, DONE, FAILED  # noqa: E402
 from conclave.infrastructure.kanzo.adapter import KanzoMcpAdapter  # noqa: E402
 from conclave.infrastructure.sqlite.consultation_repository import SQLiteConsultationRepository  # noqa: E402
+from conclave.infrastructure.auth import StaticKeyAuthService  # noqa: E402
+
+HUMAN_TOKEN = "cvh_mensch"
+AGENT_TOKEN = "cva_agent"
 
 
 class Env:
@@ -56,19 +60,22 @@ def env(tmp_path, monkeypatch):
     worker = ConsultationWorker(repo, processor)
     requests = ConsultationRequests(repo, worker, adapter, allowed_reviewers=("gpt", "claude"),
                                     max_per_hour=3, provider_label=processor.provider_label)
-    app = create_app(CLIHandler(flow), consultations=requests)
+    app = create_app(CLIHandler(flow), consultations=requests,
+                     auth_service=StaticKeyAuthService(HUMAN_TOKEN, AGENT_TOKEN))
     app.config["TESTING"] = True
     worker.start()
 
     e = Env()
-    e.client, e.kanzo, e.repo, e.worker, e.reviewers, e.requests = (
-        app.test_client(), kanzo, repo, worker, reviewers, requests)
+    e.client, e.agent = app.test_client(), app.test_client()
+    e.client.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {HUMAN_TOKEN}"
+    e.agent.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {AGENT_TOKEN}"
+    e.kanzo, e.repo, e.worker, e.reviewers, e.requests = kanzo, repo, worker, reviewers, requests
     yield e
     worker.stop()
 
 
-def _create(env, **body):
-    return env.client.post("/consultations", json={"task": "api#12", "question": "Passt das?", **body})
+def _create(env, client=None, **body):
+    return (client or env.client).post("/consultations", json={"task": "api#12", "question": "Passt das?", **body})
 
 
 # ── Anlegen ──────────────────────────────────────────────────────────────
@@ -77,7 +84,7 @@ def test_create_returns_202_and_discloses_providers(env):
     resp = _create(env)
     assert resp.status_code == 202
     data = resp.get_json()
-    assert data["status"] == "queued" and data["channel"] == "rest"
+    assert data["status"] == "queued" and data["channel"] == "human"
     assert data["reviewers"] == [{"id": "gpt", "provider": "openai, gpt-5.6"},
                                  {"id": "claude", "provider": "anthropic, claude-sonnet-5"}]
     assert env.worker.join()
@@ -97,7 +104,6 @@ def test_subset_of_reviewers(env):
     ({"question": ""}, "ValidationError"),
     ({"question": "x" * 4001}, "ValidationError"),
     ({"context": "x" * 8001}, "ValidationError"),
-    ({"channel": "mail"}, "ValidationError"),
     ({"include_previous": "ja"}, "ValidationError"),
     ({"reviewers": ["gpt", "gpt"]}, "ValidationError"),
     ({"reviewers": ["gemini"]}, "ReviewerNotAllowed"),
@@ -127,10 +133,36 @@ def test_unknown_ticket_is_404_before_anything_is_stored(env):
     assert env.repo.list_by_source_ref("kanzo", "api#99") == []
 
 
-def test_human_ticket_rejected_for_mcp_but_allowed_for_rest(env):
-    resp = _create(env, task="api#20", channel="mcp")
+def test_human_ticket_rejected_for_agent_token_but_allowed_for_human_token(env):
+    """Z3: die Luecke aus v0.4.0 - auch ein direkter REST-Aufruf mit dem Agent-Token wird abgelehnt."""
+    resp = _create(env, client=env.agent, task="api#20")
     assert resp.status_code == 403 and resp.get_json()["type"] == "HumanOnlyTicket"
-    assert _create(env, task="api#20").status_code == 202
+    assert env.repo.list_by_source_ref("kanzo", "api#20") == []              # nichts gespeichert
+    resp = _create(env, task="api#20")
+    assert resp.status_code == 202 and resp.get_json()["channel"] == "human"
+
+
+def test_agent_token_sets_channel_agent(env):
+    data = _create(env, client=env.agent).get_json()
+    assert data["channel"] == "agent" and env.repo.get(data["id"]).channel == "agent"
+
+
+@pytest.mark.parametrize("channel", ["rest", "human", "mcp", "agent", ""])
+def test_channel_in_body_is_rejected(env, channel):
+    """Z3/4.3: kein Herabstufen oder Heraufstufen per Body; veraltete Clients fallen auf."""
+    for client in (env.client, env.agent):
+        resp = _create(env, client=client, task="api#20", channel=channel)
+        assert resp.status_code == 400 and resp.get_json()["type"] == "ChannelNotAllowed"
+    assert env.repo.list_by_source_ref("kanzo", "api#20") == []
+
+
+def test_rerun_takes_channel_of_whoever_retries(env):
+    """Eine Agent-Consultation, vom Menschen wiederholt, laeuft als human; Agenten duerfen nicht wiederholen."""
+    cid = _create(env, client=env.agent).get_json()["id"]
+    assert env.worker.join()
+    rerun = env.client.post(f"/consultations/{cid}/retry", json={"rerun": True}).get_json()
+    assert rerun["channel"] == "human"
+    assert env.agent.post(f"/consultations/{cid}/retry", json={"rerun": True}).status_code == 403  # Z2
 
 
 def test_kanzo_down_is_502(env):
@@ -213,12 +245,12 @@ def test_retry_of_running_consultation_is_409(env):
 
 # ── MCP-Tool und Server ──────────────────────────────────────────────────
 
-def test_mcp_tool_always_sends_channel_mcp():
+def test_mcp_tool_sends_no_channel():
     import conclave.mcp_server as server
     with patch.object(server, "_post", return_value={"id": "x"}) as post:
         server.conclave_consult("api#12", "Passt das?", reviewers=["gpt"])
     path, body = post.call_args.args
-    assert path == "/consultations" and body["channel"] == "mcp" and body["reviewers"] == ["gpt"]
+    assert path == "/consultations" and "channel" not in body and body["reviewers"] == ["gpt"]
 
 
 def test_build_app_registers_worker_without_starting_it(tmp_path, monkeypatch):

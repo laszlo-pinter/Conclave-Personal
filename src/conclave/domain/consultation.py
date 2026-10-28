@@ -18,7 +18,7 @@ PENDING, DELIVERED = "pending", "delivered"
 DELIVERY_STATUSES = (PENDING, DELIVERED, FAILED)
 
 MODES = ("independent",)          # "debate" folgt spaeter
-CHANNELS = ("rest", "mcp")        # Zugangsweg: Mensch (REST) oder Agent (MCP)
+CHANNELS = ("human", "agent")    # Zugang laut Token (Z3/E3), nie aus der Anfrage
 
 
 def _now() -> datetime:
@@ -32,7 +32,7 @@ class Consultation:
     source_ref: str                # "api#12"
     question: str
     reviewers: tuple[str, ...]
-    channel: str = "rest"
+    channel: str = "agent"         # im Zweifel der strengere Zugang
     mode: str = "independent"
     context: str = ""
     requested_by: str = ""
@@ -58,7 +58,7 @@ class Consultation:
             raise ValueError(f"status must be one of {STATUSES}")
 
     @staticmethod
-    def create(*, source: str, source_ref: str, question: str, reviewers, channel: str = "rest",
+    def create(*, source: str, source_ref: str, question: str, reviewers, channel: str = "agent",
                context: str = "", requested_by: str = "", include_previous: bool = False) -> "Consultation":
         return Consultation(id=str(uuid.uuid4()), source=source, source_ref=source_ref, question=question,
                             reviewers=tuple(reviewers), channel=channel, context=context,

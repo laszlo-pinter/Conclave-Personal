@@ -16,20 +16,50 @@ OUTS = (
 # Wer einen Client gegen Conclave baut, sollte sich an die hier gelisteten
 # Field-Names halten — sie sind Vertragsbestandteil zwischen Conclave und seinen
 # Konsumenten (AlphaStruct, Inducta-AI, ...).
+_MESSAGE = {"type": "object", "properties": {
+    "id": {"type": "string"}, "sequence": {"type": "integer"},
+    "author_type": {"type": "string", "enum": ["user", "model"]},
+    "author_id": {"type": "string", "nullable": True},
+    "origin": {"type": "string", "enum": ["human", "agent"], "nullable": True,
+               "description": "Zugang laut Token; null = unbekannt (Modellantworten, alte Nachrichten, CLI)"},
+    "content": {"type": "string"},
+}}
+
 SCHEMAS = {
+    ("GET", "/conversations/<conversation_id>"): {
+        "response": {"required": ["id", "messages"], "properties": {
+            "id": {"type": "string"}, "status": {"type": "string"},
+            "messages": {"type": "array", "items": _MESSAGE},
+            "participants": {"type": "array", "items": {"type": "object"}},
+        }},
+    },
+    ("GET", "/conversations/<conversation_id>/export"): {
+        "response": {"required": ["id", "messages"], "properties": {
+            "id": {"type": "string"}, "topic": {"type": "string"},
+            "messages": {"type": "array", "items": _MESSAGE},
+            "participants": {"type": "array", "items": {"type": "object"}},
+            "context_reports": {"type": "array", "items": {"type": "object"}},
+        }},
+    },
     ("POST", "/conversations"): {
         "request": {"properties": {"topic": {"type": "string"}}, "example": {"topic": "Mein Thema"}},
         "response": {"required": ["conversation_id"], "properties": {"conversation_id": {"type": "string"}}},
     },
     ("POST", "/conversations/<conversation_id>/messages"): {
         "request": {"required": ["content"], "properties": {"content": {"type": "string"}}},
-        "response": {"properties": {"content": {"type": "string"}, "sequence": {"type": "integer"}}},
+        "response": {"properties": {"content": {"type": "string"}, "sequence": {"type": "integer"},
+                                    "origin": {"type": "string", "enum": ["human", "agent"],
+                                               "description": "Zugang laut Token; nie aus dem Body"}}},
     },
     ("POST", "/conversations/<conversation_id>/participants"): {
         "request": {"required": ["participant_id", "name"], "properties": {
-            "participant_id": {"type": "string"}, "name": {"type": "string"}, "type": {"type": "string", "enum": ["model", "user"]},
+            "participant_id": {"type": "string"}, "name": {"type": "string"},
+            "type": {"type": "string", "enum": ["model", "user"], "default": "model",
+                     "description": "Mit dem Agent-Token nur model"},
         }},
         "response": {"properties": {"participant_id": {"type": "string"}}},
+        "errors": {"400": "type ist nicht model oder user (ValidationError)",
+                   "403": "HumanOnly: type user mit dem Agent-Token"},
     },
     ("POST", "/conversations/<conversation_id>/participants/<participant_id>/invoke"): {
         "response": {
@@ -72,6 +102,9 @@ SCHEMAS = {
     },
     ("GET", "/health"): {
         "response": {"required": ["status"], "properties": {"status": {"type": "string"}}},
+    },
+    ("GET", "/auth/whoami"): {
+        "response": {"required": ["role"], "properties": {"role": {"type": "string", "enum": ["human", "agent"]}}},
     },
     ("GET", "/providers"): {
         "response": {"required": ["providers"], "properties": {"providers": {"type": "array", "items": {
@@ -125,14 +158,16 @@ SCHEMAS = {
         }},
     },
     ("POST", "/consultations"): {
-        "request": {"required": ["task", "question"], "properties": {
+        "request": {"required": ["task", "question"],
+                    "description": "Der Kanal (human/agent) ergibt sich aus dem Token. "
+                                   "Ein Feld channel im Body wird mit 400 (ChannelNotAllowed) abgelehnt.",
+                    "properties": {
             "task": {"type": "string", "example": "api#12"},
             "question": {"type": "string", "maxLength": 4000},
             "context": {"type": "string", "maxLength": 8000},
             "reviewers": {"type": "array", "items": {"type": "string"},
                           "description": "Teilmenge von [kanzo] reviewers; Standard: alle erlaubten"},
             "include_previous": {"type": "boolean", "default": False},
-            "channel": {"type": "string", "enum": ["rest", "mcp"], "default": "rest"},
             "requested_by": {"type": "string"},
         }},
         "response": {"required": ["id", "status", "reviewers"], "properties": {
@@ -258,6 +293,16 @@ SCHEMAS = {
 
 
 
+def _human_only() -> frozenset:
+    import sys
+    sys.path.insert(0, str(ROOT / "src"))
+    from conclave.api.access import HUMAN_ONLY as routes
+    return routes
+
+
+HUMAN_ONLY = _human_only()
+
+
 def _project_version() -> str:
     import tomllib
     data = tomllib.loads((Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8"))
@@ -314,6 +359,12 @@ def build_spec(routes: list[dict]) -> dict:
                 "200": resp_200,
             },
         }
+        for code, text in SCHEMAS.get(schema_key, {}).get("errors", {}).items():
+            operation["responses"][code] = {"description": text}
+        # Agent-Zugang (api/access.py): alles ausser der Allowlist ergibt 403 HumanOnly
+        if (r["method"], r["path"]) in HUMAN_ONLY:
+            operation["description"] = "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
+            operation["responses"].setdefault("403", {"description": "HumanOnly: nur fuer den Menschen-Zugang"})
 
         # Path-Parameter extrahieren
         params = re.findall(r'\{(\w+)\}', oapi_path)
