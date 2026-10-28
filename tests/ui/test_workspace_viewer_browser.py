@@ -41,7 +41,12 @@ def viewer_server(tmp_path, monkeypatch):
     (ws / "notizen").mkdir(parents=True)
     (ws / "notizen" / "plan.md").write_text(MARKDOWN, encoding="utf-8")
     (ws / "liesmich.txt").write_text("Nur <b>Text</b>, kein HTML.", encoding="utf-8")
+    (ws / "gross.md").write_text("x" * 5000, encoding="utf-8")
+    (ws / "bild.bin").write_bytes(b"\x89PNG\x00\x01\x02binaer")
+    (ws / ".privat").mkdir()
+    (ws / ".privat" / "geheim.md").write_text("# geheim", encoding="utf-8")
     monkeypatch.setenv("CONCLAVE_WORKSPACE", str(ws))
+    monkeypatch.setenv("CONCLAVE_WORKSPACE_UI_READ_LIMIT_BYTES", "4096")
     config = ConclaveConfig(db_path=tmp_path / "conclave.db", api_key=TOKEN, mode="development")
     conn = ThreadLocalConnection(config.db_path)
     initialize_schema(conn)
@@ -137,5 +142,37 @@ def test_missing_file_shows_error_as_text(chromium, viewer_server):
         err.wait_for(timeout=10000)
         assert err.inner_text().strip()
         assert errors == [] and _csp_problems(page) == []
+    finally:
+        page.close()
+
+
+@pytest.mark.parametrize("path", ["gross.md", "bild.bin", ".privat/geheim.md"])
+def test_too_large_binary_and_hidden_files_show_the_server_message(chromium, viewer_server, path):
+    """413 (UI-Leselimit), 415 (binaer) und 404 (versteckter Pfad): nur die Meldung, nie der Inhalt."""
+    page, errors = _open_files(chromium, viewer_server)
+    try:
+        page.evaluate("p => openWorkspaceFile(p)", path)
+        err = page.locator("#wsViewerBody.ws-viewer-error")
+        err.wait_for(timeout=10000)
+        text = err.inner_text()
+        assert text.strip() and "geheim" not in text and "xxxx" not in text
+        assert errors == [] and _csp_problems(page) == []
+    finally:
+        page.close()
+
+
+def test_the_tolerated_csp_report_comes_from_render_markdown_itself(chromium, viewer_server):
+    """Belegt, dass der eine tolerierte Bericht aus renderMarkdown()/DOMPurify stammt (wie bei
+    Modellantworten) und nicht aus dem Viewer: derselbe Aufruf ohne Viewer erzeugt ihn auch."""
+    page, _errors = _open_files(chromium, viewer_server)
+    try:
+        page.evaluate("window.__csp = []")
+        html = page.evaluate("renderMarkdown('<img src=\"x\" onerror=\"window.__pwned = 9\">')")
+        page.wait_for_timeout(300)
+        reports = page.evaluate("window.__csp")
+        assert "onerror" not in html and "<img" not in html
+        assert reports and all(r.startswith("script-src-attr ") and r.endswith("/static/vendor/purify.min.js")
+                               for r in reports)
+        assert page.evaluate("window.__pwned") is None
     finally:
         page.close()

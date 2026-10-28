@@ -206,7 +206,7 @@ function renderWorkspaceViewer(){
     body.className='ws-viewer-body msg-content ws-viewer-md';
     // safe-html: renderMarkdown() filtert ueber DOMPurify (wie Modellantworten), ohne DOMPurify nur esc()
     body.innerHTML=renderMarkdown(v.content);
-    body.querySelectorAll('pre code').forEach(el=>hljs.highlightElement(el));
+    if(typeof hljs!=='undefined') body.querySelectorAll('pre code').forEach(el=>hljs.highlightElement(el));
     return;
   }
   body.className='ws-viewer-body ws-viewer-source';
