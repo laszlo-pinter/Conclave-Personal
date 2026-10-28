@@ -38,6 +38,7 @@ from conclave.domain.errors import (
 )
 from conclave.domain.participant import ParticipantType
 from conclave.domain.principal import HUMAN_PRINCIPAL
+from conclave.api.access import HUMAN_ONLY_ERROR, agent_may
 from conclave.application.consultations import ConsultationRequestError
 from conclave.domain.errors import TaskNotFound, TaskSourceError
 from conclave.cli.bootstrap import rate_limit_disabled, validate_rate_limit
@@ -193,6 +194,17 @@ def create_app(handler: CLIHandler, auth_service=None,
         if principal is None:
             raise AuthenticationError()
         g.principal = principal
+
+    @app.before_request
+    def _check_agent_access():
+        # Z2: Agenten duerfen nur, was auf der Allowlist steht (Default deny).
+        principal = g.get("principal")
+        if principal is None or not principal.is_agent or request.method == "OPTIONS":
+            return
+        if request.url_rule is None:
+            return  # unbekannte Route: 404/405 wie bei allen anderen
+        if not agent_may(request.method, request.url_rule.rule):
+            return jsonify(HUMAN_ONLY_ERROR), 403
 
     @app.before_request
     def _log_request_start():

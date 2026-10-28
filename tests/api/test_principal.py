@@ -50,8 +50,8 @@ def test_wrong_or_missing_token_is_401(client, headers):
     assert client.get("/conversations", headers=headers).status_code == 401
 
 
-def test_agent_token_reaches_routes_in_z1(client):
-    # Z1 erkennt nur die Rolle; die Rechte des Agent-Zugangs regelt erst Z2.
+def test_agent_token_reaches_allowed_routes(client):
+    # Welche Routen das sind, regelt die Allowlist (Z2, tests/api/test_agent_access.py).
     assert client.get("/conversations", headers=_bearer(AGENT)).status_code == 200
 
 
