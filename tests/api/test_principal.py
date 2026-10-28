@@ -168,7 +168,9 @@ def test_token_variables_are_not_seeded_as_agents(monkeypatch, tmp_path, capsys)
     config.db_path = tmp_path / "c.db"
     app, config = _build_app(config)
     c = app.test_client()
-    agents = c.get("/agents", headers=_bearer(config.api_key)).get_json()
+    resp = c.get("/agents", headers=_bearer(config.api_key))
+    assert resp.status_code == 200
+    agents = resp.get_json()
     ids = {a["id"] for a in (agents["agents"] if isinstance(agents, dict) else agents)}
     assert not {"KEY", "TOKEN_FILE"} & ids
     assert "cva_a" not in capsys.readouterr().out
