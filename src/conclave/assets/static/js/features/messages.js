@@ -14,12 +14,14 @@ function buildMsg(m){
   const div=document.createElement('div');div.className=`msg ${isUser?'user':'model'}`;
   div.dataset.seq=m.sequence;if(m.id)div.dataset.messageId=m.id;
   if(!isUser&&c) div.style.borderLeftColor=c.bd;
+  // Z4: Herkunft nur bei User-Nachrichten; null (alt/CLI) zeigt nichts, statt etwas zu behaupten
+  const originTag=isUser&&m.origin==='agent'?`<span class="msg-origin" title="${attr(t('message.via_agent_hint'))}">${esc(t('message.via_agent'))}</span>`:'';
   const dlBtn=isUser?'':`<button class="msg-dl" data-action="download-message" data-name="${attr(pName)}" data-seq="${attr(m.sequence)}" title="${attr(t('download.response'))}">&#8615;</button>`;
   const content=stripToolEventRefs(m.content||'',m.tool_events||[]);
   const rendered=isUser?esc(content):renderMarkdown(content);
   const toolEventsHtml=renderToolEvents(m.tool_events||[]);
   // safe-html: Werte via esc()/attr(), Inhalt via renderMarkdown() (DOMPurify), Farben aus PALETTE
-  div.innerHTML=`<div class="msg-header"><span class="msg-label" style="color:${isUser?'var(--text-dim)':(c?.tx||'var(--accent)')}">${esc(pName)}</span><span class="msg-seq">#${esc(m.sequence)}</span>${dlBtn}</div><div class="msg-content">${rendered}</div>`;
+  div.innerHTML=`<div class="msg-header"><span class="msg-label" style="color:${isUser?'var(--text-dim)':(c?.tx||'var(--accent)')}">${esc(pName)}</span>${originTag}<span class="msg-seq">#${esc(m.sequence)}</span>${dlBtn}</div><div class="msg-content">${rendered}</div>`;
   // safe-html: renderToolEvents() escaped alle Werte
   if(toolEventsHtml) div.insertAdjacentHTML('beforeend',toolEventsHtml);
   if(!isUser) attachContextChip(div,m.context,m.id);

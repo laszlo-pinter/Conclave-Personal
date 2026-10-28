@@ -121,6 +121,26 @@ def test_v023_database_migrates_without_data_loss(pg):
         assert all(cur.fetchone())
         cur.execute("SELECT id FROM _migrations WHERE id = '010_consultation_channels'")
         assert cur.fetchone() is not None
+        cur.execute("SELECT id FROM _migrations WHERE id = '011_message_origin'")
+        assert cur.fetchone() is not None
+        cur.execute("SELECT origin FROM messages WHERE id = 'm1'")
+        assert cur.fetchone() == (None,)                 # alte Nachricht: Herkunft unbekannt
+
+
+def test_message_origin_roundtrip(pg):
+    from conclave.domain.conversation import Conversation
+    from conclave.infrastructure.postgres.message_repository import PostgresMessageRepository
+    from conclave.infrastructure.postgres.schema import initialize_schema
+
+    initialize_schema(pg)
+    with pg.cursor() as cur:
+        cur.execute("INSERT INTO conversations (id, status, topic, floor, rules, created_at) "
+                    "VALUES ('c', 'open', '', NULL, '', now())")
+    repo = PostgresMessageRepository(pg)
+    conv = Conversation(id="c", topic="")
+    for origin in ("agent", "human", None):
+        repo.save(conv.add_user_message(f"von {origin}", origin=origin))
+    assert [m.origin for m in repo.list_by_conversation_id("c")] == ["agent", "human", None]
 
 
 def test_consultation_channels_are_migrated(pg):

@@ -648,9 +648,9 @@ class ConversationFlowService:
             return []
         return self._tool_event_repo.list_by_conversation(conversation_id)
 
-    def add_user_message(self, conversation_id: str, content: str) -> Conversation:
+    def add_user_message(self, conversation_id: str, content: str, origin: str | None = None) -> Conversation:
         conversation = self.load_conversation(conversation_id)
-        message = conversation.add_user_message(content)
+        message = conversation.add_user_message(content, origin=origin)
         self._message_repository.save(message)
         return conversation
 

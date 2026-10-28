@@ -185,7 +185,7 @@ def test_post_messages_missing_content_returns_400(client):
 
 def test_post_messages_passes_content(client, handler):
     client.post("/conversations/conv-1/messages", json={"content": "Hallo"})
-    handler.add_message.assert_called_once_with("conv-1", "Hallo")
+    handler.add_message.assert_called_once_with("conv-1", "Hallo", origin="human")   # ohne Auth: Mensch
 
 
 # ── POST /conversations/<id>/participants/<pid>/invoke ─────────────────────

@@ -49,6 +49,7 @@ class DataExportService:
                     "sequence": m.sequence,
                     "author_type": m.author_type.value,
                     "author_id": m.author_id,
+                    "origin": m.origin,
                     "content": m.content,
                     "created_at": m.created_at.isoformat(),
                     "tool_events": events_by_message.get(m.id, []),

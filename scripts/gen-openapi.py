@@ -23,7 +23,9 @@ SCHEMAS = {
     },
     ("POST", "/conversations/<conversation_id>/messages"): {
         "request": {"required": ["content"], "properties": {"content": {"type": "string"}}},
-        "response": {"properties": {"content": {"type": "string"}, "sequence": {"type": "integer"}}},
+        "response": {"properties": {"content": {"type": "string"}, "sequence": {"type": "integer"},
+                                    "origin": {"type": "string", "enum": ["human", "agent"],
+                                               "description": "Zugang laut Token; nie aus dem Body"}}},
     },
     ("POST", "/conversations/<conversation_id>/participants"): {
         "request": {"required": ["participant_id", "name"], "properties": {

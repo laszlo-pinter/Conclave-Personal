@@ -83,6 +83,11 @@ MIGRATIONS: list[Migration] = [
         sql="UPDATE consultations SET channel = 'human' WHERE channel = 'rest'; "
             "UPDATE consultations SET channel = 'agent' WHERE channel = 'mcp'",
     ),
+    Migration(
+        id="011_message_origin",
+        description="Herkunft von User-Nachrichten (human/agent, NULL = unbekannt)",
+        sql="ALTER TABLE messages ADD COLUMN origin TEXT",
+    ),
 ]
 
 

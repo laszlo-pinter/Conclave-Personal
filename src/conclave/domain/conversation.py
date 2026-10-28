@@ -72,12 +72,13 @@ class Conversation:
             topic=topic,
         )
 
-    def add_user_message(self, content: str) -> Message:
+    def add_user_message(self, content: str, origin: str | None = None) -> Message:
         """Erzeugt und fuegt eine User-Message hinzu."""
         message = Message.create_user_message(
             conversation_id=self.id,
             content=content,
             sequence=len(self.messages) + 1,
+            origin=origin,
         )
         self.messages.append(message)
         return message

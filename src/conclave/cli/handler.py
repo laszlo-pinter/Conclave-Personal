@@ -467,6 +467,7 @@ class CLIHandler:
                         "sequence": m.sequence,
                         "author_type": m.author_type.value,
                         "author_id": m.author_id,
+                        "origin": m.origin,
                         "content": m.content,
                         "context": contexts.get(m.id),
                         "tool_events": [
@@ -547,9 +548,9 @@ class CLIHandler:
         return CLIResult(success=True, message=f"Participant '{participant_id}' geloescht.",
                          data={"participant_id": participant_id})
 
-    def add_message(self, conversation_id: str, content: str) -> CLIResult:
+    def add_message(self, conversation_id: str, content: str, origin: str | None = None) -> CLIResult:
         try:
-            updated = self._service.add_user_message(conversation_id, content)
+            updated = self._service.add_user_message(conversation_id, content, origin=origin)
         except ConversationNotFound:
             return CLIResult(
                 success=False,
@@ -560,7 +561,7 @@ class CLIHandler:
         return CLIResult(
             success=True,
             message=f"Message [{message.sequence}] hinzugefügt.",
-            data={"sequence": message.sequence, "content": content},
+            data={"sequence": message.sequence, "content": content, "origin": message.origin},
         )
 
     def invoke_participant(

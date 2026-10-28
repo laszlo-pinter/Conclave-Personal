@@ -16,6 +16,10 @@ class Message:
 
     Sequence wird atomar von der DB vergeben (nicht im Speicher berechnet).
     author_id ist None fuer User-Messages, Participant-ID fuer Model-Messages.
+    origin: ueber welchen Zugang eine User-Message kam (``human``/``agent``, Z4);
+    None fuer Model-Messages und fuer alte Nachrichten (unbekannt).
+    author_type bleibt ``user``, sonst hielten Modelle Agent-Nachrichten fuer
+    ihre eigenen Antworten.
     """
     id: str
     conversation_id: str
@@ -24,12 +28,14 @@ class Message:
     content: str
     sequence: int
     created_at: datetime
+    origin: str | None = None
 
     @staticmethod
     def create_user_message(
         conversation_id: str,
         content: str,
         sequence: int,
+        origin: str | None = None,
     ) -> "Message":
         """Erzeugt eine User-Message mit neuer UUID."""
         return Message(
@@ -40,6 +46,7 @@ class Message:
             content=content,
             sequence=sequence,
             created_at=datetime.now(UTC),
+            origin=origin,
         )
 
     @staticmethod

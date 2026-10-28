@@ -717,7 +717,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         if not content:
             return jsonify({"error": "content ist erforderlich."}), 400
 
-        result = handler.add_message(conversation_id, content)
+        result = handler.add_message(conversation_id, content, origin=g.principal.role)  # Z4
         if not result.success:
             return jsonify({"error": result.message}), 404
         return jsonify(result.data), 201

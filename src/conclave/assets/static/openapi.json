@@ -1137,6 +1137,14 @@
                     },
                     "sequence": {
                       "type": "integer"
+                    },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "human",
+                        "agent"
+                      ],
+                      "description": "Zugang laut Token; nie aus dem Body"
                     }
                   }
                 }

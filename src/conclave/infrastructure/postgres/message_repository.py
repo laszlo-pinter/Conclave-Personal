@@ -32,10 +32,10 @@ class PostgresMessageRepository:
             cur.execute(
                 """
                 INSERT INTO messages
-                    (id, conversation_id, author_type, author_id, content, sequence, created_at)
+                    (id, conversation_id, author_type, author_id, content, sequence, created_at, origin)
                 VALUES (%s, %s, %s, %s, %s,
                     COALESCE((SELECT MAX(sequence) FROM messages WHERE conversation_id = %s), 0) + 1,
-                    %s)
+                    %s, %s)
                 RETURNING sequence
                 """,
                 (
@@ -46,6 +46,7 @@ class PostgresMessageRepository:
                     self._encrypt(message.content),
                     message.conversation_id,
                     message.created_at,
+                    message.origin,
                 ),
             )
             row = cur.fetchone()
@@ -56,7 +57,7 @@ class PostgresMessageRepository:
         with self._connection.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, conversation_id, author_type, author_id, content, sequence, created_at
+                SELECT id, conversation_id, author_type, author_id, content, sequence, created_at, origin
                 FROM messages WHERE conversation_id = %s ORDER BY sequence
                 """,
                 (conversation_id,),
@@ -72,6 +73,7 @@ class PostgresMessageRepository:
                 content=self._decrypt(row[4]),
                 sequence=row[5],
                 created_at=row[6] if isinstance(row[6], datetime) else datetime.fromisoformat(row[6]),
+                origin=row[7],
             )
             for row in rows
         ]
