@@ -263,11 +263,26 @@ The MCP server talks to `CONCLAVE_API_URL` (default `http://localhost:8000`).
 with a fixed port (`conclave server --port 8000` or
 `conclave desktop --port 8000`) or set `CONCLAVE_API_URL` to the actual address.
 
-The local API always requires a token. Without `CONCLAVE_API_KEY`, the server
-creates one on first start (`api.token` in the configuration directory) and the
-MCP server reads it from there on every request, so the server may also be
-started after the MCP client. If the server uses an explicit
-`CONCLAVE_API_KEY`, set the same value in the MCP `env` block.
+The local API always requires a token, and since v0.5.0 there are two:
+
+- the **human token** (`api.token`, or `CONCLAVE_API_KEY`) for the web UI, the
+  REST API and the CLI,
+- the **agent token** (`agent.token`, or `CONCLAVE_AGENT_KEY`) for agents.
+
+The server creates both files in the configuration directory on first start.
+The MCP server uses only the agent token: it reads `CONCLAVE_AGENT_KEY` or
+`agent.token` on every request (so the server may also be started after the MCP
+client) and never reads `api.token`. `conclave token show --agent` prints the
+path and a ready-made `claude mcp add` command. If the server runs with an
+explicit `CONCLAVE_AGENT_KEY`, set the same value in the MCP `env` block. Never
+put the human token there: with it, agents get full access, and the MCP server
+prints a warning.
+
+With the agent token, agents can do what the MCP tools need and nothing else:
+no settings, agent management, backups, logs or deleting (`403 HumanOnly`).
+Messages they send are marked `origin: agent` and shown "via agent" in the UI.
+Upgrading from 0.4.x: see the
+[release notes v0.5.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.5.0.md).
 
 For [Kanzo](https://github.com/emanuele-em/kanzo) boards, `conclave_consult`
 asks the reviewers configured in `[kanzo] reviewers` for a second opinion on a
@@ -384,7 +399,8 @@ endpoints, processing can happen fully locally.
 
 Conclave binds the local API to `127.0.0.1` by default. The local API always
 requires a token; without `CONCLAVE_API_KEY` one is generated and stored in
-`api.token`. In `production` mode, `CONCLAVE_API_KEY` and an encryption key
+`api.token`. Agents use a separate agent token (`agent.token`,
+`CONCLAVE_AGENT_KEY`) with restricted rights. In `production` mode, `CONCLAVE_API_KEY` and an encryption key
 (`CONCLAVE_SECRET_KEY`, or an existing key file / `CONCLAVE_SECRET_KEY_FILE`)
 must be set explicitly. Workspace access stays inside the configured workspace
 root, and hidden paths are not read as agent context.
@@ -428,8 +444,11 @@ v0.4.0 remains alpha. Known limitations:
 - Advanced multi-agent orchestration is partly experimental.
 - There is no native Windows installer, AppImage, or `.deb` package yet.
 - Consultation comments in Kanzo are labelled, but the label is not proof of
-  origin (Kanzo has no login). The human-only check covers agents using the MCP
-  tools; an agent that can read `api.token` can call the REST API directly.
+  origin (Kanzo has no login).
+- Human and agent access are separated by token. Agents run as the same
+  operating-system user, so an agent with a shell can read `api.token` unless
+  the agent host blocks it; on native Windows, Claude Code has no sandbox for
+  that. See [security](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/sicherheit.md#mensch--und-agent-zugang).
 
 ## Release Verification
 

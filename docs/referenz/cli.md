@@ -11,6 +11,7 @@ conclave desktop [--host 127.0.0.1] [--port 8000] [--debug]
 ```
 
 `desktop` startet den lokalen Server und öffnet die Web-UI im Browser.
+`web`, `desktop` und `conclave-watch` nutzen das Mensch-Token.
 Wenn der bevorzugte Port belegt ist, wählt `desktop` automatisch einen freien
 Port.
 
@@ -125,6 +126,17 @@ und Usage-/Run-Daten. Consent-, DPA- und Transfer-Policy-Daten werden bewusst
 ignoriert. Existiert die Ziel-DB bereits, wird vor dem Schreiben ein Backup
 angelegt.
 
+## Tokens
+
+```powershell
+conclave token show [--agent] [--reveal]
+```
+
+Zeigt, woher ein Token kommt (Variable oder Datei). Ohne `--agent` das
+Mensch-Token, mit `--agent` das Agent-Token samt fertigem
+`claude mcp add`-Befehl für den MCP-Server; fehlt `agent.token`, wird es
+angelegt. Den Token-Wert gibt der Befehl nur mit `--reveal` aus.
+
 ## JSON-Ausgabe
 
 `--json` ist eine globale Option und steht **vor** dem Subkommando:
@@ -144,7 +156,7 @@ Neben `conclave` installiert das Paket diese Konsolenprogramme:
 | Programm | Zweck |
 |----------|-------|
 | `conclave-api` | Startet den API-Server direkt (ohne die Launch-Logik von `conclave server`) |
-| `conclave-mcp` | MCP-Server, der die Conclave-API über `CONCLAVE_API_URL` (Default `http://localhost:8000`) anspricht |
+| `conclave-mcp` | MCP-Server, der die Conclave-API über `CONCLAVE_API_URL` (Default `http://localhost:8000`) anspricht. Nutzt nur das Agent-Token (`CONCLAVE_AGENT_KEY` bzw. `agent.token`, als Rückfall `CONCLAVE_API_KEY` mit Warnung), nie `api.token` |
 | `conclave-watch` | Beobachtet eine Conversation über die HTTP-API |
 
 ```powershell

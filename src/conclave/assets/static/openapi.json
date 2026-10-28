@@ -201,8 +201,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "requestBody": {
           "required": true,
           "content": {
@@ -262,8 +266,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "agent_id",
@@ -284,8 +292,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "agent_id",
@@ -315,8 +327,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "agent_id",
@@ -339,8 +355,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
-        }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
       }
     },
     "/agent-roles": {
@@ -382,8 +402,12 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
-        }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
       }
     },
     "/providers": {
@@ -446,8 +470,12 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
-        }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
       }
     },
     "/agents/{agent_id}/test": {
@@ -495,8 +523,12 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "agent_id",
@@ -528,8 +560,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "conversation_id",
@@ -549,7 +585,69 @@
         "operationId": "get_conversation",
         "responses": {
           "200": {
-            "description": "Erfolg"
+            "description": "Erfolg",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "messages"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "messages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "type": "integer"
+                          },
+                          "author_type": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "model"
+                            ]
+                          },
+                          "author_id": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "origin": {
+                            "type": "string",
+                            "enum": [
+                              "human",
+                              "agent"
+                            ],
+                            "nullable": true,
+                            "description": "Zugang laut Token; null = unbekannt (Modellantworten, alte Nachrichten, CLI)"
+                          },
+                          "content": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "participants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -607,8 +705,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "conversation_id",
@@ -629,8 +731,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "conversation_id",
@@ -662,8 +768,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "conversation_id",
@@ -704,8 +814,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "conversation_id",
@@ -737,8 +851,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "conversation_id",
@@ -867,8 +985,12 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "conversation_id",
@@ -918,8 +1040,12 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "conversation_id",
@@ -1006,8 +1132,12 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "conversation_id",
@@ -1042,6 +1172,12 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "type ist nicht model oder user (ValidationError)"
+          },
+          "403": {
+            "description": "HumanOnly: type user mit dem Agent-Token"
           }
         },
         "parameters": [
@@ -1076,7 +1212,9 @@
                     "enum": [
                       "model",
                       "user"
-                    ]
+                    ],
+                    "default": "model",
+                    "description": "Mit dem Agent-Token nur model"
                   }
                 }
               }
@@ -1095,8 +1233,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "conversation_id",
@@ -1354,8 +1496,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "conversation_id",
@@ -1405,8 +1551,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "conversation_id",
@@ -1437,8 +1587,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "conversation_id",
@@ -1615,8 +1769,12 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
-        }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
       }
     },
     "/consultations/{consultation_id}": {
@@ -1688,8 +1846,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "consultation_id",
@@ -1728,7 +1890,75 @@
         "operationId": "export_conversation",
         "responses": {
           "200": {
-            "description": "Erfolg"
+            "description": "Erfolg",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "messages"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "topic": {
+                      "type": "string"
+                    },
+                    "messages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "type": "integer"
+                          },
+                          "author_type": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "model"
+                            ]
+                          },
+                          "author_id": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "origin": {
+                            "type": "string",
+                            "enum": [
+                              "human",
+                              "agent"
+                            ],
+                            "nullable": true,
+                            "description": "Zugang laut Token; null = unbekannt (Modellantworten, alte Nachrichten, CLI)"
+                          },
+                          "content": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "participants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "context_reports": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -1767,8 +1997,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
-        }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
       }
     },
     "/runs": {
@@ -1799,8 +2033,12 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
-        }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
       }
     },
     "/runs/{run_id}": {
@@ -1832,8 +2070,12 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "run_id",
@@ -1882,8 +2124,12 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
-        }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
       },
       "put": {
         "summary": "Aktualisiert einfache Runtime-Settings fuer die laufende Session.",
@@ -1917,8 +2163,12 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "requestBody": {
           "required": false,
           "content": {
@@ -1946,8 +2196,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
-        }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
       }
     },
     "/backup": {
@@ -1979,8 +2233,12 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2002,8 +2260,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
-        }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
       }
     },
     "/restore": {
@@ -2046,8 +2308,12 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "requestBody": {
           "required": true,
           "content": {
@@ -2214,8 +2480,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "filepath",

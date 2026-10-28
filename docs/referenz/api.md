@@ -1,6 +1,6 @@
 # API-Referenz
 
-**54 dokumentierte Endpoints** — öffentliche Personal-API.
+**55 dokumentierte Endpoints** — öffentliche Personal-API.
 
 Alle Endpoints außer `GET /`, `/static/*`, `GET /health`, `GET /api-docs` und
 `GET /openapi.json` verlangen ein Token (`Authorization: Bearer <token>` oder
@@ -10,12 +10,36 @@ brauchen `Content-Type: application/json` (auch ohne Inhalt: `{}`) oder den
 Header `X-Conclave-Client`, sonst `415`. Anfragen mit nicht erlaubtem
 `Host`-Header werden mit `421` abgelehnt. Details: [Sicherheit](../sicherheit.md).
 
+## Mensch- und Agent-Zugang
+
+Das Token bestimmt die Rolle: Mensch-Token (`CONCLAVE_API_KEY`/`api.token`)
+oder Agent-Token (`CONCLAVE_AGENT_KEY`/`agent.token`).
+`GET /auth/whoami` liefert `{"role": "human"}` bzw. `{"role": "agent"}`.
+
+Mit dem Agent-Token sind nur die Routen erlaubt, die die MCP-Tools brauchen:
+
+- `GET /auth/whoami`
+- `GET`/`POST /conversations`, `GET /conversations/<id>`,
+  `POST /conversations/<id>/topic`, `GET /conversations/<id>/export`
+- `POST /conversations/<id>/participants` (nur `type: "model"`),
+  `POST /conversations/<id>/messages`,
+  `POST /conversations/<id>/participants/<pid>/invoke`,
+  `POST /conversations/<id>/orchestrate`,
+  `POST /conversations/<id>/orchestrate-parallel`
+- `GET /agents`, `GET /usage`
+- `GET /workspace`, `GET`/`POST /workspace/<path>`
+- `POST /consultations`, `GET /consultations/<id>`
+
+Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
+`{"type": "HumanOnly", "error": "Nur für den Menschen-Zugang."}`.
+
 | Methode | Pfad | Beschreibung |
 |---------|------|-------------|
 | `GET` | `/` | Serve Ui |
 | `GET` | `/api-docs` | Swagger UI — interaktive API-Dokumentation (lokal ausgeliefert, keine CDN-Ressourcen). |
 | `GET` | `/openapi.json` | OpenAPI 3.0 Spec als JSON. |
 | `GET` | `/health` | Healthcheck für lokale Runtime und Integrationen. |
+| `GET` | `/auth/whoami` | Rolle des anfragenden Tokens: `human` oder `agent`. |
 | `POST` | `/conversations` | Create Conversation |
 | `GET` | `/conversations` | List Conversations |
 | `GET` | `/agents` | List Agents |
@@ -216,8 +240,12 @@ Antworten automatisch zu. Modelle werden nie automatisch erneut aufgerufen.
 
 Fehler kommen als JSON `{"error": "...", "type": "..."}`. Wichtige Codes:
 
-- `400` — ungültige Eingaben, leere Conversation, Provider-Client-Fehler (4xx)
+- `400` — ungültige Eingaben, leere Conversation, Provider-Client-Fehler (4xx);
+  bei Participants ein `type` außer `model`/`user`
 - `401` — Token fehlt oder ist falsch
+- `403` — `HumanOnly`: Route nur mit dem Mensch-Token (siehe
+  [Mensch- und Agent-Zugang](#mensch--und-agent-zugang)); `HumanOnlyTicket`:
+  Consultation auf ein Ticket nur für Menschen mit dem Agent-Token
 - `404` — Conversation, Participant, Agent, Run oder Datei nicht gefunden
   (auch Invoke in einer unbekannten Conversation)
 - `409` — Konflikt (z. B. Agent/Participant existiert bereits, kein Rederecht,
