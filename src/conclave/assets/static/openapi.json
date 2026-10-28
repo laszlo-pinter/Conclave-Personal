@@ -116,9 +116,6 @@
                 }
               }
             }
-          },
-          "401": {
-            "description": "Token fehlt oder ist ungueltig"
           }
         }
       }
@@ -1549,6 +1546,7 @@
                   "task",
                   "question"
                 ],
+                "description": "Der Kanal (human/agent) ergibt sich aus dem Token. Ein Feld channel im Body wird mit 400 (ChannelNotAllowed) abgelehnt.",
                 "properties": {
                   "task": {
                     "type": "string",
@@ -1576,8 +1574,7 @@
                   "requested_by": {
                     "type": "string"
                   }
-                },
-                "description": "Der Kanal (human/agent) ergibt sich aus dem Token. Ein Feld channel im Body wird mit 400 (ChannelNotAllowed) abgelehnt."
+                }
               }
             }
           }

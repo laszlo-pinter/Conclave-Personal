@@ -124,12 +124,15 @@ ohne Reviewer-Liste antworten die Endpunkte mit `503`
 - `reviewers`: Teilmenge von `[kanzo] reviewers`; Standard: alle erlaubten.
 - `include_previous`: frühere Conclave-Kommentare des Tickets mitgeben
   (Standard `false`; dann als „frühere Modellausgabe“ gekennzeichnet).
-- `channel`: `rest` (Standard) oder `mcp`; das MCP-Tool setzt immer `mcp`.
+- Kein Feld `channel`: Der Kanal (`human` oder `agent`) ergibt sich aus dem
+  Token. Ein `channel` im Body ergibt `400` (`ChannelNotAllowed`); bis v0.4.0
+  gab es dort `rest`/`mcp`.
 - Antwort `202` mit `id`, `status: "queued"` und `reviewers` (je Reviewer
   Provider und Modell: an diese Provider geht der Ticket-Inhalt).
 
-Fehler: `400` (`ValidationError`, `ReviewerNotAllowed`), `403`
-(`HumanOnlyTicket`: Ticket nur für Menschen, Anfrage über `mcp`), `404`
+Fehler: `400` (`ValidationError`, `ReviewerNotAllowed`, `ChannelNotAllowed`),
+`403` (`HumanOnlyTicket`: Ticket nur für Menschen, Anfrage mit dem
+Agent-Token), `404`
 (Ticket unbekannt), `429` (`ConsultationLimit`: `[kanzo] max_per_hour` pro
 Ticket und Stunde erreicht), `502` (Kanzo nicht erreichbar oder unbekanntes
 Ausgabeformat), `503` (nicht eingerichtet). Bei diesen Fehlern wird nichts

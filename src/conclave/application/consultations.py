@@ -80,8 +80,8 @@ class ConsultationRequests:
         if not isinstance(context, str) or len(context) > MAX_CONTEXT:
             raise ConsultationRequestError(f"context darf hoechstens {MAX_CONTEXT} Zeichen haben.",
                                            400, "ValidationError")
-        if channel not in CHANNELS:                       # kann nur ein Programmierfehler sein
-            raise ConsultationRequestError(f"Unbekannte Rolle: {channel!r}.", 403, "Forbidden")
+        if channel not in CHANNELS:                       # Programmierfehler -> 500, nicht 403
+            raise RuntimeError(f"Unbekannte Rolle im Principal: {channel!r}")
         if not isinstance(include_previous, bool):
             raise ConsultationRequestError("include_previous muss true oder false sein.", 400, "ValidationError")
         if (not isinstance(reviewers, list) or not reviewers

@@ -87,6 +87,39 @@
         }
       }
     },
+    "/auth/whoami": {
+      "get": {
+        "summary": "Rolle des anfragenden Tokens: human oder agent.",
+        "tags": [
+          "auth"
+        ],
+        "operationId": "whoami",
+        "responses": {
+          "200": {
+            "description": "Erfolg",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "role"
+                  ],
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "human",
+                        "agent"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/conversations": {
       "post": {
         "summary": "Create Conversation",
@@ -1513,6 +1546,7 @@
                   "task",
                   "question"
                 ],
+                "description": "Der Kanal (human/agent) ergibt sich aus dem Token. Ein Feld channel im Body wird mit 400 (ChannelNotAllowed) abgelehnt.",
                 "properties": {
                   "task": {
                     "type": "string",
@@ -1536,14 +1570,6 @@
                   "include_previous": {
                     "type": "boolean",
                     "default": false
-                  },
-                  "channel": {
-                    "type": "string",
-                    "enum": [
-                      "rest",
-                      "mcp"
-                    ],
-                    "default": "rest"
                   },
                   "requested_by": {
                     "type": "string"

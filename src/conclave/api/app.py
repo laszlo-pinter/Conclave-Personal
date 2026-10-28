@@ -321,7 +321,7 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     @app.get("/auth/whoami")
     def whoami():
-        """Rolle des anfragenden Tokens: human oder agent (Z1)."""
+        """Rolle des anfragenden Tokens: human oder agent."""
         return jsonify({"role": g.principal.role}), 200
 
     # ── Error Handler ────────────────────────────────────────────────────

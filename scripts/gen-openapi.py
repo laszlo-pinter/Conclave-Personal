@@ -73,6 +73,9 @@ SCHEMAS = {
     ("GET", "/health"): {
         "response": {"required": ["status"], "properties": {"status": {"type": "string"}}},
     },
+    ("GET", "/auth/whoami"): {
+        "response": {"required": ["role"], "properties": {"role": {"type": "string", "enum": ["human", "agent"]}}},
+    },
     ("GET", "/providers"): {
         "response": {"required": ["providers"], "properties": {"providers": {"type": "array", "items": {
             "type": "object",
@@ -125,14 +128,16 @@ SCHEMAS = {
         }},
     },
     ("POST", "/consultations"): {
-        "request": {"required": ["task", "question"], "properties": {
+        "request": {"required": ["task", "question"],
+                    "description": "Der Kanal (human/agent) ergibt sich aus dem Token. "
+                                   "Ein Feld channel im Body wird mit 400 (ChannelNotAllowed) abgelehnt.",
+                    "properties": {
             "task": {"type": "string", "example": "api#12"},
             "question": {"type": "string", "maxLength": 4000},
             "context": {"type": "string", "maxLength": 8000},
             "reviewers": {"type": "array", "items": {"type": "string"},
                           "description": "Teilmenge von [kanzo] reviewers; Standard: alle erlaubten"},
             "include_previous": {"type": "boolean", "default": False},
-            "channel": {"type": "string", "enum": ["rest", "mcp"], "default": "rest"},
             "requested_by": {"type": "string"},
         }},
         "response": {"required": ["id", "status", "reviewers"], "properties": {
