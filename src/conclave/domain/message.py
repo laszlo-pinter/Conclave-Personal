@@ -3,6 +3,8 @@ from datetime import datetime, UTC
 from enum import Enum
 import uuid
 
+from conclave.domain.principal import Role
+
 
 class MessageAuthorType(str, Enum):
     """Unterscheidet User-Eingaben von Model-Antworten."""
@@ -28,14 +30,14 @@ class Message:
     content: str
     sequence: int
     created_at: datetime
-    origin: str | None = None
+    origin: Role | None = None
 
     @staticmethod
     def create_user_message(
         conversation_id: str,
         content: str,
         sequence: int,
-        origin: str | None = None,
+        origin: Role | None = None,
     ) -> "Message":
         """Erzeugt eine User-Message mit neuer UUID."""
         return Message(

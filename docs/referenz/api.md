@@ -89,6 +89,11 @@ kein Datenfehler.
   `skipped_files`, `estimated_tokens` (Schätzung, ca. 3,5 Zeichen pro Token),
   `billed_input_tokens`/`billed_output_tokens` (vom Provider abgerechnet,
   `null` wenn nicht gemeldet), `adapter`, `attempts`.
+- Jede Nachricht hat `origin` (in `GET /conversations/<id>`, im Export und in
+  der Antwort von `POST /conversations/<id>/messages`): `human` oder `agent`,
+  je nach Token der Anfrage, nie aus dem Body. `null` heißt unbekannt
+  (Modellantworten, ältere Nachrichten, Wege ohne Token wie die CLI).
+  `author_type` bleibt für Nachrichten von Agenten `user`.
 - `GET /conversations/<id>/messages/<message_id>/context` liefert den
   vollständigen Report (`report`, `usage`, `run_id`). `404`, wenn Conversation,
   Nachricht oder Report fehlen (`type`: `ConversationNotFound`,
