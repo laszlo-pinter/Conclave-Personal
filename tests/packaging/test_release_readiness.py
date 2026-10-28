@@ -17,6 +17,7 @@ def test_release_docs_exist():
     required = [
         "docs/sicherheit.md",
         "docs/beispiel-workflows.md",
+        "docs/mit-kanzo-arbeiten.md",
         "docs/release-notes-v0.4.0.md",
         "docs/release-notes-v0.5.0.md",
         "docs/release-notes-v0.3.0.md",

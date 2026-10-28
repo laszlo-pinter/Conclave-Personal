@@ -289,6 +289,9 @@ asks the reviewers configured in `[kanzo] reviewers` for a second opinion on a
 ticket; the answers are posted as labelled comments on the ticket
 (`conclave_get_consultation` shows the status). See the
 [API reference](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/referenz/api.md#consultations).
+How Kanzo and Conclave work together for work packages (setup, an example
+flow, rules that proved useful):
+[Working with Kanzo](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/mit-kanzo-arbeiten.md).
 
 Tool results are returned as JSON text. Errors from the Conclave API (for
 example a missing token or an unreachable server) are reported to the model as

@@ -57,6 +57,12 @@ Your existing `api.token` keeps working for the UI, the REST API and the CLI.
   `human`. 16 tools: `conclave_delete_conversation` and
   `conclave_delete_file` are gone (deleting is for the human only).
 
+## Documentation
+
+- New page [Working with Kanzo](mit-kanzo-arbeiten.md) (German): how Kanzo
+  and Conclave complement each other, setup with the agent token, an example
+  flow from plan to `done`, and rules that proved useful.
+
 ## Breaking changes
 
 - `conclave-mcp` no longer reads `api.token` (see Upgrading).
