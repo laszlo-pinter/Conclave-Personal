@@ -109,7 +109,8 @@ Oktober 2026):
 - `~/` steht für das Benutzerverzeichnis; absolute Pfade beginnen mit `//`
   (unter Windows z. B. `//c/Users/<name>/...`). Die Zeilen für Windows
   (`%APPDATA%\Conclave`) und Linux/macOS (`~/.config/conclave`) dürfen beide
-  stehen bleiben. Mit `CONCLAVE_API_TOKEN_FILE` gilt der dort gesetzte Pfad.
+  stehen bleiben. Wer `CONCLAVE_API_TOKEN_FILE`, `CONCLAVE_SECRET_KEY_FILE`
+  oder (Linux/macOS) `XDG_CONFIG_HOME` setzt, trägt die dort gesetzten Pfade ein.
 - `secret.key` gehört dazu: Mit ihm und der Datenbank ließen sich die
   gespeicherten Provider-Keys entschlüsseln.
 - `Read`-Deny-Regeln gelten für die Datei-Tools von Claude Code und für

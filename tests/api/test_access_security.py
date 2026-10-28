@@ -34,12 +34,17 @@ def app(tmp_path):
 
 # ── Umgehung der human-Pruefung (Luecke aus v0.4.0) ───────────────────────
 
-@pytest.mark.parametrize("body_extra", [{}, {"channel": "human"}, {"channel": "rest"}, {"channel": ""},
-                                        {"requested_by": "laszlo"}, {"origin": "human"}])
-def test_agent_cannot_reach_a_human_ticket_by_any_body(env, body_extra):
+@pytest.mark.parametrize("body_extra, status, error_type", [
+    ({}, 403, "HumanOnlyTicket"),
+    ({"requested_by": "laszlo"}, 403, "HumanOnlyTicket"),
+    ({"origin": "human"}, 403, "HumanOnlyTicket"),
+    ({"channel": "human"}, 400, "ChannelNotAllowed"),
+    ({"channel": "rest"}, 400, "ChannelNotAllowed"),
+    ({"channel": ""}, 400, "ChannelNotAllowed"),
+])
+def test_agent_cannot_reach_a_human_ticket_by_any_body(env, body_extra, status, error_type):
     resp = env.agent.post("/consultations", json={"task": "api#20", "question": "?", **body_extra})
-    assert resp.status_code in (400, 403)
-    assert resp.get_json()["type"] in ("ChannelNotAllowed", "HumanOnlyTicket")
+    assert (resp.status_code, resp.get_json()["type"]) == (status, error_type)
     assert env.repo.list_by_source_ref("kanzo", "api#20") == []
     assert env.kanzo.tasks["api#20"].comments == []
 
