@@ -111,13 +111,17 @@ Datenraum für Kontext, Notizen und Outputs.
 - Dateibaum (ein vorhandener Ordner `output/` erscheint dort wie jeder
   andere Ordner; eine eigene Output-Ansicht gibt es nicht)
 - Datei hochladen oder Text ablegen
-- Klick auf einen Dateinamen fügt `@workspace/<pfad>` in das Eingabefeld ein
+- Klick auf einen Dateinamen öffnet die Datei im Viewer unter der Liste
+  (nur lesen): Markdown formatiert mit Umschalter „Formatiert / Quelltext“,
+  andere Textdateien als Text; „In Chat einfügen“ setzt `@workspace/<pfad>`
+  ins Eingabefeld (in der Seitenleiste des Chats fügt ein Klick direkt ein)
 - Limit-Chips (UI-, Agent-Lese- und Schreiblimit) und Infotext erklären,
   was Agenten sehen
 - Conversation exportieren
 
-Einen Datei-Viewer hat die UI nicht. Dateiinhalte lesen geht über die API
-oder die CLI (`conclave workspace read <pfad>`).
+Markdown im Viewer wird wie Modellausgaben behandelt: `marked` plus
+DOMPurify, unter derselben CSP. Bearbeiten und Löschen gehen nicht über den
+Viewer.
 
 ### Sicherheitsregeln
 
