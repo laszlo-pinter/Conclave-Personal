@@ -50,6 +50,8 @@ def live_server(tmp_path_factory):
         mp.setenv("CONCLAVE_SECRET_KEY_FILE", str(root / "secret.key"))
         mp.setenv("CONCLAVE_BACKUP_DIR", str(root / "backups"))
         mp.setenv("CONCLAVE_API_TOKEN_FILE", str(root / "api.token"))
+        mp.setenv("CONCLAVE_AGENT_TOKEN_FILE", str(root / "agent.token"))
+        mp.delenv("CONCLAVE_AGENT_KEY", raising=False)
         mp.delenv("CONCLAVE_API_KEY", raising=False)
         app, config = _build_app(ConclaveConfig(db_path=root / "conclave.db", api_key="", mode="development"))
         server = make_server("127.0.0.1", 0, app, threaded=True)

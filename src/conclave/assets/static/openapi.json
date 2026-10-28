@@ -87,6 +87,42 @@
         }
       }
     },
+    "/auth/whoami": {
+      "get": {
+        "summary": "Rolle des anfragenden Tokens: human oder agent.",
+        "tags": [
+          "auth"
+        ],
+        "operationId": "whoami",
+        "responses": {
+          "200": {
+            "description": "Erfolg",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "role"
+                  ],
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "human",
+                        "agent"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token fehlt oder ist ungueltig"
+          }
+        }
+      }
+    },
     "/conversations": {
       "post": {
         "summary": "Create Conversation",

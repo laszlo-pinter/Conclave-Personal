@@ -6,7 +6,7 @@ import os
 import time
 
 try:
-    from flask import Flask, Response, jsonify, request, stream_with_context, send_file as flask_send_file
+    from flask import Flask, Response, g, jsonify, request, stream_with_context, send_file as flask_send_file
     from werkzeug.exceptions import HTTPException
 except ImportError:
     raise ImportError(
@@ -37,6 +37,7 @@ from conclave.domain.errors import (
     ProviderTimeout,
 )
 from conclave.domain.participant import ParticipantType
+from conclave.domain.principal import HUMAN_PRINCIPAL
 from conclave.application.consultations import ConsultationRequestError
 from conclave.domain.errors import TaskNotFound, TaskSourceError
 from conclave.cli.bootstrap import rate_limit_disabled, validate_rate_limit
@@ -176,6 +177,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         if request.method == "OPTIONS":
             return
         if auth_service is None:
+            g.principal = HUMAN_PRINCIPAL      # ohne Auth (nur Tests/Entwicklung): voller Zugang
             return
         if request.method in ("GET", "HEAD") and (
             request.path in PUBLIC_GET_PATHS or request.path.startswith("/static/")
@@ -187,8 +189,10 @@ def create_app(handler: CLIHandler, auth_service=None,
             token = auth_header[7:]
         else:
             token = request.headers.get("X-API-Key")
-        if not auth_service.validate_token(token):
+        principal = auth_service.authenticate(token)
+        if principal is None:
             raise AuthenticationError()
+        g.principal = principal
 
     @app.before_request
     def _log_request_start():
@@ -302,6 +306,11 @@ def create_app(handler: CLIHandler, auth_service=None,
     def health():
         """Healthcheck fuer lokale Runtime und Integrationen."""
         return jsonify({"status": "ok", "product": "conclave-personal"}), 200
+
+    @app.get("/auth/whoami")
+    def whoami():
+        """Rolle des anfragenden Tokens: human oder agent (Z1)."""
+        return jsonify({"role": g.principal.role}), 200
 
     # ── Error Handler ────────────────────────────────────────────────────
 

@@ -76,6 +76,7 @@ class ConclaveConfig:
     gemini_api_key: str = ""
     # API-Authentifizierung
     api_key: str = ""
+    agent_api_key: str = ""
     allowed_hosts: str = ""
     # Betriebsmodus
     mode: str = "development"  # "development" | "production"
@@ -131,6 +132,7 @@ class ConclaveConfig:
         openai_api_key = env_secret("OPENAI_API_KEY")
         gemini_api_key = env_secret("GEMINI_API_KEY")
         api_key = env_secret("CONCLAVE_API_KEY")
+        agent_api_key = env_secret("CONCLAVE_AGENT_KEY")
         allowed_hosts = os.environ.get("CONCLAVE_ALLOWED_HOSTS", "")
         mode = os.environ.get("CONCLAVE_MODE", "development")
         kanzo = KanzoSettings.from_section(data.get("kanzo", {}))
@@ -150,6 +152,7 @@ class ConclaveConfig:
             openai_api_key=openai_api_key,
             gemini_api_key=gemini_api_key,
             api_key=api_key,
+            agent_api_key=agent_api_key,
             allowed_hosts=allowed_hosts,
             mode=mode,
             kanzo=kanzo,
