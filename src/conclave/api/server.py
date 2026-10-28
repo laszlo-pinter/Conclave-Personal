@@ -29,8 +29,10 @@ def _seed_agents(agent_service):
     # CONCLAVE_AGENT_<ID>_API_URL und _API_KEY werden vom Seed selbst gelesen,
     # duerfen aber nicht als eigene Agents geseeded werden.
     config_suffixes = ("_API_URL", "_API_KEY")
+    # Gleiches Praefix, aber keine Agents: das Agent-Token (Z1) und sein Dateipfad.
+    reserved = {"CONCLAVE_AGENT_KEY", "CONCLAVE_AGENT_TOKEN_FILE"}
     for key, value in os.environ.items():
-        if not key.startswith(prefix):
+        if not key.startswith(prefix) or key in reserved:
             continue
         if any(key.endswith(s) for s in config_suffixes):
             continue

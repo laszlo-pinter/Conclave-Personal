@@ -157,3 +157,19 @@ def test_tokens_never_appear_in_logs(tmp_path, caplog):
         secret = token.split("_", 1)[1]
         for part in (token, secret[:8], secret[-8:]):
             assert part not in text, part
+
+
+def test_token_variables_are_not_seeded_as_agents(monkeypatch, tmp_path, capsys):
+    """CONCLAVE_AGENT_KEY/_TOKEN_FILE teilen das Praefix der Agent-Seeds (CONCLAVE_AGENT_<ID>)."""
+    monkeypatch.setenv("CONCLAVE_AGENT_KEY", "cva_a:b:c")
+    monkeypatch.setenv("CONCLAVE_AGENT_TOKEN_FILE", r"C:\x\agent.token")
+    from conclave.api.server import _build_app
+    config = ConclaveConfig.from_sources(tmp_path / "fehlt.toml")
+    config.db_path = tmp_path / "c.db"
+    app, config = _build_app(config)
+    c = app.test_client()
+    agents = c.get("/agents", headers=_bearer(config.api_key)).get_json()
+    ids = {a["id"] for a in (agents["agents"] if isinstance(agents, dict) else agents)}
+    assert not {"KEY", "TOKEN_FILE"} & ids
+    assert "cva_a" not in capsys.readouterr().out
+    assert c.get("/auth/whoami", headers=_bearer("cva_a:b:c")).get_json() == {"role": "agent"}
