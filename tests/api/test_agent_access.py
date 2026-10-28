@@ -176,14 +176,13 @@ def test_every_mcp_tool_route_works_with_agent_token(mcp_via_app):
     assert used | {("GET", "/auth/whoami")} == AGENT_ALLOWED
 
 
-def test_mcp_delete_tools_are_refused_for_agents(mcp_via_app):
-    server, hits, ToolError = mcp_via_app
-    conv = server.conclave_create_conversation("Z2")["conversation_id"]
-    with pytest.raises(ToolError, match="403"):
-        server.conclave_delete_conversation(conv)
-    with pytest.raises(ToolError, match="403"):
-        server.conclave_delete_file("z2/notiz.md")
-    assert server.conclave_get_conversation(conv)["id"] == conv       # nichts geloescht
+def test_delete_routes_are_refused_for_agents(app):
+    """Die MCP-Loeschtools gibt es seit Z5 nicht mehr; direkt per REST bleibt es 403 (E2)."""
+    c = app.test_client()
+    conv = c.post("/conversations", json={}, headers=_bearer(AGENT)).get_json()["conversation_id"]
+    assert c.delete(f"/conversations/{conv}", headers=_bearer(AGENT)).status_code == 403
+    assert c.delete("/workspace/z2/notiz.md", headers=_bearer(AGENT)).status_code == 403
+    assert c.get(f"/conversations/{conv}", headers=_bearer(AGENT)).status_code == 200   # nichts geloescht
 
 
 # ── Z2b: Participants vom Typ user nur fuer Menschen ──────────────────────
