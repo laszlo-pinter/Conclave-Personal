@@ -687,7 +687,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         ptype_str = body.get("type", "model")
 
         if not participant_id or not name:
-            return jsonify({"error": "participant_id und name sind erforderlich."}), 400
+            return jsonify({"error": "participant_id und name sind erforderlich.", "type": "ValidationError"}), 400
         if ptype_str not in ("model", "user"):
             return jsonify({"error": "type muss 'model' oder 'user' sein.", "type": "ValidationError"}), 400
         # Z2b: Agenten treten nie als Mensch auf, also keine Participants vom Typ user.
