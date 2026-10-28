@@ -155,6 +155,7 @@ def _call(name, args=None):
 
 
 def test_never_reads_the_human_token_file(tmp_path, monkeypatch):
+    monkeypatch.delenv("CONCLAVE_API_KEY", raising=False)     # CI setzt die Variable global
     (tmp_path / "api.token").write_text("cvh_mensch\n", encoding="utf-8")   # CONCLAVE_API_TOKEN_FILE (conftest)
     assert server.read_token() == ""                                         # kein agent.token, keine Variablen
     (tmp_path / "agent.token").write_text("cva_agent\n", encoding="utf-8")

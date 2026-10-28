@@ -28,7 +28,8 @@ def test_agent_key_from_environment_is_used(monkeypatch, tmp_path, capsys):
     assert not (tmp_path / "agent.token").exists()
 
 
-def test_human_token_value_only_with_reveal(tmp_path, capsys):
+def test_human_token_value_only_with_reveal(tmp_path, capsys, monkeypatch):
+    monkeypatch.delenv("CONCLAVE_API_KEY", raising=False)     # CI setzt die Variable global
     token = api_token.load_or_create_token(tmp_path / "api.token")
     assert run(["token", "show"]) == 0
     out = capsys.readouterr().out
