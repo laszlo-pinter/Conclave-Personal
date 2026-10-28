@@ -13,7 +13,7 @@ answer is correct. It gives users a structured workspace for comparing model
 outputs, tracking runs, and deliberately choosing the next step. The human
 decides. Always.
 
-> Status: v0.4.0 Alpha. The primary path is local, desktop-first, and designed
+> Status: v0.5.0 Alpha. The primary path is local, desktop-first, and designed
 > for individual users on Windows and Linux.
 
 ![Conclave Studio](https://raw.githubusercontent.com/laszlo-pinter/Conclave-Personal/main/docs/assets/screenshots/conclave-studio-desktop.png)
@@ -416,6 +416,7 @@ Important documents:
 - [Security](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/sicherheit.md)
 - [Configuration](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/referenz/konfiguration.md)
 - [Release Notes v0.4.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.4.0.md)
+- [Release Notes v0.5.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.5.0.md)
 - [Release Notes v0.3.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.3.0.md)
 - [Release Notes v0.2.3](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.2.3.md)
 - [Release Notes v0.2.2](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.2.2.md)
@@ -436,7 +437,7 @@ Important documents:
 
 ## Known Limitations
 
-v0.4.0 remains alpha. Known limitations:
+v0.5.0 remains alpha. Known limitations:
 
 - Provider compatibility varies by API, model, account, and region.
 - Remote providers receive the data required for the model call.
@@ -457,7 +458,7 @@ CI runs the jobs `test` (Ubuntu and Windows, Python 3.11 and 3.12),
 `bandit`), `postgres` (PostgreSQL 16 tests) and `build` (sdist and wheel,
 artifact inspection).
 
-The v0.4.0 surface was verified with these checks:
+The v0.5.0 surface was verified with these checks:
 
 - `python -m pytest` (the Playwright browser tests for XSS protection, CSP,
   token login, the settings page, the context chip and the preview only run
@@ -475,7 +476,13 @@ The v0.4.0 surface was verified with these checks:
   Chat Completions) and Gemini APIs: text and token usage (manual, v0.2.2)
 - Consultations end-to-end with a real Kanzo and real models (Anthropic
   preset, OpenAI native): REST and MCP, human-only ticket, limit, injection
-  ticket, server restart mid-run (manual)
+  ticket, server restart mid-run (manual, v0.4.0)
+- Upgrade of a v0.4.0 database with the installed wheel (migrations, channel
+  values, `origin: null`, old `api.token` still valid, `agent.token` created)
+- Human and agent access end-to-end with the installed wheel and a scratch
+  Kanzo: `conclave-mcp` over stdio with the agent token, human-only ticket
+  rejected via MCP and via direct REST with the agent token, accepted with the
+  human token, warning for the human token in `conclave-mcp` (manual)
 - `conclave desktop` end-to-end with real providers (manual, v0.2.0)
 - `pip-audit` and `bandit` (run manually for this release, also in CI)
 - Artifact inspection without workspace data, databases, keys, logs, and old

@@ -31,6 +31,7 @@
 
 ### Release
 - [Release Notes v0.4.0](release-notes-v0.4.0.md) - Consultations: second opinions on Kanzo tickets
+- [Release Notes v0.5.0](release-notes-v0.5.0.md) - Separate human and agent access
 - [Release Notes v0.3.0](release-notes-v0.3.0.md) - Context transparency: context chip, preview before a call, per-agent message limit
 - [Release Notes v0.2.3](release-notes-v0.2.3.md) - Chat rules are saved with SQLite
 - [Release Notes v0.2.2](release-notes-v0.2.2.md) - Streaming for all preset formats, correct token usage
