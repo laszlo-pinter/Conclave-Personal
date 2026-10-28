@@ -184,3 +184,46 @@ def test_mcp_delete_tools_are_refused_for_agents(mcp_via_app):
     with pytest.raises(ToolError, match="403"):
         server.conclave_delete_file("z2/notiz.md")
     assert server.conclave_get_conversation(conv)["id"] == conv       # nichts geloescht
+
+
+# ── Z2b: Participants vom Typ user nur fuer Menschen ──────────────────────
+
+def _participants(app, conv):
+    shown = app.test_client().get(f"/conversations/{conv}", headers=_bearer(HUMAN)).get_json()
+    return {p["id"]: p for p in shown["participants"]}
+
+
+@pytest.fixture
+def conv(app):
+    return app.test_client().post("/conversations", json={}, headers=_bearer(HUMAN)).get_json()["conversation_id"]
+
+
+def test_agent_cannot_add_user_participant(app, conv):
+    resp = app.test_client().post(f"/conversations/{conv}/participants", headers=_bearer(AGENT),
+                                  json={"participant_id": "laszlo", "name": "Laszlo", "type": "user"})
+    assert resp.status_code == 403 and resp.get_json() == HUMAN_ONLY_ERROR
+    assert "laszlo" not in _participants(app, conv)
+
+
+@pytest.mark.parametrize("extra", [{}, {"type": "model"}])
+def test_agent_can_add_model_participant(app, conv, extra):
+    resp = app.test_client().post(f"/conversations/{conv}/participants", headers=_bearer(AGENT),
+                                  json={"participant_id": "p1", "name": "P1", **extra})
+    assert resp.status_code == 201
+    assert _participants(app, conv)["p1"]["type"] == "model"
+
+
+def test_human_can_add_user_participant(app, conv):
+    resp = app.test_client().post(f"/conversations/{conv}/participants", headers=_bearer(HUMAN),
+                                  json={"participant_id": "laszlo", "name": "Laszlo", "type": "user"})
+    assert resp.status_code == 201
+    assert _participants(app, conv)["laszlo"]["type"] == "user"
+
+
+@pytest.mark.parametrize("token", [HUMAN, AGENT])
+@pytest.mark.parametrize("ptype", ["usr", "USER", "", None, 1, ["user"]])
+def test_unknown_participant_type_is_400_for_everyone(app, conv, token, ptype):
+    resp = app.test_client().post(f"/conversations/{conv}/participants", headers=_bearer(token),
+                                  json={"participant_id": "x", "name": "X", "type": ptype})
+    assert resp.status_code == 400 and resp.get_json()["type"] == "ValidationError"
+    assert "x" not in _participants(app, conv)
