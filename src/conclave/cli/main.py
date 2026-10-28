@@ -643,6 +643,7 @@ def _run_token_show(args) -> int:
         if not existed:
             source += " (neu angelegt)"
     print(f"Agent-Token: {source}")
+    print("Hinweis: Setzt der Server CONCLAVE_AGENT_KEY in seiner eigenen Umgebung, gilt nur dieser Wert.")
     print()
     print("MCP-Server in Claude Code einrichten (liest agent.token selbst):")
     print(f"  claude mcp add Conclave -s user -e CONCLAVE_API_URL={url} -- conclave-mcp")

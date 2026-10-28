@@ -222,3 +222,13 @@ def test_old_server_without_roles_is_reported(monkeypatch, capsys):
 def test_delete_tools_are_gone():
     assert not hasattr(server, "conclave_delete_conversation")
     assert not hasattr(server, "conclave_delete_file")
+
+
+def test_role_check_is_repeated_after_401(conclave_api, monkeypatch, tmp_path, capsys):
+    """Falsches Token zuerst: der Check gilt nicht als erledigt, die Warnung kommt spaeter noch."""
+    _url, human, _agent = conclave_api
+    monkeypatch.setenv("CONCLAVE_AGENT_KEY", "falsch")
+    assert _call("conclave_list_conversations").is_error
+    monkeypatch.setenv("CONCLAVE_AGENT_KEY", human)
+    assert not _call("conclave_list_conversations").is_error
+    assert "WARNUNG: conclave-mcp nutzt das Mensch-Token" in capsys.readouterr().err

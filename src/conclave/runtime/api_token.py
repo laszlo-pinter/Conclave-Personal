@@ -3,10 +3,10 @@
 Die API verlangt immer ein Token. Ist ``CONCLAVE_API_KEY`` nicht gesetzt,
 erzeugt der Server beim ersten Start ein zufaelliges Token und legt es in
 ``api.token`` im Konfigurationsverzeichnis ab (neben ``secret.key``).
-CLI-Werkzeuge und der MCP-Server lesen es von dort, wenn die Variable fehlt.
+CLI-Werkzeuge (web, desktop, watch) lesen es von dort, wenn die Variable fehlt.
 
 Daneben gibt es ein Agent-Token (``CONCLAVE_AGENT_KEY`` bzw. ``agent.token``),
-das genauso angelegt wird. Neue Tokens tragen ein Praefix (``cvh_`` Mensch,
+das genauso angelegt wird. Der MCP-Server nutzt nur dieses, nie ``api.token``. Neue Tokens tragen ein Praefix (``cvh_`` Mensch,
 ``cva_`` Agent); vorhandene Tokens ohne Praefix bleiben gueltig. Tokens werden
 nie geloggt, nur Pfade.
 """

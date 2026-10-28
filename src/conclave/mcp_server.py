@@ -105,7 +105,11 @@ def _check_role() -> None:
     try:
         r = httpx.get(f"{API_URL}/auth/whoami", headers=_headers(), timeout=10)
     except httpx.HTTPError:
-        _role_checked = False          # Server noch nicht da: beim naechsten Aufruf erneut pruefen
+        r = None
+    if r is None or r.status_code not in (200, 404):
+        # Server noch nicht da oder Token falsch: beim naechsten Aufruf erneut pruefen
+        with _role_lock:
+            _role_checked = False
         return
     if r.status_code == 404:
         print("WARNUNG: Der Conclave-Server kennt keine getrennten Zugaenge (aelter als v0.5.0).",
