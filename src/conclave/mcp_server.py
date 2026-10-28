@@ -312,7 +312,7 @@ def conclave_consult(task: str, question: str, context: str = "", include_previo
         reviewers: Optional eine Teilmenge der erlaubten Reviewer (Agent-IDs)
     """
     body = {"task": task, "question": question, "context": context,
-            "include_previous": include_previous, "channel": "mcp", "requested_by": "mcp"}
+            "include_previous": include_previous, "requested_by": "mcp"}
     if reviewers:
         body["reviewers"] = reviewers
     return _post("/consultations", body)

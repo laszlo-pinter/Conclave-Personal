@@ -11,7 +11,8 @@ Sicherheit (Plan 4.1, 4.6, 4.7 und Erweiterungen aus C3):
 - Kein Einsetzen von ``@workspace/``-Dateien in den Prompt und keine
   Ausfuehrung von ``@save``/``@read`` aus Antworten - sonst koennte ein Ticket
   Workspace-Inhalte in einen Kommentar schleusen oder Dateien schreiben.
-- Tickets "nur fuer Menschen" werden ueber den Kanal ``mcp`` (Agenten) abgelehnt.
+- Tickets "nur fuer Menschen" werden abgelehnt, wenn der Kanal nicht ``human`` ist
+  (der Kanal kommt aus dem Token, Z3).
 - In Kanzo wird nur kommentiert.
 """
 
@@ -34,6 +35,7 @@ from conclave.domain.consultation import (
     ConsultationDelivery,
 )
 from conclave.domain.participant import ParticipantType
+from conclave.domain.principal import HUMAN
 from conclave.domain.ticket import Ticket
 from conclave.infrastructure.log import get_logger
 
@@ -77,7 +79,7 @@ class ConsultationService:
 
     def run(self, c: Consultation) -> None:
         ticket = self._source.get_task(c.source_ref)
-        if ticket.human and c.channel == "mcp":
+        if ticket.human and c.channel != HUMAN:            # nur der Mensch-Zugang darf (Z3)
             self._finish(c, FAILED, "Ticket ist nur fuer Menschen (human) - Anfragen von Agenten werden abgelehnt.")
             return
 

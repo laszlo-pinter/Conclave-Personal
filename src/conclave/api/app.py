@@ -857,7 +857,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         body = request.get_json(silent=True)
         if not isinstance(body, dict):
             return jsonify({"error": "JSON-Objekt erwartet.", "type": "ValidationError"}), 400
-        return jsonify(_consultations().create(body)), 202
+        return jsonify(_consultations().create(body, g.principal)), 202
 
     @app.get("/consultations")
     def list_consultations():
@@ -873,7 +873,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         rerun = body.get("rerun", False)
         if not isinstance(rerun, bool):
             return jsonify({"error": "rerun muss true oder false sein.", "type": "ValidationError"}), 400
-        result = _consultations().retry(consultation_id, rerun=rerun)
+        result = _consultations().retry(consultation_id, g.principal, rerun=rerun)
         return jsonify(result), 202
 
     # ── Personal Export ─────────────────────────────────────────────────

@@ -43,7 +43,7 @@ def repo(tmp_path):
 # ── Domain ───────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("kw", [
-    {"question": " "}, {"reviewers": []}, {"channel": "mail"}, {"mode": "debate"}, {"source_ref": ""},
+    {"question": " "}, {"reviewers": []}, {"channel": "mail"}, {"channel": "rest"}, {"channel": "mcp"}, {"mode": "debate"}, {"source_ref": ""},
 ])
 def test_consultation_validation(kw):
     base = dict(id="x", source="kanzo", source_ref="api#1", question="Frage", reviewers=("gpt",))
@@ -60,11 +60,11 @@ def test_marker_contains_consultation_and_reviewer():
 # ── Repository ───────────────────────────────────────────────────────────
 
 def test_save_get_roundtrip(repo):
-    c = _new(channel="mcp", context="Zusatz", requested_by="claude-code", include_previous=True)
+    c = _new(channel="agent", context="Zusatz", requested_by="claude-code", include_previous=True)
     repo.save(c)
     loaded = repo.get(c.id)
     assert (loaded.reviewers, loaded.channel, loaded.context, loaded.include_previous, loaded.status) == (
-        ("gpt", "claude"), "mcp", "Zusatz", True, QUEUED)
+        ("gpt", "claude"), "agent", "Zusatz", True, QUEUED)
     assert repo.get("gibtsnicht") is None
 
 
@@ -139,6 +139,24 @@ def test_existing_database_gets_tables_via_migration():
     conn.commit()
     assert "009_consultations" in run_migrations(conn)
     assert conn.execute("SELECT count(*) FROM sqlite_master WHERE name = 'consultations'").fetchone() == (1,)
+
+
+def test_channel_values_are_migrated_to_human_and_agent():
+    """Z3/E3: rest -> human, mcp -> agent; idempotent, andere Werte bleiben unberuehrt."""
+    conn = sqlite3.connect(":memory:")
+    initialize_schema(conn)
+    for cid, channel in (("a", "rest"), ("b", "mcp"), ("c", "human"), ("d", "agent")):
+        conn.execute("INSERT INTO consultations (id, source, source_ref, question, reviewers_json, channel, mode, "
+                     "status, created_at) VALUES (?, 'kanzo', 'api#1', 'F', '[\"gpt\"]', ?, 'independent', "
+                     "'done', '2026-10-27T00:00:00+00:00')", (cid, channel))
+    conn.execute("DELETE FROM _migrations WHERE id = '010_consultation_channels'")
+    conn.commit()
+    assert "010_consultation_channels" in run_migrations(conn)
+    assert run_migrations(conn) == []
+    rows = dict(conn.execute("SELECT id, channel FROM consultations").fetchall())
+    assert rows == {"a": "human", "b": "agent", "c": "human", "d": "agent"}
+    repo = SQLiteConsultationRepository(conn, autocommit=True)
+    assert repo.get("b").channel == "agent"          # alte Zeilen bleiben lesbar
 
 
 # ── Worker ───────────────────────────────────────────────────────────────

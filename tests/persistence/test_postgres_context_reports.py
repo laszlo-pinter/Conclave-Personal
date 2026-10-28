@@ -119,6 +119,29 @@ def test_v023_database_migrates_without_data_loss(pg):
         assert cur.fetchone() is not None
         cur.execute("SELECT to_regclass('consultations'), to_regclass('consultation_deliveries')")
         assert all(cur.fetchone())
+        cur.execute("SELECT id FROM _migrations WHERE id = '010_consultation_channels'")
+        assert cur.fetchone() is not None
+
+
+def test_consultation_channels_are_migrated(pg):
+    """Z3/E3 auf Postgres: rest -> human, mcp -> agent, idempotent."""
+    from conclave.infrastructure.migrations import run_migrations
+    from conclave.infrastructure.postgres.consultation_repository import PostgresConsultationRepository
+    from conclave.infrastructure.postgres.schema import initialize_schema
+
+    initialize_schema(pg)
+    with pg.cursor() as cur:
+        for cid, channel in (("a", "rest"), ("b", "mcp"), ("c", "human")):
+            cur.execute("INSERT INTO consultations (id, source, source_ref, question, reviewers_json, channel, mode, "
+                        "status, created_at) VALUES (%s, 'kanzo', 'api#1', 'F', '[\"gpt\"]', %s, 'independent', "
+                        "'done', now())", (cid, channel))
+        cur.execute("DELETE FROM _migrations WHERE id = '010_consultation_channels'")
+    assert "010_consultation_channels" in run_migrations(pg, is_postgres=True)
+    assert run_migrations(pg, is_postgres=True) == []
+    with pg.cursor() as cur:
+        cur.execute("SELECT id, channel FROM consultations ORDER BY id")
+        assert cur.fetchall() == [("a", "human"), ("b", "agent"), ("c", "human")]
+    assert PostgresConsultationRepository(pg).get("b").channel == "agent"
 
 
 def test_consultation_repository_roundtrip_and_atomic_claim(pg):
@@ -131,10 +154,10 @@ def test_consultation_repository_roundtrip_and_atomic_claim(pg):
     initialize_schema(pg)
     repo = PostgresConsultationRepository(pg)
     c = Consultation.create(source="kanzo", source_ref="api#12", question="Frage", reviewers=["gpt"],
-                            channel="mcp", include_previous=True)
+                            channel="agent", include_previous=True)
     repo.save(c)
     loaded = repo.get(c.id)
-    assert (loaded.reviewers, loaded.channel, loaded.include_previous) == (("gpt",), "mcp", True)
+    assert (loaded.reviewers, loaded.channel, loaded.include_previous) == (("gpt",), "agent", True)
 
     barrier = threading.Barrier(6)
     results = []

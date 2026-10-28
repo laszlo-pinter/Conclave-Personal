@@ -78,7 +78,7 @@ def env(tmp_path, monkeypatch):
     e = Env()
     e.flow, e.kanzo, e.reviewers, e.repo, e.svc, e.ws = service, kanzo, reviewers, repo, consultations, ws
 
-    def new(ref="api#12", channel="rest", reviewers=("gpt", "claude"), **kw):
+    def new(ref="api#12", channel="human", reviewers=("gpt", "claude"), **kw):
         c = Consultation.create(source="kanzo", source_ref=ref, question="Ist der Fix richtig?",
                                 reviewers=reviewers, channel=channel, **kw)
         repo.save(c)
@@ -129,12 +129,12 @@ def test_only_read_and_comment_tools_are_used(env):
 
 def test_human_ticket_is_rejected_for_agents_but_allowed_for_humans(env):
     env.kanzo.add(FakeTask("api", 20, "Privat", human=True))
-    c = env.new(ref="api#20", channel="mcp")
+    c = env.new(ref="api#20", channel="agent")
     env.svc.run(c)
     assert env.repo.get(c.id).status == FAILED and "nur fuer Menschen" in env.repo.get(c.id).error
     assert _comments(env, "api#20") == [] and env.reviewers["gpt"].prompts == []
 
-    c2 = env.new(ref="api#20", channel="rest")
+    c2 = env.new(ref="api#20", channel="human")
     env.svc.run(c2)
     assert env.repo.get(c2.id).status == DONE
 

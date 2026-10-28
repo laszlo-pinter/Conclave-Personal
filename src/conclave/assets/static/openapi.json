@@ -1573,18 +1573,11 @@
                     "type": "boolean",
                     "default": false
                   },
-                  "channel": {
-                    "type": "string",
-                    "enum": [
-                      "rest",
-                      "mcp"
-                    ],
-                    "default": "rest"
-                  },
                   "requested_by": {
                     "type": "string"
                   }
-                }
+                },
+                "description": "Der Kanal (human/agent) ergibt sich aus dem Token. Ein Feld channel im Body wird mit 400 (ChannelNotAllowed) abgelehnt."
               }
             }
           }

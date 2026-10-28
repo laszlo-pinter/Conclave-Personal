@@ -2,8 +2,10 @@
 
 - Die Obergrenze pro Ticket und Stunde wird beim Anlegen gezaehlt, nicht erst im Worker.
 - Reviewer nur aus ``[kanzo] reviewers``; ohne Liste ist die Funktion aus.
+- Der Kanal (``human``/``agent``) kommt aus dem Principal, also aus dem Token,
+  nie aus dem Body; ``channel`` im Body ergibt 400 (Z3).
 - Das Ticket wird schon beim Anlegen geprueft: unbekannt -> 404, nur fuer
-  Menschen ueber den Kanal ``mcp`` -> 403. Der Worker prueft erneut.
+  Menschen und Kanal nicht ``human`` -> 403. Der Worker prueft erneut.
 - Retry: offene oder fehlgeschlagene Zustellungen erneut zustellen (ohne
   Modellaufrufe); ``rerun`` legt eine neue Consultation an und zaehlt zur Grenze.
 """
@@ -25,6 +27,7 @@ from conclave.domain.consultation import (
     Consultation,
 )
 from conclave.domain.errors import ConclaveError
+from conclave.domain.principal import HUMAN, Principal
 from conclave.domain.ticket import TASK_REF
 
 MAX_QUESTION = 4000
@@ -53,7 +56,7 @@ class ConsultationRequests:
 
     # ── Anlegen ──────────────────────────────────────────────────────────
 
-    def create(self, body: dict) -> dict:
+    def create(self, body: dict, principal: Principal) -> dict:
         if not self._allowed:
             raise ConsultationRequestError(
                 "Consultations sind nicht eingerichtet: [kanzo] reviewers in config.toml fehlt.",
@@ -61,7 +64,11 @@ class ConsultationRequests:
         task = body.get("task")
         question = body.get("question")
         context = body.get("context") or ""
-        channel = body.get("channel") or "rest"
+        if "channel" in body:
+            raise ConsultationRequestError(
+                "channel wird nicht mehr angenommen: der Kanal ergibt sich aus dem Token (seit v0.5.0).",
+                400, "ChannelNotAllowed")
+        channel = principal.role
         include_previous = body.get("include_previous", False)
         reviewers = body.get("reviewers") or list(self._allowed)
 
@@ -73,8 +80,8 @@ class ConsultationRequests:
         if not isinstance(context, str) or len(context) > MAX_CONTEXT:
             raise ConsultationRequestError(f"context darf hoechstens {MAX_CONTEXT} Zeichen haben.",
                                            400, "ValidationError")
-        if channel not in CHANNELS:
-            raise ConsultationRequestError(f"channel muss einer von {CHANNELS} sein.", 400, "ValidationError")
+        if channel not in CHANNELS:                       # kann nur ein Programmierfehler sein
+            raise ConsultationRequestError(f"Unbekannte Rolle: {channel!r}.", 403, "Forbidden")
         if not isinstance(include_previous, bool):
             raise ConsultationRequestError("include_previous muss true oder false sein.", 400, "ValidationError")
         if (not isinstance(reviewers, list) or not reviewers
@@ -94,7 +101,7 @@ class ConsultationRequests:
                 429, "ConsultationLimit")
 
         ticket = self._source.get_task(task)              # TaskNotFound / TaskSourceError -> Fehlerbehandlung
-        if ticket.human and channel == "mcp":
+        if ticket.human and channel != HUMAN:
             raise ConsultationRequestError("Ticket ist nur fuer Menschen (human) - Anfragen von Agenten "
                                            "werden abgelehnt.", 403, "HumanOnlyTicket")
 
@@ -120,14 +127,15 @@ class ConsultationRequests:
 
     # ── Wiederholen ──────────────────────────────────────────────────────
 
-    def retry(self, consultation_id: str, *, rerun: bool = False) -> dict:
+    def retry(self, consultation_id: str, principal: Principal, *, rerun: bool = False) -> dict:
         c = self._require(consultation_id)
         if c.status in (QUEUED, RUNNING):
             raise ConsultationRequestError("Consultation laeuft noch.", 409, "ConsultationBusy")
         if rerun:
+            # Der Kanal folgt dem, der wiederholt - nicht der urspruenglichen Anfrage.
             return self.create({"task": c.source_ref, "question": c.question, "context": c.context,
-                                "channel": c.channel, "include_previous": c.include_previous,
-                                "reviewers": list(c.reviewers), "requested_by": c.requested_by})
+                                "include_previous": c.include_previous,
+                                "reviewers": list(c.reviewers), "requested_by": c.requested_by}, principal)
         open_deliveries = [d for d in self._repo.list_deliveries(c.id) if d.status != DELIVERED and d.message_id]
         if not open_deliveries:
             raise ConsultationRequestError(
