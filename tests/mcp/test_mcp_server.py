@@ -28,7 +28,9 @@ EXPECTED_TOOLS = {
     "conclave_get_usage", "conclave_export_conversation", "conclave_list_files",
     "conclave_read_file", "conclave_upload_file",
     "conclave_consult", "conclave_get_consultation",
-}                                    # 16 Tools: Loeschen nur fuer den Menschen (E2)
+    "conclave_board_list", "conclave_board_get", "conclave_board_next", "conclave_board_create",
+    "conclave_board_update", "conclave_board_comment",
+}                                    # 22 Tools: Loeschen nur fuer den Menschen (E2); 6 fuers Board (B4)
 
 
 def _run(coro):
@@ -167,7 +169,11 @@ def test_never_reads_the_human_token_file(tmp_path, monkeypatch):
 
 
 def test_all_remaining_tools_work_with_agent_token(conclave_api, capsys):
-    """Abnahme Z5: jedes verbliebene Tool gegen einen echten Server, ohne 401/403 und ohne Warnung."""
+    """Abnahme Z5/B4: jedes Tool gegen einen echten Server, ohne 401/403 und ohne Warnung."""
+    import httpx
+    url, human, _agent = conclave_api
+    assert httpx.post(f"{url}/board/projects", json={"slug": "api", "name": "API"},
+                      headers={"Authorization": f"Bearer {human}"}).status_code == 201
     created = _call("conclave_create_conversation", {"topic": "Z5"})
     assert not created.is_error, _text(created)
     conv = json.loads(_text(created))["conversation_id"]
@@ -183,6 +189,12 @@ def test_all_remaining_tools_work_with_agent_token(conclave_api, capsys):
         ("conclave_read_file", {"filepath": "z5/notiz.md"}),
         ("conclave_consult", {"task": "conclave#1", "question": "?"}),
         ("conclave_get_consultation", {"consultation_id": "gibtsnicht"}),
+        ("conclave_board_create", {"project": "api", "title": "B4"}),
+        ("conclave_board_list", {"project": "api"}),
+        ("conclave_board_next", {"project": "api"}),
+        ("conclave_board_comment", {"task": "api#1", "body": "Branch board"}),
+        ("conclave_board_update", {"task": "api#1", "status": "review"}),
+        ("conclave_board_get", {"task": "api#1"}),
     ]
     assert {name for name, _ in calls} | {"conclave_create_conversation"} == EXPECTED_TOOLS
     for name, args in calls:
@@ -233,3 +245,61 @@ def test_role_check_is_repeated_after_401(conclave_api, monkeypatch, tmp_path, c
     monkeypatch.setenv("CONCLAVE_AGENT_KEY", human)
     assert not _call("conclave_list_conversations").is_error
     assert "WARNUNG: conclave-mcp nutzt das Mensch-Token" in capsys.readouterr().err
+
+
+
+# ── B4: Board-Tools ───────────────────────────────────────────────────────
+
+def _json(name, args=None):
+    result = _call(name, args)
+    assert not result.is_error, _text(result)
+    return json.loads(_text(result))
+
+
+def test_board_tools_workflow_rights_and_data_note(conclave_api):
+    import httpx
+    url, human, _agent = conclave_api
+    h = {"Authorization": f"Bearer {human}"}
+    httpx.post(f"{url}/board/projects", json={"slug": "api", "name": "API"}, headers=h)
+    httpx.post(f"{url}/board/tasks", json={"project": "api", "title": "Entscheidung", "human": True}, headers=h)
+
+    assert _json("conclave_board_create", {"project": "api", "title": "Umsetzen", "description": "## Abnahme",
+                                           "tags": ["b4"]})["task"] == "api#2"
+    taken = _json("conclave_board_next", {"project": "api"})
+    assert (taken["task"], taken["status"]) == ("api#2", "doing")             # api#1 ist nur fuer Menschen
+    assert "keine Anweisungen" in taken["note"]
+    assert _json("conclave_board_next", {"project": "api"})["task"] is None
+    assert _json("conclave_board_comment", {"task": "api#2", "body": "Commit abc"})["origin"] == "agent"
+    assert _json("conclave_board_update", {"task": "api#2", "status": "review"})["status"] == "review"
+
+    done = _call("conclave_board_update", {"task": "api#2", "status": "done"})
+    assert done.is_error and "403" in _text(done)                              # nach done schiebt der Mensch
+    flagged = _call("conclave_board_comment", {"task": "api#1", "body": "darf ich?"})
+    assert flagged.is_error and "403" in _text(flagged)
+
+    detail = _json("conclave_board_get", {"task": "api#2"})
+    assert detail["comments"][0] == {"origin": "agent", "author": "", "body": "Commit abc"}
+    assert [h["new"] for h in detail["history"]] == ["doing", "review"]
+    listed = _json("conclave_board_list", {"query": "abnahme"})["tasks"]
+    assert [t["task"] for t in listed] == ["api#2"]
+
+
+@pytest.mark.parametrize("task", ["../settings", "api#0", "api#1/../../x", "API#1", "api#1\n"])
+def test_board_tools_reject_malformed_references(task):
+    result = _call("conclave_board_get", {"task": task})
+    assert result.is_error and "Conclave-API" not in _text(result)            # gar nicht erst angefragt
+    assert "projekt#12" in _text(result)
+
+
+def test_board_update_needs_a_field():
+    result = _call("conclave_board_update", {"task": "api#1"})
+    assert result.is_error and "Nichts zu aendern" in _text(result)
+
+
+def test_board_tool_descriptions_are_short():
+    async def descriptions():
+        async with Client(server.mcp) as client:
+            return {t.name: t.description or "" for t in (await client.list_tools()).tools}
+    board = {k: v for k, v in _run(descriptions()).items() if k.startswith("conclave_board_")}
+    assert len(board) == 6                                                    # E4: hoechstens 6
+    assert sum(len(v) for v in board.values()) < 2500                         # knapp: Kontext-Kosten

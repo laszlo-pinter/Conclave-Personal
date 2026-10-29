@@ -27,23 +27,17 @@ AGENT_ALLOWED = frozenset({
     ("POST", "/consultations"),
     ("GET", "/consultations/<consultation_id>"),
 }) | frozenset({
-    # Board (B3): lesen, anlegen, aendern, kommentieren, next_task. Die feineren Regeln
+    # Board: genau was die Tools conclave_board_* brauchen (B4). Die feineren Regeln
     # (letzte Spalte, Markierung, Tickets "nur fuer Menschen") prueft der BoardService.
-    ("GET", "/board"),
-    ("GET", "/board/changes"),
     ("GET", "/board/tasks"),
     ("POST", "/board/tasks"),
     ("GET", "/board/search"),
     ("POST", "/board/next"),
     ("GET", "/board/projects/<slug>/tasks/<int:number>"),
     ("PATCH", "/board/projects/<slug>/tasks/<int:number>"),
-    ("GET", "/board/projects/<slug>/tasks/<int:number>/comments"),
     ("POST", "/board/projects/<slug>/tasks/<int:number>/comments"),
     ("GET", "/board/projects/<slug>/tasks/<int:number>/history"),
 })
-
-# Board-Routen fuer Agenten, die (noch) kein MCP-Tool nutzt; B4 deckt sie ab.
-BOARD_AGENT_ROUTES = frozenset(r for r in AGENT_ALLOWED if r[1].startswith("/board"))
 
 # Nur mit dem Mensch-Token: Einstellungen, Agents verwalten, Backup/Restore, Logs,
 # Loeschen (E2), Floor und Auto-Loop, Wiederholen von Consultations (rerun kostet Geld)
@@ -82,7 +76,10 @@ HUMAN_ONLY = frozenset({
     ("GET", "/conversations/<conversation_id>/messages/<message_id>/context"),
     ("GET", "/conversations/<conversation_id>/participants/<participant_id>/context-preview"),
     ("GET", "/conversations/<conversation_id>/participants/<participant_id>/stream"),
-    # Board: Projekte verwalten, loeschen, Kommentare aendern, Import (Freigabe-Recht)
+    # Board: UI-Uebersicht, Projekte verwalten, loeschen, Kommentare aendern, Import
+    ("GET", "/board"),
+    ("GET", "/board/changes"),
+    ("GET", "/board/projects/<slug>/tasks/<int:number>/comments"),
     ("POST", "/board/projects"),
     ("PUT", "/board/projects/<slug>"),
     ("DELETE", "/board/projects/<slug>"),

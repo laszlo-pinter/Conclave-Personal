@@ -1891,8 +1891,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
-        }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
       }
     },
     "/board/changes": {
@@ -1905,8 +1909,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
-        }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
       }
     },
     "/board/projects": {
@@ -2147,8 +2155,12 @@
         "responses": {
           "200": {
             "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "slug",

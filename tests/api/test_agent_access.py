@@ -6,7 +6,7 @@ import pytest
 pytest.importorskip("flask")
 pytest.importorskip("mcp")
 
-from conclave.api.access import AGENT_ALLOWED, BOARD_AGENT_ROUTES, HUMAN_ONLY, HUMAN_ONLY_ERROR, PUBLIC, agent_may
+from conclave.api.access import AGENT_ALLOWED, HUMAN_ONLY, HUMAN_ONLY_ERROR, PUBLIC, agent_may
 from conclave.cli.config import ConclaveConfig
 
 HUMAN = "cvh_mensch-token"
@@ -143,8 +143,10 @@ def mcp_via_app(app, monkeypatch):
     return server, hits, ToolError
 
 
-def test_every_mcp_tool_route_works_with_agent_token(mcp_via_app):
+def test_every_mcp_tool_route_works_with_agent_token(app, mcp_via_app):
     server, hits, ToolError = mcp_via_app
+    assert app.test_client().post("/board/projects", json={"slug": "api", "name": "API"},
+                                  headers=_bearer(HUMAN)).status_code == 201
 
     def call(fn, *args, **kwargs):
         try:
@@ -169,13 +171,19 @@ def test_every_mcp_tool_route_works_with_agent_token(mcp_via_app):
     call(server.conclave_read_file, "z2/notiz.md")
     call(server.conclave_consult, "conclave#1", "Frage?")
     call(server.conclave_get_consultation, "gibtsnicht")
+    call(server.conclave_board_create, "api", "B4", description="Ziel")
+    call(server.conclave_board_list, project="api")
+    call(server.conclave_board_list, query="B4")
+    call(server.conclave_board_next, "api")
+    call(server.conclave_board_comment, "api#1", "Branch board")
+    call(server.conclave_board_update, "api#1", status="review")
+    call(server.conclave_board_get, "api#1")
 
     blocked = [(m, r, s) for m, r, s in hits if s in (401, 403)]
     assert not blocked, blocked
     used = {(m, r) for m, r, _ in hits}
-    # Die Allowlist ist genau das, was die Tools brauchen, plus whoami (Z5) und die Board-Routen,
-    # fuer die B4 die MCP-Tools liefert.
-    assert used | {("GET", "/auth/whoami")} | BOARD_AGENT_ROUTES == AGENT_ALLOWED
+    # Die Allowlist ist genau das, was die Tools brauchen, plus whoami (Z5) - auch fuers Board (B4).
+    assert used | {("GET", "/auth/whoami")} == AGENT_ALLOWED
 
 
 def test_delete_routes_are_refused_for_agents(app):

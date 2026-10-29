@@ -38,12 +38,13 @@ def _task(c, token, **body):
 
 
 def test_overview_and_change_counter(client):
-    data = client.get("/board", headers=_bearer(AGENT)).get_json()
+    assert client.get("/board", headers=_bearer(AGENT)).status_code == 403   # UI-Uebersicht nur fuer Menschen
+    data = client.get("/board", headers=_bearer(HUMAN)).get_json()
     assert data["statuses"] == ["todo", "doing", "review", "done"]
     assert [p["slug"] for p in data["projects"]] == ["api"]
-    before = client.get("/board/changes", headers=_bearer(AGENT)).get_json()["changes"]
+    before = client.get("/board/changes", headers=_bearer(HUMAN)).get_json()["changes"]
     _task(client, AGENT)
-    assert client.get("/board/changes", headers=_bearer(AGENT)).get_json()["changes"] > before
+    assert client.get("/board/changes", headers=_bearer(HUMAN)).get_json()["changes"] > before
 
 
 def test_agent_workflow_and_the_done_rule(client):
