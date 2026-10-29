@@ -11,10 +11,10 @@
 ### Workflows
 - [Example workflows](beispiel-workflows.md) - Writing, architecture, workspace context, and multi-agent runs
 - [Provider smoke test](provider-smoke-test.md) - Check Claude, Gemini, GPT, and DeepSeek locally
-- [Working with Kanzo](mit-kanzo-arbeiten.md) - Work packages on a Kanzo board, second opinions from Conclave
+- [Working with the board](mit-dem-board-arbeiten.md) - Work packages for humans and agents, Kanzo import, second opinions
 
 ### Product UI
-- [Personal UI architecture](personal-ui-architektur.md) - Studio, Agents, Workspace, Runs, Settings
+- [Personal UI architecture](personal-ui-architektur.md) - Studio, Agents, Workspace, Board, Runs, Settings
 
 ### Security
 - [Security](sicherheit.md) - Local API, secrets, workspace, and release artifacts
@@ -31,6 +31,7 @@
 - [Ports & adapters](architektur/ports-adapter.md) - Interfaces, ProviderProfiles, ResilientAdapter
 
 ### Release
+- [Release Notes v0.6.0](release-notes-v0.6.0.md) - Own board for work packages, consultations on it
 - [Release Notes v0.5.1](release-notes-v0.5.1.md) - File viewer in the Files area
 - [Release Notes v0.5.0](release-notes-v0.5.0.md) - Separate human and agent access
 - [Release Notes v0.4.0](release-notes-v0.4.0.md) - Consultations: second opinions on Kanzo tickets

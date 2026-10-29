@@ -83,6 +83,8 @@ def parse_export(data, statuses) -> list[ImportedProject]:
         slug = _str(p.get("slug"), "Projekt-Kurzname", allow_empty=False)
         if not SLUG.match(slug):
             raise ImportFormatError(f"Ungueltiger Projekt-Kurzname: {slug!r}")
+        if any(seen.slug == slug for seen in projects):
+            raise ImportFormatError(f"Projekt {slug!r} ist doppelt")
         project = ImportedProject(slug=slug, name=_str(p.get("name") or slug, f"{slug}: Name", allow_empty=False))
         tasks = p.get("tasks", [])
         if not isinstance(tasks, list):

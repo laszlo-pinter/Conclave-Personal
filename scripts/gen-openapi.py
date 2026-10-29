@@ -315,7 +315,7 @@ def _project_version() -> str:
 
 def extract_routes(source: str) -> list[dict]:
     pattern = re.compile(
-        r'@app\.(get|post|put|delete)\(["\']([^"\']+)["\']\)\s*\n'
+        r'@app\.(get|post|put|patch|delete)\(["\']([^"\']+)["\']\)\s*\n'
         r'\s*def\s+(\w+)\(.*?\):\s*\n'
         r'(?:\s*"""(.*?)""")?',
         re.DOTALL,
@@ -397,8 +397,8 @@ def build_spec(routes: list[dict]) -> dict:
                 "content": {"application/json": {"schema": {"type": "object", **req_schema}}},
             }
 
-        if method in ("post", "put", "delete"):
-            if "requestBody" not in operation and method in ("post", "put"):
+        if method in ("post", "put", "patch", "delete"):
+            if "requestBody" not in operation and method in ("post", "put", "patch"):
                 operation["requestBody"] = {
                     "content": {"application/json": {"schema": {"type": "object"}}},
                 }

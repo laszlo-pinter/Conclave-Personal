@@ -3,7 +3,7 @@
   "info": {
     "title": "Conclave API",
     "description": "Host-gesteuertes Multi-Model-Konversationssystem",
-    "version": "0.5.1"
+    "version": "0.6.0"
   },
   "servers": [
     {
@@ -2109,6 +2109,45 @@
             }
           }
         ]
+      },
+      "patch": {
+        "summary": "Ticket aendern: title, description, tags, status, human, index (Position in der Spalte).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_update_task",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
       },
       "delete": {
         "summary": "Ticket loeschen (Freigabe-Recht).",

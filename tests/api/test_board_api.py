@@ -225,3 +225,10 @@ def test_import_size_limit_without_content_length(client, monkeypatch):
 def test_import_rejects_invalid_json(client):
     resp = client.post("/board/import", data=b"{kaputt", headers={**_bearer(HUMAN), "Content-Type": "application/json"})
     assert resp.status_code == 400 and resp.get_json()["type"] == "ImportFormatError"
+
+
+def test_spec_lists_the_patch_route():
+    """B7: der Generator kannte @app.patch nicht; die Route zum Aendern fehlte in der Spec."""
+    spec = json.loads((Path(__file__).resolve().parents[2] / "static" / "openapi.json").read_text(encoding="utf-8"))
+    op = spec["paths"]["/board/projects/{slug}/tasks/{number}"]["patch"]
+    assert "requestBody" in op and op["operationId"] == "board_update_task"

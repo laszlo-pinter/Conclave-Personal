@@ -264,7 +264,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         if origin and origin in _cors_allowed:
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Headers"] = f"Content-Type, Authorization, X-API-Key, {CLIENT_HEADER}"
-            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         return response
 
     @app.route("/", defaults={"path": ""}, methods=["OPTIONS"])
