@@ -55,9 +55,6 @@ def service(db_connection):
     )
 
 
-
-
-
 # Beispiel-Export eines Boards (Aufbau der JSON-Ausgabe eines Board-Exports, B3)
 BOARD_SAMPLE_EXPORT = {
     "exported_at": "2026-10-29T17:39:07Z",

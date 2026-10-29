@@ -87,9 +87,9 @@ CONTENT_SECURITY_POLICY = "; ".join([
 # Mikrofon nur fuer die eigene Seite (Spracheingabe in speech.js)
 PERMISSIONS_POLICY = "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
 
-# Ohne Token erreichbar (B12): UI-Seite, statische Dateien, Healthcheck, API-Doku.
 BOARD_IMPORT_MAX_BYTES = 50 * 1024 * 1024    # Groesse des JSON-Exports, vor dem Parsen geprueft
 
+# Ohne Token erreichbar (B12): UI-Seite, statische Dateien, Healthcheck, API-Doku.
 PUBLIC_GET_PATHS = frozenset({"/", "/health", "/api-docs", "/openapi.json"})
 CLIENT_HEADER = "X-Conclave-Client"
 
@@ -1042,10 +1042,19 @@ def create_app(handler: CLIHandler, auth_service=None,
     @app.post("/board/import")
     def board_import():
         """JSON-Export eines Boards uebernehmen (Freigabe-Recht, idempotent)."""
+        too_large = BoardError(f"Export zu gross (hoechstens {BOARD_IMPORT_MAX_BYTES // (1024 * 1024)} MB).",
+                               413, "ImportTooLarge")
         if (request.content_length or 0) > BOARD_IMPORT_MAX_BYTES:
-            raise BoardError(f"Export zu gross (hoechstens {BOARD_IMPORT_MAX_BYTES // (1024 * 1024)} MB).",
-                             413, "ImportTooLarge")
-        return jsonify(_board().import_export(g.principal, _json_object())), 200
+            raise too_large
+        # Mit Obergrenze lesen: greift auch ohne Content-Length (z. B. chunked)
+        raw = request.stream.read(BOARD_IMPORT_MAX_BYTES + 1)
+        if len(raw) > BOARD_IMPORT_MAX_BYTES:
+            raise too_large
+        try:
+            data = _json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            raise BoardError("Export ist kein gueltiges JSON.", 400, "ImportFormatError") from None
+        return jsonify(_board().import_export(g.principal, data)), 200
 
     # ── Personal Export ─────────────────────────────────────────────────
 

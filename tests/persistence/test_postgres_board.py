@@ -158,7 +158,6 @@ def test_project_creation_is_atomic_and_deletes_cascade(repo, pg):
     assert {t for t, _ in rules} == {"board_comments", "board_counters", "board_events", "board_tasks"}
 
 
-
 # ── B2: Dienst gegen Postgres ─────────────────────────────────────────────
 
 def _service(conn, crypto):
@@ -261,7 +260,6 @@ def test_optimistic_update_and_flag_guard_on_postgres(pg, crypto):
         assert cur.fetchone() == (0,)
 
 
-
 def test_agent_comment_guard_on_postgres(pg, crypto):
     from conclave.domain.board import TaskComment
     from conclave.domain.principal import HUMAN_PRINCIPAL as HUMAN
@@ -285,7 +283,6 @@ def test_import_on_postgres_is_atomic_ordered_and_idempotent(pg, crypto, board_s
     assert all(c.origin is None for c in svc.comments("conclave#7"))
     assert svc.import_export(HUMAN, board_sample_export)["tasks_skipped"] == 3
     assert svc.create_task(HUMAN, "conclave", "neu").number == 14                              # hinter #13
-
 
 
 def test_import_conflict_on_postgres_writes_nothing(pg, crypto, board_sample_export):

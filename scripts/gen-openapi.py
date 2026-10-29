@@ -26,6 +26,11 @@ _MESSAGE = {"type": "object", "properties": {
 }}
 
 SCHEMAS = {
+    ("POST", "/board/import"): {
+        "errors": {"400": "Export ungueltig (ImportFormatError), es wurde nichts geschrieben",
+                   "403": "HumanOnly: nur mit dem Mensch-Token",
+                   "413": "ImportTooLarge: Export groesser als 50 MB"},
+    },
     ("GET", "/conversations/<conversation_id>"): {
         "response": {"required": ["id", "messages"], "properties": {
             "id": {"type": "string"}, "status": {"type": "string"},

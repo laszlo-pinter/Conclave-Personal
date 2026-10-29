@@ -17,7 +17,6 @@ AGENT = "cva_agent-token"
 REAL_EXPORT = os.environ.get("CONCLAVE_TEST_BOARD_EXPORT", "")
 
 
-
 def _bearer(token):
     return {"Authorization": f"Bearer {token}"}
 
@@ -170,7 +169,6 @@ def test_board_disabled_without_service():
     assert resp.status_code == 503 and resp.get_json()["type"] == "BoardDisabled"
 
 
-
 # ── Review B3 ─────────────────────────────────────────────────────────────
 
 def test_spec_paths_have_no_flask_converters_and_typed_numbers():
@@ -208,3 +206,21 @@ def test_import_size_limit(client, monkeypatch):
     monkeypatch.setattr(app_module, "BOARD_IMPORT_MAX_BYTES", 100)
     resp = client.post("/board/import", json={"projects": [], "x": "y" * 200}, headers=_bearer(HUMAN))
     assert resp.status_code == 413 and resp.get_json()["type"] == "ImportTooLarge"
+
+
+def test_import_size_limit_without_content_length(client, monkeypatch):
+    import io
+
+    import conclave.api.app as app_module
+    monkeypatch.setattr(app_module, "BOARD_IMPORT_MAX_BYTES", 100)
+    body = json.dumps({"projects": [], "x": "y" * 200}).encode()
+    # wie hinter waitress: chunked, ohne Content-Length, Eingabe als abgeschlossen gemeldet
+    resp = client.post("/board/import", input_stream=io.BytesIO(body),
+                       headers={**_bearer(HUMAN), "Content-Type": "application/json", "Transfer-Encoding": "chunked"},
+                       environ_overrides={"wsgi.input_terminated": True, "CONTENT_LENGTH": ""})
+    assert resp.status_code == 413 and resp.get_json()["type"] == "ImportTooLarge"
+
+
+def test_import_rejects_invalid_json(client):
+    resp = client.post("/board/import", data=b"{kaputt", headers={**_bearer(HUMAN), "Content-Type": "application/json"})
+    assert resp.status_code == 400 and resp.get_json()["type"] == "ImportFormatError"

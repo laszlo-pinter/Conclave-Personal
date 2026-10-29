@@ -2314,8 +2314,14 @@
           "200": {
             "description": "Erfolg"
           },
+          "400": {
+            "description": "Export ungueltig (ImportFormatError), es wurde nichts geschrieben"
+          },
           "403": {
-            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+            "description": "HumanOnly: nur mit dem Mensch-Token"
+          },
+          "413": {
+            "description": "ImportTooLarge: Export groesser als 50 MB"
           }
         },
         "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
