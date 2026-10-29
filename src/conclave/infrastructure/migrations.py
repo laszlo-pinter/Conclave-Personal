@@ -88,6 +88,11 @@ MIGRATIONS: list[Migration] = [
         description="Herkunft von User-Nachrichten (human/agent, NULL = unbekannt)",
         sql="ALTER TABLE messages ADD COLUMN origin TEXT",
     ),
+    Migration(
+        id="012_board",
+        description="Board: Projekte, Tickets, Kommentare, Verlauf, Zaehler (Plan board.md, B1)",
+        fn=lambda connection, is_postgres: _create_board_tables(connection, is_postgres),
+    ),
 ]
 
 
@@ -304,6 +309,74 @@ def _create_consultations_tables(connection, is_postgres: bool) -> None:
 
 
 # ── Runner ────────────────────────────────────────────────────────────────
+
+def _create_board_tables(connection, is_postgres: bool) -> None:
+    ts = "TIMESTAMPTZ" if is_postgres else "TEXT"
+    boolean = "BOOLEAN NOT NULL DEFAULT FALSE" if is_postgres else "INTEGER NOT NULL DEFAULT 0"
+    real = "DOUBLE PRECISION" if is_postgres else "REAL"
+    statements = [
+        f"""CREATE TABLE IF NOT EXISTS board_projects (
+            id         TEXT PRIMARY KEY,
+            slug       TEXT NOT NULL UNIQUE,
+            name       TEXT NOT NULL,
+            created_at {ts} NOT NULL
+        )""",
+        """CREATE TABLE IF NOT EXISTS board_counters (
+            project_id  TEXT PRIMARY KEY REFERENCES board_projects(id),
+            next_number INTEGER NOT NULL
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS board_tasks (
+            id          TEXT PRIMARY KEY,
+            project_id  TEXT NOT NULL REFERENCES board_projects(id),
+            number      INTEGER NOT NULL,
+            title       TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            tags        TEXT NOT NULL DEFAULT '[]',
+            status      TEXT NOT NULL,
+            position    {real} NOT NULL DEFAULT 0,
+            human       {boolean},
+            assignee    TEXT,
+            created_at  {ts} NOT NULL,
+            updated_at  {ts} NOT NULL,
+            UNIQUE(project_id, number)
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS board_comments (
+            id          TEXT PRIMARY KEY,
+            task_id     TEXT NOT NULL REFERENCES board_tasks(id),
+            body        TEXT NOT NULL,
+            origin      TEXT,
+            actor_id    TEXT,
+            author_name TEXT NOT NULL DEFAULT '',
+            created_at  {ts} NOT NULL,
+            updated_at  {ts}
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS board_events (
+            id         TEXT PRIMARY KEY,
+            task_id    TEXT NOT NULL REFERENCES board_tasks(id),
+            field      TEXT NOT NULL,
+            old_value  TEXT,
+            new_value  TEXT,
+            origin     TEXT,
+            actor_id   TEXT,
+            created_at {ts} NOT NULL
+        )""",
+        """CREATE TABLE IF NOT EXISTS board_meta (
+            key   TEXT PRIMARY KEY,
+            value INTEGER NOT NULL
+        )""",
+        "INSERT INTO board_meta (key, value) VALUES ('changes', 0) ON CONFLICT (key) DO NOTHING",
+        "CREATE INDEX IF NOT EXISTS idx_board_tasks_column ON board_tasks(project_id, status, position)",
+        "CREATE INDEX IF NOT EXISTS idx_board_comments_task ON board_comments(task_id, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_board_events_task ON board_events(task_id, created_at)",
+    ]
+    if is_postgres:
+        with connection.cursor() as cur:
+            for statement in statements:
+                cur.execute(statement)
+    else:
+        for statement in statements:
+            connection.execute(statement)
+
 
 def _ensure_migrations_table(connection, is_postgres: bool) -> None:
     """Erstellt die _migrations Tracking-Tabelle."""
