@@ -6,7 +6,9 @@ Rechte (Plan, Abschnitt 3). "Freigabe-Recht" ist eine eigene Pruefung
 - Lesen, Verlauf, ``next_task``: Mensch und Agent.
 - Anlegen, bearbeiten, kommentieren: beide; Agenten aber nicht bei Tickets
   "nur fuer Menschen" (die duerfen sie nur lesen).
-- Status: Agenten nicht in die letzte Spalte und nicht aus ihr heraus.
+- Status: Agenten nicht in die letzte Spalte und nicht aus ihr heraus. Tickets in der
+  letzten Spalte sind fuer Agenten nur lesbar und kommentierbar (Entscheidung Laszlo,
+  29.10.2026): mit "erledigt" hat der Mensch entschieden.
 - Markierung "nur fuer Menschen": Agenten duerfen sie setzen, nicht entfernen.
 - Kommentare: nur eigene Kommentare des Menschen sind aenderbar; Kommentare von
   Agenten und von Conclave (``system``) sind unveraenderlich.
@@ -186,6 +188,12 @@ class BoardService:
         if principal.is_agent and task.human:
             raise _forbidden("Ticket ist nur fuer Menschen: Agenten duerfen es nur lesen.")
 
+    def _guard_edit(self, principal: Principal, task: Task) -> None:
+        """Wie _guard_write, dazu: erledigte Tickets aendern Agenten nicht (kommentieren schon)."""
+        self._guard_write(principal, task)
+        if principal.is_agent and task.status == self.flow.last:
+            raise _forbidden("Erledigte Tickets duerfen Agenten nur lesen und kommentieren.")
+
     def create_task(self, principal: Principal, slug: str, title: str, *, description: str = "", tags=(),
                     human: bool = False, status: str | None = None) -> Task:
         project = self._project(slug)
@@ -204,7 +212,7 @@ class BoardService:
                     human: bool | None = None, index: int | None = None) -> Task:
         """Aendert die uebergebenen Felder. ``index`` setzt die Position in der (neuen) Spalte."""
         task = self.get_task(ref)
-        self._guard_write(principal, task)
+        self._guard_edit(principal, task)
         origin, actor_id = self.actor(principal)
         events: list[TaskEvent] = []
 

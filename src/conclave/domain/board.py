@@ -12,7 +12,6 @@ schreibt (z. B. Consultations), ``None`` fuer Importiertes oder Unbekanntes.
 
 from __future__ import annotations
 
-import hashlib
 import re
 import uuid
 from dataclasses import dataclass, field
@@ -24,7 +23,6 @@ DEFAULT_STATUSES = ("todo", "doing", "review", "done")
 ORIGINS = ("human", "agent", "system")
 # Verlaufseintraege fuer diese Felder (Plan 2, "Ticket-Verlauf")
 TRACKED_FIELDS = ("status", "title", "description", "human")
-EVENT_VALUE_MAX = 200
 POSITION_STEP = 1024.0      # Abstand der Karten nach dem Neunummerieren
 
 
@@ -51,14 +49,11 @@ def check_origin(origin: str | None) -> str | None:
 
 
 def event_value(value) -> str | None:
-    """Wert fuer den Verlauf: kurze Werte unveraendert, lange als Hash plus Anfang."""
+    """Wert fuer den Verlauf, vollstaendig (Entscheidung Laszlo, 29.10.2026): Nur so ist
+    sichtbar, *was* sich an einer Abnahme geaendert hat. Verschluesselt wird im Repository."""
     if value is None:
         return None
-    text = str(value)
-    if len(text) <= EVENT_VALUE_MAX:
-        return text
-    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
-    return f"sha256:{digest} {text[:80]}…"
+    return str(value)
 
 
 @dataclass(frozen=True)

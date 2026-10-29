@@ -321,3 +321,25 @@ def _set(board, ref, **fields):
     for name, value in fields.items():
         setattr(task, name, value)
     return task
+
+
+
+# ── Entscheidungen Laszlo (29.10.2026) ────────────────────────────────────
+
+def test_history_keeps_a_long_description_in_full(board):
+    """Eine abgeschwaechte Abnahme am Ende einer langen Beschreibung bleibt sichtbar."""
+    head = "## Ziel\n" + "Ausfuehrliche Beschreibung. " * 40
+    board.create_task(HUMAN, "api", "T", description=head + "\n## Abnahme\n- alle Tests gruen\n- Postgres geprueft")
+    board.update_task(AGENT, "api#1", description=head + "\n## Abnahme\n- alle Tests gruen")
+    [event] = board.history("api#1")
+    assert event.old_value.endswith("- Postgres geprueft") and not event.new_value.endswith("geprueft")
+    assert len(event.old_value) > 1000
+
+
+def test_done_tickets_are_read_and_comment_only_for_agents(board):
+    board.create_task(HUMAN, "api", "fertig", status="done")
+    _forbidden(board.update_task, AGENT, "api#1", title="nachtraeglich")
+    _forbidden(board.update_task, AGENT, "api#1", description="neu")
+    _forbidden(board.update_task, AGENT, "api#1", index=0)
+    assert board.add_comment(AGENT, "api#1", "Nachtrag: Doku verlinkt").origin == "agent"
+    assert board.update_task(HUMAN, "api#1", title="vom Menschen").title == "vom Menschen"

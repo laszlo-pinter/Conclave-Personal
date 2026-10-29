@@ -6,7 +6,6 @@ import threading
 import pytest
 
 from conclave.domain.board import (
-    EVENT_VALUE_MAX,
     Project,
     StatusFlow,
     Task,
@@ -53,11 +52,9 @@ def test_project_and_comment_validation():
     assert TaskComment.create("t", "text", origin=None).origin is None
 
 
-def test_event_value_hashes_long_text():
-    assert event_value("kurz") == "kurz"
-    long = "x" * (EVENT_VALUE_MAX + 1)
-    value = event_value(long)
-    assert value.startswith("sha256:") and len(value) < len(long)
+def test_event_value_keeps_the_full_text():
+    long = "Abnahme\n" + "x" * 5000 + "\n- Postgres geprueft"
+    assert event_value(long) == long and event_value(True) == "True" and event_value(None) is None
     with pytest.raises(ValueError):
         TaskEvent.create("t", "tags", "a", "b", "human")           # nur verfolgte Felder
 
