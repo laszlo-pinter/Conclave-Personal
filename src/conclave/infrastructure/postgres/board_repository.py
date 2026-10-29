@@ -14,8 +14,8 @@ Anweisung:
   dabei einmal um die Zahl der Eintraege (dieselbe Zeile zweimal zu aendern geht in
   einer Anweisung nicht); die Eintraege bekommen die Werte darunter als ``seq``.
 
-Der Aenderungszaehler ist eine eigene Anweisung danach; er ist nur ein Signal
-fuer die UI.
+Wo der Aenderungszaehler nicht Teil der Anweisung ist (Projekt/Ticket anlegen,
+Neunummerieren), folgt er als eigene Anweisung; dort ist er nur ein Signal fuer die UI.
 """
 
 from __future__ import annotations
@@ -23,7 +23,8 @@ from __future__ import annotations
 from contextlib import contextmanager
 
 from conclave.domain.board import Project, Task, TaskComment, TaskEvent
-from conclave.infrastructure.sqlite.board_repository import POSITION_STEP, SQLiteBoardRepository
+from conclave.domain.board import POSITION_STEP
+from conclave.infrastructure.sqlite.board_repository import SQLiteBoardRepository
 
 
 class _Result:
@@ -108,7 +109,8 @@ class PostgresBoardRepository(SQLiteBoardRepository):
     _EVENT_ROW = "SELECT ?, ?, ?, ?, ?, ?, ?, c.value - ?, ? FROM c, u"
     _UPDATE_WITH_EVENTS = (
         "WITH u AS (UPDATE board_tasks SET title = ?, description = ?, tags = ?, status = ?, position = ?, "
-        "           human = ?, assignee = ?, updated_at = ? WHERE id = ? RETURNING id), "
+        "           human = ?, assignee = ?, updated_at = ?, version = version + 1 "
+        "           WHERE id = ? AND version = ? RETURNING id), "
         "     c AS (UPDATE board_meta SET value = value + ? WHERE key = 'changes' "
         "           AND EXISTS (SELECT 1 FROM u) RETURNING value) "
         "INSERT INTO board_events (id, task_id, field, old_value, new_value, origin, actor_id, seq, created_at) ")
@@ -129,8 +131,11 @@ class PostgresBoardRepository(SQLiteBoardRepository):
             return super().update_task(task)
         rows, params = self._event_rows(events)
         sql = self._UPDATE_WITH_EVENTS + rows  # nosec B608 - nur feste SQL-Texte, Werte als Platzhalter
-        result = self._execute(sql, (*self._task_params(task), task.id, len(events) + 1, *params))
-        return result.rowcount == len(events)
+        result = self._execute(sql, (*self._task_params(task), task.id, task.version, len(events) + 1, *params))
+        if result.rowcount == len(events):
+            task.version += 1
+            return True
+        return False
 
     def claim_task(self, task_id: str, from_status: str, to_status: str, position: float, updated_at,
                    event: TaskEvent | None = None) -> bool:
@@ -138,8 +143,8 @@ class PostgresBoardRepository(SQLiteBoardRepository):
             return super().claim_task(task_id, from_status, to_status, position, updated_at)
         _rows, params = self._event_rows([event])
         result = self._execute(
-            "WITH u AS (UPDATE board_tasks SET status = ?, position = ?, updated_at = ? "
-            "           WHERE id = ? AND status = ? RETURNING id), "
+            "WITH u AS (UPDATE board_tasks SET status = ?, position = ?, updated_at = ?, version = version + 1 "
+            "           WHERE id = ? AND status = ? AND NOT human RETURNING id), "
             "     c AS (UPDATE board_meta SET value = value + 2 WHERE key = 'changes' "
             "           AND EXISTS (SELECT 1 FROM u) RETURNING value) "
             "INSERT INTO board_events (id, task_id, field, old_value, new_value, origin, actor_id, seq, created_at) "

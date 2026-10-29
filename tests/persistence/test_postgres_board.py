@@ -233,3 +233,29 @@ def test_parallel_next_task_over_many_connections(pg, crypto):
     with pg.cursor() as cur:
         cur.execute("SELECT count(*) FROM board_events WHERE field = 'status'")
         assert cur.fetchone() == (6,)                             # genau ein Eintrag je vergebenem Ticket
+
+
+def test_optimistic_update_and_flag_guard_on_postgres(pg, crypto):
+    from conclave.domain.board import TaskEvent
+    from conclave.domain.principal import HUMAN_PRINCIPAL as HUMAN
+
+    svc = _service(pg, crypto)
+    svc.create_project(HUMAN, "api", "API")
+    svc.create_task(HUMAN, "api", "T")
+    repo = svc._repo
+    stale = repo.get_task("api", 1)
+    fresh = repo.get_task("api", 1)
+    fresh.human = True
+    assert repo.update_task(fresh) is True and fresh.version == 2
+    stale.title = "harmlos"
+    event = TaskEvent.create(stale.id, "title", "T", "harmlos", "agent")
+    assert repo.update_task(stale, [event]) is False                    # veralteter Stand: nichts geschrieben
+    assert repo.update_task(stale) is False
+    now = repo.get_task("api", 1)
+    assert (now.human, now.title, now.version) == (True, "T", 2)
+    claim_event = TaskEvent.create(now.id, "status", "todo", "doing", "agent")
+    assert repo.claim_task(now.id, "todo", "doing", 1.0, now.updated_at, claim_event) is False   # markiert
+    assert repo.claim_task(now.id, "todo", "doing", 1.0, now.updated_at) is False
+    with pg.cursor() as cur:
+        cur.execute("SELECT count(*) FROM board_events")
+        assert cur.fetchone() == (0,)

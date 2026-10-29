@@ -334,6 +334,7 @@ def _create_board_tables(connection, is_postgres: bool) -> None:
             position    {real} NOT NULL DEFAULT 0,
             human       {boolean},
             assignee    TEXT,
+            version     INTEGER NOT NULL DEFAULT 1,
             created_at  {ts} NOT NULL,
             updated_at  {ts} NOT NULL,
             UNIQUE(project_id, number)

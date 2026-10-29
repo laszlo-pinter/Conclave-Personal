@@ -11,6 +11,10 @@ Rechte (Plan, Abschnitt 3). "Freigabe-Recht" ist eine eigene Pruefung
 - Kommentare: nur eigene Kommentare des Menschen sind aenderbar; Kommentare von
   Agenten und von Conclave (``system``) sind unveraenderlich.
 - Projekte anlegen/umbenennen/loeschen und Tickets loeschen: nur mit Freigabe-Recht.
+
+Geschrieben wird optimistisch (Versionsnummer): Hat seit dem Lesen jemand das Ticket
+geaendert, gilt die Pruefung nicht mehr fuer den neuen Stand -> 409 statt Ueberschreiben.
+``next_task`` claimt nur Tickets ohne Markierung, gepruefter Zustand und Schreiben sind eins.
 """
 
 from __future__ import annotations
@@ -229,12 +233,16 @@ class BoardService:
         elif moved_column:
             task.position = self._end_position(task.project_id, task.status)
         task.updated_at = self._now()
-        self._repo.update_task(task, events)                 # Ticket und Verlauf zusammen
+        # Ticket und Verlauf zusammen, nur wenn seit dem Lesen niemand geaendert hat
+        if not self._repo.update_task(task, events):
+            if self._repo.get_task_by_id(task.id) is None:
+                raise BoardError(f"Ticket '{ref}' nicht gefunden.", 404, "TaskNotFound")
+            raise BoardError(f"Ticket '{ref}' wurde inzwischen geaendert; bitte neu laden.", 409, "Conflict")
         return task
 
     def delete_task(self, principal: Principal, ref: str) -> None:
-        task = self.get_task(ref)
         self._require_approval(principal)
+        task = self.get_task(ref)
         self._repo.delete_task(task.id)
 
     # ── next_task ────────────────────────────────────────────────────────

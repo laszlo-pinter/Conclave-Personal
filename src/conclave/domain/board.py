@@ -122,6 +122,7 @@ class Task:
     position: float = 0.0
     human: bool = False
     assignee: str | None = None     # Mehrbenutzerbetrieb, vorerst leer
+    version: int = 1                # optimistische Sperre: jede Aenderung erhoeht sie
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 

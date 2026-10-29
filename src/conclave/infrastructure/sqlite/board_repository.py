@@ -28,7 +28,7 @@ from conclave.domain.board import POSITION_STEP, Project, Task, TaskComment, Tas
 MIN_SQLITE = (3, 35)       # UPDATE ... RETURNING
 
 _TASK_COLUMNS = ("t.id, t.project_id, p.slug, t.number, t.title, t.description, t.tags, t.status, t.position, "
-                 "t.human, t.assignee, t.created_at, t.updated_at")
+                 "t.human, t.assignee, t.created_at, t.updated_at, t.version")
 
 
 def _ts(value):
@@ -148,7 +148,7 @@ class SQLiteBoardRepository:
         return Task(id=row[0], project_id=row[1], project_slug=row[2], number=row[3], title=self._dec(row[4]),
                     description=self._dec(row[5]) or "", tags=tuple(json.loads(tags)) if tags else (),
                     status=row[7], position=float(row[8]), human=bool(row[9]), assignee=row[10],
-                    created_at=_ts(row[11]), updated_at=_ts(row[12]))
+                    created_at=_ts(row[11]), updated_at=_ts(row[12]), version=int(row[13]))
 
     def _task_params(self, task: Task) -> tuple:
         return (self._enc(task.title), self._enc(task.description), self._enc(json.dumps(list(task.tags))),
@@ -200,24 +200,34 @@ class SQLiteBoardRepository:
         return [self._task(r) for r in self._all(sql, tuple(params))]
 
     def update_task(self, task: Task, events=()) -> bool:
-        """Ticket und zugehoerige Verlaufseintraege zusammen (atomar)."""
+        """Ticket und zugehoerige Verlaufseintraege zusammen (atomar).
+
+        Optimistisch: geschrieben wird nur, wenn ``task.version`` noch die gespeicherte
+        Version ist; sonst ``False`` (inzwischen geaendert oder geloescht). Bei Erfolg
+        steigt ``task.version``.
+        """
         with self._tx():
             changed = self._rowcount(
                 "UPDATE board_tasks SET title = ?, description = ?, tags = ?, status = ?, position = ?, human = ?, "
-                "assignee = ?, updated_at = ? WHERE id = ?", (*self._task_params(task), task.id))
+                "assignee = ?, updated_at = ?, version = version + 1 WHERE id = ? AND version = ?",
+                (*self._task_params(task), task.id, task.version))
             if changed:
                 self._bump()
                 for event in events:
                     self._insert_event(event)
+        if changed == 1:
+            task.version += 1
         return changed == 1
 
     def claim_task(self, task_id: str, from_status: str, to_status: str, position: float, updated_at,
                    event: TaskEvent | None = None) -> bool:
-        """Atomar: nur wenn das Ticket noch in ``from_status`` steht (fuer next_task); mit Verlaufseintrag."""
+        """Atomar: nur wenn das Ticket noch in ``from_status`` steht und nicht "nur fuer Menschen"
+        markiert ist (fuer next_task); mit Verlaufseintrag."""
         with self._tx():
             changed = self._rowcount(
-                "UPDATE board_tasks SET status = ?, position = ?, updated_at = ? WHERE id = ? AND status = ?",
-                (to_status, position, self._dt(updated_at), task_id, from_status))
+                "UPDATE board_tasks SET status = ?, position = ?, updated_at = ?, version = version + 1 "
+                "WHERE id = ? AND status = ? AND human = ?",
+                (to_status, position, self._dt(updated_at), task_id, from_status, self._bool(False)))
             if changed:
                 self._bump()
                 if event is not None:

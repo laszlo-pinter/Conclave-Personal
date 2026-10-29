@@ -252,3 +252,72 @@ def test_comments_keep_their_order_within_the_same_moment(board):
     for i in range(20):
         board.add_comment(AGENT, "api#1", f"k{i}")
     assert [c.body for c in board.comments("api#1")] == [f"k{i}" for i in range(20)]
+
+
+# ── Review B2: Wettlaeufe zwischen Pruefen und Schreiben ──────────────────
+
+def _stale(board, monkeypatch, ref):
+    """Der Dienst liest kuenftig den jetzigen (dann veralteten) Stand des Tickets."""
+    import copy
+    old = copy.deepcopy(board.get_task(ref))
+    monkeypatch.setattr(board, "get_task", lambda r: copy.deepcopy(old))
+
+
+def test_agent_update_cannot_undo_a_flag_set_meanwhile(board, monkeypatch):
+    board.create_task(HUMAN, "api", "T")
+    _stale(board, monkeypatch, "api#1")
+    BoardService.get_task(board, "api#1")
+    board._repo.update_task(_set(board, "api#1", human=True))                 # der Mensch markiert inzwischen
+    with pytest.raises(BoardError) as e:
+        board.update_task(AGENT, "api#1", title="harmlos")
+    assert (e.value.status, e.value.type) == (409, "Conflict")
+    monkeypatch.undo()
+    fresh = board.get_task("api#1")
+    assert fresh.human is True and fresh.title == "T"
+    assert [ev.field_name for ev in board.history("api#1")] == []             # kein Eintrag des Agenten
+
+
+def test_agent_update_cannot_pull_a_ticket_back_from_done(board, monkeypatch):
+    board.create_task(HUMAN, "api", "T", status="review")
+    _stale(board, monkeypatch, "api#1")
+    board._repo.update_task(_set(board, "api#1", status="done"))              # der Mensch schliesst inzwischen ab
+    with pytest.raises(BoardError) as e:
+        board.update_task(AGENT, "api#1", title="harmlos")
+    assert e.value.status == 409
+    monkeypatch.undo()
+    assert board.get_task("api#1").status == "done"
+
+
+def test_update_of_a_deleted_ticket_is_404(board, monkeypatch):
+    board.create_task(HUMAN, "api", "T")
+    _stale(board, monkeypatch, "api#1")
+    task = BoardService.get_task(board, "api#1")
+    board._repo.delete_task(task.id)
+    with pytest.raises(BoardError) as e:
+        board.update_task(HUMAN, "api#1", title="neu")
+    assert e.value.status == 404
+
+
+def test_next_task_does_not_hand_out_a_ticket_flagged_meanwhile(board, monkeypatch):
+    board.create_task(HUMAN, "api", "T")
+    stale = board.list_tasks("api", ["todo"])
+    board._repo.update_task(_set(board, "api#1", human=True))                 # Markierung nach dem Lesen
+    monkeypatch.setattr(board, "list_tasks", lambda *a, **k: stale)
+    assert board.next_task(AGENT, "api") is None
+    monkeypatch.undo()
+    assert board.get_task("api#1").status == "todo" and board.history("api#1") == []
+
+
+def test_version_grows_with_every_write(board):
+    task = board.create_task(HUMAN, "api", "T")
+    assert task.version == 1
+    assert board.update_task(HUMAN, "api#1", title="T2").version == 2
+    board.next_task(AGENT)
+    assert board.get_task("api#1").version == 3
+
+
+def _set(board, ref, **fields):
+    task = BoardService.get_task(board, ref)
+    for name, value in fields.items():
+        setattr(task, name, value)
+    return task
