@@ -274,17 +274,22 @@ class BoardService:
         task = self.get_task(ref)
         self._guard_write(principal, task)
         origin, actor_id = self.actor(principal)
-        return self._save_comment(task, body, origin, actor_id, author_name)
+        # Agenten: die Markierung wird beim Schreiben erneut geprueft (sie kann inzwischen gesetzt sein)
+        return self._save_comment(task, body, origin, actor_id, author_name, only_if_not_human=principal.is_agent)
 
     def add_system_comment(self, ref: str, body: str, author_name: str) -> TaskComment:
         """Von Conclave selbst geschrieben (z. B. Consultations): Herkunft ``system``."""
         return self._save_comment(self.get_task(ref), body, "system", SYSTEM_ACTOR, author_name)
 
-    def _save_comment(self, task: Task, body: str, origin, actor_id, author_name: str) -> TaskComment:
+    def _save_comment(self, task: Task, body: str, origin, actor_id, author_name: str, *,
+                      only_if_not_human: bool = False) -> TaskComment:
         if not isinstance(body, str) or not body.strip():
             raise _invalid("Kommentar darf nicht leer sein.")
         comment = TaskComment.create(task.id, body, origin, actor_id=actor_id, author_name=str(author_name or "")[:100])
-        self._repo.add_comment(comment)
+        if not self._repo.add_comment_checked(comment, only_if_not_human=only_if_not_human):
+            if self._repo.get_task_by_id(task.id) is None:
+                raise BoardError(f"Ticket '{task.ref}' nicht gefunden.", 404, "TaskNotFound")
+            raise _forbidden("Ticket ist nur fuer Menschen: Agenten duerfen es nur lesen.")
         return comment
 
     def _own_comment(self, principal: Principal, comment_id: str) -> TaskComment:

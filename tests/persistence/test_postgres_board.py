@@ -259,3 +259,17 @@ def test_optimistic_update_and_flag_guard_on_postgres(pg, crypto):
     with pg.cursor() as cur:
         cur.execute("SELECT count(*) FROM board_events")
         assert cur.fetchone() == (0,)
+
+
+
+def test_agent_comment_guard_on_postgres(pg, crypto):
+    from conclave.domain.board import TaskComment
+    from conclave.domain.principal import HUMAN_PRINCIPAL as HUMAN
+
+    svc = _service(pg, crypto)
+    svc.create_project(HUMAN, "api", "API")
+    task = svc.create_task(HUMAN, "api", "T", human=True)
+    repo = svc._repo
+    assert repo.add_comment_checked(TaskComment.create(task.id, "x", "agent"), only_if_not_human=True) is False
+    assert repo.add_comment_checked(TaskComment.create(task.id, "y", "human")) is True
+    assert [c.body for c in repo.list_comments(task.id)] == ["y"]

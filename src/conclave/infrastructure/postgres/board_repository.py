@@ -90,13 +90,20 @@ class PostgresBoardRepository(SQLiteBoardRepository):
             (POSITION_STEP, project_id, status))
         self._bump()
 
-    def add_comment(self, comment: TaskComment) -> None:
-        self._execute(
-            "WITH c AS (UPDATE board_meta SET value = value + 1 WHERE key = 'changes' RETURNING value) "
+    def add_comment(self, comment: TaskComment, *, only_if_not_human: bool = False) -> bool:
+        result = self._execute(
+            "WITH t AS (SELECT 1 FROM board_tasks WHERE id = ? AND (NOT human OR ?)), "
+            "     c AS (UPDATE board_meta SET value = value + 1 WHERE key = 'changes' "
+            "           AND EXISTS (SELECT 1 FROM t) RETURNING value) "
             "INSERT INTO board_comments (id, task_id, body, origin, actor_id, author_name, seq, "
             "created_at, updated_at) SELECT ?, ?, ?, ?, ?, ?, c.value, ?, ? FROM c",
-            (comment.id, comment.task_id, self._enc(comment.body), comment.origin, comment.actor_id,
-             self._enc(comment.author_name), comment.created_at, comment.updated_at))
+            (comment.task_id, not only_if_not_human, comment.id, comment.task_id, self._enc(comment.body),
+             comment.origin, comment.actor_id, self._enc(comment.author_name), comment.created_at,
+             comment.updated_at))
+        return result.rowcount == 1
+
+    def add_comment_checked(self, comment: TaskComment, *, only_if_not_human: bool = False) -> bool:
+        return self.add_comment(comment, only_if_not_human=only_if_not_human)
 
     def add_event(self, event: TaskEvent) -> None:
         self._execute(

@@ -266,7 +266,6 @@ def _stale(board, monkeypatch, ref):
 def test_agent_update_cannot_undo_a_flag_set_meanwhile(board, monkeypatch):
     board.create_task(HUMAN, "api", "T")
     _stale(board, monkeypatch, "api#1")
-    BoardService.get_task(board, "api#1")
     board._repo.update_task(_set(board, "api#1", human=True))                 # der Mensch markiert inzwischen
     with pytest.raises(BoardError) as e:
         board.update_task(AGENT, "api#1", title="harmlos")
@@ -343,3 +342,15 @@ def test_done_tickets_are_read_and_comment_only_for_agents(board):
     _forbidden(board.update_task, AGENT, "api#1", index=0)
     assert board.add_comment(AGENT, "api#1", "Nachtrag: Doku verlinkt").origin == "agent"
     assert board.update_task(HUMAN, "api#1", title="vom Menschen").title == "vom Menschen"
+
+
+
+def test_agent_comment_respects_a_flag_set_meanwhile(board, monkeypatch):
+    board.create_task(HUMAN, "api", "T")
+    _stale(board, monkeypatch, "api#1")
+    board._repo.update_task(_set(board, "api#1", human=True))
+    token = board.change_token()
+    _forbidden(board.add_comment, AGENT, "api#1", "kommt zu spaet")
+    monkeypatch.undo()
+    assert board.comments("api#1") == [] and board.change_token() == token     # nichts geschrieben
+    assert board.add_comment(HUMAN, "api#1", "der Mensch darf").origin == "human"

@@ -31,6 +31,10 @@ _TASK_COLUMNS = ("t.id, t.project_id, p.slug, t.number, t.title, t.description, 
                  "t.human, t.assignee, t.created_at, t.updated_at, t.version")
 
 
+class _NotInserted(Exception):
+    """Kommentar nicht geschrieben (Ticket fehlt oder ist markiert); rollt den Zaehler zurueck."""
+
+
 def _ts(value):
     if value is None or isinstance(value, datetime):
         return value
@@ -64,6 +68,12 @@ class SQLiteBoardRepository:
 
     def _rowcount(self, sql: str, params: tuple = ()) -> int:
         return self._execute(sql, params).rowcount
+
+    def add_comment_checked(self, comment: TaskComment, *, only_if_not_human: bool = False) -> bool:
+        try:
+            return self.add_comment(comment, only_if_not_human=only_if_not_human)
+        except _NotInserted:
+            return False
 
     @contextmanager
     def _tx(self):
@@ -267,14 +277,20 @@ class SQLiteBoardRepository:
         return TaskComment(id=row[0], task_id=row[1], body=self._dec(row[2]), origin=row[3], actor_id=row[4],
                            author_name=self._dec(row[5]) or "", created_at=_ts(row[6]), updated_at=_ts(row[7]))
 
-    def add_comment(self, comment: TaskComment) -> None:
+    def add_comment(self, comment: TaskComment, *, only_if_not_human: bool = False) -> bool:
+        """Mit ``only_if_not_human`` nur, wenn das Ticket beim Schreiben nicht "nur fuer Menschen" ist."""
         with self._tx():
             seq = self._bump()
-            self._execute(
+            inserted = self._rowcount(
                 "INSERT INTO board_comments (id, task_id, body, origin, actor_id, author_name, seq, created_at, "
-                "updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "updated_at) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? "
+                "WHERE EXISTS (SELECT 1 FROM board_tasks WHERE id = ? AND (human = ? OR ?))",
                 (comment.id, comment.task_id, self._enc(comment.body), comment.origin, comment.actor_id,
-                 self._enc(comment.author_name), seq, self._dt(comment.created_at), self._dt(comment.updated_at)))
+                 self._enc(comment.author_name), seq, self._dt(comment.created_at), self._dt(comment.updated_at),
+                 comment.task_id, self._bool(False), self._bool(not only_if_not_human)))
+            if inserted != 1:
+                raise _NotInserted()
+        return True
 
     def get_comment(self, comment_id: str) -> TaskComment | None:
         row = self._one("SELECT id, task_id, body, origin, actor_id, author_name, created_at, updated_at "
