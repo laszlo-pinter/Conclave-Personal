@@ -54,6 +54,27 @@ class KanzoSettings:
                    max_per_hour=max_per_hour, comment_max_chars=comment_max_chars)
 
 
+@dataclass(frozen=True)
+class BoardSettings:
+    """Abschnitt [board] in config.toml: die Spalten des Boards (Plan board.md).
+
+    Neue Tickets landen in der ersten Spalte, die letzte gilt als erledigt.
+    """
+    statuses: tuple[str, ...] = ("todo", "doing", "review", "done")
+
+    @classmethod
+    def from_section(cls, section: dict) -> "BoardSettings":
+        from conclave.domain.board import DEFAULT_STATUSES, StatusFlow
+        statuses = section.get("statuses", list(DEFAULT_STATUSES))
+        if not isinstance(statuses, list) or not all(isinstance(s, str) for s in statuses):
+            raise ValueError("[board] statuses muss eine Liste von Spaltennamen sein")
+        try:
+            flow = StatusFlow(tuple(s.strip() for s in statuses))
+        except ValueError as e:
+            raise ValueError(f"[board] statuses: {e}") from None
+        return cls(statuses=flow.statuses)
+
+
 @dataclass
 class ConclaveConfig:
     db_provider: str = "sqlite"                                  # "sqlite" | "postgres"
@@ -82,6 +103,7 @@ class ConclaveConfig:
     mode: str = "development"  # "development" | "production"
     # Consultations (Kanzo)
     kanzo: KanzoSettings = field(default_factory=KanzoSettings)
+    board: BoardSettings = field(default_factory=BoardSettings)
 
     @classmethod
     def from_sources(
@@ -136,6 +158,7 @@ class ConclaveConfig:
         allowed_hosts = os.environ.get("CONCLAVE_ALLOWED_HOSTS", "")
         mode = os.environ.get("CONCLAVE_MODE", "development")
         kanzo = KanzoSettings.from_section(data.get("kanzo", {}))
+        board = BoardSettings.from_section(data.get("board", {}))
         return cls(
             db_provider=provider,
             db_path=db_path,
@@ -156,6 +179,7 @@ class ConclaveConfig:
             allowed_hosts=allowed_hosts,
             mode=mode,
             kanzo=kanzo,
+            board=board,
         )
 
 

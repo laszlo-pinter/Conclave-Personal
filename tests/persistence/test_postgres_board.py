@@ -139,3 +139,20 @@ def test_migration_012_is_idempotent(pg):
         cur.execute("SELECT id FROM _migrations WHERE id = '012_board'")
         assert cur.fetchone() is not None
     assert "012_board" not in run_migrations(pg, is_postgres=True)
+
+
+def test_project_creation_is_atomic_and_deletes_cascade(repo, pg):
+    p = Project.create("api", "API")
+    repo.create_project(p)
+    with pytest.raises(psycopg2.errors.UniqueViolation):
+        repo.create_project(Project.create("api", "Doppelt"))             # Slug vergeben
+    with pg.cursor() as cur:
+        cur.execute("SELECT (SELECT count(*) FROM board_projects), (SELECT count(*) FROM board_counters)")
+        assert cur.fetchone() == (1, 1)                                     # kein Projekt ohne Zaehler
+        cur.execute("""
+            SELECT tc.table_name, rc.delete_rule FROM information_schema.referential_constraints rc
+            JOIN information_schema.table_constraints tc ON tc.constraint_name = rc.constraint_name
+            WHERE tc.table_name LIKE 'board_%' ORDER BY 1""")
+        rules = cur.fetchall()
+    assert rules and all(rule == "CASCADE" for _, rule in rules)
+    assert {t for t, _ in rules} == {"board_comments", "board_counters", "board_events", "board_tasks"}

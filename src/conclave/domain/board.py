@@ -131,6 +131,8 @@ class Task:
 
     @property
     def ref(self) -> str:
+        if self.number is None:
+            raise ValueError("Ticket hat noch keine Nummer (erst nach dem Speichern)")
         return f"{self.project_slug}#{self.number}"
 
     @staticmethod

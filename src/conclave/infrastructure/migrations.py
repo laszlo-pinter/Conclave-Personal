@@ -308,8 +308,6 @@ def _create_consultations_tables(connection, is_postgres: bool) -> None:
             connection.execute(index)
 
 
-# ── Runner ────────────────────────────────────────────────────────────────
-
 def _create_board_tables(connection, is_postgres: bool) -> None:
     ts = "TIMESTAMPTZ" if is_postgres else "TEXT"
     boolean = "BOOLEAN NOT NULL DEFAULT FALSE" if is_postgres else "INTEGER NOT NULL DEFAULT 0"
@@ -322,12 +320,12 @@ def _create_board_tables(connection, is_postgres: bool) -> None:
             created_at {ts} NOT NULL
         )""",
         """CREATE TABLE IF NOT EXISTS board_counters (
-            project_id  TEXT PRIMARY KEY REFERENCES board_projects(id),
+            project_id  TEXT PRIMARY KEY REFERENCES board_projects(id) ON DELETE CASCADE,
             next_number INTEGER NOT NULL
         )""",
         f"""CREATE TABLE IF NOT EXISTS board_tasks (
             id          TEXT PRIMARY KEY,
-            project_id  TEXT NOT NULL REFERENCES board_projects(id),
+            project_id  TEXT NOT NULL REFERENCES board_projects(id) ON DELETE CASCADE,
             number      INTEGER NOT NULL,
             title       TEXT NOT NULL,
             description TEXT NOT NULL DEFAULT '',
@@ -342,7 +340,7 @@ def _create_board_tables(connection, is_postgres: bool) -> None:
         )""",
         f"""CREATE TABLE IF NOT EXISTS board_comments (
             id          TEXT PRIMARY KEY,
-            task_id     TEXT NOT NULL REFERENCES board_tasks(id),
+            task_id     TEXT NOT NULL REFERENCES board_tasks(id) ON DELETE CASCADE,
             body        TEXT NOT NULL,
             origin      TEXT,
             actor_id    TEXT,
@@ -352,7 +350,7 @@ def _create_board_tables(connection, is_postgres: bool) -> None:
         )""",
         f"""CREATE TABLE IF NOT EXISTS board_events (
             id         TEXT PRIMARY KEY,
-            task_id    TEXT NOT NULL REFERENCES board_tasks(id),
+            task_id    TEXT NOT NULL REFERENCES board_tasks(id) ON DELETE CASCADE,
             field      TEXT NOT NULL,
             old_value  TEXT,
             new_value  TEXT,
@@ -377,6 +375,8 @@ def _create_board_tables(connection, is_postgres: bool) -> None:
         for statement in statements:
             connection.execute(statement)
 
+
+# ── Runner ────────────────────────────────────────────────────────────────
 
 def _ensure_migrations_table(connection, is_postgres: bool) -> None:
     """Erstellt die _migrations Tracking-Tabelle."""

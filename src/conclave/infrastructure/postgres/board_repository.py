@@ -1,14 +1,24 @@
 """Board-Repository fuer PostgreSQL.
 
-Die Verbindung laeuft mit ``autocommit``. Die Nummernvergabe ist deshalb eine
-einzige Anweisung: Die CTE erhoeht die Zaehler-Zeile des Projekts (Zeilensperre)
-und das ``INSERT`` uebernimmt die Nummer. ``MAX(number)+1`` wuerde unter
-READ COMMITTED doppelte Nummern liefern.
+Die Verbindung laeuft mit ``autocommit`` (``api/server.py``): Jede Anweisung wird
+einzeln festgeschrieben. Alles, was zusammengehoert, ist deshalb **eine**
+Anweisung:
+
+- Ticket anlegen: Die CTE erhoeht die Zaehler-Zeile des Projekts (Zeilensperre),
+  das ``INSERT`` uebernimmt die Nummer. ``MAX(number)+1`` wuerde unter READ
+  COMMITTED doppelte Nummern liefern.
+- Projekt anlegen: Projekt und Zaehler-Zeile in einer CTE.
+- Loeschen: ``ON DELETE CASCADE`` (in der Basisklasse).
+
+Der Aenderungszaehler ist eine eigene Anweisung danach; er ist nur ein Signal
+fuer die UI.
 """
 
 from __future__ import annotations
 
-from conclave.domain.board import Task
+from contextlib import contextmanager
+
+from conclave.domain.board import Project, Task
 from conclave.infrastructure.sqlite.board_repository import POSITION_STEP, SQLiteBoardRepository
 
 
@@ -35,14 +45,22 @@ class PostgresBoardRepository(SQLiteBoardRepository):
             rows = cur.fetchall() if cur.description else []
             return _Result(rows, cur.rowcount)
 
-    def _commit(self) -> None:
-        pass                                    # autocommit
+    @contextmanager
+    def _tx(self):
+        yield                                     # autocommit; zusammengehoeriges ist eine Anweisung
 
     def _dt(self, value):
         return value
 
     def _bool(self, value) -> bool:
         return bool(value)
+
+    def create_project(self, project: Project) -> None:
+        self._execute(
+            "WITH p AS (INSERT INTO board_projects (id, slug, name, created_at) VALUES (?, ?, ?, ?) RETURNING id) "
+            "INSERT INTO board_counters (project_id, next_number) SELECT id, 1 FROM p",
+            (project.id, project.slug, self._enc(project.name), project.created_at))
+        self._bump()
 
     def create_task(self, task: Task) -> Task:
         row = self._one(
