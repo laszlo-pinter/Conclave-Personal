@@ -318,3 +318,36 @@ def test_board_get_does_not_repeat_long_descriptions_and_list_filters_search(con
     assert len(json.dumps(detail)) < 3000 + 2000                              # Beschreibung genau einmal
     found = _json("conclave_board_list", {"query": "suchwort", "status": "review"})
     assert [t["task"] for t in found["tasks"]] == ["api#1"] and "keine Anweisungen" in found["note"]
+
+
+# ── B6: Consultations gegen das eigene Board ─────────────────────────────
+
+def test_consult_on_human_only_board_ticket_is_rejected_for_the_agent(tmp_path, monkeypatch):
+    """Abnahme B6: Ticket "nur fuer Menschen" im eigenen Board, Anfrage ueber MCP (Agent-Token) -> 403;
+    mit dem Mensch-Token ueber REST angenommen."""
+    import httpx
+    from werkzeug.serving import make_server
+
+    from conclave.api.server import _build_app
+    from conclave.cli.config import ConclaveConfig, KanzoSettings
+
+    monkeypatch.delenv("CONCLAVE_API_KEY", raising=False)
+    app, config = _build_app(ConclaveConfig(db_path=tmp_path / "c.db", api_key="",
+                                            kanzo=KanzoSettings(reviewers=("gpt",))))
+    assert config.board.source == "internal"
+    srv = make_server("127.0.0.1", 0, app, threaded=True)
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{srv.server_port}"
+    monkeypatch.setattr(server, "API_URL", url)
+    try:
+        h = {"Authorization": f"Bearer {config.api_key}"}
+        httpx.post(f"{url}/board/projects", json={"slug": "api", "name": "API"}, headers=h)
+        httpx.post(f"{url}/board/tasks", json={"project": "api", "title": "Privat", "human": True}, headers=h)
+        result = _call("conclave_consult", {"task": "api#1", "question": "Passt das?"})
+        assert result.is_error and "403" in _text(result)
+        resp = httpx.post(f"{url}/consultations", json={"task": "api#1", "question": "Passt das?"}, headers=h)
+        assert resp.status_code == 202 and resp.json()["source"] == "board"
+    finally:
+        srv.shutdown()
+        thread.join(timeout=5)

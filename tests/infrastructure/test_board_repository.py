@@ -311,3 +311,32 @@ def test_invalid_board_statuses_are_rejected(tmp_path, value):
     cfg.write_text(f"[board]\nstatuses = {value}\n", encoding="utf-8")
     with pytest.raises(ValueError, match=r"\[board\] statuses"):
         ConclaveConfig.from_sources(cfg)
+
+
+@pytest.mark.parametrize("toml, env, expected", [
+    ("", None, "internal"),                                                   # Standard: eigenes Board
+    ('[kanzo]\nreviewers = ["gpt"]\n', None, "internal"),                     # Reviewer allein reichen nicht
+    ('[kanzo]\nurl = "http://localhost:4242/mcp"\n', None, "kanzo"),          # Kanzo-Adresse gesetzt
+    ("", "http://localhost:4242/mcp", "kanzo"),                               # ... oder per Umgebung
+    ('[kanzo]\nurl = "http://localhost:4242/mcp"\n[board]\nsource = "internal"\n', None, "internal"),
+    ('[board]\nsource = "kanzo"\n', None, "kanzo"),
+])
+def test_board_source_from_config(tmp_path, monkeypatch, toml, env, expected):
+    """B6/E6: Consultations lesen aus dem eigenen Board, ausser Kanzo ist ausdruecklich eingestellt."""
+    from conclave.cli.config import ConclaveConfig
+    if env:
+        monkeypatch.setenv("CONCLAVE_KANZO_URL", env)
+    else:
+        monkeypatch.delenv("CONCLAVE_KANZO_URL", raising=False)
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(toml, encoding="utf-8")
+    assert ConclaveConfig.from_sources(cfg).board.source == expected
+
+
+@pytest.mark.parametrize("value", ['"extern"', '"Internal"', "1", '["internal"]'])
+def test_invalid_board_source_is_rejected(tmp_path, value):
+    from conclave.cli.config import ConclaveConfig
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(f"[board]\nsource = {value}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"\[board\] source"):
+        ConclaveConfig.from_sources(cfg)

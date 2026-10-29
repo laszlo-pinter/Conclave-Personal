@@ -466,12 +466,12 @@ def conclave_board_comment(task: str, body: str, author: str = "") -> dict:
     return {"task": task, "comment": c["id"], "origin": c["origin"]}
 
 
-# ── Tools: Consultations (Zweitmeinung zu Kanzo-Tickets) ──────────────────
+# ── Tools: Consultations (Zweitmeinung zu Tickets) ───────────────────────
 
 @mcp.tool()
 def conclave_consult(task: str, question: str, context: str = "", include_previous: bool = False,
                      reviewers: list[str] | None = None) -> dict:
-    """Bittet Conclave um eine Zweitmeinung zu einem Kanzo-Ticket.
+    """Bittet Conclave um eine Zweitmeinung zu einem Ticket (eigenes Board oder, falls eingestellt, Kanzo).
 
     Conclave liest das Ticket selbst, fragt die erlaubten Reviewer-Modelle und
     schreibt jede Antwort als gekennzeichneten Kommentar in das Ticket

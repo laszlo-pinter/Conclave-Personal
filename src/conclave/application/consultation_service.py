@@ -13,7 +13,7 @@ Sicherheit (Plan 4.1, 4.6, 4.7 und Erweiterungen aus C3):
   Workspace-Inhalte in einen Kommentar schleusen oder Dateien schreiben.
 - Tickets "nur fuer Menschen" werden abgelehnt, wenn der Kanal nicht ``human`` ist
   (der Kanal kommt aus dem Token, Z3).
-- In Kanzo wird nur kommentiert.
+- In der Ticket-Quelle (eigenes Board oder Kanzo) wird nur kommentiert.
 """
 
 from __future__ import annotations
@@ -83,7 +83,7 @@ class ConsultationService:
             self._finish(c, FAILED, "Ticket ist nur fuer Menschen (human) - Anfragen von Agenten werden abgelehnt.")
             return
 
-        conversation = self._flow.create_conversation(topic=f"kanzo:{c.source_ref} · {c.id}")
+        conversation = self._flow.create_conversation(topic=f"{c.source}:{c.source_ref} · {c.id}")
         c.conversation_id = conversation.id
         self._repo.save(c)
         for pid in c.reviewers:
