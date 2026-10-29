@@ -31,6 +31,7 @@
 - [Ports & adapters](architektur/ports-adapter.md) - Interfaces, ProviderProfiles, ResilientAdapter
 
 ### Release
+- [Release Notes v0.5.1](release-notes-v0.5.1.md) - File viewer in the Files area
 - [Release Notes v0.5.0](release-notes-v0.5.0.md) - Separate human and agent access
 - [Release Notes v0.4.0](release-notes-v0.4.0.md) - Consultations: second opinions on Kanzo tickets
 - [Release Notes v0.3.0](release-notes-v0.3.0.md) - Context transparency: context chip, preview before a call, per-agent message limit

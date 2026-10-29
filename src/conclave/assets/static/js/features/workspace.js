@@ -36,11 +36,12 @@ async function loadWorkspace(){
       if(mainEl) mainEl.innerHTML=empty;
       return;
     }
-    const tree=_renderFileTree(_buildFileTree(files));
+    const root=_buildFileTree(files);
+    // Seitenleiste im Chat: Klick fuegt @workspace/ ein; Files-Bereich: Klick oeffnet den Viewer
     // safe-html: _renderFileTree() escaped alle Werte
-    if(el) el.innerHTML=tree;
+    if(el) el.innerHTML=_renderFileTree(root,'',0,'insert-workspace-ref');
     // safe-html: _renderFileTree() escaped alle Werte
-    if(mainEl) mainEl.innerHTML=tree;
+    if(mainEl) mainEl.innerHTML=_renderFileTree(root,'',0,'open-workspace-file');
   }catch(e){
     const err=`<div class="surface-empty">${esc(e.message)}</div>`;
     // safe-html: err enthaelt Fehlertext via esc()
@@ -74,7 +75,7 @@ function _buildFileTree(files){
   return root;
 }
 
-function _renderFileTree(node,prefix='',depth=0){
+function _renderFileTree(node,prefix='',depth=0,fileAction='insert-workspace-ref'){
   let html='';
   // Ordner
   const dirs=Object.keys(node._dirs).sort();
@@ -89,14 +90,14 @@ function _renderFileTree(node,prefix='',depth=0){
       <span style="font-size:10px;color:var(--text-faint);margin-left:4px">(${count})</span>
     </div>`;
     html+=`<div id="${id}" style="padding-left:12px;${open?'':'display:none'}">`;
-    html+=_renderFileTree(sub,prefix+dir+'/',depth+1);
+    html+=_renderFileTree(sub,prefix+dir+'/',depth+1,fileAction);
     html+='</div>';
   }
   // Dateien
   for(const f of node._files.sort((a,b)=>a.path.localeCompare(b.path))){
     const name=f.path.split('/').pop();
     html+=`<div class="surface-item" style="padding:3px 10px"><div class="surface-item-row">
-      <span class="surface-item-label ws-file-ref" data-action="insert-workspace-ref" data-path="${attr(f.path)}" title="@workspace/${attr(f.path)}">${esc(name)}</span>
+      <span class="surface-item-label ws-file-ref" data-action="${attr(fileAction)}" data-path="${attr(f.path)}" data-size="${attr(f.size)}" title="@workspace/${attr(f.path)}">${esc(name)}</span>
       <span style="font-size:10px;color:var(--text-faint)">${(Number(f.size)/1024).toFixed(1)} KB</span>
     </div></div>`;
   }
@@ -160,6 +161,79 @@ function insertWorkspaceRef(path){
   autoResize(ta);ta.focus();
   toast(t('workspace.inserted', {ref}),'ok');
   switchTab('conv');
+}
+
+// ── Datei-Viewer (Files-Bereich, nur lesen) ───────────────────────────
+let wsViewer=null; // {path, size, content, markdown, mode}
+
+function _wsPathUrl(path){
+  return '/workspace/'+String(path).split('/').map(encodeURIComponent).join('/');
+}
+
+async function openWorkspaceFile(path,size){
+  const box=document.getElementById('wsViewer');
+  if(!box) return;
+  box.hidden=false;
+  document.getElementById('wsViewerName').textContent=path;
+  document.getElementById('wsViewerSize').textContent=size!==undefined&&size!==''?fmtBytes(Number(size)):'';
+  const body=document.getElementById('wsViewerBody');
+  body.className='ws-viewer-body';
+  body.textContent=t('workspace.viewerLoading');
+  document.getElementById('wsViewerMode').hidden=true;
+  wsViewer={path, size, content:null, markdown:/\.(md|markdown)$/i.test(path), mode:'rendered'};
+  const current=wsViewer;
+  try{
+    const d=await req('GET',_wsPathUrl(path));
+    if(wsViewer!==current) return;                // inzwischen andere Datei gewaehlt
+    current.content=String(d.content??'');
+    renderWorkspaceViewer();
+  }catch(e){
+    if(wsViewer!==current) return;
+    body.className='ws-viewer-body ws-viewer-error';
+    body.textContent=e.message;                     // Fehlertext nur als Text
+  }
+  box.scrollIntoView({block:'nearest'});
+}
+
+function renderWorkspaceViewer(){
+  const v=wsViewer;
+  if(!v||v.content===null) return;
+  const body=document.getElementById('wsViewerBody');
+  const modeBtn=document.getElementById('wsViewerMode');
+  modeBtn.hidden=!v.markdown;
+  modeBtn.textContent=v.mode==='rendered'?t('workspace.viewerSource'):t('workspace.viewerRendered');
+  if(v.markdown&&v.mode==='rendered'){
+    body.className='ws-viewer-body msg-content ws-viewer-md';
+    // safe-html: renderMarkdown() filtert ueber DOMPurify (wie Modellantworten), ohne DOMPurify nur esc()
+    body.innerHTML=renderMarkdown(v.content);
+    if(typeof hljs!=='undefined') body.querySelectorAll('pre code').forEach(el=>hljs.highlightElement(el));
+    return;
+  }
+  body.className='ws-viewer-body ws-viewer-source';
+  const pre=document.createElement('pre');
+  const code=document.createElement('code');
+  code.textContent=v.content;
+  pre.appendChild(code);
+  body.replaceChildren(pre);
+  if(!v.markdown&&typeof hljs!=='undefined') hljs.highlightElement(code);
+}
+
+function toggleWorkspaceViewerMode(){
+  if(!wsViewer) return;
+  wsViewer.mode=wsViewer.mode==='rendered'?'source':'rendered';
+  renderWorkspaceViewer();
+}
+
+function closeWorkspaceViewer(){
+  wsViewer=null;
+  const box=document.getElementById('wsViewer');
+  if(box) box.hidden=true;
+  const body=document.getElementById('wsViewerBody');
+  if(body) body.replaceChildren();
+}
+
+function insertViewerRef(){
+  if(wsViewer) insertWorkspaceRef(wsViewer.path);
 }
 
 // ── File Upload ──────────────────────────────────────────────────────

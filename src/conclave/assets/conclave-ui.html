@@ -203,6 +203,18 @@
         <div id="workspaceLimits" class="limit-row"></div>
         <div id="workspaceMainList"><div class="surface-empty" data-i18n="workspace.loading">Lade Workspace...</div></div>
       </div>
+      <div class="workbench-section ws-viewer" id="wsViewer" hidden>
+        <div class="ws-viewer-head">
+          <span class="ws-viewer-name" id="wsViewerName"></span>
+          <span class="ws-viewer-size" id="wsViewerSize"></span>
+          <div class="ws-viewer-actions">
+            <button class="btn-full secondary page-action" id="wsViewerMode" data-action="ws-viewer-mode" hidden></button>
+            <button class="btn-full secondary page-action" data-action="ws-viewer-insert" data-i18n="workspace.viewerInsert">In Chat einfügen</button>
+            <button class="btn-full secondary page-action" data-action="ws-viewer-close" data-i18n="workspace.viewerClose">Schließen</button>
+          </div>
+        </div>
+        <div class="ws-viewer-body" id="wsViewerBody"></div>
+      </div>
     </div>
   </div>
 

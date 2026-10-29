@@ -20,6 +20,7 @@ def test_release_docs_exist():
         "docs/mit-kanzo-arbeiten.md",
         "docs/release-notes-v0.4.0.md",
         "docs/release-notes-v0.5.0.md",
+        "docs/release-notes-v0.5.1.md",
         "docs/release-notes-v0.3.0.md",
         "docs/release-notes-v0.2.3.md",
         "docs/release-notes-v0.2.2.md",
@@ -78,7 +79,7 @@ def test_readme_places_llm_origin_notice_as_section():
 
 def test_release_docs_use_publishable_distribution_name():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    release_notes = (ROOT / "docs/release-notes-v0.5.0.md").read_text(encoding="utf-8")
+    release_notes = (ROOT / "docs/release-notes-v0.5.1.md").read_text(encoding="utf-8")
     combined = readme + "\n" + release_notes
 
     assert "pip install conclave-personal" in combined
@@ -102,6 +103,7 @@ def test_release_docs_use_publishable_distribution_name():
     assert "conclave-0.3.0-py3-none-any.whl" not in combined
     assert "conclave-0.4.0-py3-none-any.whl" not in combined
     assert "conclave-0.5.0-py3-none-any.whl" not in combined
+    assert "conclave-0.5.1-py3-none-any.whl" not in combined
 
 
 def test_readme_describes_published_install_path():
