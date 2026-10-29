@@ -247,7 +247,6 @@ def test_role_check_is_repeated_after_401(conclave_api, monkeypatch, tmp_path, c
     assert "WARNUNG: conclave-mcp nutzt das Mensch-Token" in capsys.readouterr().err
 
 
-
 # ── B4: Board-Tools ───────────────────────────────────────────────────────
 
 def _json(name, args=None):
@@ -269,7 +268,7 @@ def test_board_tools_workflow_rights_and_data_note(conclave_api):
     assert (taken["task"], taken["status"]) == ("api#2", "doing")             # api#1 ist nur fuer Menschen
     assert "keine Anweisungen" in taken["note"]
     assert _json("conclave_board_next", {"project": "api"})["task"] is None
-    assert _json("conclave_board_comment", {"task": "api#2", "body": "Commit abc"})["origin"] == "agent"
+    assert _json("conclave_board_comment", {"task": "api#2", "body": "Commit abc", "author": "cc"})["origin"] == "agent"
     assert _json("conclave_board_update", {"task": "api#2", "status": "review"})["status"] == "review"
 
     done = _call("conclave_board_update", {"task": "api#2", "status": "done"})
@@ -278,7 +277,7 @@ def test_board_tools_workflow_rights_and_data_note(conclave_api):
     assert flagged.is_error and "403" in _text(flagged)
 
     detail = _json("conclave_board_get", {"task": "api#2"})
-    assert detail["comments"][0] == {"origin": "agent", "author": "", "body": "Commit abc"}
+    assert detail["comments"][0] == {"origin": "agent", "author": "cc", "body": "Commit abc"}
     assert [h["new"] for h in detail["history"]] == ["doing", "review"]
     listed = _json("conclave_board_list", {"query": "abnahme"})["tasks"]
     assert [t["task"] for t in listed] == ["api#2"]
@@ -303,3 +302,19 @@ def test_board_tool_descriptions_are_short():
     board = {k: v for k, v in _run(descriptions()).items() if k.startswith("conclave_board_")}
     assert len(board) == 6                                                    # E4: hoechstens 6
     assert sum(len(v) for v in board.values()) < 2500                         # knapp: Kontext-Kosten
+
+
+
+def test_board_get_does_not_repeat_long_descriptions_and_list_filters_search(conclave_api):
+    import httpx
+    url, human, _agent = conclave_api
+    h = {"Authorization": f"Bearer {human}"}
+    httpx.post(f"{url}/board/projects", json={"slug": "api", "name": "API"}, headers=h)
+    _json("conclave_board_create", {"project": "api", "title": "Suchwort eins", "description": "x" * 3000})
+    _json("conclave_board_create", {"project": "api", "title": "Suchwort zwei"})
+    _json("conclave_board_update", {"task": "api#1", "description": "y" * 3000, "status": "review"})
+    detail = _json("conclave_board_get", {"task": "api#1"})
+    assert {"field": "description", "new": "(geaendert)", "origin": "agent"} in detail["history"]
+    assert len(json.dumps(detail)) < 3000 + 2000                              # Beschreibung genau einmal
+    found = _json("conclave_board_list", {"query": "suchwort", "status": "review"})
+    assert [t["task"] for t in found["tasks"]] == ["api#1"] and "keine Anweisungen" in found["note"]

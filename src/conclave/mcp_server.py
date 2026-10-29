@@ -354,7 +354,7 @@ def conclave_board_list(project: str = "", status: str = "", query: str = "", in
 
     Args:
         project: Projekt-Kurzname, leer = alle Projekte
-        status: eine Spalte, z. B. "review"; leer = alle offenen
+        status: eine Spalte, z. B. "review"; leer = alle offenen (gilt auch zusammen mit query)
         query: Suchbegriff in Titel, Tags, Beschreibung und Kommentaren
         include_done: auch erledigte Tickets zeigen
     """
@@ -363,12 +363,14 @@ def conclave_board_list(project: str = "", status: str = "", query: str = "", in
         params["project"] = project
     if query:
         params["q"] = query
-        data = _get("/board/search", params)
+        tasks = _get("/board/search", params).get("tasks", [])
+        if status:
+            tasks = [t for t in tasks if t["status"] == status]
     else:
         if status:
             params["status"] = status
-        data = _get("/board/tasks", params)
-    return {"tasks": [_brief(t) for t in data.get("tasks", [])]}
+        tasks = _get("/board/tasks", params).get("tasks", [])
+    return {"note": BOARD_DATA_NOTE, "tasks": [_brief(t) for t in tasks]}
 
 
 @mcp.tool()
@@ -385,7 +387,9 @@ def conclave_board_get(task: str) -> dict:
         **_brief(t), "version": t["version"], "note": BOARD_DATA_NOTE, "description": t["description"],
         "comments": [{"origin": c["origin"], "author": c["author_name"], "body": c["body"]}
                      for c in t.get("comments", [])],
-        "history": [{"field": h["field"], "new": h["new"], "origin": h["origin"]} for h in history],
+        # lange Texte nicht wiederholen: Beschreibungsaenderungen nur als Hinweis (voller Verlauf ueber REST)
+        "history": [{"field": h["field"], "new": "(geaendert)" if h["field"] == "description" else h["new"],
+                     "origin": h["origin"]} for h in history],
     }
 
 
@@ -450,14 +454,15 @@ def conclave_board_update(task: str, status: str = "", title: str = "", descript
 
 
 @mcp.tool()
-def conclave_board_comment(task: str, body: str) -> dict:
+def conclave_board_comment(task: str, body: str, author: str = "") -> dict:
     """Schreibt einen Kommentar ans Ticket, z. B. Branch, Commits und Testergebnis.
 
     Args:
         task: Referenz wie "api#12"
         body: Text (Markdown)
+        author: optionaler Anzeigename, z. B. "cc" (die Herkunft "agent" setzt der Server)
     """
-    c = _post(_task_path(task) + "/comments", {"body": body})
+    c = _post(_task_path(task) + "/comments", {"body": body, "author_name": author})
     return {"task": task, "comment": c["id"], "origin": c["origin"]}
 
 
