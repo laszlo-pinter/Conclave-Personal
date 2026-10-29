@@ -54,22 +54,24 @@ class KanzoSettings:
                    max_per_hour=max_per_hour, comment_max_chars=comment_max_chars)
 
 
+from conclave.domain.board import DEFAULT_STATUSES  # noqa: E402
+
 @dataclass(frozen=True)
 class BoardSettings:
     """Abschnitt [board] in config.toml: die Spalten des Boards (Plan board.md).
 
     Neue Tickets landen in der ersten Spalte, die letzte gilt als erledigt.
     """
-    statuses: tuple[str, ...] = ("todo", "doing", "review", "done")
+    statuses: tuple[str, ...] = DEFAULT_STATUSES
 
     @classmethod
     def from_section(cls, section: dict) -> "BoardSettings":
-        from conclave.domain.board import DEFAULT_STATUSES, StatusFlow
+        from conclave.domain.board import StatusFlow
         statuses = section.get("statuses", list(DEFAULT_STATUSES))
         if not isinstance(statuses, list) or not all(isinstance(s, str) for s in statuses):
             raise ValueError("[board] statuses muss eine Liste von Spaltennamen sein")
         try:
-            flow = StatusFlow(tuple(s.strip() for s in statuses))
+            flow = StatusFlow(tuple(statuses))           # ohne strip(): " todo" ist ungueltig
         except ValueError as e:
             raise ValueError(f"[board] statuses: {e}") from None
         return cls(statuses=flow.statuses)

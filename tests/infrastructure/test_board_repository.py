@@ -306,7 +306,8 @@ def test_board_statuses_from_config(tmp_path):
     assert ConclaveConfig.from_sources(tmp_path / "fehlt.toml").board.statuses == ("todo", "doing", "review", "done")
 
 
-@pytest.mark.parametrize("value", ['["nur-eine"]', '["a", "a"]', '"todo"', '["Mit Leerzeichen", "b"]', '[1, 2]'])
+@pytest.mark.parametrize("value", ['["nur-eine"]', '["a", "a"]', '"todo"', '["Mit Leerzeichen", "b"]', '[1, 2]',
+                                   '[" todo", "done"]'])
 def test_invalid_board_statuses_are_rejected(tmp_path, value):
     from conclave.cli.config import ConclaveConfig
     cfg = tmp_path / "config.toml"
