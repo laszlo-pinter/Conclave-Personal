@@ -68,6 +68,11 @@ const _actions = {
   'ws-viewer-mode':      () => toggleWorkspaceViewerMode(),
   'ws-viewer-insert':    () => insertViewerRef(),
   'ws-viewer-close':     () => closeWorkspaceViewer(),
+  'board-new':           () => openBoardNew(),
+  'board-create':        () => createBoardTask(),
+  'board-open-task':     (el) => openBoardTask(el.dataset.ref),
+  'board-close-task':    () => closeBoardTask(),
+  'board-comment':       () => addBoardComment(),
   'export-conv':         () => exportConv(),
   'open-key-modal':      () => openKeyModal(),
   'save-key':            () => saveKey(),
@@ -106,6 +111,11 @@ function _bindStaticUiEvents() {
   on('msgInput', 'input', (e) => autoResize(e.target))
   ;['aId','aName','aTopic'].forEach(id => on(id, 'input', updatePrompt))
   on('aPreset', 'change', onPresetChange)
+  on('boardProject', 'change', onBoardFilter)
+  on('boardShowDone', 'change', onBoardFilter)
+  on('boardSearch', 'input', onBoardSearch)
+  on('boardTaskStatus', 'change', () => saveBoardTaskField('status'))
+  on('boardTaskHuman', 'change', () => saveBoardTaskField('human'))
   on('aSysPrompt', 'input', onSysEdit)
 }
 

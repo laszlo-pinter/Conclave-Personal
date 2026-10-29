@@ -3,18 +3,20 @@
 // ── Tabs ──────────────────────────────────────────────────────────────────
 function switchTab(tab){
   // Sidebar-Panels
-  const tabs=['conv','agents','workspace','runs','settings'];
+  const tabs=['conv','agents','workspace','board','runs','settings'];
   document.querySelectorAll('.sb-tab').forEach((t,i)=>t.classList.toggle('active',tabs[i]===tab));
   document.getElementById('panelConv').classList.toggle('active',tab==='conv');
   document.getElementById('panelAgents').classList.toggle('active',tab==='agents');
   document.getElementById('panelWorkspace').classList.toggle('active',tab==='workspace');
+  document.getElementById('panelBoard').classList.toggle('active',tab==='board');
   document.getElementById('panelRuns').classList.toggle('active',tab==='runs');
   document.getElementById('panelSettings').classList.toggle('active',tab==='settings');
 
-  // Main-Panels: Studio (Chat) vs Agents vs Workspace vs Runs vs Settings
+  // Main-Panels: Studio (Chat) vs Agents vs Workspace vs Board vs Runs vs Settings
   const isStudio = tab==='conv';
   const isAgents = tab==='agents';
   const isWorkspace = tab==='workspace';
+  const isBoard = tab==='board';
   const isRuns = tab==='runs';
   const isSettings = tab==='settings';
 
@@ -28,11 +30,13 @@ function switchTab(tab){
   // Personal workspaces
   document.getElementById('registryMain').style.display = isAgents ? '' : 'none';
   document.getElementById('workspaceMain').style.display = isWorkspace ? '' : 'none';
+  document.getElementById('boardMain').style.display = isBoard ? '' : 'none';
   document.getElementById('runsMain').style.display = isRuns ? '' : 'none';
   document.getElementById('settingsMain').style.display = isSettings ? '' : 'none';
 
   if(isAgents){loadAgents();loadProviders();}
   if(isWorkspace){loadWorkspace();}
+  if(isBoard){loadBoard();}
   if(isRuns){loadRuns();loadConversationUsage();}
   if(isSettings){loadSettings();loadLogs();}
 }
