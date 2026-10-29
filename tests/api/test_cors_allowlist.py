@@ -109,3 +109,12 @@ class TestCorsAllowedOrigins:
         with app.test_client() as client:
             resp = client.get("/conversations", headers={"Origin": "null"})
         assert resp.headers.get("Access-Control-Allow-Origin") == "null"
+
+
+# ── B7: PATCH (Board-Tickets) ─────────────────────────────────────────────────
+
+def test_preflight_allows_patch_for_configured_origin(client_with_origin):
+    resp = client_with_origin.options("/board/projects/api/tasks/1", headers={
+        "Origin": "http://localhost:3000", "Access-Control-Request-Method": "PATCH"})
+    assert resp.headers.get("Access-Control-Allow-Origin") == "http://localhost:3000"
+    assert "PATCH" in resp.headers.get("Access-Control-Allow-Methods", "").split(", ")

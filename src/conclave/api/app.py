@@ -40,6 +40,7 @@ from conclave.domain.participant import ParticipantType
 from conclave.domain.principal import HUMAN_PRINCIPAL
 from conclave.api.access import HUMAN_ONLY_ERROR, agent_may
 from conclave.application.consultations import ConsultationRequestError
+from conclave.application.board import BoardError, comment_to_dict, event_to_dict, project_to_dict, task_to_dict
 from conclave.domain.errors import TaskNotFound, TaskSourceError
 from conclave.cli.bootstrap import rate_limit_disabled, validate_rate_limit
 from conclave.cli.config import DEFAULT_RATE_LIMIT
@@ -86,6 +87,8 @@ CONTENT_SECURITY_POLICY = "; ".join([
 # Mikrofon nur fuer die eigene Seite (Spracheingabe in speech.js)
 PERMISSIONS_POLICY = "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
 
+BOARD_IMPORT_MAX_BYTES = 50 * 1024 * 1024    # Groesse des JSON-Exports, vor dem Parsen geprueft
+
 # Ohne Token erreichbar (B12): UI-Seite, statische Dateien, Healthcheck, API-Doku.
 PUBLIC_GET_PATHS = frozenset({"/", "/health", "/api-docs", "/openapi.json"})
 CLIENT_HEADER = "X-Conclave-Client"
@@ -120,7 +123,7 @@ def is_host_allowed(host_header: str, allowed: set[tuple[str, str]]) -> bool:
 
 
 def create_app(handler: CLIHandler, auth_service=None,
-               agent_service=None, config=None, service=None, consultations=None) -> Flask:
+               agent_service=None, config=None, service=None, consultations=None, board=None) -> Flask:
     import pathlib
     asset_root = get_asset_root()
     app = Flask(__name__, static_folder=str(asset_root / "static"), static_url_path="/static")
@@ -261,7 +264,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         if origin and origin in _cors_allowed:
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Headers"] = f"Content-Type, Authorization, X-API-Key, {CLIENT_HEADER}"
-            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         return response
 
     @app.route("/", defaults={"path": ""}, methods=["OPTIONS"])
@@ -395,6 +398,10 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     @app.errorhandler(ConsultationRequestError)
     def _handle_consultation_request(e):
+        return jsonify({"error": str(e), "type": e.type}), e.status
+
+    @app.errorhandler(BoardError)
+    def _handle_board_error(e):
         return jsonify({"error": str(e), "type": e.type}), e.status
 
     @app.errorhandler(TaskNotFound)
@@ -880,6 +887,174 @@ def create_app(handler: CLIHandler, auth_service=None,
             return jsonify({"error": "rerun muss true oder false sein.", "type": "ValidationError"}), 400
         result = _consultations().retry(consultation_id, g.principal, rerun=rerun)
         return jsonify(result), 202
+
+    # ── Board (Plan board.md, B3) ───────────────────────────────────────
+    def _board():
+        if board is None:
+            raise BoardError("Das Board ist in dieser Instanz nicht verfuegbar.", 503, "BoardDisabled")
+        return board
+
+    def _json_object() -> dict:
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            raise BoardError("JSON-Objekt erwartet.", 400, "ValidationError")
+        return body
+
+    def _check_task_fields(body: dict, allowed: set) -> None:
+        """Gleiche Typpruefung fuer Anlegen (POST) und Aendern (PATCH)."""
+        unknown = set(body) - allowed
+        if unknown:
+            raise BoardError(f"Unbekannte Felder: {sorted(unknown)}", 400, "ValidationError")
+        for name in ("project", "title", "description", "status"):
+            if body.get(name) is not None and not isinstance(body[name], str):
+                raise BoardError(f"{name} muss Text sein.", 400, "ValidationError")
+        tags = body.get("tags")
+        if tags is not None and (not isinstance(tags, list) or not all(isinstance(t, str) for t in tags)):
+            raise BoardError("tags muss eine Liste von Texten sein.", 400, "ValidationError")
+        if body.get("human") is not None and not isinstance(body["human"], bool):
+            raise BoardError("human muss true oder false sein.", 400, "ValidationError")
+        index = body.get("index")
+        if index is not None and (isinstance(index, bool) or not isinstance(index, int)):
+            raise BoardError("index muss eine ganze Zahl sein.", 400, "ValidationError")
+
+    def _flag(name: str, default: bool = False) -> bool:
+        return request.args.get(name, "true" if default else "false").lower() in ("1", "true", "yes")
+
+    @app.get("/board")
+    def board_overview():
+        """Spalten, Projekte und Aenderungszaehler des Boards."""
+        b = _board()
+        return jsonify({"statuses": list(b.flow.statuses), "projects": [project_to_dict(p) for p in b.list_projects()],
+                        "changes": b.change_token()}), 200
+
+    @app.get("/board/changes")
+    def board_changes():
+        """Aenderungszaehler; die UI laedt neu, wenn er steigt."""
+        return jsonify({"changes": _board().change_token()}), 200
+
+    @app.post("/board/projects")
+    def board_create_project():
+        """Projekt anlegen (Freigabe-Recht)."""
+        body = _json_object()
+        project = _board().create_project(g.principal, body.get("slug"), body.get("name"))
+        return jsonify(project_to_dict(project)), 201
+
+    @app.put("/board/projects/<slug>")
+    def board_rename_project(slug: str):
+        """Projekt umbenennen (Freigabe-Recht)."""
+        project = _board().rename_project(g.principal, slug, _json_object().get("name"))
+        return jsonify(project_to_dict(project)), 200
+
+    @app.delete("/board/projects/<slug>")
+    def board_delete_project(slug: str):
+        """Projekt samt Tickets loeschen (Freigabe-Recht)."""
+        _board().delete_project(g.principal, slug)
+        return "", 204
+
+    @app.get("/board/tasks")
+    def board_list_tasks():
+        """Tickets in Board-Reihenfolge; Filter project, status (mehrfach), include_done."""
+        statuses = request.args.getlist("status") or None
+        tasks = _board().list_tasks(request.args.get("project") or None, statuses,
+                                    include_done=_flag("include_done"))
+        return jsonify({"tasks": [task_to_dict(t) for t in tasks]}), 200
+
+    @app.post("/board/tasks")
+    def board_create_task():
+        """Ticket anlegen; neue Tickets landen in der ersten Spalte."""
+        body = _json_object()
+        _check_task_fields(body, {"project", "title", "description", "tags", "status", "human"})
+        task = _board().create_task(g.principal, body.get("project"), body.get("title"),
+                                    description=body.get("description") or "", tags=body.get("tags") or [],
+                                    human=body.get("human", False), status=body.get("status"))
+        return jsonify(task_to_dict(task)), 201
+
+    @app.get("/board/search")
+    def board_search():
+        """Suche in Titel, Tags, Beschreibung und Kommentaren."""
+        tasks = _board().search(request.args.get("q", ""), request.args.get("project") or None,
+                                include_done=_flag("include_done", True))
+        return jsonify({"tasks": [task_to_dict(t) for t in tasks]}), 200
+
+    @app.post("/board/next")
+    def board_next_task():
+        """Oberstes freies Ticket der ersten Spalte uebernehmen (atomar)."""
+        body = request.get_json(silent=True) or {}
+        task = _board().next_task(g.principal, body.get("project") or None)
+        return jsonify({"task": task_to_dict(task) if task else None}), 200
+
+    def _ref(slug: str, number: int) -> str:
+        return f"{slug}#{number}"
+
+    @app.get("/board/projects/<slug>/tasks/<int:number>")
+    def board_get_task(slug: str, number: int):
+        """Ein Ticket mit Kommentaren."""
+        b = _board()
+        task = b.get_task(_ref(slug, number))
+        return jsonify({**task_to_dict(task), "comments": [comment_to_dict(c) for c in b.comments(task.ref)]}), 200
+
+    @app.patch("/board/projects/<slug>/tasks/<int:number>")
+    def board_update_task(slug: str, number: int):
+        """Ticket aendern: title, description, tags, status, human, index (Position in der Spalte)."""
+        body = _json_object()
+        _check_task_fields(body, {"title", "description", "tags", "status", "human", "index"})
+        task = _board().update_task(g.principal, _ref(slug, number), title=body.get("title"),
+                                    description=body.get("description"), tags=body.get("tags"),
+                                    status=body.get("status"), human=body.get("human"), index=body.get("index"))
+        return jsonify(task_to_dict(task)), 200
+
+    @app.delete("/board/projects/<slug>/tasks/<int:number>")
+    def board_delete_task(slug: str, number: int):
+        """Ticket loeschen (Freigabe-Recht)."""
+        _board().delete_task(g.principal, _ref(slug, number))
+        return "", 204
+
+    @app.get("/board/projects/<slug>/tasks/<int:number>/comments")
+    def board_list_comments(slug: str, number: int):
+        """Kommentare eines Tickets mit Herkunft."""
+        return jsonify({"comments": [comment_to_dict(c) for c in _board().comments(_ref(slug, number))]}), 200
+
+    @app.post("/board/projects/<slug>/tasks/<int:number>/comments")
+    def board_add_comment(slug: str, number: int):
+        """Kommentar schreiben; die Herkunft kommt aus dem Token."""
+        body = _json_object()
+        comment = _board().add_comment(g.principal, _ref(slug, number), body.get("body"),
+                                       author_name=body.get("author_name") or "")
+        return jsonify(comment_to_dict(comment)), 201
+
+    @app.get("/board/projects/<slug>/tasks/<int:number>/history")
+    def board_history(slug: str, number: int):
+        """Verlauf eines Tickets (Status, Titel, Beschreibung, Markierung)."""
+        return jsonify({"history": [event_to_dict(e) for e in _board().history(_ref(slug, number))]}), 200
+
+    @app.put("/board/comments/<comment_id>")
+    def board_edit_comment(comment_id: str):
+        """Eigenen Kommentar aendern (nur Mensch)."""
+        comment = _board().edit_comment(g.principal, comment_id, _json_object().get("body"))
+        return jsonify(comment_to_dict(comment)), 200
+
+    @app.delete("/board/comments/<comment_id>")
+    def board_delete_comment(comment_id: str):
+        """Eigenen Kommentar loeschen (nur Mensch)."""
+        _board().delete_comment(g.principal, comment_id)
+        return "", 204
+
+    @app.post("/board/import")
+    def board_import():
+        """JSON-Export eines Boards uebernehmen (Freigabe-Recht, idempotent)."""
+        too_large = BoardError(f"Export zu gross (hoechstens {BOARD_IMPORT_MAX_BYTES // (1024 * 1024)} MB).",
+                               413, "ImportTooLarge")
+        if (request.content_length or 0) > BOARD_IMPORT_MAX_BYTES:
+            raise too_large
+        # Mit Obergrenze lesen: greift auch ohne Content-Length (z. B. chunked)
+        raw = request.stream.read(BOARD_IMPORT_MAX_BYTES + 1)
+        if len(raw) > BOARD_IMPORT_MAX_BYTES:
+            raise too_large
+        try:
+            data = _json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            raise BoardError("Export ist kein gueltiges JSON.", 400, "ImportFormatError") from None
+        return jsonify(_board().import_export(g.principal, data)), 200
 
     # ── Personal Export ─────────────────────────────────────────────────
 

@@ -2,7 +2,7 @@
 
 **Projekt-ID:** `conclave`
 **Arbeitsbranch:** `main`
-**Phase:** v0.5.1 Alpha
+**Phase:** v0.6.0 Alpha
 
 ## Ziel
 
@@ -82,7 +82,7 @@ vorbereitet.
 
 ## Regeln
 
-Dieses Repository ist für v0.5.1 selbstbeschreibend. Für Beiträge gelten:
+Dieses Repository ist für v0.6.0 selbstbeschreibend. Für Beiträge gelten:
 
 - Personal-first: keine Enterprise-/DSGVO-Oberflächen wieder einführen.
 - Keine Feature-Ausweitung während Release-Stabilisierung ohne konkreten

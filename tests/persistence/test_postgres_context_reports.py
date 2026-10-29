@@ -123,6 +123,8 @@ def test_v023_database_migrates_without_data_loss(pg):
         assert cur.fetchone() is not None
         cur.execute("SELECT id FROM _migrations WHERE id = '011_message_origin'")
         assert cur.fetchone() is not None
+        cur.execute("SELECT id FROM _migrations WHERE id = '012_board'")
+        assert cur.fetchone() is not None
         cur.execute("SELECT origin FROM messages WHERE id = 'm1'")
         assert cur.fetchone() == (None,)                 # alte Nachricht: Herkunft unbekannt
 

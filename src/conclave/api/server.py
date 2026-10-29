@@ -142,8 +142,8 @@ def _build_sqlite(config):
     return service, agent_service, conn
 
 
-def _build_consultations(service, agent_service, conn, config):
-    """Consultations (Kanzo): Repository, Kanzo-Adapter, Ablauf, Worker, Anfragen."""
+def _build_consultations(service, agent_service, conn, config, board):
+    """Consultations: Repository, Ticket-Quelle (eigenes Board oder Kanzo), Ablauf, Worker, Anfragen."""
     from conclave.application.consultation_service import ConsultationService
     from conclave.application.consultation_worker import ConsultationWorker
     from conclave.application.consultations import ConsultationRequests
@@ -162,15 +162,35 @@ def _build_consultations(service, agent_service, conn, config):
         except Exception:  # noqa: BLE001 - Anzeige-Name, Fallback auf die ID
             return agent_id
 
-    kanzo = KanzoMcpAdapter(config.kanzo.url)
-    processor = ConsultationService(service, repo, kanzo, kanzo,
+    if config.board.source == "kanzo":
+        source, source_name = KanzoMcpAdapter(config.kanzo.url), "kanzo"
+    else:
+        from conclave.application.board_consultations import BoardTaskSource
+        source, source_name = BoardTaskSource(board), "board"
+    processor = ConsultationService(service, repo, source, source,
                                     comment_max_chars=config.kanzo.comment_max_chars,
                                     reviewer_name=reviewer_name)
     worker = ConsultationWorker(repo, processor)
-    requests = ConsultationRequests(repo, worker, kanzo, allowed_reviewers=config.kanzo.reviewers,
+    requests = ConsultationRequests(repo, worker, source, allowed_reviewers=config.kanzo.reviewers,
                                     max_per_hour=config.kanzo.max_per_hour,
-                                    provider_label=processor.provider_label)
+                                    provider_label=processor.provider_label, source=source_name)
     return requests, worker
+
+
+def _build_board(conn, config):
+    """Board (Plan board.md): Repository mit Verschluesselung, Dienst mit den Spalten aus config.toml."""
+    from conclave.application.board import BoardService
+    from conclave.cli.bootstrap import _load_crypto
+    from conclave.domain.board import StatusFlow
+
+    crypto = _load_crypto()
+    if config.db_provider == "postgres":
+        from conclave.infrastructure.postgres.board_repository import PostgresBoardRepository
+        repo = PostgresBoardRepository(conn, crypto)
+    else:
+        from conclave.infrastructure.sqlite.board_repository import SQLiteBoardRepository
+        repo = SQLiteBoardRepository(conn, crypto, autocommit=True)
+    return BoardService(repo, StatusFlow(config.board.statuses))
 
 
 def _build_app(config: ConclaveConfig | None = None):
@@ -211,10 +231,11 @@ def _build_app(config: ConclaveConfig | None = None):
         config.agent_api_key = load_or_create_agent_token()
     auth_service = StaticKeyAuthService(config.api_key, config.agent_api_key)
 
-    consultations, worker = _build_consultations(service, agent_service, conn, config)
+    board = _build_board(conn, config)
+    consultations, worker = _build_consultations(service, agent_service, conn, config, board)
     app = create_app(handler, auth_service=auth_service,
                      agent_service=agent_service, config=config,
-                     service=service, consultations=consultations)
+                     service=service, consultations=consultations, board=board)
     # Gestartet wird der Worker erst in runtime.serve.serve() (nicht hier, nicht in create_app)
     app.extensions["conclave_workers"] = [worker]
     if isinstance(conn, ThreadLocalConnection):

@@ -198,31 +198,75 @@ Oktober 2026):
   auf solche Ziele wird ebenfalls abgelehnt. Localhost ist nur für explizite
   lokale Provider wie Ollama erlaubt.
 
-## Consultations (Kanzo)
+## Board
 
-Consultations lesen ein Ticket aus Kanzo, geben es an Remote-Provider und
+Das Board (seit v0.6.0, siehe [Mit dem Board arbeiten](mit-dem-board-arbeiten.md))
+setzt seine Regeln am Token durch, nicht an Angaben in der Anfrage:
+
+- **Herkunft:** Kommentare und Verlauf bekommen `origin` (`human`, `agent`,
+  `system` für Conclave selbst, `null` für importierte) und `actor_id` vom
+  Server. Felder wie `origin` oder `actor_id` im Body werden ignoriert bzw.
+  bei Tickets mit `400` abgelehnt; ein `author_name` ist nur ein Anzeigename.
+- **Freigabe-Recht** (heute: der Mensch): nach und aus der letzten Spalte
+  schieben, löschen, Projekte verwalten, importieren. Mit dem Agent-Token
+  ergibt das `403 HumanOnly`, ohne dass etwas geschrieben wird.
+- **Agenten** lesen erledigte Tickets und Tickets „nur für Menschen“ nur
+  (erledigte dürfen sie kommentieren), dürfen die Markierung „nur für
+  Menschen“ setzen, aber nicht entfernen, und bekommen solche Tickets nie über
+  `next_task`. Die Prüfungen laufen im selben Schreibvorgang wie die Änderung
+  (keine Lücke zwischen Prüfen und Schreiben); `next_task` vergibt jedes Ticket
+  genau einmal.
+- **Unveränderliche Kommentare:** Kommentare von Agenten, von Conclave und
+  importierte kann niemand ändern oder löschen; der Mensch nur seine eigenen.
+- **Verlauf:** Änderungen an Status, Titel, Beschreibung und Markierung werden
+  mit vollständigem altem und neuem Wert gespeichert.
+- **Ticket-Texte sind Daten:** Die MCP-Tools kennzeichnen Titel, Beschreibung
+  und Kommentare als Daten, nicht als Anweisungen. In der UI laufen
+  Beschreibung und Kommentare durch `marked` und DOMPurify wie Modellantworten,
+  alles andere wird als Text gesetzt.
+- **Verschlüsselung:** Titel, Beschreibungen, Tags, Kommentare und Verlaufswerte liegen
+  verschlüsselt in der Datenbank (wie Nachrichten, `secret.key`).
+- **Import:** nur mit dem Mensch-Token, höchstens 50 MB, vollständig geprüft
+  vor dem ersten Schreiben. Importierte Kommentare bekommen keine Herkunft,
+  auch wenn der Export einen Autor nennt.
+- **Grenze:** Wie überall gilt die
+  [Grenze des gleichen Benutzers](#grenze-gleicher-betriebssystem-benutzer):
+  Ein Agent, der `api.token` lesen kann, kann auch nach `done` schieben.
+
+Das Board ist eine eigene Umsetzung; Conclave enthält keinen Code aus Kanzo.
+
+## Consultations
+
+Consultations lesen ein Ticket aus dem eigenen Board oder, mit
+`[board] source = "kanzo"`, aus Kanzo, geben es an Remote-Provider und
 schreiben deren Antworten als Kommentar zurück. Ticket-Inhalte sind fremd und
 werden als Daten behandelt:
 
 - **Daten-Block:** Das Ticket steht im Prompt zwischen einer zufälligen
   Begrenzung, die der Ticket-Inhalt nicht vorzeitig schließen kann; die Regeln
   der Conversation sagen, dass sein Inhalt keine Anweisung ist.
-- **Keine Wirkung über das Kommentieren hinaus:** Conclave ruft in Kanzo nur
-  `get_task` und `add_comment` auf. Es setzt bei Consultations keine
+- **Keine Wirkung über das Kommentieren hinaus:** Conclave liest das Ticket
+  und schreibt Kommentare, sonst nichts (in Kanzo nur `get_task` und
+  `add_comment`). Es setzt bei Consultations keine
   `@workspace/`-Dateien in den Prompt ein und führt `@save`/`@read` aus
   Reviewer-Antworten nicht aus – sonst könnte ein Ticket Workspace-Inhalte in
   einen Kommentar schleusen oder Dateien schreiben lassen.
 - **Kennzeichnung:** Jeder Kommentar endet mit „Zweitmeinung von … über
   Conclave, nicht geprüft“ samt Provider, Modell und Kennung. Zeilen, die diese
   Schlusszeile nachahmen, werden aus der Antwort entfernt.
-- **Kein Echtheitsnachweis:** Kanzo hat keine Anmeldung; Autor und
-  Schlusszeile kann jeder schreiben. Die Kennzeichnung schützt vor
+- **Herkunft:** Im eigenen Board schreibt Conclave mit Herkunft `system`; ein
+  Agent kann keinen Kommentar mit dieser Herkunft anlegen. Ein fremder
+  Kommentar, dessen Name nach Conclave aussieht, zählt nicht als Zustellung und
+  steht im Prompt mit seiner Herkunft.
+- **Kein Echtheitsnachweis in Kanzo:** Kanzo hat keine Anmeldung; Autor und
+  Schlusszeile kann dort jeder schreiben. Die Kennzeichnung schützt vor
   Verwechslung, nicht vor Täuschung – Kommentaren mit dieser Kennzeichnung
   nicht mehr vertrauen als anderen Kommentaren.
 - **Keine Rückkopplung:** Frühere Conclave-Kommentare fließen nur mit
   `include_previous: true` in neue Consultations ein, dann ausdrücklich als
   „frühere Modellausgabe“.
-- **Tickets nur für Menschen:** Tickets mit Kanzos `human`-Markierung werden
+- **Tickets nur für Menschen:** Tickets mit der Markierung „nur für Menschen“
+  (in Kanzo `human`) werden
   mit dem Agent-Token abgelehnt, über das MCP-Tool wie über einen direkten
   REST-Aufruf (`403 HumanOnlyTicket`); der Kanal kommt aus dem Token
   (seit v0.5.0). Die bekannte Lücke aus v0.4.0 ist damit geschlossen, soweit
@@ -234,8 +278,8 @@ werden als Daten behandelt:
   höchstens `max_per_hour` Consultations pro Ticket und Stunde, Kommentare
   gekürzt. Nach einem Neustart werden Modelle nie automatisch erneut aufgerufen.
 - **Datenabfluss:** Der Ticket-Inhalt geht an die Provider der Reviewer; die
-  Antwort von `POST /consultations` und jeder Kommentar nennen sie. Mit
-  `kanzo sync` landen die Kommentare im Git-Repository des Kanzo-Boards.
+  Antwort von `POST /consultations` und jeder Kommentar nennen sie. Bei Kanzo
+  landen die Kommentare mit `kanzo sync` im Git-Repository des Kanzo-Boards.
 - Conclave spricht Kanzo (AGPL-3.0) nur über MCP an und enthält keinen Code
   aus Kanzo.
 

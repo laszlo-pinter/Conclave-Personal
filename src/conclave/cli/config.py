@@ -54,6 +54,38 @@ class KanzoSettings:
                    max_per_hour=max_per_hour, comment_max_chars=comment_max_chars)
 
 
+from conclave.domain.board import DEFAULT_STATUSES  # noqa: E402
+
+BOARD_SOURCES = ("internal", "kanzo")
+
+@dataclass(frozen=True)
+class BoardSettings:
+    """Abschnitt [board] in config.toml: die Spalten des Boards (Plan board.md).
+
+    Neue Tickets landen in der ersten Spalte, die letzte gilt als erledigt.
+    ``source`` bestimmt, woher Consultations Tickets lesen (E6): ``internal`` (eigenes
+    Board) oder ``kanzo`` (externes Kanzo unter ``[kanzo] url``). Ohne Angabe gilt
+    ``kanzo`` nur, wenn eine Kanzo-Adresse ausdruecklich gesetzt ist.
+    """
+    statuses: tuple[str, ...] = DEFAULT_STATUSES
+    source: str = "internal"
+
+    @classmethod
+    def from_section(cls, section: dict, kanzo_url_set: bool = False) -> "BoardSettings":
+        from conclave.domain.board import StatusFlow
+        source = section.get("source", "kanzo" if kanzo_url_set else "internal")
+        if source not in BOARD_SOURCES:
+            raise ValueError(f"[board] source muss einer von {list(BOARD_SOURCES)} sein")
+        statuses = section.get("statuses", list(DEFAULT_STATUSES))
+        if not isinstance(statuses, list) or not all(isinstance(s, str) for s in statuses):
+            raise ValueError("[board] statuses muss eine Liste von Spaltennamen sein")
+        try:
+            flow = StatusFlow(tuple(statuses))           # ohne strip(): " todo" ist ungueltig
+        except ValueError as e:
+            raise ValueError(f"[board] statuses: {e}") from None
+        return cls(statuses=flow.statuses, source=source)
+
+
 @dataclass
 class ConclaveConfig:
     db_provider: str = "sqlite"                                  # "sqlite" | "postgres"
@@ -82,6 +114,7 @@ class ConclaveConfig:
     mode: str = "development"  # "development" | "production"
     # Consultations (Kanzo)
     kanzo: KanzoSettings = field(default_factory=KanzoSettings)
+    board: BoardSettings = field(default_factory=BoardSettings)
 
     @classmethod
     def from_sources(
@@ -136,6 +169,8 @@ class ConclaveConfig:
         allowed_hosts = os.environ.get("CONCLAVE_ALLOWED_HOSTS", "")
         mode = os.environ.get("CONCLAVE_MODE", "development")
         kanzo = KanzoSettings.from_section(data.get("kanzo", {}))
+        kanzo_url_set = "url" in data.get("kanzo", {}) or bool(os.environ.get("CONCLAVE_KANZO_URL", "").strip())
+        board = BoardSettings.from_section(data.get("board", {}), kanzo_url_set=kanzo_url_set)
         return cls(
             db_provider=provider,
             db_path=db_path,
@@ -156,6 +191,7 @@ class ConclaveConfig:
             allowed_hosts=allowed_hosts,
             mode=mode,
             kanzo=kanzo,
+            board=board,
         )
 
 

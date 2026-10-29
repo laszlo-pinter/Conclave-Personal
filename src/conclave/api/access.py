@@ -26,6 +26,17 @@ AGENT_ALLOWED = frozenset({
     ("POST", "/workspace/<path:filepath>"),
     ("POST", "/consultations"),
     ("GET", "/consultations/<consultation_id>"),
+}) | frozenset({
+    # Board: genau was die Tools conclave_board_* brauchen (B4). Die feineren Regeln
+    # (letzte Spalte, Markierung, Tickets "nur fuer Menschen") prueft der BoardService.
+    ("GET", "/board/tasks"),
+    ("POST", "/board/tasks"),
+    ("GET", "/board/search"),
+    ("POST", "/board/next"),
+    ("GET", "/board/projects/<slug>/tasks/<int:number>"),
+    ("PATCH", "/board/projects/<slug>/tasks/<int:number>"),
+    ("POST", "/board/projects/<slug>/tasks/<int:number>/comments"),
+    ("GET", "/board/projects/<slug>/tasks/<int:number>/history"),
 })
 
 # Nur mit dem Mensch-Token: Einstellungen, Agents verwalten, Backup/Restore, Logs,
@@ -65,6 +76,17 @@ HUMAN_ONLY = frozenset({
     ("GET", "/conversations/<conversation_id>/messages/<message_id>/context"),
     ("GET", "/conversations/<conversation_id>/participants/<participant_id>/context-preview"),
     ("GET", "/conversations/<conversation_id>/participants/<participant_id>/stream"),
+    # Board: UI-Uebersicht, Projekte verwalten, loeschen, Kommentare aendern, Import
+    ("GET", "/board"),
+    ("GET", "/board/changes"),
+    ("GET", "/board/projects/<slug>/tasks/<int:number>/comments"),
+    ("POST", "/board/projects"),
+    ("PUT", "/board/projects/<slug>"),
+    ("DELETE", "/board/projects/<slug>"),
+    ("DELETE", "/board/projects/<slug>/tasks/<int:number>"),
+    ("PUT", "/board/comments/<comment_id>"),
+    ("DELETE", "/board/comments/<comment_id>"),
+    ("POST", "/board/import"),
 })
 
 # Ohne Token erreichbar (PUBLIC_GET_PATHS und statische Dateien in app.py).

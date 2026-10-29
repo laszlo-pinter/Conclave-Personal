@@ -3,7 +3,7 @@
 ## Ziel
 
 Die Conclave-UI ist für ein persönliches Multi-Agent-Arbeitswerkzeug
-geschnitten. Statt vieler Funktionen in einem Bedienraum gibt es fünf
+geschnitten. Statt vieler Funktionen in einem Bedienraum gibt es sechs
 fachliche Arbeitsräume.
 
 Die UI ist keine Enterprise-Konsole. Sie ist ein lokales Arbeitsstudio für
@@ -14,6 +14,7 @@ einzelne Nutzer.
 - Studio
 - Agents
 - Files (Seitenüberschrift "Workspace")
+- Board
 - Runs
 - Settings
 
@@ -130,7 +131,34 @@ Viewer.
 - Große Dateien werden durch Größenlimits begrenzt (ohne Bestätigungsdialog).
 - Kontext wird nicht automatisch vollständig geladen.
 
-## 4. Runs
+## 4. Board
+
+### Zweck
+
+Arbeitspakete für Mensch und Agenten: was zu tun ist, wer daran arbeitet,
+was ein Agent geändert oder kommentiert hat (siehe
+[Mit dem Board arbeiten](mit-dem-board-arbeiten.md)).
+
+### Inhalte
+
+- Spalten aus `[board] statuses`, Karten mit Referenz, Titel, Tags und
+  Markierung „nur für Menschen“
+- Drag & Drop in eine andere Spalte und innerhalb der Spalte
+- Ticketansicht: Beschreibung (Markdown), Kommentare mit Herkunft („Mensch“,
+  „über Agent“, „Zweitmeinung (Modell)“, „unbekannt“), Verlauf, Status,
+  Markierung, neuer Kommentar
+- Neues Ticket, Suche, Projektauswahl, Schalter „Erledigte zeigen“
+- Live-Aktualisierung: alle 5 Sekunden `GET /board/changes`, nur bei aktivem
+  Bereich und sichtbarer Seite
+
+### Sicherheitsregeln
+
+- Werte aus der API kommen per `textContent` ins DOM; Beschreibung und
+  Kommentare laufen durch `renderMarkdown()` (DOMPurify).
+- Die UI nutzt das Mensch-Token; die Board-Regeln für Agenten setzt der Server
+  durch.
+
+## 5. Runs
 
 ### Zweck
 
@@ -152,7 +180,7 @@ Dauer und Kosten werden nicht angezeigt.
 Der Nutzer sieht, was gelaufen ist, wie viele Tokens es verbraucht hat und
 wo ein Aufruf fehlgeschlagen ist.
 
-## 5. Settings
+## 6. Settings
 
 ### Zweck
 
@@ -202,6 +230,7 @@ src/conclave/assets/static/
       agents.js
       auth.js
       autoloop.js
+      board.js
       context.js
       conversations.js
       export.js

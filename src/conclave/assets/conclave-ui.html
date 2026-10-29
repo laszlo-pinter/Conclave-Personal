@@ -32,6 +32,7 @@
     <button class="sb-tab active" data-action="switch-tab" data-tab="conv" data-i18n="nav.studio">Studio</button>
     <button class="sb-tab" data-action="switch-tab" data-tab="agents" data-i18n="nav.agents">Agents</button>
     <button class="sb-tab" data-action="switch-tab" data-tab="workspace" data-i18n="nav.files">Files</button>
+    <button class="sb-tab" data-action="switch-tab" data-tab="board" data-i18n="nav.board">Board</button>
     <button class="sb-tab" data-action="switch-tab" data-tab="runs" data-i18n="nav.runs">Runs</button>
     <button class="sb-tab" data-action="switch-tab" data-tab="settings" data-i18n="nav.settings">Settings</button>
   </div>
@@ -71,6 +72,14 @@
       <div class="surface-section-title" data-i18n="workspace.export">Export</div>
       <div class="surface-info" data-i18n="conv.choose">Conversation waehlen, dann:</div>
       <button class="btn-full secondary" data-action="export-conv" id="btnExport" disabled data-i18n="workspace.exportConv">Conversation exportieren</button>
+    </div>
+  </div>
+
+  <div class="sb-panel" id="panelBoard">
+    <div class="surface-section">
+      <div class="surface-section-title" data-i18n="board.view">Ansicht</div>
+      <label class="board-check"><input type="checkbox" id="boardShowDone"/> <span data-i18n="board.showDone">Erledigte zeigen</span></label>
+      <div class="surface-info" data-i18n="board.hint">Karten per Drag &amp; Drop verschieben. Das Board aktualisiert sich selbst.</div>
     </div>
   </div>
 
@@ -218,6 +227,24 @@
     </div>
   </div>
 
+  <!-- Board Main Panel -->
+  <div class="messages" id="boardMain" style="display:none">
+    <div class="workspace-page board-page">
+      <div class="page-head">
+        <div>
+          <h2>Board</h2>
+          <p data-i18n="board.subtitle">Arbeitspakete fuer Menschen und Agenten.</p>
+        </div>
+        <div class="page-actions">
+          <select id="boardProject" class="board-input" data-i18n-title="board.project"></select>
+          <input type="search" id="boardSearch" class="board-input" data-i18n-placeholder="board.search" placeholder="Suchen..."/>
+          <button class="btn-full page-action" data-action="board-new" data-i18n="board.new">Neues Ticket</button>
+        </div>
+      </div>
+      <div class="board-columns" id="boardColumns"><div class="surface-empty" data-i18n="common.loading">Lade...</div></div>
+    </div>
+  </div>
+
   <!-- Runs Main Panel -->
   <div class="messages" id="runsMain" style="display:none">
     <div class="workspace-page">
@@ -341,6 +368,56 @@
 </div>
 
 <!-- Modal: Thema setzen -->
+<div class="overlay" id="overlayBoardNew">
+  <div class="modal">
+    <div class="modal-title" data-i18n="board.new">Neues Ticket</div>
+    <div class="field">
+      <label data-i18n="board.project">Projekt</label>
+      <select id="boardNewProject"></select>
+    </div>
+    <div class="field">
+      <label data-i18n="board.title">Titel</label>
+      <input type="text" id="boardNewTitle"/>
+    </div>
+    <div class="field">
+      <label data-i18n="board.description">Beschreibung (Markdown)</label>
+      <textarea id="boardNewDesc"></textarea>
+    </div>
+    <div class="field">
+      <label data-i18n="board.tags">Tags (mit Komma getrennt)</label>
+      <input type="text" id="boardNewTags"/>
+    </div>
+    <label class="board-check"><input type="checkbox" id="boardNewHuman"/> <span data-i18n="board.humanOnly">Nur fuer Menschen</span></label>
+    <div class="modal-acts">
+      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayBoardNew" data-i18n="common.cancel">Abbrechen</button>
+      <button class="btn-confirm" data-action="board-create" data-i18n="common.create">Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlayBoardTask">
+  <div class="modal board-task-modal">
+    <div class="modal-title"><span class="board-ref" id="boardTaskRef"></span> <span id="boardTaskTitle"></span></div>
+    <div class="board-task-meta">
+      <select id="boardTaskStatus" class="board-input" data-i18n-title="board.status"></select>
+      <label class="board-check"><input type="checkbox" id="boardTaskHuman"/> <span data-i18n="board.humanOnly">Nur fuer Menschen</span></label>
+      <div class="board-tags" id="boardTaskTags"></div>
+    </div>
+    <div class="board-task-desc msg-content" id="boardTaskDesc"></div>
+    <div class="workbench-title" data-i18n="board.comments">Kommentare</div>
+    <div id="boardTaskComments"></div>
+    <div class="field board-comment-new">
+      <textarea id="boardCommentBody" data-i18n-placeholder="board.commentPlaceholder" placeholder="Kommentar (Markdown)"></textarea>
+    </div>
+    <div class="workbench-title" data-i18n="board.history">Verlauf</div>
+    <div id="boardTaskHistory"></div>
+    <div class="modal-acts">
+      <button class="btn-cancel" data-action="board-close-task" data-i18n="board.close">Schliessen</button>
+      <button class="btn-confirm" data-action="board-comment" data-i18n="board.addComment">Kommentieren</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="overlayTopic">
   <div class="modal">
     <div class="modal-title" data-i18n="topic.set">Thema setzen</div>
@@ -564,6 +641,7 @@
 <script src="static/js/features/speech.js"></script>
 <script src="static/js/features/workspace.js"></script>
 <script src="static/js/features/usage.js"></script>
+<script src="static/js/features/board.js"></script>
 <script src="static/js/features/runs.js"></script>
 <script src="static/js/features/settings.js"></script>
 <script src="static/js/main.js"></script>

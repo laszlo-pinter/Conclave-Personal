@@ -12,7 +12,8 @@ pytest.importorskip("mcp")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "infrastructure" / "kanzo"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "application"))
 
-from fake_kanzo import FakeKanzo, FakeTask  # noqa: E402
+from consultation_backends import BACKENDS, make_backend  # noqa: E402
+from fake_kanzo import FakeTask  # noqa: E402
 from test_consultation_service import FakeReviewer  # noqa: E402
 
 from conclave.api.app import create_app  # noqa: E402
@@ -34,8 +35,8 @@ class Env:
     pass
 
 
-@pytest.fixture
-def env(tmp_path, monkeypatch):
+@pytest.fixture(params=BACKENDS)
+def env(request, tmp_path, monkeypatch):
     from conclave.cli.bootstrap import build_service
     from conclave.cli.config import ConclaveConfig
     from conclave.infrastructure.sqlite.connection import ThreadLocalConnection
@@ -51,15 +52,14 @@ def env(tmp_path, monkeypatch):
         registry.register(pid, adapter)
     flow.set_adapter_registry(registry)
 
-    kanzo = FakeKanzo()
+    kanzo, tickets, source = make_backend(request.param, conn)
     kanzo.add(FakeTask("api", 12, "Login bleibt leer", description="Seite leer"))
     kanzo.add(FakeTask("api", 20, "Privat", human=True))
-    adapter = KanzoMcpAdapter(kanzo.server)
     repo = SQLiteConsultationRepository(conn, autocommit=True)
-    processor = ConsultationService(flow, repo, adapter, adapter, reviewer_name=str.upper)
+    processor = ConsultationService(flow, repo, tickets, tickets, reviewer_name=str.upper)
     worker = ConsultationWorker(repo, processor)
-    requests = ConsultationRequests(repo, worker, adapter, allowed_reviewers=("gpt", "claude"),
-                                    max_per_hour=3, provider_label=processor.provider_label)
+    requests = ConsultationRequests(repo, worker, tickets, allowed_reviewers=("gpt", "claude"),
+                                    max_per_hour=3, provider_label=processor.provider_label, source=source)
     app = create_app(CLIHandler(flow), consultations=requests,
                      auth_service=StaticKeyAuthService(HUMAN_TOKEN, AGENT_TOKEN))
     app.config["TESTING"] = True
@@ -70,6 +70,7 @@ def env(tmp_path, monkeypatch):
     e.client.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {HUMAN_TOKEN}"
     e.agent.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {AGENT_TOKEN}"
     e.kanzo, e.repo, e.worker, e.reviewers, e.requests = kanzo, repo, worker, reviewers, requests
+    e.backend, e.source = request.param, source
     yield e
     worker.stop()
 
@@ -111,7 +112,7 @@ def test_subset_of_reviewers(env):
 def test_invalid_requests(env, body, error_type):
     resp = _create(env, **body)
     assert resp.status_code == 400 and resp.get_json()["type"] == error_type
-    assert env.repo.list_by_source_ref("kanzo", "api#12") == []
+    assert env.repo.list_by_source_ref(env.source, "api#12") == []
 
 
 def test_body_must_be_json_object(env):
@@ -130,14 +131,14 @@ def test_limit_per_ticket_and_hour_counted_at_post(env):
 def test_unknown_ticket_is_404_before_anything_is_stored(env):
     resp = _create(env, task="api#99")
     assert resp.status_code == 404
-    assert env.repo.list_by_source_ref("kanzo", "api#99") == []
+    assert env.repo.list_by_source_ref(env.source, "api#99") == []
 
 
 def test_human_ticket_rejected_for_agent_token_but_allowed_for_human_token(env):
     """Z3: die Luecke aus v0.4.0 - auch ein direkter REST-Aufruf mit dem Agent-Token wird abgelehnt."""
     resp = _create(env, client=env.agent, task="api#20")
     assert resp.status_code == 403 and resp.get_json()["type"] == "HumanOnlyTicket"
-    assert env.repo.list_by_source_ref("kanzo", "api#20") == []              # nichts gespeichert
+    assert env.repo.list_by_source_ref(env.source, "api#20") == []              # nichts gespeichert
     resp = _create(env, task="api#20")
     assert resp.status_code == 202 and resp.get_json()["channel"] == "human"
 
@@ -153,7 +154,7 @@ def test_channel_in_body_is_rejected(env, channel):
     for client in (env.client, env.agent):
         resp = _create(env, client=client, task="api#20", channel=channel)
         assert resp.status_code == 400 and resp.get_json()["type"] == "ChannelNotAllowed"
-    assert env.repo.list_by_source_ref("kanzo", "api#20") == []
+    assert env.repo.list_by_source_ref(env.source, "api#20") == []
 
 
 def test_rerun_takes_channel_of_whoever_retries(env):
@@ -269,3 +270,37 @@ def test_build_app_registers_worker_without_starting_it(tmp_path, monkeypatch):
     client = app.test_client()
     headers = {"Authorization": f"Bearer {(tmp_path / 't').read_text().strip()}"}
     assert client.get("/consultations?source_ref=api%231", headers=headers).status_code == 200
+
+
+
+# ── B6: Quelle aus [board] source ─────────────────────────────────────────
+
+@pytest.mark.parametrize("source, expected", [("internal", "board"), ("kanzo", "kanzo")])
+def test_build_app_picks_the_ticket_source(tmp_path, monkeypatch, source, expected):
+    from conclave.api.server import _build_app
+    from conclave.application.board_consultations import BoardTaskSource
+    from conclave.cli.config import BoardSettings, ConclaveConfig, KanzoSettings
+
+    for name, value in (("CONCLAVE_WORKSPACE", tmp_path / "ws"), ("CONCLAVE_SECRET_KEY_FILE", tmp_path / "k"),
+                        ("CONCLAVE_API_TOKEN_FILE", tmp_path / "t"), ("CONCLAVE_AGENT_TOKEN_FILE", tmp_path / "a")):
+        monkeypatch.setenv(name, str(value))
+    monkeypatch.delenv("CONCLAVE_API_KEY", raising=False)
+    monkeypatch.delenv("CONCLAVE_AGENT_KEY", raising=False)
+    config = ConclaveConfig(db_path=tmp_path / "c.db", kanzo=KanzoSettings(reviewers=("gpt",)),
+                            board=BoardSettings(source=source))
+    app, _ = _build_app(config)
+    [worker] = app.extensions["conclave_workers"]
+    processor = worker._processor
+    assert isinstance(processor._source, BoardTaskSource if source == "internal" else KanzoMcpAdapter)
+    assert processor._sink is processor._source
+
+    client = app.test_client()
+    human = {"Authorization": f"Bearer {(tmp_path / 't').read_text().strip()}"}
+    agent = {"Authorization": f"Bearer {(tmp_path / 'a').read_text().strip()}"}
+    if source == "internal":
+        client.post("/board/projects", json={"slug": "api", "name": "API"}, headers=human)
+        client.post("/board/tasks", json={"project": "api", "title": "Privat", "human": True}, headers=human)
+        resp = client.post("/consultations", json={"task": "api#1", "question": "?"}, headers=agent)
+        assert resp.status_code == 403 and resp.get_json()["type"] == "HumanOnlyTicket"
+        resp = client.post("/consultations", json={"task": "api#1", "question": "?"}, headers=human)
+        assert resp.status_code == 202 and resp.get_json()["source"] == expected

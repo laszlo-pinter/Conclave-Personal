@@ -152,6 +152,8 @@ Aus der TOML-Datei werden nur diese Schlüssel gelesen; alles andere ist nur
   Vorrang hat `CONCLAVE_DB_PATH`, dann `path`, dann der Plattformdefault
   (für alle Einstiegspunkte).
 - `[server]` `rate_limit`
+- `[board]` `statuses`, `source` (Board und Quelle der Consultations, siehe
+  unten)
 - `[kanzo]` `url`, `reviewers`, `max_per_hour`, `comment_max_chars`
   (Consultations, siehe unten)
 - `[participants]` (Altbestand, siehe unten)
@@ -171,8 +173,14 @@ path = "/pfad/zur/conclave.db"
 # CONCLAVE_RATE_LIMIT hat Vorrang.
 rate_limit = "120 per minute"
 
+[board]
+# Spalten des Boards: neue Tickets in die erste, die letzte gilt als erledigt
+statuses = ["todo", "doing", "review", "done"]
+# Woher Consultations Tickets lesen: "internal" (eigenes Board) oder "kanzo"
+source = "internal"
+
 [kanzo]
-# Consultations: Zweitmeinung zu Kanzo-Tickets (siehe unten)
+# Consultations: Reviewer und Grenzen; url nur fuer ein externes Kanzo
 url = "http://localhost:4242/mcp"
 reviewers = ["gpt", "claude"]
 max_per_hour = 3
@@ -192,20 +200,37 @@ keinen Agent mit dieser ID gibt. Gelesen werden nur `name`, `provider`,
 `model` und `system_prompt`; API-Keys kommen nicht aus der TOML-Datei.
 Danach werden Agents über UI, API oder CLI verwaltet.
 
-## Consultations (Kanzo)
+## Board
 
-Consultations holen eine Zweitmeinung zu einem Ticket aus
-[Kanzo](https://github.com/emanuele-em/kanzo) (siehe
-[API-Referenz](api.md#consultations)). Eingestellt wird das nur in
-`config.toml`; die API nimmt keine Ziel-Adresse an.
+Das eigene Board (siehe [Mit dem Board arbeiten](../mit-dem-board-arbeiten.md)).
 
 | Schlüssel | Default | Bedeutung |
 |---|---|---|
-| `url` | `http://localhost:4242/mcp` | Kanzos MCP-Endpunkt (`mcp_http = true` in Kanzos Konfiguration, das ist dort der Default). Umgebungsvariable `CONCLAVE_KANZO_URL` hat Vorrang. Nur `http://` oder `https://`. |
+| `statuses` | `["todo", "doing", "review", "done"]` | Spalten in dieser Reihenfolge, mindestens zwei, ohne Doppelte; Namen aus Kleinbuchstaben, Ziffern und `-` (höchstens 40 Zeichen). Neue Tickets landen in der ersten, die letzte gilt als erledigt (nur der Mensch schiebt dorthin). `next_task` schiebt von der ersten in die zweite. |
+| `source` | `internal`, oder `kanzo`, wenn `[kanzo] url` bzw. `CONCLAVE_KANZO_URL` gesetzt ist | Woher Consultations Tickets lesen: `internal` (eigenes Board, Kommentare mit Herkunft `system`) oder `kanzo` (externes Kanzo unter `[kanzo] url`). |
+
+Spalten nachträglich umzubenennen ändert gespeicherte Tickets nicht: Tickets
+mit einem Status, der nicht mehr in `statuses` steht, zeigt die UI nicht an,
+bis die Spalte wieder da ist.
+
+Das Board braucht SQLite ab Version 3.35 (bei Python 3.11 und 3.12 üblich)
+oder PostgreSQL.
+
+## Consultations
+
+Consultations holen eine Zweitmeinung zu einem Ticket aus dem eigenen Board
+oder aus [Kanzo](https://github.com/emanuele-em/kanzo) (`[board] source`,
+siehe oben und [API-Referenz](api.md#consultations)). Eingestellt wird das
+nur in `config.toml`; die API nimmt keine Ziel-Adresse an.
+
+| Schlüssel | Default | Bedeutung |
+|---|---|---|
+| `url` | `http://localhost:4242/mcp` | Nur mit `[board] source = "kanzo"`: Kanzos MCP-Endpunkt (`mcp_http = true` in Kanzos Konfiguration, das ist dort der Default). Umgebungsvariable `CONCLAVE_KANZO_URL` hat Vorrang. Nur `http://` oder `https://`. |
 | `reviewers` | leer | Agent-IDs, die als Reviewer erlaubt sind – also wer Ticket-Inhalte zu sehen bekommt. **Leer = Consultations sind aus.** |
 | `max_per_hour` | `3` | Höchstens so viele Consultations pro Ticket und Stunde (gezählt beim Anlegen). |
 | `comment_max_chars` | `2000` | Kommentare werden auf diese Länge gekürzt (mindestens 200), die Schlusszeile kommt danach. |
 
 Die Consultations laufen in einem Hintergrund-Thread des Servers
 (`conclave desktop`, `conclave server`, `conclave-api`). Für die Verbindung zu
-Kanzo braucht der Server das MCP-SDK: `pip install "conclave-personal[mcp]"`.
+Kanzo braucht der Server das MCP-SDK: `pip install "conclave-personal[mcp]"`;
+für das eigene Board nicht.

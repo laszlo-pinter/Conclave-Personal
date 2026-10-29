@@ -1,6 +1,6 @@
 # API-Referenz
 
-**55 dokumentierte Endpoints** — öffentliche Personal-API.
+**73 dokumentierte Endpoints** — öffentliche Personal-API.
 
 Alle Endpoints außer `GET /`, `/static/*`, `GET /health`, `GET /api-docs` und
 `GET /openapi.json` verlangen ein Token (`Authorization: Bearer <token>` oder
@@ -29,6 +29,11 @@ Mit dem Agent-Token sind nur die Routen erlaubt, die die MCP-Tools brauchen:
 - `GET /agents`, `GET /usage`
 - `GET /workspace`, `GET`/`POST /workspace/<path>`
 - `POST /consultations`, `GET /consultations/<id>`
+- Board: `GET`/`POST /board/tasks`, `GET /board/search`, `POST /board/next`,
+  `GET`/`PATCH /board/projects/<slug>/tasks/<n>`,
+  `POST /board/projects/<slug>/tasks/<n>/comments`,
+  `GET /board/projects/<slug>/tasks/<n>/history` (die feineren Regeln prüft das
+  Board selbst, siehe [Board](#board))
 
 Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 `{"type": "HumanOnly", "error": "Nur für den Menschen-Zugang."}`.
@@ -62,7 +67,7 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `GET` | `/conversations/<conversation_id>/messages/<message_id>/context` | Vollständiger Kontext-Report einer Modellantwort (siehe unten). |
 | `GET` | `/conversations/<conversation_id>/participants/<participant_id>/context-preview` | Vorschau: welcher Kontext beim nächsten Aufruf gesendet würde, ohne Provider-Aufruf. |
 | `GET` | `/conversations/<conversation_id>/tool-events` | List Tool Events |
-| `POST` | `/consultations` | Zweitmeinung zu einem Kanzo-Ticket anfordern (`202`, siehe unten). |
+| `POST` | `/consultations` | Zweitmeinung zu einem Ticket anfordern (`202`, siehe unten). |
 | `GET` | `/consultations` | Consultations zu einem Ticket (`?source_ref=api#12`, URL-kodiert). |
 | `GET` | `/consultations/<consultation_id>` | Status, Reviewer mit Provider, Zustellungen. |
 | `POST` | `/consultations/<consultation_id>/retry` | Offene Zustellungen erneut; `rerun: true` ruft die Modelle erneut auf. |
@@ -90,8 +95,26 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `GET` | `/workspace/<path:filepath>` | Liest eine Datei aus dem Workspace. |
 | `POST` | `/workspace/<path:filepath>` | Schreibt eine Datei in den Workspace. |
 | `DELETE` | `/workspace/<path:filepath>` | Löscht eine Datei aus dem Workspace. |
+| `GET` | `/board` | Spalten, Projekte und Änderungszähler (nur Mensch). |
+| `GET` | `/board/changes` | Änderungszähler; die UI lädt neu, wenn er steigt (nur Mensch). |
+| `POST` | `/board/projects` | Projekt anlegen (nur Mensch). |
+| `PUT` | `/board/projects/<slug>` | Projekt umbenennen (nur Mensch). |
+| `DELETE` | `/board/projects/<slug>` | Projekt samt Tickets löschen (nur Mensch). |
+| `GET` | `/board/tasks` | Tickets in Board-Reihenfolge; Filter `project`, `status` (mehrfach), `include_done`. |
+| `POST` | `/board/tasks` | Ticket anlegen; neue Tickets landen in der ersten Spalte. |
+| `GET` | `/board/search` | Suche in Titel, Tags, Beschreibung und Kommentaren (`q`, `project`, `include_done`). |
+| `POST` | `/board/next` | Oberstes freies Ticket der ersten Spalte übernehmen (atomar). |
+| `GET` | `/board/projects/<slug>/tasks/<int:number>` | Ein Ticket mit Kommentaren. |
+| `PATCH` | `/board/projects/<slug>/tasks/<int:number>` | Ticket ändern: `title`, `description`, `tags`, `status`, `human`, `index`. |
+| `DELETE` | `/board/projects/<slug>/tasks/<int:number>` | Ticket löschen (nur Mensch). |
+| `GET` | `/board/projects/<slug>/tasks/<int:number>/comments` | Kommentare mit Herkunft (nur Mensch; Agenten lesen sie über das Ticket). |
+| `POST` | `/board/projects/<slug>/tasks/<int:number>/comments` | Kommentar schreiben; die Herkunft kommt aus dem Token. |
+| `GET` | `/board/projects/<slug>/tasks/<int:number>/history` | Verlauf (Status, Titel, Beschreibung, Markierung). |
+| `PUT` | `/board/comments/<comment_id>` | Eigenen Kommentar ändern (nur Mensch). |
+| `DELETE` | `/board/comments/<comment_id>` | Eigenen Kommentar löschen (nur Mensch). |
+| `POST` | `/board/import` | JSON-Export eines Kanzo-Boards übernehmen (nur Mensch, idempotent). |
 
-*Stand: v0.2.0 (2026-10-26), abgeglichen mit `openapi.json`*
+*Stand: v0.6.0 (2026-10-29), abgeglichen mit `openapi.json`*
 
 ## Kontext-Reports
 
@@ -135,11 +158,13 @@ kein Datenfehler.
 ## Consultations
 
 Eine Consultation holt eine Zweitmeinung mehrerer Reviewer-Modelle zu einem
-Ticket aus [Kanzo](https://github.com/emanuele-em/kanzo) und schreibt jede
-Antwort als Kommentar in das Ticket. Voraussetzung: `[kanzo]` in
-`config.toml` mit `reviewers` (siehe [Konfiguration](konfiguration.md#consultations-kanzo));
+Ticket und schreibt jede Antwort als Kommentar in das Ticket. Die Tickets kommen
+aus dem eigenen [Board](#board) (Kommentare mit Herkunft `system`) oder, mit
+`[board] source = "kanzo"`, aus [Kanzo](https://github.com/emanuele-em/kanzo).
+Voraussetzung: `[kanzo] reviewers` in `config.toml` (siehe
+[Konfiguration](konfiguration.md#consultations));
 ohne Reviewer-Liste antworten die Endpunkte mit `503`
-(`ConsultationsDisabled`). Sicherheit: [Sicherheit](../sicherheit.md#consultations-kanzo).
+(`ConsultationsDisabled`). Sicherheit: [Sicherheit](../sicherheit.md#consultations).
 
 `POST /consultations`:
 
@@ -168,7 +193,7 @@ Ausgabeformat), `503` (nicht eingerichtet). Bei diesen Fehlern wird nichts
 gespeichert.
 
 Ablauf im Hintergrund: Conclave legt die Conversation
-`kanzo:<task> · <id>` an, fragt alle Reviewer parallel und stellt jede Antwort
+`board:<task> · <id>` (bzw. `kanzo:<task> · <id>`) an, fragt alle Reviewer parallel und stellt jede Antwort
 als Kommentar zu. Status: `queued` → `running` → `done` | `failed`; nach einem
 Server-Neustart wird `running` zu `interrupted`. Jeder Kommentar endet mit einer
 Schlusszeile wie
@@ -193,6 +218,58 @@ Verweis auf die Conversation); die Schlusszeile bleibt immer erhalten.
 
 Nach einem Neustart stellt Conclave gespeicherte, aber nicht zugestellte
 Antworten automatisch zu. Modelle werden nie automatisch erneut aufgerufen.
+
+## Board
+
+Arbeitspakete für Menschen und Agenten (Anleitung:
+[Mit dem Board arbeiten](../mit-dem-board-arbeiten.md)). Tickets heißen
+`projekt#nummer` und liegen unter `/board/projects/<slug>/tasks/<nummer>`.
+Spalten aus `[board] statuses` (siehe [Konfiguration](konfiguration.md#board)).
+
+Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
+
+```json
+{"ref": "api#12", "project": "api", "number": 12, "title": "Login reparieren",
+ "description": "## Abnahme\n...", "tags": ["ui"], "status": "doing",
+ "position": 1024.0, "human": false, "assignee": null, "version": 3,
+ "created_at": "...", "updated_at": "..."}
+```
+
+- **Anlegen** `POST /board/tasks`: `project` und `title` Pflicht, optional
+  `description`, `tags`, `human`, `status` (Standard: erste Spalte).
+- **Ändern** `PATCH`: nur übergebene Felder; `index` setzt die Position in der
+  (neuen) Spalte, gezählt ohne das Ticket selbst. Unbekannte Felder ergeben
+  `400`.
+- **`POST /board/next`** (`{"project": "api"}` optional): schiebt das oberste
+  Ticket der ersten Spalte ohne Markierung „nur für Menschen“ atomar in die
+  zweite und liefert es (`{"task": ...}`, `null` wenn keines frei ist).
+- **Kommentare** `POST .../comments` mit `body` (Markdown), optional
+  `author_name` (Anzeigename). `origin` (`human`/`agent`/`system`/`null`) und
+  `actor_id` setzt der Server aus dem Token; solche Felder im Body werden
+  ignoriert.
+- **Verlauf** `GET .../history`: `field`, `old`, `new` (vollständig), `origin`,
+  `actor_id`, `created_at`.
+
+Regeln für das Agent-Token (Fehler `403 HumanOnly`): nicht nach oder aus der
+letzten Spalte schieben, erledigte Tickets nur lesen und kommentieren, keine
+erledigten Tickets anlegen, Tickets „nur für Menschen“ nur lesen, die
+Markierung setzen, aber nicht entfernen. Kommentare ändern und löschen nur der
+Mensch und nur eigene. Gleichzeitige Änderungen am selben Ticket: `409
+Conflict`.
+
+**Import** `POST /board/import` (nur Mensch) nimmt die Ausgabe von
+`kanzo export -f json` an, höchstens 50 MB (`413 ImportTooLarge`). Der Export
+wird vollständig geprüft, bevor etwas geschrieben wird (`400
+ImportFormatError`). Antwort:
+
+```json
+{"projects_created": 1, "tasks_imported": 12, "tasks_skipped": 0,
+ "comments_imported": 30, "skipped_refs": []}
+```
+
+Ticket-Nummern bleiben erhalten; vorhandene Tickets werden übersprungen, ohne
+neue Kommentare nachzutragen. Importierte Kommentare haben `origin: null`,
+importierte Tickets keinen Verlauf.
 
 ## Backup und Restore
 
@@ -244,16 +321,20 @@ Fehler kommen als JSON `{"error": "...", "type": "..."}`. Wichtige Codes:
   bei Participants ein `type` außer `model`/`user`
 - `401` — Token fehlt oder ist falsch
 - `403` — `HumanOnly`: Route nur mit dem Mensch-Token (siehe
-  [Mensch- und Agent-Zugang](#mensch--und-agent-zugang)); `HumanOnlyTicket`:
-  Consultation auf ein Ticket nur für Menschen mit dem Agent-Token
-- `404` — Conversation, Participant, Agent, Run oder Datei nicht gefunden
-  (auch Invoke in einer unbekannten Conversation)
-- `409` — Konflikt (z. B. Agent/Participant existiert bereits, kein Rederecht,
-  Rate-Limit durch `CONCLAVE_RATE_LIMIT` gesperrt)
+  [Mensch- und Agent-Zugang](#mensch--und-agent-zugang)) oder Board-Regel
+  (siehe [Board](#board)); `HumanOnlyTicket`: Consultation auf ein Ticket nur
+  für Menschen mit dem Agent-Token
+- `404` — Conversation, Participant, Agent, Run, Datei, Projekt, Ticket oder
+  Kommentar nicht gefunden (auch Invoke in einer unbekannten Conversation)
+- `409` — Konflikt (z. B. Agent/Participant/Projekt existiert bereits, kein
+  Rederecht, Ticket inzwischen geändert, Rate-Limit durch
+  `CONCLAVE_RATE_LIMIT` gesperrt)
+- `413` — Board-Import größer als 50 MB (`ImportTooLarge`)
 - `415` — POST ohne JSON bzw. `X-Conclave-Client`; Binärdatei im Workspace
 - `421` — `Host`-Header nicht erlaubt
 - `429` — eigenes Rate-Limit überschritten (`RateLimitExceeded`) oder
   Provider-Rate-Limit nach ausgeschöpften Retries (`ProviderRateLimit`)
 - `502` — Provider-Fehler (`ProviderUnavailable` u. a.), kein Adapter
   (`AdapterNotFound`)
+- `503` — Board oder Consultations in dieser Instanz nicht verfügbar
 - `504` — Provider-Timeout (`ProviderTimeout`)

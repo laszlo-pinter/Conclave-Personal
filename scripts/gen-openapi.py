@@ -26,6 +26,11 @@ _MESSAGE = {"type": "object", "properties": {
 }}
 
 SCHEMAS = {
+    ("POST", "/board/import"): {
+        "errors": {"400": "Export ungueltig (ImportFormatError), es wurde nichts geschrieben",
+                   "403": "HumanOnly: nur mit dem Mensch-Token",
+                   "413": "ImportTooLarge: Export groesser als 50 MB"},
+    },
     ("GET", "/conversations/<conversation_id>"): {
         "response": {"required": ["id", "messages"], "properties": {
             "id": {"type": "string"}, "status": {"type": "string"},
@@ -310,7 +315,7 @@ def _project_version() -> str:
 
 def extract_routes(source: str) -> list[dict]:
     pattern = re.compile(
-        r'@app\.(get|post|put|delete)\(["\']([^"\']+)["\']\)\s*\n'
+        r'@app\.(get|post|put|patch|delete)\(["\']([^"\']+)["\']\)\s*\n'
         r'\s*def\s+(\w+)\(.*?\):\s*\n'
         r'(?:\s*"""(.*?)""")?',
         re.DOTALL,
@@ -326,8 +331,14 @@ def extract_routes(source: str) -> list[dict]:
 
 
 def flask_to_openapi_path(path: str) -> str:
-    """Konvertiert Flask-Pfad (<param>) zu OpenAPI-Pfad ({param})."""
-    return re.sub(r'<(?:path:)?(\w+)>', r'{\1}', path)
+    """Konvertiert Flask-Pfad (<param>, <conv:param>) zu OpenAPI-Pfad ({param})."""
+    return re.sub(r'<(?:\w+:)?(\w+)>', r'{\1}', path)
+
+
+def path_param_types(path: str) -> dict[str, str]:
+    """OpenAPI-Typ je Pfad-Parameter: <int:x> -> integer, sonst string."""
+    return {name: ("integer" if conv == "int" else "string")
+            for conv, name in re.findall(r'<(?:(\w+):)?(\w+)>', path)}
 
 
 def build_spec(routes: list[dict]) -> dict:
@@ -368,9 +379,10 @@ def build_spec(routes: list[dict]) -> dict:
 
         # Path-Parameter extrahieren
         params = re.findall(r'\{(\w+)\}', oapi_path)
+        types = path_param_types(r["path"])
         if params:
             operation["parameters"] = [
-                {"name": p, "in": "path", "required": True, "schema": {"type": "string"}}
+                {"name": p, "in": "path", "required": True, "schema": {"type": types.get(p, "string")}}
                 for p in params
             ]
 
@@ -385,8 +397,8 @@ def build_spec(routes: list[dict]) -> dict:
                 "content": {"application/json": {"schema": {"type": "object", **req_schema}}},
             }
 
-        if method in ("post", "put", "delete"):
-            if "requestBody" not in operation and method in ("post", "put"):
+        if method in ("post", "put", "patch", "delete"):
+            if "requestBody" not in operation and method in ("post", "put", "patch"):
                 operation["requestBody"] = {
                     "content": {"application/json": {"schema": {"type": "object"}}},
                 }

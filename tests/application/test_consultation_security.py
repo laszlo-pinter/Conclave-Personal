@@ -117,10 +117,12 @@ def test_task_ref_variants_cannot_bypass_the_limit(env, ref):
 
 
 def test_ambiguous_ticket_format_fails_closed_at_post(env):
+    if env.backend == "board":
+        pytest.skip("Textformat gibt es nur bei Kanzo; das eigene Board liefert Felder")
     env.kanzo.add(FakeTask("api", 7, "T", human=True, description="status: todo, created 2026-10-27 20:12 UTC"))
     resp = env.client.post("/consultations", json={"task": "api#7", "question": "?"})
     assert resp.status_code == 502 and "TaskFormatError" in resp.get_json()["type"]
-    assert env.repo.list_by_source_ref("kanzo", "api#7") == []
+    assert env.repo.list_by_source_ref(env.source, "api#7") == []
 
 
 def test_requested_by_is_bounded(env):
@@ -131,6 +133,8 @@ def test_requested_by_is_bounded(env):
 
 def test_foreign_comment_with_predicted_marker_does_not_suppress_delivery(env):
     """Kennt ein Agent die ID, kann er die Kennung vorwegnehmen - zaehlen nur Kommentare des erwarteten Autors."""
+    if env.backend == "board":
+        pytest.skip("Kanzo-Kommentare lassen sich frei setzen; Board-Variante in test_consultation_service")
     from conclave.domain.consultation import PENDING
 
     cid = env.client.post("/consultations", json={"task": "api#12", "question": "?",

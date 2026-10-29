@@ -3,7 +3,7 @@
   "info": {
     "title": "Conclave API",
     "description": "Host-gesteuertes Multi-Model-Konversationssystem",
-    "version": "0.5.1"
+    "version": "0.6.0"
   },
   "servers": [
     {
@@ -1875,6 +1875,512 @@
                     "description": "true: Modelle erneut aufrufen (neue Consultation)"
                   }
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/board": {
+      "get": {
+        "summary": "Spalten, Projekte und Aenderungszaehler des Boards.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_overview",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
+      }
+    },
+    "/board/changes": {
+      "get": {
+        "summary": "Aenderungszaehler; die UI laedt neu, wenn er steigt.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_changes",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
+      }
+    },
+    "/board/projects": {
+      "post": {
+        "summary": "Projekt anlegen (Freigabe-Recht).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_create_project",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/board/projects/{slug}": {
+      "put": {
+        "summary": "Projekt umbenennen (Freigabe-Recht).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_rename_project",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Projekt samt Tickets loeschen (Freigabe-Recht).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_delete_project",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/board/tasks": {
+      "get": {
+        "summary": "Tickets in Board-Reihenfolge; Filter project, status (mehrfach), include_done.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_list_tasks",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        }
+      },
+      "post": {
+        "summary": "Ticket anlegen; neue Tickets landen in der ersten Spalte.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_create_task",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/board/search": {
+      "get": {
+        "summary": "Suche in Titel, Tags, Beschreibung und Kommentaren.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_search",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        }
+      }
+    },
+    "/board/next": {
+      "post": {
+        "summary": "Oberstes freies Ticket der ersten Spalte uebernehmen (atomar).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_next_task",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/board/projects/{slug}/tasks/{number}": {
+      "get": {
+        "summary": "Ein Ticket mit Kommentaren.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_get_task",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "summary": "Ticket aendern: title, description, tags, status, human, index (Position in der Spalte).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_update_task",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Ticket loeschen (Freigabe-Recht).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_delete_task",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/board/projects/{slug}/tasks/{number}/comments": {
+      "get": {
+        "summary": "Kommentare eines Tickets mit Herkunft.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_list_comments",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      },
+      "post": {
+        "summary": "Kommentar schreiben; die Herkunft kommt aus dem Token.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_add_comment",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/board/projects/{slug}/tasks/{number}/history": {
+      "get": {
+        "summary": "Verlauf eines Tickets (Status, Titel, Beschreibung, Markierung).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_history",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/board/comments/{comment_id}": {
+      "put": {
+        "summary": "Eigenen Kommentar aendern (nur Mensch).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_edit_comment",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "comment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Eigenen Kommentar loeschen (nur Mensch).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_delete_comment",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "comment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/board/import": {
+      "post": {
+        "summary": "JSON-Export eines Boards uebernehmen (Freigabe-Recht, idempotent).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_import",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Export ungueltig (ImportFormatError), es wurde nichts geschrieben"
+          },
+          "403": {
+            "description": "HumanOnly: nur mit dem Mensch-Token"
+          },
+          "413": {
+            "description": "ImportTooLarge: Export groesser als 50 MB"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
               }
             }
           }
