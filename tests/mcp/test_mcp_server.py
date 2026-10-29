@@ -351,3 +351,10 @@ def test_consult_on_human_only_board_ticket_is_rejected_for_the_agent(tmp_path, 
     finally:
         srv.shutdown()
         thread.join(timeout=5)
+
+
+def test_instructions_name_the_conclave_board_as_authoritative():
+    """B8: nach dem Umzug gilt nur noch das Board in Conclave."""
+    text = server.mcp.instructions or ""
+    assert "massgebliche Ort fuer Arbeitspakete" in text and "nicht parallel" in text
+    assert "festgelegt hat" not in text                    # Uebergangsregel aus B4 entfaellt
