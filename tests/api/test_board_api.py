@@ -1,6 +1,5 @@
 """B3: Board-REST-API mit Mensch- und Agent-Token, Import aus einem JSON-Export."""
 
-import copy
 import json
 import os
 from pathlib import Path
@@ -17,30 +16,6 @@ AGENT = "cva_agent-token"
 # Echter Export (nur lokal, Kopie im Scratchpad): CONCLAVE_TEST_BOARD_EXPORT=<pfad>
 REAL_EXPORT = os.environ.get("CONCLAVE_TEST_BOARD_EXPORT", "")
 
-SAMPLE_EXPORT = {
-    "exported_at": "2026-10-29T17:39:07Z",
-    "statuses": ["todo", "doing", "review", "done"],
-    "projects": [{
-        "id": 1, "slug": "conclave", "name": "conclave", "repos": ["x/y"], "color": None,
-        "created_at": "2026-10-28T16:08:38Z", "open": 2, "total": 3,
-        "tasks": [
-            {"id": 7, "key": "conclave#7", "title": "Z2", "description": "## Ziel\nRechte", "tags": ["zugaenge"],
-             "human": False, "images": [], "status": "done", "created_at": "2026-10-28T18:51:00Z",
-             "updated_at": "2026-10-28T20:00:00Z",
-             "comments": [
-                 {"id": "2", "task_id": "7", "author": "CD · auto-review", "body": "in Ordnung",
-                  "created_at": "2026-10-28T19:56:00Z"},
-                 {"id": "1", "task_id": "7", "author": "cc", "body": "fertig", "created_at": "2026-10-28T19:55:00Z"}]},
-            {"id": 13, "key": "conclave#13", "title": "Migrations-Runner", "description": "", "tags": [],
-             "human": True, "images": [], "status": "todo", "created_at": "2026-10-28T23:09:28Z",
-             "updated_at": "2026-10-28T23:09:28Z", "comments": []},
-            {"id": 2, "key": "conclave#2", "title": "E1", "description": "Frage", "tags": ["entscheidung"],
-             "human": True, "images": [], "status": "done", "created_at": "2026-10-28T18:50:00Z",
-             "updated_at": "2026-10-28T19:00:00Z", "comments": [
-                 {"id": "3", "task_id": "2", "author": "me", "body": "(a)", "created_at": "2026-10-28T19:00:00Z"}]},
-        ],
-    }],
-}
 
 
 def _bearer(token):
@@ -96,7 +71,7 @@ def test_human_only_routes_for_agents(client):
                               ("PUT", "/board/projects/api", {"name": "neu"}),
                               ("DELETE", "/board/projects/api", None),
                               ("DELETE", "/board/projects/api/tasks/1", None),
-                              ("POST", "/board/import", SAMPLE_EXPORT)]:
+                              ("POST", "/board/import", {"projects": []})]:
         resp = client.open(url, method=method, json=body, headers=_bearer(AGENT))
         assert resp.status_code == 403, (method, url)
     assert client.delete("/board/projects/api/tasks/1", headers=_bearer(HUMAN)).status_code == 204
@@ -134,14 +109,9 @@ def test_list_and_search(client):
 
 # ── Import ────────────────────────────────────────────────────────────────
 
-def _export():
-    if REAL_EXPORT and Path(REAL_EXPORT).is_file():
-        return json.loads(Path(REAL_EXPORT).read_text(encoding="utf-8"))
-    return copy.deepcopy(SAMPLE_EXPORT)
-
-
-def test_import_is_complete_without_claimed_origin_and_idempotent(client):
-    data = _export()
+def test_import_is_complete_without_claimed_origin_and_idempotent(client, board_sample_export):
+    data = (json.loads(Path(REAL_EXPORT).read_text(encoding="utf-8"))
+            if REAL_EXPORT and Path(REAL_EXPORT).is_file() else board_sample_export)
     expected_tasks = sum(len(p["tasks"]) for p in data["projects"])
     expected_comments = sum(len(t["comments"]) for p in data["projects"] for t in p["tasks"]
                             if any(c["body"].strip() for c in t["comments"]))
@@ -150,6 +120,7 @@ def test_import_is_complete_without_claimed_origin_and_idempotent(client):
     assert first["comments_imported"] >= expected_comments
     second = client.post("/board/import", json=data, headers=_bearer(HUMAN)).get_json()
     assert (second["tasks_imported"], second["tasks_skipped"], second["projects_created"]) == (0, expected_tasks, 0)
+    assert len(second["skipped_refs"]) == expected_tasks
 
     slug = data["projects"][0]["slug"]
     source = data["projects"][0]["tasks"][0]
@@ -165,8 +136,8 @@ def test_import_is_complete_without_claimed_origin_and_idempotent(client):
     assert new["number"] == highest + 1
 
 
-def test_imported_human_only_ticket_stays_protected(client):
-    client.post("/board/import", json=copy.deepcopy(SAMPLE_EXPORT), headers=_bearer(HUMAN))
+def test_imported_human_only_ticket_stays_protected(client, board_sample_export):
+    client.post("/board/import", json=board_sample_export, headers=_bearer(HUMAN))
     assert client.post("/board/next", json={"project": "conclave"}, headers=_bearer(AGENT)).get_json()["task"] is None
     assert client.patch("/board/projects/conclave/tasks/13", json={"title": "x"},
                         headers=_bearer(AGENT)).status_code == 403
@@ -181,8 +152,8 @@ def test_imported_human_only_ticket_stays_protected(client):
     (lambda d: d["projects"][0]["tasks"][0].update(created_at="gestern"), "Zeitpunkt"),
     (lambda d: d["projects"][0].update(slug="Mit Leerzeichen"), "Kurzname"),
 ])
-def test_broken_export_writes_nothing(client, mutate, message):
-    data = copy.deepcopy(SAMPLE_EXPORT)
+def test_broken_export_writes_nothing(client, board_sample_export, mutate, message):
+    data = board_sample_export
     mutate(data)
     before = client.get("/board/changes", headers=_bearer(HUMAN)).get_json()["changes"]
     resp = client.post("/board/import", json=data, headers=_bearer(HUMAN))
@@ -197,3 +168,43 @@ def test_board_disabled_without_service():
     from conclave.api.app import create_app
     resp = create_app(MagicMock()).test_client().get("/board")
     assert resp.status_code == 503 and resp.get_json()["type"] == "BoardDisabled"
+
+
+
+# ── Review B3 ─────────────────────────────────────────────────────────────
+
+def test_spec_paths_have_no_flask_converters_and_typed_numbers():
+    spec = json.loads((Path(__file__).resolve().parents[2] / "static" / "openapi.json").read_text(encoding="utf-8"))
+    assert not [p for p in spec["paths"] if "<" in p or ">" in p]
+    op = spec["paths"]["/board/projects/{slug}/tasks/{number}"]["get"]
+    params = {p["name"]: p["schema"]["type"] for p in op["parameters"]}
+    assert params == {"slug": "string", "number": "integer"}
+
+
+def test_import_counts_a_number_taken_meanwhile_as_skipped(client, board_sample_export, monkeypatch):
+    """Vergibt jemand zwischen Pruefen und Schreiben dieselbe Nummer, kein 500, sondern uebersprungen."""
+    client.post("/board/import", json=board_sample_export, headers=_bearer(HUMAN))
+    from conclave.infrastructure.sqlite.board_repository import SQLiteBoardRepository
+    monkeypatch.setattr(SQLiteBoardRepository, "get_task", lambda self, slug, number: None)  # Pruefung "sieht" nichts
+    resp = client.post("/board/import", json=board_sample_export, headers=_bearer(HUMAN))
+    monkeypatch.undo()
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert (data["tasks_imported"], data["tasks_skipped"]) == (0, 3)
+    assert sorted(data["skipped_refs"]) == ["conclave#13", "conclave#2", "conclave#7"]
+    comments = client.get("/board/projects/conclave/tasks/7/comments", headers=_bearer(HUMAN)).get_json()["comments"]
+    assert len(comments) == 2                                                 # nichts doppelt
+
+
+@pytest.mark.parametrize("body", [{"human": "false"}, {"title": 5}, {"description": ["x"]}, {"tags": ["a", 1]},
+                                  {"status": 3}, {"unbekannt": 1}])
+def test_create_validates_like_patch(client, body):
+    resp = client.post("/board/tasks", json={"project": "api", "title": "T", **body}, headers=_bearer(HUMAN))
+    assert resp.status_code == 400 and resp.get_json()["type"] == "ValidationError", body
+
+
+def test_import_size_limit(client, monkeypatch):
+    import conclave.api.app as app_module
+    monkeypatch.setattr(app_module, "BOARD_IMPORT_MAX_BYTES", 100)
+    resp = client.post("/board/import", json={"projects": [], "x": "y" * 200}, headers=_bearer(HUMAN))
+    assert resp.status_code == 413 and resp.get_json()["type"] == "ImportTooLarge"

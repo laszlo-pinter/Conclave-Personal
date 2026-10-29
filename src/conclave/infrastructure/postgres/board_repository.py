@@ -84,14 +84,17 @@ class PostgresBoardRepository(SQLiteBoardRepository):
     _IMPORT_TASK = (
         "WITH u AS (INSERT INTO board_tasks (id, project_id, number, title, description, tags, status, "
         "           position, human, assignee, updated_at, created_at) "
-        "           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING project_id, number), "
+        "           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "           ON CONFLICT (project_id, number) DO NOTHING RETURNING project_id, number), "
         "     n AS (UPDATE board_counters SET next_number = GREATEST(next_number, (SELECT number FROM u) + 1) "
         "           WHERE project_id = (SELECT project_id FROM u) RETURNING project_id), "
-        "     c AS (UPDATE board_meta SET value = value + ? WHERE key = 'changes' RETURNING value) ")
+        "     c AS (UPDATE board_meta SET value = value + ? WHERE key = 'changes' "
+        "           AND EXISTS (SELECT 1 FROM u) RETURNING value) ")
     _COMMENT_ROW = "SELECT ?, ?, ?, ?, ?, ?, c.value - ?, ?::timestamptz, ?::timestamptz FROM c, u"  # Typen fuer NULL im UNION
 
-    def import_task(self, task: Task, comments=()) -> Task:
-        """Ticket mit vorgegebener Nummer, Zaehler-Sprung und Kommentaren in einer Anweisung."""
+    def import_task(self, task: Task, comments=()) -> bool:
+        """Ticket mit vorgegebener Nummer, Zaehler-Sprung und Kommentaren in einer Anweisung;
+        ``False``, wenn die Nummer inzwischen vergeben ist (dann wird nichts geschrieben)."""
         comments = list(comments)
         params = [task.id, task.project_id, task.number, *self._task_params(task), task.created_at,
                   len(comments) + 1]
@@ -104,8 +107,8 @@ class PostgresBoardRepository(SQLiteBoardRepository):
                    "author_name, seq, created_at, updated_at) " + rows)  # nosec B608 - feste Texte, Platzhalter
         else:
             sql = self._IMPORT_TASK + "SELECT 1 FROM c, u"  # nosec B608 - feste Texte
-        self._execute(sql, tuple(params))
-        return task
+        result = self._execute(sql, tuple(params))
+        return result.rowcount == (len(comments) or 1)
 
     def renumber_column(self, project_id: str, status: str) -> None:
         """Eine Anweisung: Postgres rechnet die Rangfolge auf dem Stand vor dem UPDATE aus."""

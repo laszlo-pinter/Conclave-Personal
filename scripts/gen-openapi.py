@@ -326,8 +326,14 @@ def extract_routes(source: str) -> list[dict]:
 
 
 def flask_to_openapi_path(path: str) -> str:
-    """Konvertiert Flask-Pfad (<param>) zu OpenAPI-Pfad ({param})."""
-    return re.sub(r'<(?:path:)?(\w+)>', r'{\1}', path)
+    """Konvertiert Flask-Pfad (<param>, <conv:param>) zu OpenAPI-Pfad ({param})."""
+    return re.sub(r'<(?:\w+:)?(\w+)>', r'{\1}', path)
+
+
+def path_param_types(path: str) -> dict[str, str]:
+    """OpenAPI-Typ je Pfad-Parameter: <int:x> -> integer, sonst string."""
+    return {name: ("integer" if conv == "int" else "string")
+            for conv, name in re.findall(r'<(?:(\w+):)?(\w+)>', path)}
 
 
 def build_spec(routes: list[dict]) -> dict:
@@ -368,9 +374,10 @@ def build_spec(routes: list[dict]) -> dict:
 
         # Path-Parameter extrahieren
         params = re.findall(r'\{(\w+)\}', oapi_path)
+        types = path_param_types(r["path"])
         if params:
             operation["parameters"] = [
-                {"name": p, "in": "path", "required": True, "schema": {"type": "string"}}
+                {"name": p, "in": "path", "required": True, "schema": {"type": types.get(p, "string")}}
                 for p in params
             ]
 

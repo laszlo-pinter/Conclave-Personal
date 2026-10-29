@@ -324,7 +324,8 @@ class BoardService:
             projects = parse_export(data, self.flow.statuses)
         except ImportFormatError as e:
             raise BoardError(str(e), 400, "ImportFormatError") from None
-        summary = {"projects_created": 0, "tasks_imported": 0, "tasks_skipped": 0, "comments_imported": 0}
+        summary = {"projects_created": 0, "tasks_imported": 0, "tasks_skipped": 0, "comments_imported": 0,
+                   "skipped_refs": []}
         for imported in projects:
             project = self._repo.get_project(imported.slug)
             if project is None:
@@ -332,8 +333,10 @@ class BoardService:
                 self._repo.create_project(project)
                 summary["projects_created"] += 1
             for it in imported.tasks:
+                ref = f"{project.slug}#{it.number}"
                 if self._repo.get_task(project.slug, it.number) is not None:
                     summary["tasks_skipped"] += 1          # idempotent: schon vorhanden
+                    summary["skipped_refs"].append(ref)
                     continue
                 task = Task.create(project, it.title, it.status, description=it.description, tags=it.tags,
                                    position=self._end_position(project.id, it.status), human=it.human)
@@ -343,7 +346,10 @@ class BoardService:
                     comment = TaskComment.create(task.id, ic.body, None, author_name=ic.author)
                     comment.created_at = ic.created_at
                     comments.append(comment)
-                self._repo.import_task(task, comments)      # Ticket und Kommentare zusammen
+                if not self._repo.import_task(task, comments):    # Ticket und Kommentare zusammen
+                    summary["tasks_skipped"] += 1          # Nummer inzwischen vergeben
+                    summary["skipped_refs"].append(ref)
+                    continue
                 summary["tasks_imported"] += 1
                 summary["comments_imported"] += len(comments)
         return summary

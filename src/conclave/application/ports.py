@@ -321,7 +321,7 @@ class BoardRepository(Protocol):
         """Legt das Ticket an und vergibt die naechste Nummer des Projekts (atomar)."""
         ...
 
-    def import_task(self, task: Task, comments=()) -> Task:
+    def import_task(self, task: Task, comments=()) -> bool:
         """Ticket mit vorgegebener Nummer samt Kommentaren (Import, atomar); der Zaehler springt mit."""
         ...
 

@@ -111,8 +111,10 @@ def parse_export(data, statuses) -> list[ImportedProject]:
             if not isinstance(human, bool):
                 raise ImportFormatError(f"{slug}#{number}: 'human' muss true oder false sein")
             comments = t.get("comments", [])
-            if not isinstance(comments, list) or len(comments) > MAX_COMMENTS_PER_TASK:
+            if not isinstance(comments, list):
                 raise ImportFormatError(f"{slug}#{number}: 'comments' muss eine Liste sein")
+            if len(comments) > MAX_COMMENTS_PER_TASK:
+                raise ImportFormatError(f"{slug}#{number}: hoechstens {MAX_COMMENTS_PER_TASK} Kommentare")
             task = ImportedTask(
                 number=number, title=_str(t.get("title"), f"{slug}#{number}: Titel", allow_empty=False),
                 description=_str(t.get("description", "") or "", f"{slug}#{number}: Beschreibung"),

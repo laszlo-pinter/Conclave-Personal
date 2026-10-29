@@ -275,17 +275,32 @@ def test_agent_comment_guard_on_postgres(pg, crypto):
     assert [c.body for c in repo.list_comments(task.id)] == ["y"]
 
 
-def test_import_on_postgres_is_atomic_ordered_and_idempotent(pg, crypto):
-    import sys
-    from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
-    from test_board_api import SAMPLE_EXPORT
+def test_import_on_postgres_is_atomic_ordered_and_idempotent(pg, crypto, board_sample_export):
     from conclave.domain.principal import HUMAN_PRINCIPAL as HUMAN
 
     svc = _service(pg, crypto)
-    first = svc.import_export(HUMAN, SAMPLE_EXPORT)
+    first = svc.import_export(HUMAN, board_sample_export)
     assert (first["tasks_imported"], first["comments_imported"]) == (3, 3)
     assert [c.author_name for c in svc.comments("conclave#7")] == ["cc", "CD · auto-review"]   # nach Zeit
     assert all(c.origin is None for c in svc.comments("conclave#7"))
-    assert svc.import_export(HUMAN, SAMPLE_EXPORT)["tasks_skipped"] == 3
+    assert svc.import_export(HUMAN, board_sample_export)["tasks_skipped"] == 3
     assert svc.create_task(HUMAN, "conclave", "neu").number == 14                              # hinter #13
+
+
+
+def test_import_conflict_on_postgres_writes_nothing(pg, crypto, board_sample_export):
+    from conclave.domain.board import Task, TaskComment
+    from conclave.domain.principal import HUMAN_PRINCIPAL as HUMAN
+
+    svc = _service(pg, crypto)
+    svc.import_export(HUMAN, board_sample_export)
+    repo = svc._repo
+    project = repo.get_project("conclave")
+    clash = Task.create(project, "Doppelt", "todo")
+    clash.number = 7
+    before = repo.change_token()
+    assert repo.import_task(clash, [TaskComment.create(clash.id, "x", None)]) is False
+    assert repo.change_token() == before
+    with pg.cursor() as cur:
+        cur.execute("SELECT count(*) FROM board_comments")
+        assert cur.fetchone() == (3,)

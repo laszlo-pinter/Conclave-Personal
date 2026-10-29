@@ -2071,7 +2071,7 @@
         }
       }
     },
-    "/board/projects/{slug}/tasks/<int:number>": {
+    "/board/projects/{slug}/tasks/{number}": {
       "get": {
         "summary": "Ein Ticket mit Kommentaren.",
         "tags": [
@@ -2090,6 +2090,14 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
             }
           }
         ]
@@ -2117,11 +2125,19 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
           }
         ]
       }
     },
-    "/board/projects/{slug}/tasks/<int:number>/comments": {
+    "/board/projects/{slug}/tasks/{number}/comments": {
       "get": {
         "summary": "Kommentare eines Tickets mit Herkunft.",
         "tags": [
@@ -2140,6 +2156,14 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
             }
           }
         ]
@@ -2163,6 +2187,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
           }
         ],
         "requestBody": {
@@ -2176,7 +2208,7 @@
         }
       }
     },
-    "/board/projects/{slug}/tasks/<int:number>/history": {
+    "/board/projects/{slug}/tasks/{number}/history": {
       "get": {
         "summary": "Verlauf eines Tickets (Status, Titel, Beschreibung, Markierung).",
         "tags": [
@@ -2195,6 +2227,14 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
             }
           }
         ]

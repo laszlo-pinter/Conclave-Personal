@@ -88,6 +88,8 @@ CONTENT_SECURITY_POLICY = "; ".join([
 PERMISSIONS_POLICY = "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
 
 # Ohne Token erreichbar (B12): UI-Seite, statische Dateien, Healthcheck, API-Doku.
+BOARD_IMPORT_MAX_BYTES = 50 * 1024 * 1024    # Groesse des JSON-Exports, vor dem Parsen geprueft
+
 PUBLIC_GET_PATHS = frozenset({"/", "/health", "/api-docs", "/openapi.json"})
 CLIENT_HEADER = "X-Conclave-Client"
 
@@ -898,6 +900,23 @@ def create_app(handler: CLIHandler, auth_service=None,
             raise BoardError("JSON-Objekt erwartet.", 400, "ValidationError")
         return body
 
+    def _check_task_fields(body: dict, allowed: set) -> None:
+        """Gleiche Typpruefung fuer Anlegen (POST) und Aendern (PATCH)."""
+        unknown = set(body) - allowed
+        if unknown:
+            raise BoardError(f"Unbekannte Felder: {sorted(unknown)}", 400, "ValidationError")
+        for name in ("project", "title", "description", "status"):
+            if body.get(name) is not None and not isinstance(body[name], str):
+                raise BoardError(f"{name} muss Text sein.", 400, "ValidationError")
+        tags = body.get("tags")
+        if tags is not None and (not isinstance(tags, list) or not all(isinstance(t, str) for t in tags)):
+            raise BoardError("tags muss eine Liste von Texten sein.", 400, "ValidationError")
+        if body.get("human") is not None and not isinstance(body["human"], bool):
+            raise BoardError("human muss true oder false sein.", 400, "ValidationError")
+        index = body.get("index")
+        if index is not None and (isinstance(index, bool) or not isinstance(index, int)):
+            raise BoardError("index muss eine ganze Zahl sein.", 400, "ValidationError")
+
     def _flag(name: str, default: bool = False) -> bool:
         return request.args.get(name, "true" if default else "false").lower() in ("1", "true", "yes")
 
@@ -944,12 +963,10 @@ def create_app(handler: CLIHandler, auth_service=None,
     def board_create_task():
         """Ticket anlegen; neue Tickets landen in der ersten Spalte."""
         body = _json_object()
-        tags = body.get("tags") or []
-        if not isinstance(tags, list):
-            raise BoardError("tags muss eine Liste sein.", 400, "ValidationError")
+        _check_task_fields(body, {"project", "title", "description", "tags", "status", "human"})
         task = _board().create_task(g.principal, body.get("project"), body.get("title"),
-                                    description=body.get("description") or "", tags=tags,
-                                    human=bool(body.get("human", False)), status=body.get("status"))
+                                    description=body.get("description") or "", tags=body.get("tags") or [],
+                                    human=body.get("human", False), status=body.get("status"))
         return jsonify(task_to_dict(task)), 201
 
     @app.get("/board/search")
@@ -980,21 +997,10 @@ def create_app(handler: CLIHandler, auth_service=None,
     def board_update_task(slug: str, number: int):
         """Ticket aendern: title, description, tags, status, human, index (Position in der Spalte)."""
         body = _json_object()
-        unknown = set(body) - {"title", "description", "tags", "status", "human", "index"}
-        if unknown:
-            raise BoardError(f"Unbekannte Felder: {sorted(unknown)}", 400, "ValidationError")
-        tags = body.get("tags")
-        if tags is not None and not isinstance(tags, list):
-            raise BoardError("tags muss eine Liste sein.", 400, "ValidationError")
-        index = body.get("index")
-        if index is not None and (isinstance(index, bool) or not isinstance(index, int)):
-            raise BoardError("index muss eine ganze Zahl sein.", 400, "ValidationError")
-        human = body.get("human")
-        if human is not None and not isinstance(human, bool):
-            raise BoardError("human muss true oder false sein.", 400, "ValidationError")
+        _check_task_fields(body, {"title", "description", "tags", "status", "human", "index"})
         task = _board().update_task(g.principal, _ref(slug, number), title=body.get("title"),
-                                    description=body.get("description"), tags=tags, status=body.get("status"),
-                                    human=human, index=index)
+                                    description=body.get("description"), tags=body.get("tags"),
+                                    status=body.get("status"), human=body.get("human"), index=body.get("index"))
         return jsonify(task_to_dict(task)), 200
 
     @app.delete("/board/projects/<slug>/tasks/<int:number>")
@@ -1036,6 +1042,9 @@ def create_app(handler: CLIHandler, auth_service=None,
     @app.post("/board/import")
     def board_import():
         """JSON-Export eines Boards uebernehmen (Freigabe-Recht, idempotent)."""
+        if (request.content_length or 0) > BOARD_IMPORT_MAX_BYTES:
+            raise BoardError(f"Export zu gross (hoechstens {BOARD_IMPORT_MAX_BYTES // (1024 * 1024)} MB).",
+                             413, "ImportTooLarge")
         return jsonify(_board().import_export(g.principal, _json_object())), 200
 
     # ── Personal Export ─────────────────────────────────────────────────

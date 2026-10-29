@@ -53,3 +53,40 @@ def service(db_connection):
         message_repository=SQLiteMessageRepository(db_connection),
         participant_repository=SQLiteParticipantRepository(db_connection),
     )
+
+
+
+
+
+# Beispiel-Export eines Boards (Aufbau der JSON-Ausgabe eines Board-Exports, B3)
+BOARD_SAMPLE_EXPORT = {
+    "exported_at": "2026-10-29T17:39:07Z",
+    "statuses": ["todo", "doing", "review", "done"],
+    "projects": [{
+        "id": 1, "slug": "conclave", "name": "conclave", "repos": ["x/y"], "color": None,
+        "created_at": "2026-10-28T16:08:38Z", "open": 2, "total": 3,
+        "tasks": [
+            {"id": 7, "key": "conclave#7", "title": "Z2", "description": "## Ziel\nRechte", "tags": ["zugaenge"],
+             "human": False, "images": [], "status": "done", "created_at": "2026-10-28T18:51:00Z",
+             "updated_at": "2026-10-28T20:00:00Z",
+             "comments": [
+                 {"id": "2", "task_id": "7", "author": "CD · auto-review", "body": "in Ordnung",
+                  "created_at": "2026-10-28T19:56:00Z"},
+                 {"id": "1", "task_id": "7", "author": "cc", "body": "fertig", "created_at": "2026-10-28T19:55:00Z"}]},
+            {"id": 13, "key": "conclave#13", "title": "Migrations-Runner", "description": "", "tags": [],
+             "human": True, "images": [], "status": "todo", "created_at": "2026-10-28T23:09:28Z",
+             "updated_at": "2026-10-28T23:09:28Z", "comments": []},
+            {"id": 2, "key": "conclave#2", "title": "E1", "description": "Frage", "tags": ["entscheidung"],
+             "human": True, "images": [], "status": "done", "created_at": "2026-10-28T18:50:00Z",
+             "updated_at": "2026-10-28T19:00:00Z", "comments": [
+                 {"id": "3", "task_id": "2", "author": "me", "body": "(a)", "created_at": "2026-10-28T19:00:00Z"}]},
+        ],
+    }],
+}
+
+
+@pytest.fixture
+def board_sample_export():
+    """Frische Kopie je Test, damit Tests den Export veraendern duerfen."""
+    import copy
+    return copy.deepcopy(BOARD_SAMPLE_EXPORT)
