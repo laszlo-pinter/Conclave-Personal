@@ -34,7 +34,9 @@ max_per_hour = 3
 
 - **`[consultations]`** holds `reviewers`, `max_per_hour` and
   `comment_max_chars`. The old keys under `[kanzo]` are still read when
-  `[consultations]` does not set them; the server then logs a warning. Errors
+  `[consultations]` does not set them; the server then logs a warning. A key
+  set in both sections takes the `[consultations]` value and logs that the
+  `[kanzo]` value is ignored. Errors
   in these values name the section they came from. Reviewers alone do not
   switch consultations to Kanzo; only `[kanzo] url`,
   `CONCLAVE_KANZO_URL` or `[board] source = "kanzo"` do (unchanged).

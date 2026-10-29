@@ -392,3 +392,18 @@ def test_legacy_kanzo_keys_log_a_warning(tmp_path, monkeypatch, caplog):
     with caplog.at_level("WARNING"):
         _build_app(ConclaveConfig(db_path=tmp_path / "c.db", kanzo=kanzo))
     assert any("[consultations]" in r.getMessage() and "reviewers" in r.getMessage() for r in caplog.records)
+
+
+def test_key_in_both_sections_logs_that_kanzo_is_ignored(tmp_path, monkeypatch, caplog):
+    from conclave.api.server import _build_app
+    from conclave.cli.config import ConclaveConfig, KanzoSettings
+    for name, value in (("CONCLAVE_WORKSPACE", tmp_path / "ws"), ("CONCLAVE_SECRET_KEY_FILE", tmp_path / "k"),
+                        ("CONCLAVE_API_TOKEN_FILE", tmp_path / "t"), ("CONCLAVE_AGENT_TOKEN_FILE", tmp_path / "a")):
+        monkeypatch.setenv(name, str(value))
+    monkeypatch.delenv("CONCLAVE_API_KEY", raising=False)
+    monkeypatch.delenv("CONCLAVE_AGENT_KEY", raising=False)
+    kanzo = KanzoSettings.from_section({"reviewers": ["alt"]}, {"reviewers": ["neu"]})
+    assert (kanzo.reviewers, kanzo.ignored_keys, kanzo.legacy_keys) == (("neu",), ("reviewers",), ())
+    with caplog.at_level("WARNING"):
+        _build_app(ConclaveConfig(db_path=tmp_path / "c.db", kanzo=kanzo))
+    assert any("ignoriert" in r.getMessage() and "reviewers" in r.getMessage() for r in caplog.records)

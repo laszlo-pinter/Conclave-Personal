@@ -237,7 +237,8 @@ Abschnitt `[consultations]`:
 
 Bis v0.6.0 standen diese Schlüssel unter `[kanzo]`. Dort werden sie weiter
 gelesen, wenn `[consultations]` sie nicht setzt; der Server schreibt dann eine
-Warnung ins Log.
+Warnung ins Log. Steht ein Schlüssel in beiden Abschnitten, gilt
+`[consultations]`, ebenfalls mit Warnung.
 
 Abschnitt `[kanzo]` (nur mit `[board] source = "kanzo"`):
 

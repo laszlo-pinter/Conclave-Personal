@@ -43,6 +43,7 @@ class KanzoSettings:
     max_per_hour: int = 3              # Consultations pro Ticket und Stunde
     comment_max_chars: int = 2000      # Kuerzung der Kommentare (ohne Schlusszeile)
     legacy_keys: tuple[str, ...] = ()  # aus [kanzo] statt [consultations] gelesen
+    ignored_keys: tuple[str, ...] = ()  # in [kanzo] und [consultations]; [kanzo] wird ignoriert
 
     @classmethod
     def from_section(cls, section: dict, consultations: dict | None = None) -> "KanzoSettings":
@@ -51,6 +52,7 @@ class KanzoSettings:
         if not url.lower().startswith(("http://", "https://")):
             raise ValueError("[kanzo] url muss mit http:// oder https:// beginnen")
         legacy = tuple(k for k in CONSULTATION_KEYS if k in section and k not in consultations)
+        ignored = tuple(k for k in CONSULTATION_KEYS if k in section and k in consultations)
         values = {**{k: section[k] for k in legacy}, **{k: consultations[k] for k in CONSULTATION_KEYS
                                                          if k in consultations}}
 
@@ -66,7 +68,8 @@ class KanzoSettings:
             if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
                 raise ValueError(f"{label(name)} muss eine ganze Zahl >= {minimum} sein")
         return cls(url=url, reviewers=tuple(r.strip() for r in reviewers),
-                   max_per_hour=max_per_hour, comment_max_chars=comment_max_chars, legacy_keys=legacy)
+                   max_per_hour=max_per_hour, comment_max_chars=comment_max_chars, legacy_keys=legacy,
+                   ignored_keys=ignored)
 
 
 from conclave.domain.board import DEFAULT_STATUSES  # noqa: E402
