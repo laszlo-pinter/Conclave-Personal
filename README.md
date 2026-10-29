@@ -289,14 +289,11 @@ Since v0.6.0 Conclave has its own board for work packages. Agents use six
 tools (`conclave_board_list`, `_get`, `_next`, `_create`, `_update`,
 `_comment`): take a ticket with `next_task`, comment, move it to `review`. Only
 the human moves tickets to `done`, and tickets for humans only stay read-only
-for agents; the origin of every comment comes from the token. A Kanzo board can
-be imported. See
+for agents; the origin of every comment comes from the token. See
 [Working with the board](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/mit-dem-board-arbeiten.md).
 
-`conclave_consult` asks the reviewers configured in `[kanzo] reviewers` for a
-second opinion on a ticket of the board (or of an external
-[Kanzo](https://github.com/emanuele-em/kanzo) with `[board] source = "kanzo"`);
-the answers are posted as labelled comments on the ticket
+`conclave_consult` asks the configured reviewer models for a second opinion on
+a ticket of the board; the answers are posted as comments on the ticket
 (`conclave_get_consultation` shows the status). See the
 [API reference](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/referenz/api.md#consultations).
 
@@ -334,7 +331,7 @@ Runs expose status, errors, duration, and usage.
 
 ### Consultation
 
-A second opinion on a ticket from the board (or an external Kanzo): Conclave reads the ticket,
+A second opinion on a ticket from the board: Conclave reads the ticket,
 asks the configured reviewer models in parallel, and posts each answer as a
 labelled comment ("not verified"). The ticket content is treated as data;
 Conclave only reads tickets and writes comments.
@@ -456,9 +453,6 @@ v0.6.0 remains alpha. Known limitations:
 - Desktop mode starts the local web application in a browser.
 - Advanced multi-agent orchestration is partly experimental.
 - There is no native Windows installer, AppImage, or `.deb` package yet.
-- Consultation comments in an external Kanzo are labelled, but the label is not
-  proof of origin (Kanzo has no login). In the own board, origin comes from the
-  token.
 - Human and agent access are separated by token. Agents run as the same
   operating-system user, so an agent with a shell can read `api.token` unless
   the agent host blocks it; on native Windows, Claude Code has no sandbox for
@@ -495,11 +489,11 @@ The v0.6.0 surface was verified with these checks:
 - Human and agent access end-to-end with the installed wheel and a scratch
   Kanzo: `conclave-mcp` over stdio with the agent token, human-only ticket
   rejected via MCP and via direct REST with the agent token, accepted with the
-  human token, warning for the human token in `conclave-mcp` (manual)
+  human token, warning for the human token in `conclave-mcp` (manual, v0.5.0)
 - Upgrade of a v0.5.1 database with the installed wheel (migration
   `012_board`, existing data kept)
 - Board end-to-end with the installed wheel: `conclave-mcp` over stdio with the
-  agent token (`next_task`, comment, move to `review`, `done` rejected), Kanzo
+  agent token (`next_task`, comment, move to `review`, `done` rejected), board
   export imported with the human token (manual)
 - `conclave desktop` end-to-end with real providers (manual, v0.2.0)
 - `pip-audit` and `bandit` (run manually for this release, also in CI)

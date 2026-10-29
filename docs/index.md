@@ -11,7 +11,7 @@
 ### Workflows
 - [Example workflows](beispiel-workflows.md) - Writing, architecture, workspace context, and multi-agent runs
 - [Provider smoke test](provider-smoke-test.md) - Check Claude, Gemini, GPT, and DeepSeek locally
-- [Working with the board](mit-dem-board-arbeiten.md) - Work packages for humans and agents, Kanzo import, second opinions
+- [Working with the board](mit-dem-board-arbeiten.md) - Work packages for humans and agents, import, second opinions
 
 ### Product UI
 - [Personal UI architecture](personal-ui-architektur.md) - Studio, Agents, Workspace, Board, Runs, Settings
