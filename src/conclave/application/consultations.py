@@ -1,7 +1,7 @@
 """Consultations anlegen, abfragen, wiederholen - die Logik hinter API und MCP-Tools.
 
 - Die Obergrenze pro Ticket und Stunde wird beim Anlegen gezaehlt, nicht erst im Worker.
-- Reviewer nur aus ``[kanzo] reviewers``; ohne Liste ist die Funktion aus.
+- Reviewer nur aus ``[consultations] reviewers``; ohne Liste ist die Funktion aus.
 - Der Kanal (``human``/``agent``) kommt aus dem Principal, also aus dem Token,
   nie aus dem Body; ``channel`` im Body ergibt 400 (Z3).
 - Das Ticket wird schon beim Anlegen geprueft: unbekannt -> 404, nur fuer
@@ -59,7 +59,7 @@ class ConsultationRequests:
     def create(self, body: dict, principal: Principal) -> dict:
         if not self._allowed:
             raise ConsultationRequestError(
-                "Consultations sind nicht eingerichtet: [kanzo] reviewers in config.toml fehlt.",
+                "Consultations sind nicht eingerichtet: [consultations] reviewers in config.toml fehlt.",
                 503, "ConsultationsDisabled")
         task = body.get("task")
         question = body.get("question")

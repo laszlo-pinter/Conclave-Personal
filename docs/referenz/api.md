@@ -161,7 +161,7 @@ Eine Consultation holt eine Zweitmeinung mehrerer Reviewer-Modelle zu einem
 Ticket und schreibt jede Antwort als Kommentar in das Ticket. Die Tickets kommen
 aus dem eigenen [Board](#board) (Kommentare mit Herkunft `system`) oder, mit
 `[board] source = "kanzo"`, aus [Kanzo](https://github.com/emanuele-em/kanzo).
-Voraussetzung: `[kanzo] reviewers` in `config.toml` (siehe
+Voraussetzung: `[consultations] reviewers` in `config.toml` (siehe
 [Konfiguration](konfiguration.md#consultations));
 ohne Reviewer-Liste antworten die Endpunkte mit `503`
 (`ConsultationsDisabled`). Sicherheit: [Sicherheit](../sicherheit.md#consultations).
@@ -175,7 +175,7 @@ ohne Reviewer-Liste antworten die Endpunkte mit `503`
 
 - `task` (Pflicht): Ticket-Referenz `projekt#nummer` (Kleinbuchstaben).
 - `question` (Pflicht, bis 4.000 Zeichen), `context` (optional, bis 8.000).
-- `reviewers`: Teilmenge von `[kanzo] reviewers`; Standard: alle erlaubten.
+- `reviewers`: Teilmenge von `[consultations] reviewers`; Standard: alle erlaubten.
 - `include_previous`: frühere Conclave-Kommentare des Tickets mitgeben
   (Standard `false`; dann als „frühere Modellausgabe“ gekennzeichnet).
 - Kein Feld `channel`: Der Kanal (`human` oder `agent`) ergibt sich aus dem
@@ -187,7 +187,7 @@ ohne Reviewer-Liste antworten die Endpunkte mit `503`
 Fehler: `400` (`ValidationError`, `ReviewerNotAllowed`, `ChannelNotAllowed`),
 `403` (`HumanOnlyTicket`: Ticket nur für Menschen, Anfrage mit dem
 Agent-Token), `404`
-(Ticket unbekannt), `429` (`ConsultationLimit`: `[kanzo] max_per_hour` pro
+(Ticket unbekannt), `429` (`ConsultationLimit`: `[consultations] max_per_hour` pro
 Ticket und Stunde erreicht), `502` (Kanzo nicht erreichbar oder unbekanntes
 Ausgabeformat), `503` (nicht eingerichtet). Bei diesen Fehlern wird nichts
 gespeichert.
@@ -200,7 +200,7 @@ Schlusszeile wie
 
 `— Zweitmeinung von GPT (openai, gpt-5.6) über Conclave, nicht geprüft · consultation <id>/gpt`
 
-Lange Antworten werden vorher auf `[kanzo] comment_max_chars` gekürzt (mit
+Lange Antworten werden vorher auf `[consultations] comment_max_chars` gekürzt (mit
 Verweis auf die Conversation); die Schlusszeile bleibt immer erhalten.
 
 `GET /consultations/<id>` liefert zusätzlich `deliveries` (je Reviewer

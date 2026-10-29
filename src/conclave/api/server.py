@@ -162,6 +162,11 @@ def _build_consultations(service, agent_service, conn, config, board):
         except Exception:  # noqa: BLE001 - Anzeige-Name, Fallback auf die ID
             return agent_id
 
+    if config.kanzo.legacy_keys:
+        from conclave.infrastructure.log import get_logger
+        get_logger("api.server").warning(
+            "config.toml: %s unter [kanzo] ist veraltet; bitte nach [consultations] verschieben "
+            "([kanzo] url bleibt fuer ein externes Kanzo).", ", ".join(config.kanzo.legacy_keys))
     if config.board.source == "kanzo":
         source, source_name = KanzoMcpAdapter(config.kanzo.url), "kanzo"
     else:

@@ -3,7 +3,7 @@
   "info": {
     "title": "Conclave API",
     "description": "Host-gesteuertes Multi-Model-Konversationssystem",
-    "version": "0.6.0"
+    "version": "0.6.1"
   },
   "servers": [
     {
@@ -1727,7 +1727,7 @@
                     "items": {
                       "type": "string"
                     },
-                    "description": "Teilmenge von [kanzo] reviewers; Standard: alle erlaubten"
+                    "description": "Teilmenge von [consultations] reviewers; Standard: alle erlaubten"
                   },
                   "include_previous": {
                     "type": "boolean",

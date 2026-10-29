@@ -154,8 +154,9 @@ Aus der TOML-Datei werden nur diese Schlüssel gelesen; alles andere ist nur
 - `[server]` `rate_limit`
 - `[board]` `statuses`, `source` (Board und Quelle der Consultations, siehe
   unten)
-- `[kanzo]` `url`, `reviewers`, `max_per_hour`, `comment_max_chars`
-  (Consultations, siehe unten)
+- `[consultations]` `reviewers`, `max_per_hour`, `comment_max_chars`
+  (siehe unten)
+- `[kanzo]` `url` (nur für ein externes Kanzo)
 - `[participants]` (Altbestand, siehe unten)
 
 ```toml
@@ -179,12 +180,15 @@ statuses = ["todo", "doing", "review", "done"]
 # Woher Consultations Tickets lesen: "internal" (eigenes Board) oder "kanzo"
 source = "internal"
 
-[kanzo]
-# Consultations: Reviewer und Grenzen; url nur fuer ein externes Kanzo
-url = "http://localhost:4242/mcp"
+[consultations]
+# Zweitmeinungen zu Tickets: wer Ticket-Inhalte sieht, Grenzen
 reviewers = ["gpt", "claude"]
 max_per_hour = 3
 comment_max_chars = 2000
+
+[kanzo]
+# nur mit [board] source = "kanzo"
+url = "http://localhost:4242/mcp"
 
 [participants.claude]
 # Altbestand: wird einmalig als Agent in die DB übernommen
@@ -223,12 +227,23 @@ oder aus [Kanzo](https://github.com/emanuele-em/kanzo) (`[board] source`,
 siehe oben und [API-Referenz](api.md#consultations)). Eingestellt wird das
 nur in `config.toml`; die API nimmt keine Ziel-Adresse an.
 
+Abschnitt `[consultations]`:
+
 | Schlüssel | Default | Bedeutung |
 |---|---|---|
-| `url` | `http://localhost:4242/mcp` | Nur mit `[board] source = "kanzo"`: Kanzos MCP-Endpunkt (`mcp_http = true` in Kanzos Konfiguration, das ist dort der Default). Umgebungsvariable `CONCLAVE_KANZO_URL` hat Vorrang. Nur `http://` oder `https://`. |
 | `reviewers` | leer | Agent-IDs, die als Reviewer erlaubt sind – also wer Ticket-Inhalte zu sehen bekommt. **Leer = Consultations sind aus.** |
 | `max_per_hour` | `3` | Höchstens so viele Consultations pro Ticket und Stunde (gezählt beim Anlegen). |
 | `comment_max_chars` | `2000` | Kommentare werden auf diese Länge gekürzt (mindestens 200), die Schlusszeile kommt danach. |
+
+Bis v0.6.0 standen diese Schlüssel unter `[kanzo]`. Dort werden sie weiter
+gelesen, wenn `[consultations]` sie nicht setzt; der Server schreibt dann eine
+Warnung ins Log.
+
+Abschnitt `[kanzo]` (nur mit `[board] source = "kanzo"`):
+
+| Schlüssel | Default | Bedeutung |
+|---|---|---|
+| `url` | `http://localhost:4242/mcp` | Kanzos MCP-Endpunkt (`mcp_http = true` in Kanzos Konfiguration, das ist dort der Default). Umgebungsvariable `CONCLAVE_KANZO_URL` hat Vorrang. Nur `http://` oder `https://`. |
 
 Die Consultations laufen in einem Hintergrund-Thread des Servers
 (`conclave desktop`, `conclave server`, `conclave-api`). Für die Verbindung zu

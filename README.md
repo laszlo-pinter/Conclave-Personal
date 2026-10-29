@@ -13,7 +13,7 @@ answer is correct. It gives users a structured workspace for comparing model
 outputs, tracking runs, and deliberately choosing the next step. The human
 decides. Always.
 
-> Status: v0.6.0 Alpha. The primary path is local, desktop-first, and designed
+> Status: v0.6.1 Alpha. The primary path is local, desktop-first, and designed
 > for individual users on Windows and Linux.
 
 ![Conclave Studio](https://raw.githubusercontent.com/laszlo-pinter/Conclave-Personal/main/docs/assets/screenshots/conclave-studio-desktop.png)
@@ -426,6 +426,7 @@ Important documents:
 - [Release Notes v0.5.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.5.0.md)
 - [Release Notes v0.5.1](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.5.1.md)
 - [Release Notes v0.6.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.6.0.md)
+- [Release Notes v0.6.1](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.6.1.md)
 - [Release Notes v0.3.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.3.0.md)
 - [Release Notes v0.2.3](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.2.3.md)
 - [Release Notes v0.2.2](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.2.2.md)
@@ -446,7 +447,7 @@ Important documents:
 
 ## Known Limitations
 
-v0.6.0 remains alpha. Known limitations:
+v0.6.1 remains alpha. Known limitations:
 
 - Provider compatibility varies by API, model, account, and region.
 - Remote providers receive the data required for the model call.
@@ -465,7 +466,7 @@ CI runs the jobs `test` (Ubuntu and Windows, Python 3.11 and 3.12),
 `bandit`), `postgres` (PostgreSQL 16 tests) and `build` (sdist and wheel,
 artifact inspection).
 
-The v0.6.0 surface was verified with these checks:
+The v0.6.1 surface was verified with these checks:
 
 - `python -m pytest` (the Playwright browser tests for XSS protection, CSP,
   token login, the settings page, the context chip, the preview, the file viewer and the board only run

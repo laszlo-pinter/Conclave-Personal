@@ -160,6 +160,8 @@ source = "kanzo"
 
 [kanzo]
 url = "http://localhost:4242/mcp"
+
+[consultations]
 reviewers = ["gpt", "claude"]
 ```
 
@@ -185,7 +187,7 @@ ist kein Herkunftsnachweis. Im eigenen Board kommt die Herkunft aus dem Token.
   eine harte Grenze, siehe
   [Sicherheit](sicherheit.md#grenze-gleicher-betriebssystem-benutzer).
 - Der Ticket-Inhalt geht bei einer Consultation an die Provider der Reviewer;
-  `[kanzo] reviewers` legt fest, an welche.
+  `[consultations] reviewers` legt fest, an welche.
 - Bilder an Tickets und Repository-Verknüpfungen aus Kanzo übernimmt der
   Import nicht.
 

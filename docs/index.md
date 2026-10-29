@@ -31,6 +31,7 @@
 - [Ports & adapters](architektur/ports-adapter.md) - Interfaces, ProviderProfiles, ResilientAdapter
 
 ### Release
+- [Release Notes v0.6.1](release-notes-v0.6.1.md) - `[consultations]` section, board as the place for work packages
 - [Release Notes v0.6.0](release-notes-v0.6.0.md) - Own board for work packages, consultations on it
 - [Release Notes v0.5.1](release-notes-v0.5.1.md) - File viewer in the Files area
 - [Release Notes v0.5.0](release-notes-v0.5.0.md) - Separate human and agent access

@@ -274,7 +274,7 @@ werden als Daten behandelt:
   reicht: Ein Agent, der `api.token` lesen kann, hat den Mensch-Zugang.
 - **Feste Adresse:** Die Kanzo-Adresse steht nur in `config.toml`
   (`[kanzo] url`); die API nimmt keine Ziel-URL an (SSRF).
-- **Grenzen:** Reviewer nur aus `[kanzo] reviewers` (wer Ticket-Inhalte sieht),
+- **Grenzen:** Reviewer nur aus `[consultations] reviewers` (wer Ticket-Inhalte sieht),
   höchstens `max_per_hour` Consultations pro Ticket und Stunde, Kommentare
   gekürzt. Nach einem Neustart werden Modelle nie automatisch erneut aufgerufen.
 - **Datenabfluss:** Der Ticket-Inhalt geht an die Provider der Reviewer; die

@@ -93,7 +93,7 @@ Meinungen mehrerer Modelle ein; sie landen als Kommentare im Ticket.
 Einmalig in `config.toml` (Agent-IDs aus `conclave agents`):
 
 ```toml
-[kanzo]
+[consultations]
 reviewers = ["gpt", "claude"]
 ```
 

@@ -340,3 +340,55 @@ def test_invalid_board_source_is_rejected(tmp_path, value):
     cfg.write_text(f"[board]\nsource = {value}\n", encoding="utf-8")
     with pytest.raises(ValueError, match=r"\[board\] source"):
         ConclaveConfig.from_sources(cfg)
+
+
+# ── B8: [consultations] statt [kanzo] fuer Reviewer und Grenzen ──────────
+
+@pytest.mark.parametrize("toml, reviewers, legacy", [
+    ('[consultations]\nreviewers = ["gpt"]\nmax_per_hour = 5\n', ("gpt",), ()),
+    ('[kanzo]\nreviewers = ["alt"]\n', ("alt",), ("reviewers",)),                       # weiter gelesen
+    ('[kanzo]\nreviewers = ["alt"]\n[consultations]\nreviewers = ["neu"]\n', ("neu",), ()),  # neu gewinnt
+    ("", (), ()),
+])
+def test_consultation_settings_section(tmp_path, monkeypatch, toml, reviewers, legacy):
+    from conclave.cli.config import ConclaveConfig
+    monkeypatch.delenv("CONCLAVE_KANZO_URL", raising=False)
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(toml, encoding="utf-8")
+    kanzo = ConclaveConfig.from_sources(cfg).kanzo
+    assert (kanzo.reviewers, kanzo.legacy_keys) == (reviewers, legacy)
+
+
+def test_reviewers_alone_do_not_switch_the_source_to_kanzo(tmp_path, monkeypatch):
+    from conclave.cli.config import ConclaveConfig
+    monkeypatch.delenv("CONCLAVE_KANZO_URL", raising=False)
+    cfg = tmp_path / "config.toml"
+    cfg.write_text('[consultations]\nreviewers = ["gpt"]\n', encoding="utf-8")
+    assert ConclaveConfig.from_sources(cfg).board.source == "internal"
+
+
+@pytest.mark.parametrize("toml, message", [
+    ('[consultations]\nreviewers = "gpt"\n', r"\[consultations\] reviewers"),
+    ('[kanzo]\nmax_per_hour = 0\n', r"\[kanzo\] max_per_hour"),
+    ('[consultations]\ncomment_max_chars = 10\n', r"\[consultations\] comment_max_chars"),
+])
+def test_invalid_consultation_settings_name_their_section(tmp_path, toml, message):
+    from conclave.cli.config import ConclaveConfig
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(toml, encoding="utf-8")
+    with pytest.raises(ValueError, match=message):
+        ConclaveConfig.from_sources(cfg)
+
+
+def test_legacy_kanzo_keys_log_a_warning(tmp_path, monkeypatch, caplog):
+    from conclave.api.server import _build_app
+    from conclave.cli.config import ConclaveConfig, KanzoSettings
+    for name, value in (("CONCLAVE_WORKSPACE", tmp_path / "ws"), ("CONCLAVE_SECRET_KEY_FILE", tmp_path / "k"),
+                        ("CONCLAVE_API_TOKEN_FILE", tmp_path / "t"), ("CONCLAVE_AGENT_TOKEN_FILE", tmp_path / "a")):
+        monkeypatch.setenv(name, str(value))
+    monkeypatch.delenv("CONCLAVE_API_KEY", raising=False)
+    monkeypatch.delenv("CONCLAVE_AGENT_KEY", raising=False)
+    kanzo = KanzoSettings.from_section({"reviewers": ["gpt"]})
+    with caplog.at_level("WARNING"):
+        _build_app(ConclaveConfig(db_path=tmp_path / "c.db", kanzo=kanzo))
+    assert any("[consultations]" in r.getMessage() and "reviewers" in r.getMessage() for r in caplog.records)

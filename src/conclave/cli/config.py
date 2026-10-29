@@ -25,33 +25,48 @@ DEFAULT_RATE_LIMIT = "120 per minute"
 DEFAULT_KANZO_URL = "http://localhost:4242/mcp"
 
 
+CONSULTATION_KEYS = ("reviewers", "max_per_hour", "comment_max_chars")
+
+
 @dataclass
 class KanzoSettings:
-    """Abschnitt [kanzo] in config.toml (Consultations).
+    """Consultations: ``[consultations]`` in config.toml, dazu ``[kanzo] url`` fuer ein externes Kanzo.
 
     Die Adresse steht nur hier - die API nimmt keine Ziel-URL an (SSRF).
     ``reviewers`` legt fest, welche Agenten Ticket-Inhalte zu sehen bekommen.
+    Bis v0.6.0 standen ``reviewers``, ``max_per_hour`` und ``comment_max_chars``
+    unter ``[kanzo]``; dort werden sie weiter gelesen, wenn ``[consultations]``
+    sie nicht setzt (siehe ``legacy_keys``).
     """
     url: str = DEFAULT_KANZO_URL
     reviewers: tuple[str, ...] = ()
     max_per_hour: int = 3              # Consultations pro Ticket und Stunde
     comment_max_chars: int = 2000      # Kuerzung der Kommentare (ohne Schlusszeile)
+    legacy_keys: tuple[str, ...] = ()  # aus [kanzo] statt [consultations] gelesen
 
     @classmethod
-    def from_section(cls, section: dict) -> "KanzoSettings":
+    def from_section(cls, section: dict, consultations: dict | None = None) -> "KanzoSettings":
+        consultations = consultations or {}
         url = os.environ.get("CONCLAVE_KANZO_URL", str(section.get("url", DEFAULT_KANZO_URL))).strip()
         if not url.lower().startswith(("http://", "https://")):
             raise ValueError("[kanzo] url muss mit http:// oder https:// beginnen")
-        reviewers = section.get("reviewers", [])
+        legacy = tuple(k for k in CONSULTATION_KEYS if k in section and k not in consultations)
+        values = {**{k: section[k] for k in legacy}, **{k: consultations[k] for k in CONSULTATION_KEYS
+                                                         if k in consultations}}
+
+        def label(key: str) -> str:
+            return f"[{'kanzo' if key in legacy else 'consultations'}] {key}"
+
+        reviewers = values.get("reviewers", [])
         if not isinstance(reviewers, list) or not all(isinstance(r, str) and r.strip() for r in reviewers):
-            raise ValueError("[kanzo] reviewers muss eine Liste von Agent-IDs sein")
-        max_per_hour = section.get("max_per_hour", 3)
-        comment_max_chars = section.get("comment_max_chars", 2000)
+            raise ValueError(f"{label('reviewers')} muss eine Liste von Agent-IDs sein")
+        max_per_hour = values.get("max_per_hour", 3)
+        comment_max_chars = values.get("comment_max_chars", 2000)
         for name, value, minimum in (("max_per_hour", max_per_hour, 1), ("comment_max_chars", comment_max_chars, 200)):
             if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
-                raise ValueError(f"[kanzo] {name} muss eine ganze Zahl >= {minimum} sein")
+                raise ValueError(f"{label(name)} muss eine ganze Zahl >= {minimum} sein")
         return cls(url=url, reviewers=tuple(r.strip() for r in reviewers),
-                   max_per_hour=max_per_hour, comment_max_chars=comment_max_chars)
+                   max_per_hour=max_per_hour, comment_max_chars=comment_max_chars, legacy_keys=legacy)
 
 
 from conclave.domain.board import DEFAULT_STATUSES  # noqa: E402
@@ -168,7 +183,7 @@ class ConclaveConfig:
         agent_api_key = env_secret("CONCLAVE_AGENT_KEY")
         allowed_hosts = os.environ.get("CONCLAVE_ALLOWED_HOSTS", "")
         mode = os.environ.get("CONCLAVE_MODE", "development")
-        kanzo = KanzoSettings.from_section(data.get("kanzo", {}))
+        kanzo = KanzoSettings.from_section(data.get("kanzo", {}), data.get("consultations", {}))
         kanzo_url_set = "url" in data.get("kanzo", {}) or bool(os.environ.get("CONCLAVE_KANZO_URL", "").strip())
         board = BoardSettings.from_section(data.get("board", {}), kanzo_url_set=kanzo_url_set)
         return cls(
