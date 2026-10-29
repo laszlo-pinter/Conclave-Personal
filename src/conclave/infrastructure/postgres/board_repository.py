@@ -89,58 +89,60 @@ class PostgresBoardRepository(SQLiteBoardRepository):
             (POSITION_STEP, project_id, status))
         self._bump()
 
-    _SEQ = "WITH c AS (UPDATE board_meta SET value = value + 1 WHERE key = 'changes' RETURNING value) "
-
     def add_comment(self, comment: TaskComment) -> None:
         self._execute(
-            self._SEQ + "INSERT INTO board_comments (id, task_id, body, origin, actor_id, author_name, seq, "
+            "WITH c AS (UPDATE board_meta SET value = value + 1 WHERE key = 'changes' RETURNING value) "
+            "INSERT INTO board_comments (id, task_id, body, origin, actor_id, author_name, seq, "
             "created_at, updated_at) SELECT ?, ?, ?, ?, ?, ?, c.value, ?, ? FROM c",
             (comment.id, comment.task_id, self._enc(comment.body), comment.origin, comment.actor_id,
              self._enc(comment.author_name), comment.created_at, comment.updated_at))
 
     def add_event(self, event: TaskEvent) -> None:
         self._execute(
-            self._SEQ + "INSERT INTO board_events (id, task_id, field, old_value, new_value, origin, actor_id, seq, "
+            "WITH c AS (UPDATE board_meta SET value = value + 1 WHERE key = 'changes' RETURNING value) "
+            "INSERT INTO board_events (id, task_id, field, old_value, new_value, origin, actor_id, seq, "
             "created_at) SELECT ?, ?, ?, ?, ?, ?, ?, c.value, ? FROM c",
             (event.id, event.task_id, event.field_name, self._enc(event.old_value), self._enc(event.new_value),
              event.origin, event.actor_id, event.created_at))
 
-    def _event_rows(self, events, first_seq_expr: str) -> tuple[str, list]:
-        """SELECT-Zeilen fuer board_events; ``seq`` = Zaehlerstand - Anzahl + Index."""
-        selects, params = [], []
+    _EVENT_ROW = "SELECT ?, ?, ?, ?, ?, ?, ?, c.value - ?, ? FROM c, u"
+    _UPDATE_WITH_EVENTS = (
+        "WITH u AS (UPDATE board_tasks SET title = ?, description = ?, tags = ?, status = ?, position = ?, "
+        "           human = ?, assignee = ?, updated_at = ? WHERE id = ? RETURNING id), "
+        "     c AS (UPDATE board_meta SET value = value + ? WHERE key = 'changes' "
+        "           AND EXISTS (SELECT 1 FROM u) RETURNING value) "
+        "INSERT INTO board_events (id, task_id, field, old_value, new_value, origin, actor_id, seq, created_at) ")
+
+    def _event_rows(self, events) -> tuple[str, list]:
+        """SELECT-Zeilen fuer board_events (feste Texte, Werte als Parameter);
+        ``seq`` = Zaehlerstand - (Anzahl - Index)."""
+        params = []
         n = len(events)
         for i, e in enumerate(events, start=1):
-            selects.append(f"SELECT ?, ?, ?, ?, ?, ?, ?, {first_seq_expr} - {n - i}, ? FROM c, u")
             params += [e.id, e.task_id, e.field_name, self._enc(e.old_value), self._enc(e.new_value),
-                       e.origin, e.actor_id, e.created_at]
-        return " UNION ALL ".join(selects), params
+                       e.origin, e.actor_id, n - i, e.created_at]
+        return " UNION ALL ".join([self._EVENT_ROW] * n), params
 
     def update_task(self, task: Task, events=()) -> bool:
         events = list(events)
         if not events:
             return super().update_task(task)
-        rows, params = self._event_rows(events, "c.value")
-        result = self._execute(
-            "WITH u AS (UPDATE board_tasks SET title = ?, description = ?, tags = ?, status = ?, position = ?, "
-            "           human = ?, assignee = ?, updated_at = ? WHERE id = ? RETURNING id), "
-            f"     c AS (UPDATE board_meta SET value = value + {len(events) + 1} WHERE key = 'changes' "
-            "           AND EXISTS (SELECT 1 FROM u) RETURNING value) "
-            "INSERT INTO board_events (id, task_id, field, old_value, new_value, origin, actor_id, seq, created_at) "
-            + rows,  # nosec B608 - Platzhalter, Zahlen aus len()
-            (*self._task_params(task), task.id, *params))
+        rows, params = self._event_rows(events)
+        sql = self._UPDATE_WITH_EVENTS + rows  # nosec B608 - nur feste SQL-Texte, Werte als Platzhalter
+        result = self._execute(sql, (*self._task_params(task), task.id, len(events) + 1, *params))
         return result.rowcount == len(events)
 
     def claim_task(self, task_id: str, from_status: str, to_status: str, position: float, updated_at,
                    event: TaskEvent | None = None) -> bool:
         if event is None:
             return super().claim_task(task_id, from_status, to_status, position, updated_at)
-        rows, params = self._event_rows([event], "c.value")
+        _rows, params = self._event_rows([event])
         result = self._execute(
             "WITH u AS (UPDATE board_tasks SET status = ?, position = ?, updated_at = ? "
             "           WHERE id = ? AND status = ? RETURNING id), "
             "     c AS (UPDATE board_meta SET value = value + 2 WHERE key = 'changes' "
             "           AND EXISTS (SELECT 1 FROM u) RETURNING value) "
             "INSERT INTO board_events (id, task_id, field, old_value, new_value, origin, actor_id, seq, created_at) "
-            + rows,  # nosec B608 - Platzhalter
+            "SELECT ?, ?, ?, ?, ?, ?, ?, c.value - ?, ? FROM c, u",
             (to_status, position, updated_at, task_id, from_status, *params))
         return result.rowcount == 1
