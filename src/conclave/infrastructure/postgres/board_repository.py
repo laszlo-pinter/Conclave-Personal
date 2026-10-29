@@ -81,6 +81,32 @@ class PostgresBoardRepository(SQLiteBoardRepository):
         self._bump()
         return task
 
+    _IMPORT_TASK = (
+        "WITH u AS (INSERT INTO board_tasks (id, project_id, number, title, description, tags, status, "
+        "           position, human, assignee, updated_at, created_at) "
+        "           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING project_id, number), "
+        "     n AS (UPDATE board_counters SET next_number = GREATEST(next_number, (SELECT number FROM u) + 1) "
+        "           WHERE project_id = (SELECT project_id FROM u) RETURNING project_id), "
+        "     c AS (UPDATE board_meta SET value = value + ? WHERE key = 'changes' RETURNING value) ")
+    _COMMENT_ROW = "SELECT ?, ?, ?, ?, ?, ?, c.value - ?, ?::timestamptz, ?::timestamptz FROM c, u"  # Typen fuer NULL im UNION
+
+    def import_task(self, task: Task, comments=()) -> Task:
+        """Ticket mit vorgegebener Nummer, Zaehler-Sprung und Kommentaren in einer Anweisung."""
+        comments = list(comments)
+        params = [task.id, task.project_id, task.number, *self._task_params(task), task.created_at,
+                  len(comments) + 1]
+        if comments:
+            rows = " UNION ALL ".join([self._COMMENT_ROW] * len(comments))
+            for i, cm in enumerate(comments, start=1):
+                params += [cm.id, cm.task_id, self._enc(cm.body), cm.origin, cm.actor_id,
+                           self._enc(cm.author_name), len(comments) - i, cm.created_at, cm.updated_at]
+            sql = (self._IMPORT_TASK + "INSERT INTO board_comments (id, task_id, body, origin, actor_id, "  # nosec B608 - feste Texte
+                   "author_name, seq, created_at, updated_at) " + rows)  # nosec B608 - feste Texte, Platzhalter
+        else:
+            sql = self._IMPORT_TASK + "SELECT 1 FROM c, u"  # nosec B608 - feste Texte
+        self._execute(sql, tuple(params))
+        return task
+
     def renumber_column(self, project_id: str, status: str) -> None:
         """Eine Anweisung: Postgres rechnet die Rangfolge auf dem Stand vor dem UPDATE aus."""
         self._execute(
@@ -113,7 +139,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
             (event.id, event.task_id, event.field_name, self._enc(event.old_value), self._enc(event.new_value),
              event.origin, event.actor_id, event.created_at))
 
-    _EVENT_ROW = "SELECT ?, ?, ?, ?, ?, ?, ?, c.value - ?, ? FROM c, u"
+    _EVENT_ROW = "SELECT ?, ?, ?, ?, ?, ?, ?, c.value - ?, ?::timestamptz FROM c, u"
     _UPDATE_WITH_EVENTS = (
         "WITH u AS (UPDATE board_tasks SET title = ?, description = ?, tags = ?, status = ?, position = ?, "
         "           human = ?, assignee = ?, updated_at = ?, version = version + 1 "

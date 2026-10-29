@@ -173,6 +173,22 @@ def _build_consultations(service, agent_service, conn, config):
     return requests, worker
 
 
+def _build_board(conn, config):
+    """Board (Plan board.md): Repository mit Verschluesselung, Dienst mit den Spalten aus config.toml."""
+    from conclave.application.board import BoardService
+    from conclave.cli.bootstrap import _load_crypto
+    from conclave.domain.board import StatusFlow
+
+    crypto = _load_crypto()
+    if config.db_provider == "postgres":
+        from conclave.infrastructure.postgres.board_repository import PostgresBoardRepository
+        repo = PostgresBoardRepository(conn, crypto)
+    else:
+        from conclave.infrastructure.sqlite.board_repository import SQLiteBoardRepository
+        repo = SQLiteBoardRepository(conn, crypto, autocommit=True)
+    return BoardService(repo, StatusFlow(config.board.statuses))
+
+
 def _build_app(config: ConclaveConfig | None = None):
     """Baut die Flask-App mit allen Services."""
     if config is None:
@@ -212,9 +228,10 @@ def _build_app(config: ConclaveConfig | None = None):
     auth_service = StaticKeyAuthService(config.api_key, config.agent_api_key)
 
     consultations, worker = _build_consultations(service, agent_service, conn, config)
+    board = _build_board(conn, config)
     app = create_app(handler, auth_service=auth_service,
                      agent_service=agent_service, config=config,
-                     service=service, consultations=consultations)
+                     service=service, consultations=consultations, board=board)
     # Gestartet wird der Worker erst in runtime.serve.serve() (nicht hier, nicht in create_app)
     app.extensions["conclave_workers"] = [worker]
     if isinstance(conn, ThreadLocalConnection):

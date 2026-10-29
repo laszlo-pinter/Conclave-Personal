@@ -6,7 +6,7 @@ import pytest
 pytest.importorskip("flask")
 pytest.importorskip("mcp")
 
-from conclave.api.access import AGENT_ALLOWED, HUMAN_ONLY, HUMAN_ONLY_ERROR, PUBLIC, agent_may
+from conclave.api.access import AGENT_ALLOWED, BOARD_AGENT_ROUTES, HUMAN_ONLY, HUMAN_ONLY_ERROR, PUBLIC, agent_may
 from conclave.cli.config import ConclaveConfig
 
 HUMAN = "cvh_mensch-token"
@@ -36,6 +36,7 @@ def _registered(app):
 def _url(rule):
     """Beispiel-URL zu einem Routen-Muster: <x> -> x1, <path:p> -> a/b.txt."""
     rule = re.sub(r"<path:[^>]+>", "a/b.txt", rule)
+    rule = re.sub(r"<int:[^>]+>", "1", rule)
     return re.sub(r"<(?:[^:>]+:)?([^>]+)>", lambda m: f"{m.group(1)}1", rule)
 
 
@@ -172,8 +173,9 @@ def test_every_mcp_tool_route_works_with_agent_token(mcp_via_app):
     blocked = [(m, r, s) for m, r, s in hits if s in (401, 403)]
     assert not blocked, blocked
     used = {(m, r) for m, r, _ in hits}
-    # Die Allowlist ist genau das, was die Tools brauchen, plus whoami (Z5).
-    assert used | {("GET", "/auth/whoami")} == AGENT_ALLOWED
+    # Die Allowlist ist genau das, was die Tools brauchen, plus whoami (Z5) und die Board-Routen,
+    # fuer die B4 die MCP-Tools liefert.
+    assert used | {("GET", "/auth/whoami")} | BOARD_AGENT_ROUTES == AGENT_ALLOWED
 
 
 def test_delete_routes_are_refused_for_agents(app):

@@ -312,3 +312,68 @@ class BoardService:
     def delete_comment(self, principal: Principal, comment_id: str) -> None:
         self._own_comment(principal, comment_id)
         self._repo.delete_comment(comment_id)
+
+    # ── Import ───────────────────────────────────────────────────────────
+
+    def import_export(self, principal: Principal, data) -> dict:
+        """Uebernimmt einen JSON-Export (siehe ``board_import``); nur mit Freigabe-Recht."""
+        from conclave.application.board_import import ImportFormatError, parse_export
+
+        self._require_approval(principal)
+        try:
+            projects = parse_export(data, self.flow.statuses)
+        except ImportFormatError as e:
+            raise BoardError(str(e), 400, "ImportFormatError") from None
+        summary = {"projects_created": 0, "tasks_imported": 0, "tasks_skipped": 0, "comments_imported": 0}
+        for imported in projects:
+            project = self._repo.get_project(imported.slug)
+            if project is None:
+                project = Project.create(imported.slug, imported.name)
+                self._repo.create_project(project)
+                summary["projects_created"] += 1
+            for it in imported.tasks:
+                if self._repo.get_task(project.slug, it.number) is not None:
+                    summary["tasks_skipped"] += 1          # idempotent: schon vorhanden
+                    continue
+                task = Task.create(project, it.title, it.status, description=it.description, tags=it.tags,
+                                   position=self._end_position(project.id, it.status), human=it.human)
+                task.number, task.created_at, task.updated_at = it.number, it.created_at, it.updated_at
+                comments = []
+                for ic in it.comments:
+                    comment = TaskComment.create(task.id, ic.body, None, author_name=ic.author)
+                    comment.created_at = ic.created_at
+                    comments.append(comment)
+                self._repo.import_task(task, comments)      # Ticket und Kommentare zusammen
+                summary["tasks_imported"] += 1
+                summary["comments_imported"] += len(comments)
+        return summary
+
+
+# ── Darstellung fuer API und MCP ─────────────────────────────────────────
+
+def _iso(value) -> str | None:
+    return value.isoformat() if value is not None else None
+
+
+def project_to_dict(project: Project) -> dict:
+    return {"slug": project.slug, "name": project.name, "created_at": _iso(project.created_at)}
+
+
+def task_to_dict(task: Task) -> dict:
+    return {
+        "ref": task.ref, "project": task.project_slug, "number": task.number, "title": task.title,
+        "description": task.description, "tags": list(task.tags), "status": task.status,
+        "position": task.position, "human": task.human, "assignee": task.assignee, "version": task.version,
+        "created_at": _iso(task.created_at), "updated_at": _iso(task.updated_at),
+    }
+
+
+def comment_to_dict(comment: TaskComment) -> dict:
+    return {"id": comment.id, "body": comment.body, "origin": comment.origin, "actor_id": comment.actor_id,
+            "author_name": comment.author_name, "created_at": _iso(comment.created_at),
+            "updated_at": _iso(comment.updated_at)}
+
+
+def event_to_dict(event: TaskEvent) -> dict:
+    return {"field": event.field_name, "old": event.old_value, "new": event.new_value, "origin": event.origin,
+            "actor_id": event.actor_id, "created_at": _iso(event.created_at)}

@@ -273,3 +273,19 @@ def test_agent_comment_guard_on_postgres(pg, crypto):
     assert repo.add_comment_checked(TaskComment.create(task.id, "x", "agent"), only_if_not_human=True) is False
     assert repo.add_comment_checked(TaskComment.create(task.id, "y", "human")) is True
     assert [c.body for c in repo.list_comments(task.id)] == ["y"]
+
+
+def test_import_on_postgres_is_atomic_ordered_and_idempotent(pg, crypto):
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
+    from test_board_api import SAMPLE_EXPORT
+    from conclave.domain.principal import HUMAN_PRINCIPAL as HUMAN
+
+    svc = _service(pg, crypto)
+    first = svc.import_export(HUMAN, SAMPLE_EXPORT)
+    assert (first["tasks_imported"], first["comments_imported"]) == (3, 3)
+    assert [c.author_name for c in svc.comments("conclave#7")] == ["cc", "CD · auto-review"]   # nach Zeit
+    assert all(c.origin is None for c in svc.comments("conclave#7"))
+    assert svc.import_export(HUMAN, SAMPLE_EXPORT)["tasks_skipped"] == 3
+    assert svc.create_task(HUMAN, "conclave", "neu").number == 14                              # hinter #13

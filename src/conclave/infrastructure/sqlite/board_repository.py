@@ -180,6 +180,27 @@ class SQLiteBoardRepository:
         task.number = number
         return task
 
+    def import_task(self, task: Task, comments=()) -> Task:
+        """Uebernimmt ein Ticket mit vorgegebener Nummer samt Kommentaren (Import, atomar);
+        der Zaehler des Projekts springt mit."""
+        with self._tx():
+            self._execute(
+                "INSERT INTO board_tasks (id, project_id, number, title, description, tags, status, position, "
+                "human, assignee, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (task.id, task.project_id, task.number, *self._task_params(task), self._dt(task.created_at)))
+            self._execute("UPDATE board_counters SET next_number = MAX(next_number, ?) WHERE project_id = ?",
+                          (task.number + 1, task.project_id))
+            self._bump()
+            for comment in comments:
+                seq = self._bump()
+                self._execute(
+                    "INSERT INTO board_comments (id, task_id, body, origin, actor_id, author_name, seq, "
+                    "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (comment.id, comment.task_id, self._enc(comment.body), comment.origin, comment.actor_id,
+                     self._enc(comment.author_name), seq, self._dt(comment.created_at),
+                     self._dt(comment.updated_at)))
+        return task
+
     def get_task(self, slug: str, number: int) -> Task | None:
         row = self._one(f"SELECT {_TASK_COLUMNS} FROM board_tasks t JOIN board_projects p ON p.id = t.project_id "  # nosec B608
                         "WHERE p.slug = ? AND t.number = ?", (slug, number))
