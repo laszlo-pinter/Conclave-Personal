@@ -12,6 +12,8 @@
 - Freitext (Projektname, Titel, Beschreibung, Tags, Kommentare, Verlaufswerte) wird
   wie Nachrichten verschluesselt, wenn ein CryptoService gesetzt ist.
 - Jede aendernde Schreiboperation erhoeht den Aenderungszaehler (``board_meta``).
+  Kommentare und Verlaufseintraege bekommen dessen neuen Wert als ``seq``: eine
+  eindeutige, steigende Reihenfolge, auch wenn mehrere im selben Moment entstehen.
 """
 
 from __future__ import annotations
@@ -21,9 +23,8 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 
-from conclave.domain.board import Project, Task, TaskComment, TaskEvent
+from conclave.domain.board import POSITION_STEP, Project, Task, TaskComment, TaskEvent
 
-POSITION_STEP = 1024.0
 MIN_SQLITE = (3, 35)       # UPDATE ... RETURNING
 
 _TASK_COLUMNS = ("t.id, t.project_id, p.slug, t.number, t.title, t.description, t.tags, t.status, t.position, "
@@ -96,8 +97,9 @@ class SQLiteBoardRepository:
 
     # ── Aenderungszaehler ────────────────────────────────────────────────
 
-    def _bump(self) -> None:
-        self._execute("UPDATE board_meta SET value = value + 1 WHERE key = 'changes'")
+    def _bump(self) -> int:
+        row = self._one("UPDATE board_meta SET value = value + 1 WHERE key = 'changes' RETURNING value")
+        return int(row[0])
 
     def change_token(self) -> int:
         row = self._one("SELECT value FROM board_meta WHERE key = 'changes'")
@@ -197,23 +199,29 @@ class SQLiteBoardRepository:
         sql += " ORDER BY p.slug, t.status, t.position, t.number"
         return [self._task(r) for r in self._all(sql, tuple(params))]
 
-    def update_task(self, task: Task) -> bool:
+    def update_task(self, task: Task, events=()) -> bool:
+        """Ticket und zugehoerige Verlaufseintraege zusammen (atomar)."""
         with self._tx():
             changed = self._rowcount(
                 "UPDATE board_tasks SET title = ?, description = ?, tags = ?, status = ?, position = ?, human = ?, "
                 "assignee = ?, updated_at = ? WHERE id = ?", (*self._task_params(task), task.id))
             if changed:
                 self._bump()
+                for event in events:
+                    self._insert_event(event)
         return changed == 1
 
-    def claim_task(self, task_id: str, from_status: str, to_status: str, position: float, updated_at) -> bool:
-        """Atomar: nur wenn das Ticket noch in ``from_status`` steht (fuer next_task)."""
+    def claim_task(self, task_id: str, from_status: str, to_status: str, position: float, updated_at,
+                   event: TaskEvent | None = None) -> bool:
+        """Atomar: nur wenn das Ticket noch in ``from_status`` steht (fuer next_task); mit Verlaufseintrag."""
         with self._tx():
             changed = self._rowcount(
                 "UPDATE board_tasks SET status = ?, position = ?, updated_at = ? WHERE id = ? AND status = ?",
                 (to_status, position, self._dt(updated_at), task_id, from_status))
             if changed:
                 self._bump()
+                if event is not None:
+                    self._insert_event(event)
         return changed == 1
 
     def delete_task(self, task_id: str) -> bool:
@@ -251,12 +259,12 @@ class SQLiteBoardRepository:
 
     def add_comment(self, comment: TaskComment) -> None:
         with self._tx():
+            seq = self._bump()
             self._execute(
-                "INSERT INTO board_comments (id, task_id, body, origin, actor_id, author_name, created_at, "
-                "updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO board_comments (id, task_id, body, origin, actor_id, author_name, seq, created_at, "
+                "updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (comment.id, comment.task_id, self._enc(comment.body), comment.origin, comment.actor_id,
-                 self._enc(comment.author_name), self._dt(comment.created_at), self._dt(comment.updated_at)))
-            self._bump()
+                 self._enc(comment.author_name), seq, self._dt(comment.created_at), self._dt(comment.updated_at)))
 
     def get_comment(self, comment_id: str) -> TaskComment | None:
         row = self._one("SELECT id, task_id, body, origin, actor_id, author_name, created_at, updated_at "
@@ -266,7 +274,7 @@ class SQLiteBoardRepository:
     def list_comments(self, task_id: str) -> list[TaskComment]:
         return [self._comment(r) for r in self._all(
             "SELECT id, task_id, body, origin, actor_id, author_name, created_at, updated_at "
-            "FROM board_comments WHERE task_id = ? ORDER BY created_at, id", (task_id,))]
+            "FROM board_comments WHERE task_id = ? ORDER BY seq", (task_id,))]
 
     def update_comment(self, comment: TaskComment) -> bool:
         with self._tx():
@@ -287,15 +295,19 @@ class SQLiteBoardRepository:
 
     def add_event(self, event: TaskEvent) -> None:
         with self._tx():
-            self._execute(
-                "INSERT INTO board_events (id, task_id, field, old_value, new_value, origin, actor_id, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (event.id, event.task_id, event.field_name, self._enc(event.old_value), self._enc(event.new_value),
-                 event.origin, event.actor_id, self._dt(event.created_at)))
-            self._bump()
+            self._insert_event(event)
+
+    def _insert_event(self, event: TaskEvent) -> None:
+        """Innerhalb einer laufenden Transaktion; ``seq`` ist der neue Zaehlerstand."""
+        seq = self._bump()
+        self._execute(
+            "INSERT INTO board_events (id, task_id, field, old_value, new_value, origin, actor_id, seq, "
+            "created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (event.id, event.task_id, event.field_name, self._enc(event.old_value), self._enc(event.new_value),
+             event.origin, event.actor_id, seq, self._dt(event.created_at)))
 
     def list_events(self, task_id: str) -> list[TaskEvent]:
         return [TaskEvent(id=r[0], task_id=r[1], field_name=r[2], old_value=self._dec(r[3]),
                           new_value=self._dec(r[4]), origin=r[5], actor_id=r[6], created_at=_ts(r[7]))
                 for r in self._all("SELECT id, task_id, field, old_value, new_value, origin, actor_id, created_at "
-                                   "FROM board_events WHERE task_id = ? ORDER BY created_at, id", (task_id,))]
+                                   "FROM board_events WHERE task_id = ? ORDER BY seq", (task_id,))]

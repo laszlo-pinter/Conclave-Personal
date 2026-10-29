@@ -25,6 +25,7 @@ ORIGINS = ("human", "agent", "system")
 # Verlaufseintraege fuer diese Felder (Plan 2, "Ticket-Verlauf")
 TRACKED_FIELDS = ("status", "title", "description", "human")
 EVENT_VALUE_MAX = 200
+POSITION_STEP = 1024.0      # Abstand der Karten nach dem Neunummerieren
 
 
 def _now() -> datetime:

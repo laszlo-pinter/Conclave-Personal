@@ -345,6 +345,7 @@ def _create_board_tables(connection, is_postgres: bool) -> None:
             origin      TEXT,
             actor_id    TEXT,
             author_name TEXT NOT NULL DEFAULT '',
+            seq         INTEGER NOT NULL DEFAULT 0,
             created_at  {ts} NOT NULL,
             updated_at  {ts}
         )""",
@@ -356,6 +357,7 @@ def _create_board_tables(connection, is_postgres: bool) -> None:
             new_value  TEXT,
             origin     TEXT,
             actor_id   TEXT,
+            seq        INTEGER NOT NULL DEFAULT 0,
             created_at {ts} NOT NULL
         )""",
         """CREATE TABLE IF NOT EXISTS board_meta (
@@ -364,8 +366,8 @@ def _create_board_tables(connection, is_postgres: bool) -> None:
         )""",
         "INSERT INTO board_meta (key, value) VALUES ('changes', 0) ON CONFLICT (key) DO NOTHING",
         "CREATE INDEX IF NOT EXISTS idx_board_tasks_column ON board_tasks(project_id, status, position)",
-        "CREATE INDEX IF NOT EXISTS idx_board_comments_task ON board_comments(task_id, created_at)",
-        "CREATE INDEX IF NOT EXISTS idx_board_events_task ON board_events(task_id, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_board_comments_task ON board_comments(task_id, seq)",
+        "CREATE INDEX IF NOT EXISTS idx_board_events_task ON board_events(task_id, seq)",
     ]
     if is_postgres:
         with connection.cursor() as cur:
