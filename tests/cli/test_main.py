@@ -290,6 +290,15 @@ def test_restore_command_calls_handler(tmp_path):
     assert kwargs["backup_path"] == backup_path
     assert kwargs["backup_dir"] == tmp_path
     assert kwargs["replace_workspace"] is False
+    assert kwargs["allow_foreign"] is False
+
+
+def test_restore_command_passes_allow_foreign(tmp_path):
+    handler = make_handler_mock()
+    handler.restore_backup.return_value = CLIResult(success=True, message="ok", data={"status": "restored"})
+    with patch_run(handler):
+        assert run(["restore", "--backup", str(tmp_path / "b.zip"), "--allow-foreign"]) == 0
+    assert handler.restore_backup.call_args.kwargs["allow_foreign"] is True
 
 
 def test_web_command_opens_browser(monkeypatch):

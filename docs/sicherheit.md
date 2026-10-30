@@ -213,8 +213,15 @@ Oktober 2026):
   Kommentar 65.536 Zeichen, höchstens 50 Tags zu je 50 Zeichen).
 - `POST /restore` stellt nur Backups aus dem Backup-Verzeichnis wieder her
   (Dateiname, keine Pfade) und leert den Workspace nur nach ausdrücklicher
-  Bestätigung. ZIP-Inhalte werden auf Pfad-Traversal, Symlinks und Größe
-  geprüft; vor jedem Restore entsteht ein automatisches Backup.
+  Bestätigung. ZIP-Inhalte werden auf Pfad-Traversal, Symlinks, Größe und
+  Prüfsummen geprüft; vor jedem Restore entsteht ein automatisches Backup.
+- Ein Restore ändert nichts, solange nicht das ganze Archiv geprüft und
+  entpackt ist; die Datenbank kommt zuletzt. Backups enthalten keine verlinkten
+  Inhalte (Symlinks, Junctions).
+- Backups tragen eine Signatur, abgeleitet aus `secret.key`. Ein Backup ohne
+  belegte eigene Herkunft wird erst nach Bestätigung eingespielt; vorher zeigt
+  Conclave die Agents und Ziel-URLs aus dem Backup. Trigger und Views aus
+  Backup-Datenbanken werden verworfen.
 
 ## Provider
 

@@ -291,13 +291,29 @@ importierte Tickets keinen Verlauf.
 - `GET /backups` listet die vorhandenen Backups (`name`, `size_bytes`,
   `modified_at`).
 - `POST /restore` akzeptiert nur einen Dateinamen aus dieser Liste:
-  `{"backup": "conclave-backup-20261026T120000Z.zip"}`. Pfade, `..`,
+  `{"backup": "conclave-backup-20261030T120000123456Z-3fa2c1.zip"}`. Pfade, `..`,
   Laufwerksangaben und Symlinks aus dem Verzeichnis heraus werden mit `400`
   abgelehnt; das frühere Feld `backup_path` wird nicht mehr unterstützt.
 - Standardmäßig bleibt der Workspace erhalten; Dateien aus dem Backup werden
   hinzugefügt bzw. überschrieben. Den Workspace vorher leeren nur mit
   `"replace_workspace": true` **und** `"confirm": "replace-workspace"`.
 - Vor jedem Restore wird automatisch ein `conclave-pre-restore-*.zip` angelegt.
+  Backup-Namen enthalten Mikrosekunden und einen Zufallsanteil; ein vorhandenes
+  Backup wird nie überschrieben.
+- Ein Backup enthält nur normale Dateien des Workspace; Symlinks und Junctions
+  werden übersprungen.
+- Der Restore prüft und entpackt das ganze Archiv zuerst in ein
+  Zwischenverzeichnis, tauscht dann den Workspace und spielt die Datenbank
+  zuletzt ein. Schlägt ein Schritt fehl, bleiben Datenbank und Workspace
+  unverändert. Trigger und Views aus der Backup-Datenbank werden verworfen.
+- **Herkunft:** Jedes Backup enthält ein `manifest.json` mit Instanz-ID und
+  einer Signatur über den Inhalt, abgeleitet aus `secret.key`. Stammt ein Backup
+  nicht nachweislich von dieser Instanz (andere Instanz, verändert, ohne
+  Manifest wie ältere Backups), antwortet der Restore mit `409`,
+  `"status": "origin_unverified"`, dem Grund (`reason`) und den Agents des
+  Backups (`agents`: `id`, `api_url`), ohne etwas zu ändern. Nach Prüfung der
+  Agents mit `"allow_foreign": true` wiederholen. Die Antwort enthält dann
+  `"origin": "foreign"`, sonst `"own"`.
 - Die CLI (`conclave restore --backup <pfad>`) darf weiterhin beliebige Pfade
   verwenden.
 

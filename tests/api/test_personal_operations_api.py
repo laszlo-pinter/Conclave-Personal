@@ -146,7 +146,7 @@ def test_restore_restores_db_and_replaces_workspace(handler, tmp_path, monkeypat
 
     with app.test_client() as c:
         resp = c.post("/restore", json={"backup": "restore.zip", "replace_workspace": True,
-                                        "confirm": "replace-workspace"})
+                                        "confirm": "replace-workspace", "allow_foreign": True})
 
     body = resp.get_json()
     assert resp.status_code == 200
@@ -259,7 +259,7 @@ def test_restore_unknown_backup_returns_404(restore_env):
 
 def test_restore_keeps_workspace_by_default(restore_env):
     c, workspace, _, db_path, _ = restore_env
-    resp = c.post("/restore", json={"backup": "good.zip"})
+    resp = c.post("/restore", json={"backup": "good.zip", "allow_foreign": True})
     body = resp.get_json()
     assert resp.status_code == 200
     assert body["workspace_replaced"] is False
@@ -285,7 +285,8 @@ def test_replace_workspace_rejects_non_boolean(restore_env):
 
 def test_replace_workspace_with_confirmation_clears_workspace(restore_env):
     c, workspace, *_ = restore_env
-    resp = c.post("/restore", json={"backup": "good.zip", "replace_workspace": True, "confirm": "replace-workspace"})
+    resp = c.post("/restore", json={"backup": "good.zip", "replace_workspace": True, "confirm": "replace-workspace",
+                                    "allow_foreign": True})
     assert resp.status_code == 200
     assert resp.get_json()["workspace_replaced"] is True
     assert not (workspace / "keep.txt").exists()
@@ -356,8 +357,55 @@ def test_restore_is_visible_to_connections_that_stay_open(restore_env):
     open_conn = sqlite3.connect(db_path)
     try:
         assert open_conn.execute("SELECT value FROM marker").fetchone()[0] == "old db"
-        assert c.post("/restore", json={"backup": "good.zip"}).status_code == 200
+        assert c.post("/restore", json={"backup": "good.zip", "allow_foreign": True}).status_code == 200
         assert open_conn.execute("SELECT value FROM marker").fetchone()[0] == "restored db"
     finally:
         open_conn.close()
     assert _marker(db_path) == "restored db"
+
+
+# ── R7: Herkunft des Backups ───────────────────────────────────────────────
+
+def test_restore_of_backup_without_proven_origin_needs_confirmation(restore_env, tmp_path):
+    c, workspace, backup_dir, db_path, _ = restore_env
+    src = tmp_path / "foreign.db"
+    _make_db(src, "foreign db")
+    with sqlite3.connect(src) as conn:
+        conn.execute("CREATE TABLE agents (id TEXT PRIMARY KEY, api_url TEXT)")
+        conn.execute("INSERT INTO agents VALUES ('gpt', 'https://gateway.example/v1')")
+    conn.close()
+    with zipfile.ZipFile(backup_dir / "foreign.zip", "w") as zf:
+        zf.write(src, "conclave.db")
+        zf.writestr("workspace/new.md", "neu")
+    resp = c.post("/restore", json={"backup": "foreign.zip"})
+    body = resp.get_json()
+    assert resp.status_code == 409
+    assert body["status"] == "origin_unverified"
+    assert body["agents"] == [{"id": "gpt", "api_url": "https://gateway.example/v1"}]
+    assert _marker(db_path) == "old db"
+    assert not (workspace / "new.md").exists()
+    assert not list(backup_dir.glob("conclave-pre-restore-*"))
+
+    resp = c.post("/restore", json={"backup": "foreign.zip", "allow_foreign": True})
+    assert resp.status_code == 200
+    assert resp.get_json()["origin"] == "foreign"
+    assert _marker(db_path) == "foreign db"
+
+
+def test_restore_rejects_non_boolean_allow_foreign(restore_env):
+    c, _, _, db_path, _ = restore_env
+    resp = c.post("/restore", json={"backup": "good.zip", "allow_foreign": "yes"})
+    assert resp.status_code == 400
+    assert _marker(db_path) == "old db"
+
+
+def test_own_backup_restores_without_confirmation(restore_env, tmp_path, monkeypatch):
+    c, workspace, _, db_path, _ = restore_env
+    monkeypatch.setenv("CONCLAVE_SECRET_KEY_FILE", str(tmp_path / "secret.key"))
+    (tmp_path / "secret.key").write_bytes(b"instanz-schluessel")
+    name = c.post("/backup", json={}).get_json()["backup"]
+    _make_db(db_path, "changed")
+    resp = c.post("/restore", json={"backup": name})
+    assert resp.status_code == 200, resp.get_json()
+    assert resp.get_json()["origin"] == "own"
+    assert _marker(db_path) == "old db"

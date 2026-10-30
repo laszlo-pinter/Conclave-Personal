@@ -225,6 +225,8 @@ def build_parser() -> argparse.ArgumentParser:
     restore_p.add_argument("--dir", default=None, dest="backup_dir")
     restore_p.add_argument("--keep-workspace", action="store_true",
                            help="Workspace-Dateien zusammenfuehren statt vorhandenen Workspace zu ersetzen")
+    restore_p.add_argument("--allow-foreign", action="store_true",
+                           help="Backup ohne belegte Herkunft (andere Instanz) nach Pruefung trotzdem einspielen")
 
     migrate_p = sub.add_parser("migrate-personal", help="Alte lokale SQLite-Daten nach Conclave Personal migrieren")
     migrate_p.add_argument("--from", required=True, dest="source_path", help="Pfad zur alten SQLite-DB")
@@ -503,6 +505,7 @@ def run(argv: list[str] | None = None) -> int:
             db_path=config.db_path,
             backup_dir=backup_dir,
             replace_workspace=not args.keep_workspace,
+            allow_foreign=args.allow_foreign,
         )
 
     elif args.command == "watch":

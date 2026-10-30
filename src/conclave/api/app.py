@@ -57,7 +57,9 @@ from conclave.application.workspace_security import (
 )
 from conclave.infrastructure.log import active_log_file, get_logger, read_log_tail
 from conclave.runtime.toml_edit import set_toml_string
-from conclave.runtime.backup import create_backup_archive, restore_backup_archive
+from conclave.runtime.backup import (
+    ForeignBackupError, create_backup_archive, load_backup_secret, restore_backup_archive,
+)
 from conclave.runtime.assets import get_asset_root
 from conclave.runtime.env import env_secret
 
@@ -1284,6 +1286,7 @@ def create_app(handler: CLIHandler, auth_service=None,
             db_path=_sqlite_db_path(),
             workspace_root=pathlib.Path(WORKSPACE),
             backup_dir=_backup_root(),
+            secret=load_backup_secret(),
         )
         return jsonify({"backup": backup_path.name, "backup_path": str(backup_path), "format": "zip"}), 201
 
@@ -1326,6 +1329,9 @@ def create_app(handler: CLIHandler, auth_service=None,
                 "error": "Workspace leeren nur mit confirm: \"replace-workspace\".",
                 "status": "confirmation_required",
             }), 400
+        allow_foreign = body.get("allow_foreign", False)
+        if not isinstance(allow_foreign, bool):
+            return jsonify({"error": "allow_foreign muss true oder false sein.", "status": "invalid_request"}), 400
         try:
             result = restore_backup_archive(
                 backup_path=path,
@@ -1333,7 +1339,17 @@ def create_app(handler: CLIHandler, auth_service=None,
                 workspace_root=pathlib.Path(WORKSPACE),
                 backup_dir=_backup_root(),
                 replace_workspace=replace_workspace,
+                secret=load_backup_secret(),
+                allow_foreign=allow_foreign,
             )
+        except ForeignBackupError as exc:
+            # Fremde oder unbelegte Herkunft: nichts geaendert, Agents des Backups zur Pruefung (R7)
+            return jsonify({
+                "error": f"{exc} Agents im Backup pruefen, dann mit allow_foreign: true wiederholen.",
+                "status": "origin_unverified",
+                "reason": exc.reason,
+                "agents": exc.agents,
+            }), 409
         except ValueError as exc:
             return jsonify({"error": str(exc), "status": "invalid_backup"}), 400
         except OSError as exc:
@@ -1343,6 +1359,7 @@ def create_app(handler: CLIHandler, auth_service=None,
             "status": "restored",
             "format": "zip",
             "db_restored": result.db_restored,
+            "origin": result.origin,
             "workspace_files_restored": result.workspace_files_restored,
             "workspace_replaced": result.workspace_replaced,
             "pre_restore_backup_path": str(result.pre_restore_backup_path),

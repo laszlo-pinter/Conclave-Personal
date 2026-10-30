@@ -103,7 +103,7 @@ conclave runs [--conversation-id <id>] [--limit 100]
 conclave usage [--by-conversation]
 conclave export <conversation_id>
 conclave backup [--dir <backup_dir>]
-conclave restore --backup <backup.zip> [--dir <backup_dir>] [--keep-workspace]
+conclave restore --backup <backup.zip> [--dir <backup_dir>] [--keep-workspace] [--allow-foreign]
 ```
 
 `backup` erstellt ein ZIP mit lokaler SQLite-DB und Workspace-Dateien. Ohne
@@ -116,6 +116,12 @@ wieder her. Vor dem Schreiben wird automatisch ein Pre-Restore-Backup erstellt;
 Anders als die API ersetzt die CLI standardmäßig den Workspace-Inhalt; mit
 `--keep-workspace` werden Dateien aus dem Backup in den bestehenden Workspace
 gemischt.
+Der Restore prüft und entpackt erst alles; schlägt ein Schritt fehl, bleiben
+Datenbank und Workspace unverändert. Ein Backup ohne belegte Herkunft (andere
+Instanz, verändert oder ältere Backups ohne Manifest) spielt `restore` nicht ein,
+sondern listet die Agents aus dem Backup mit ihren Ziel-URLs. Nach Prüfung mit
+`--allow-foreign` wiederholen. Details:
+[API-Referenz, Backup und Restore](api.md#backup-und-restore).
 
 ## Migration
 

@@ -1092,8 +1092,9 @@ class CLIHandler:
         if backup_dir is None:
             backup_dir_env = os.environ.get("CONCLAVE_BACKUP_DIR", "").strip()
             backup_dir = Path(backup_dir_env) if backup_dir_env else root.parent / "backups"
-        from conclave.runtime.backup import create_backup_archive
-        backup_path = create_backup_archive(db_path=db_path, workspace_root=root, backup_dir=backup_dir)
+        from conclave.runtime.backup import create_backup_archive, load_backup_secret
+        backup_path = create_backup_archive(db_path=db_path, workspace_root=root, backup_dir=backup_dir,
+                                            secret=load_backup_secret())
         return CLIResult(success=True, message="Backup erstellt.",
                          data={"backup_path": str(backup_path), "format": "zip"})
 
@@ -1103,12 +1104,13 @@ class CLIHandler:
         db_path: Path | None = None,
         backup_dir: Path | None = None,
         replace_workspace: bool = True,
+        allow_foreign: bool = False,
     ) -> CLIResult:
         root = self._workspace_root()
         if backup_dir is None:
             backup_dir_env = os.environ.get("CONCLAVE_BACKUP_DIR", "").strip()
             backup_dir = Path(backup_dir_env) if backup_dir_env else root.parent / "backups"
-        from conclave.runtime.backup import restore_backup_archive
+        from conclave.runtime.backup import ForeignBackupError, load_backup_secret, restore_backup_archive
         try:
             result = restore_backup_archive(
                 backup_path=backup_path,
@@ -1116,6 +1118,16 @@ class CLIHandler:
                 workspace_root=root,
                 backup_dir=backup_dir,
                 replace_workspace=replace_workspace,
+                secret=load_backup_secret(),
+                allow_foreign=allow_foreign,
+            )
+        except ForeignBackupError as exc:
+            agents = "\n".join(f"  {a['id']}: {a['api_url'] or '(Standard des Presets)'}" for a in exc.agents)
+            return CLIResult(
+                success=False,
+                message=(f"{exc}\nAgents im Backup:\n{agents or '  (keine)'}\n"
+                         "Pruefen, dann mit --allow-foreign wiederholen. Es wurde nichts geaendert."),
+                data={"status": "origin_unverified", "reason": exc.reason, "agents": exc.agents},
             )
         except ValueError as exc:
             return CLIResult(success=False, message=str(exc), data={"status": "invalid_backup"})
@@ -1131,5 +1143,6 @@ class CLIHandler:
                 "db_restored": result.db_restored,
                 "workspace_files_restored": result.workspace_files_restored,
                 "workspace_replaced": result.workspace_replaced,
+                "origin": result.origin,
             },
         )
