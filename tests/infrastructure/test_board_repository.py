@@ -429,3 +429,29 @@ def test_migration_014_takes_rank_from_position(tmp_path):
     run_migrations(conn)
     rows = conn.execute("SELECT number FROM board_tasks ORDER BY rank").fetchall()
     assert [r[0] for r in rows] == [2, 3, 1]
+
+
+def test_migration_015_adds_origin_columns_and_history_tables(tmp_path, crypto):
+    """R9: bestehende Boards bekommen Herkunftsspalten, Soft-Delete und Projekt-Verlauf."""
+    import sqlite3
+    from conclave.infrastructure.migrations import MIGRATIONS, run_migrations
+    conn = sqlite3.connect(tmp_path / "alt.db")
+    before = [m for m in MIGRATIONS if m.id != "015_board_history"]
+    for table in ("conversations (id TEXT PRIMARY KEY, status TEXT)", "agents (id TEXT PRIMARY KEY)",
+                  "audit_log (id TEXT PRIMARY KEY)", "messages (id TEXT PRIMARY KEY, content TEXT)"):
+        conn.execute(f"CREATE TABLE {table}")
+    run_migrations(conn, migrations=before)
+    for table, column in (("board_tasks", "origin"), ("board_tasks", "actor_id"), ("board_tasks", "created_by"),
+                          ("board_comments", "deleted_at")):
+        conn.execute(f"ALTER TABLE {table} DROP COLUMN {column}")        # Stand vor R9
+    conn.execute("DROP TABLE board_project_events")
+    conn.execute("DROP TABLE board_settings")
+    conn.execute("INSERT INTO board_projects (id, slug, name, created_at) VALUES ('p', 'api', 'API', '2026-01-01')")
+    conn.execute("INSERT INTO board_tasks (id, project_id, number, title, status, position, human, created_at, "
+                 "updated_at) VALUES ('t1', 'p', 1, 'alt', 'todo', 1024, 0, '2026-01-01', '2026-01-01')")
+    conn.commit()
+    run_migrations(conn)
+    repo = SQLiteBoardRepository(conn, autocommit=True)
+    task = repo.get_task("api", 1)
+    assert (task.origin, task.actor_id, task.created_by) == (None, None, "")
+    assert repo.list_project_events("p") == [] and repo.get_setting("last_status") is None
