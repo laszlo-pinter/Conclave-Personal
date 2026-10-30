@@ -105,8 +105,10 @@ def test_token_in_query_string_is_not_accepted(app):
 
 # ── MCP-Server mit dem Mensch-Token ───────────────────────────────────────
 
-def test_mcp_server_warns_when_given_the_human_token(monkeypatch, capsys):
+def test_mcp_server_refuses_the_human_token(monkeypatch, capsys):
+    """R2: Mit dem Mensch-Token arbeitet der MCP-Server nicht (frueher nur eine Warnung)."""
     import httpx
+    from mcp.server.mcpserver.exceptions import ToolError
 
     import conclave.mcp_server as server
 
@@ -116,10 +118,11 @@ def test_mcp_server_warns_when_given_the_human_token(monkeypatch, capsys):
         seen["auth"] = headers.get("Authorization")
         return httpx.Response(200, json={"role": "human"}, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(server, "_role_checked", False)
+    monkeypatch.setattr(server, "_confirmed_token", None)
+    monkeypatch.delenv("CONCLAVE_MCP_ALLOW_HUMAN", raising=False)
     monkeypatch.setattr(server.httpx, "get", fake_get)
     monkeypatch.setenv("CONCLAVE_AGENT_KEY", HUMAN_TOKEN)
-    server._check_role()
-    err = capsys.readouterr().err
-    assert "WARNUNG: conclave-mcp nutzt das Mensch-Token" in err and HUMAN_TOKEN not in err
+    with pytest.raises(ToolError, match="Mensch-Token"):
+        server._check_role()
+    assert HUMAN_TOKEN not in capsys.readouterr().err
     assert seen["auth"] == f"Bearer {HUMAN_TOKEN}"

@@ -9,36 +9,38 @@ Benoetigt das Extra ``mcp`` (MCP Python SDK 2.x): pip install "conclave-personal
 
 Der MCP-Server nutzt den Agent-Zugang (seit v0.5.0): das Token aus
 CONCLAVE_AGENT_KEY oder, falls leer, aus agent.token im Konfigurationsverzeichnis.
-api.token (Mensch-Token) liest er nie. CONCLAVE_API_KEY gilt nur noch als
-Rueckfall fuer alte Einrichtungen; liefert der Server dafuer die Rolle "human",
-steht eine Warnung auf stderr. Den passenden Befehl zeigt `conclave token show --agent`.
+api.token und CONCLAVE_API_KEY (Mensch-Token) liest er nie. Meldet der Server
+fuer das Token die Rolle "human", lehnt jedes Tool ab; nur mit
+CONCLAVE_MCP_ALLOW_HUMAN=1 (unsicher, nur zur Fehlersuche) arbeitet er trotzdem.
+Den passenden Befehl zeigt `conclave token show --agent`.
 
 In Claude Code:
     claude mcp add Conclave -s user -e CONCLAVE_API_URL=http://localhost:8000 -- conclave-mcp
 """
 
 import os
+import re
 import sys
 import threading
 from importlib.metadata import PackageNotFoundError, version
+from urllib.parse import quote
 
 import httpx
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from conclave.runtime.api_token import read_agent_token
-from conclave.runtime.env import env_secret
 
 # ── Config ────────────────────────────────────────────────────────────────
 
 API_URL = os.environ.get("CONCLAVE_API_URL", "http://localhost:8000")
-# Token: CONCLAVE_AGENT_KEY, sonst agent.token, sonst (alt) CONCLAVE_API_KEY - nie api.token.
+# Token: CONCLAVE_AGENT_KEY, sonst agent.token - nie das Mensch-Token.
 # Wird pro Anfrage gelesen, damit der MCP-Client auch vor dem ersten Serverstart laufen darf.
 
 
 def read_token() -> str:
-    """Token fuer den MCP-Server: der Agent-Zugang, nie die Datei api.token."""
-    return read_agent_token() or env_secret("CONCLAVE_API_KEY")
+    """Token fuer den MCP-Server: nur der Agent-Zugang (nie api.token oder CONCLAVE_API_KEY)."""
+    return read_agent_token()
 
 
 def _package_version() -> str:
@@ -93,41 +95,72 @@ def _result(r: httpx.Response) -> dict:
 
 
 _role_lock = threading.Lock()
-_role_checked = False
+_confirmed_token: str | None = None     # Token, dessen Rolle geprueft und erlaubt ist
 
-HUMAN_TOKEN_WARNING = (
-    "WARNUNG: conclave-mcp nutzt das Mensch-Token. Agenten haben damit vollen Zugang zu Conclave "
-    "(Einstellungen, Loeschen, Backups). Bitte CONCLAVE_AGENT_KEY setzen bzw. CONCLAVE_API_KEY aus der "
-    "MCP-Konfiguration entfernen - der Befehl steht in `conclave token show --agent`."
+HUMAN_TOKEN_ERROR = (
+    "conclave-mcp nutzt das Mensch-Token und lehnt deshalb ab: Agenten haetten damit vollen Zugang "
+    "zu Conclave (Einstellungen, Loeschen, Backups). Bitte das Agent-Token eintragen "
+    "(CONCLAVE_AGENT_KEY oder agent.token); den Befehl zeigt `conclave token show --agent`."
+)
+ALLOW_HUMAN_WARNING = (
+    "WARNUNG: conclave-mcp arbeitet mit dem Mensch-Token, weil CONCLAVE_MCP_ALLOW_HUMAN=1 gesetzt ist. "
+    "Agenten haben damit vollen Zugang zu Conclave; nur zur Fehlersuche verwenden."
 )
 
 
 def _check_role() -> None:
-    """Einmal pro Prozess: GET /auth/whoami. Bei Rolle human eine deutliche Warnung auf stderr (4.2)."""
-    global _role_checked
+    """Vor jedem Tool-Aufruf: Rolle des aktuellen Tokens per GET /auth/whoami pruefen.
+
+    Erlaubt ist nur ``agent`` (bzw. ``human`` mit CONCLAVE_MCP_ALLOW_HUMAN=1). Das Ergebnis
+    gilt nur fuer genau dieses Token; ist der Server nicht erreichbar, wird beim naechsten
+    Aufruf erneut geprueft.
+    """
+    global _confirmed_token
+    token = read_token()
     with _role_lock:
-        if _role_checked:
+        if token and token == _confirmed_token:
             return
-        _role_checked = True
     try:
         r = httpx.get(f"{API_URL}/auth/whoami", headers=_headers(), timeout=10)
-    except httpx.HTTPError:
-        r = None
-    if r is None or r.status_code not in (200, 404):
-        # Server noch nicht da oder Token falsch: beim naechsten Aufruf erneut pruefen
-        with _role_lock:
-            _role_checked = False
-        return
+    except httpx.HTTPError as exc:
+        raise ToolError(f"Conclave-Server unter {API_URL} nicht erreichbar: {exc}") from exc
     if r.status_code == 404:
-        print("WARNUNG: Der Conclave-Server kennt keine getrennten Zugaenge (aelter als v0.5.0).",
-              file=sys.stderr, flush=True)
-    elif r.status_code == 200:
+        raise ToolError("Der Conclave-Server kennt keine getrennten Zugaenge (aelter als v0.5.0); "
+                        "bitte den Server aktualisieren.")
+    role = None
+    if r.status_code == 200:
         try:
             role = r.json().get("role")
         except (ValueError, AttributeError):
-            return
-        if role == "human":
-            print(HUMAN_TOKEN_WARNING, file=sys.stderr, flush=True)
+            role = None
+    else:
+        _result(r)                      # 401 usw. als ToolError mit Conclaves Meldung
+    if role == "human":
+        if os.environ.get("CONCLAVE_MCP_ALLOW_HUMAN") != "1":
+            raise ToolError(HUMAN_TOKEN_ERROR)
+        print(ALLOW_HUMAN_WARNING, file=sys.stderr, flush=True)
+    elif role != "agent":
+        raise ToolError("Die Rolle des Tokens liess sich nicht pruefen (GET /auth/whoami).")
+    with _role_lock:
+        _confirmed_token = token
+
+
+# ── Pfade: jedes Segment kodiert, nichts ausserhalb der vorgesehenen Route ─
+
+def _seg(value) -> str:
+    """Ein Pfadsegment: leer, "." und ".." abgelehnt, alles andere vollstaendig kodiert."""
+    text = str(value)
+    if text in ("", ".", ".."):
+        raise ToolError(f"Ungueltige ID bzw. ungueltiger Pfadteil: {text!r}")
+    return quote(text, safe="")
+
+
+def _workspace_path(filepath: str) -> str:
+    """Relativer Workspace-Pfad: Segmente an / und \\ getrennt, jedes kodiert; kein .., keine Leersegmente."""
+    parts = re.split(r"[\\/]", str(filepath))
+    if any(part in ("", ".", "..") for part in parts):
+        raise ToolError(f"Ungueltiger Workspace-Pfad {filepath!r}: keine leeren Teile, kein . oder ..")
+    return "/".join(_seg(part) for part in parts)
 
 
 def _request(method: str, path: str, *, timeout: float, **kwargs) -> dict:
@@ -163,7 +196,7 @@ def conclave_create_conversation(topic: str = "") -> dict:
     result = _post("/conversations")
     conv_id = result.get("conversation_id")
     if topic and conv_id:
-        _post(f"/conversations/{conv_id}/topic", {"topic": topic})
+        _post(f"/conversations/{_seg(conv_id)}/topic", {"topic": topic})
     return {"conversation_id": conv_id, "topic": topic}
 
 
@@ -180,7 +213,7 @@ def conclave_get_conversation(conversation_id: str) -> dict:
     Args:
         conversation_id: Die ID der Conversation
     """
-    return _get(f"/conversations/{conversation_id}")
+    return _get(f"/conversations/{_seg(conversation_id)}")
 
 
 # Loeschen (Conversations, Workspace-Dateien) darf nur der Mensch (E2), daher kein Tool dafuer.
@@ -201,7 +234,7 @@ def conclave_add_participant(
         agent_id: Die ID des Agenten (z.B. "Claude", "ChatGPT")
         name: Optionaler Anzeigename (Default: gleich wie agent_id)
     """
-    return _post(f"/conversations/{conversation_id}/participants", {
+    return _post(f"/conversations/{_seg(conversation_id)}/participants", {
         "participant_id": agent_id,
         "name": name or agent_id,
         "type": "model",
@@ -224,7 +257,7 @@ def conclave_send_message(conversation_id: str, content: str) -> dict:
         conversation_id: Die ID der Conversation
         content: Der Nachrichtentext
     """
-    return _post(f"/conversations/{conversation_id}/messages", {"content": content})
+    return _post(f"/conversations/{_seg(conversation_id)}/messages", {"content": content})
 
 
 @mcp.tool()
@@ -234,7 +267,7 @@ def conclave_get_messages(conversation_id: str) -> list[dict]:
     Args:
         conversation_id: Die ID der Conversation
     """
-    data = _get(f"/conversations/{conversation_id}")
+    data = _get(f"/conversations/{_seg(conversation_id)}")
     return data.get("messages", [])
 
 
@@ -248,7 +281,7 @@ def conclave_invoke(conversation_id: str, participant_id: str) -> dict:
         conversation_id: Die ID der Conversation
         participant_id: Die ID des Participants (z.B. "Claude")
     """
-    return _post(f"/conversations/{conversation_id}/participants/{participant_id}/invoke")
+    return _post(f"/conversations/{_seg(conversation_id)}/participants/{_seg(participant_id)}/invoke")
 
 
 @mcp.tool()
@@ -273,7 +306,7 @@ def conclave_orchestrate(
     # POST /conversations/<id>/orchestrate-parallel mit eigener groups-Struktur.
     endpoint = "/orchestrate-parallel" if parallel else "/orchestrate"
     body = {"groups": [list(sequence)]} if parallel else {"sequence": sequence}
-    return _post(f"/conversations/{conversation_id}{endpoint}", body)
+    return _post(f"/conversations/{_seg(conversation_id)}{endpoint}", body)
 
 
 @mcp.tool()
@@ -283,7 +316,7 @@ def conclave_export_conversation(conversation_id: str) -> dict:
     Args:
         conversation_id: Die ID der Conversation
     """
-    return _get(f"/conversations/{conversation_id}/export")
+    return _get(f"/conversations/{_seg(conversation_id)}/export")
 
 
 @mcp.tool()
@@ -312,7 +345,7 @@ def conclave_read_file(filepath: str) -> dict:
     Args:
         filepath: Relativer Pfad im Workspace (z.B. "analyse.md" oder "daten/input.csv")
     """
-    return _get(f"/workspace/{filepath}")
+    return _get(f"/workspace/{_workspace_path(filepath)}")
 
 
 @mcp.tool()
@@ -326,7 +359,7 @@ def conclave_upload_file(filepath: str, content: str) -> dict:
         filepath: Relativer Pfad im Workspace (z.B. "ergebnis.md" oder "reports/zusammenfassung.txt")
         content: Der Dateiinhalt als Text
     """
-    return _post(f"/workspace/{filepath}", {"content": content})
+    return _post(f"/workspace/{_workspace_path(filepath)}", {"content": content})
 
 
 # ── Tools: Board (Arbeitspakete) ──────────────────────────────────────────
@@ -341,7 +374,7 @@ def _task_path(task: str) -> str:
         slug, number = parse_ref(task)
     except ValueError as e:
         raise ToolError(str(e)) from None
-    return f"/board/projects/{slug}/tasks/{number}"
+    return f"/board/projects/{_seg(slug)}/tasks/{int(number)}"
 
 
 def _brief(t: dict) -> dict:
@@ -501,7 +534,7 @@ def conclave_get_consultation(consultation_id: str) -> dict:
     Args:
         consultation_id: ID aus conclave_consult
     """
-    return _get(f"/consultations/{consultation_id}")
+    return _get(f"/consultations/{_seg(consultation_id)}")
 
 
 # ── Entrypoint ────────────────────────────────────────────────────────────

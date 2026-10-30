@@ -156,7 +156,7 @@ Neben `conclave` installiert das Paket diese Konsolenprogramme:
 | Programm | Zweck |
 |----------|-------|
 | `conclave-api` | Startet den API-Server direkt (ohne die Launch-Logik von `conclave server`) |
-| `conclave-mcp` | MCP-Server, der die Conclave-API über `CONCLAVE_API_URL` (Default `http://localhost:8000`) anspricht. Nutzt nur das Agent-Token (`CONCLAVE_AGENT_KEY` bzw. `agent.token`, als Rückfall `CONCLAVE_API_KEY` mit Warnung), nie `api.token` |
+| `conclave-mcp` | MCP-Server, der die Conclave-API über `CONCLAVE_API_URL` (Default `http://localhost:8000`) anspricht. Nutzt nur das Agent-Token (`CONCLAVE_AGENT_KEY` bzw. `agent.token`), nie `api.token` oder `CONCLAVE_API_KEY`; mit dem Mensch-Token lehnt jedes Tool ab (Ausnahme zur Fehlersuche: `CONCLAVE_MCP_ALLOW_HUMAN=1`) |
 | `conclave-watch` | Beobachtet eine Conversation über die HTTP-API |
 
 ```powershell

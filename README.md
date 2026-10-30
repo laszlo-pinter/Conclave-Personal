@@ -276,8 +276,8 @@ The MCP server uses only the agent token: it reads `CONCLAVE_AGENT_KEY` or
 client) and never reads `api.token`. `conclave token show --agent` prints the
 path and a ready-made `claude mcp add` command. If the server runs with an
 explicit `CONCLAVE_AGENT_KEY`, set the same value in the MCP `env` block. Never
-put the human token there: with it, agents get full access, and the MCP server
-prints a warning.
+put the human token there: the MCP server refuses to work with it (since
+v0.6.2).
 
 With the agent token, agents can do what the MCP tools need and nothing else:
 no settings, agent management, backups, logs or deleting (`403 HumanOnly`).

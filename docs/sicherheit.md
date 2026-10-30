@@ -60,7 +60,10 @@ Anfrage spielen dafür keine Rolle.
   nie `api.token`. Ist es gleich dem Mensch-Token, gibt es keinen
   Agent-Zugang.
 - **Rolle prüfen:** `GET /auth/whoami` liefert `{"role": "human"|"agent"}`.
-  Bekommt der MCP-Server `human`, schreibt er eine Warnung nach stderr.
+  Bekommt der MCP-Server `human`, lehnt er jedes Tool ab (seit v0.6.2; nur mit
+  `CONCLAVE_MCP_ALLOW_HUMAN=1` arbeitet er trotzdem, mit Warnung, für die
+  Fehlersuche). `CONCLAVE_API_KEY` liest er nicht. Pfadteile in Tool-Aufrufen
+  werden vollständig kodiert.
 - **Rechte des Agent-Zugangs:** nur die Routen, die die MCP-Tools brauchen
   (Liste in `api/access.py`); alles andere ergibt `403`
   `{"type": "HumanOnly"}`. Neue Routen sind für Agenten gesperrt, bis sie
