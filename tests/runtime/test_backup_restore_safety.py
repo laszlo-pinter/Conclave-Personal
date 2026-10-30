@@ -15,7 +15,9 @@ from datetime import datetime, timezone
 import pytest
 
 from conclave.runtime import backup as backup_mod
-from conclave.runtime.backup import ForeignBackupError, create_backup_archive, restore_backup_archive
+from conclave.runtime.backup import (
+    ForeignBackupError, WorkspaceBusyError, create_backup_archive, restore_backup_archive,
+)
 
 SECRET = b"secret-a"
 OTHER = b"secret-b"
@@ -304,3 +306,57 @@ def test_backup_without_secret_counts_as_foreign(env):
     path = create_backup_archive(db_path=db, workspace_root=workspace, backup_dir=backups, secret=None)
     with pytest.raises(ForeignBackupError):
         _restore(path, db, workspace, backups)
+
+
+# ── Nacharbeit aus dem Review ───────────────────────────────────────────────
+
+def test_replacing_a_workspace_with_a_junction_leaves_the_junction_target_intact(env):
+    tmp_path, workspace, db, backups = env
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "wichtig.txt").write_text("bleibt", encoding="utf-8")
+    _junction(outside, workspace / "link")
+    path = _own_backup(tmp_path, backups)
+    _restore(path, db, workspace, backups, replace_workspace=True)
+    assert (outside / "wichtig.txt").read_text(encoding="utf-8") == "bleibt"
+    assert _state(workspace) == [("notes/new.md", b"neu")]
+
+
+def test_busy_workspace_reports_clearly_and_changes_nothing(env, monkeypatch):
+    tmp_path, workspace, db, backups = env
+    path = _own_backup(tmp_path, backups)
+    before = _state(workspace)
+    real = os.replace
+
+    def busy(src, dst):
+        if os.path.abspath(src) == str(workspace):
+            raise PermissionError(32, "Datei wird verwendet")
+        return real(src, dst)
+
+    monkeypatch.setattr(backup_mod.os, "replace", busy)
+    with pytest.raises(WorkspaceBusyError, match="in Benutzung"):
+        _restore(path, db, workspace, backups, replace_workspace=True)
+    monkeypatch.undo()
+    assert _state(workspace) == before and _marker(db) == "old db"
+
+
+def test_file_used_as_folder_is_an_invalid_backup(env):
+    tmp_path, workspace, db, backups = env
+    backups.mkdir()
+    path = backups / "clash.zip"
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("workspace/a", "datei")
+        zf.writestr("workspace/a/b", "darunter")
+    with pytest.raises(ValueError, match="folder"):
+        _restore(path, db, workspace, backups, allow_foreign=True)
+
+
+def test_name_collision_never_deletes_an_existing_backup(env, monkeypatch):
+    _, workspace, db, backups = env
+    backups.mkdir()
+    existing = backups / "fest.zip"
+    existing.write_bytes(b"vorhandenes backup")
+    monkeypatch.setattr(backup_mod, "_new_backup_path", lambda directory, prefix: existing)
+    with pytest.raises(FileExistsError):
+        create_backup_archive(db_path=db, workspace_root=workspace, backup_dir=backups, secret=SECRET)
+    assert existing.read_bytes() == b"vorhandenes backup"

@@ -61,7 +61,7 @@ from conclave.application import workspace_security
 from conclave.infrastructure.log import active_log_file, get_logger, read_log_tail
 from conclave.runtime.toml_edit import set_toml_string
 from conclave.runtime.backup import (
-    ForeignBackupError, create_backup_archive, load_backup_secret, restore_backup_archive,
+    ForeignBackupError, WorkspaceBusyError, create_backup_archive, load_backup_secret, restore_backup_archive,
 )
 from conclave.runtime.assets import get_asset_root
 from conclave.runtime.env import env_secret
@@ -1360,6 +1360,8 @@ def create_app(handler: CLIHandler, auth_service=None,
             }), 409
         except ValueError as exc:
             return jsonify({"error": str(exc), "status": "invalid_backup"}), 400
+        except WorkspaceBusyError as exc:
+            return jsonify({"error": str(exc), "status": "workspace_busy"}), 409
         except OSError as exc:
             logger.exception("Restore fehlgeschlagen: %s", exc)
             return jsonify({"error": "Restore fehlgeschlagen.", "status": "restore_failed"}), 500

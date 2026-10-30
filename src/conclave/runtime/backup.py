@@ -54,6 +54,10 @@ class ForeignBackupError(Exception):
         return f"Herkunft des Backups nicht belegt ({self.reason}). Restore nur mit Bestaetigung."
 
 
+class WorkspaceBusyError(OSError):
+    """Der Workspace laesst sich nicht tauschen, weil ein Prozess darin Dateien offen hat."""
+
+
 def load_backup_secret() -> bytes | None:
     """Schluessel fuer das Backup-Manifest: derselbe wie fuer die Verschluesselung (secret.key).
 
@@ -96,9 +100,10 @@ def create_backup_archive(
     backup_path = _new_backup_path(backup_dir, prefix)
     files: dict[str, dict] = {}
 
+    # Modus "x": ein vorhandenes Backup wird nie ueberschrieben; aufgeraeumt wird nur das eigene
+    archive = zipfile.ZipFile(backup_path, "x", compression=zipfile.ZIP_DEFLATED)
     try:
-        # Modus "x": ein vorhandenes Backup wird nie ueberschrieben
-        with zipfile.ZipFile(backup_path, "x", compression=zipfile.ZIP_DEFLATED) as zf:
+        with archive as zf:
             if db_path and db_path.is_file():
                 with tempfile.TemporaryDirectory(dir=str(backup_dir), prefix=".snapshot-") as tmp_dir:
                     snapshot = Path(tmp_dir) / "conclave.db"
@@ -165,7 +170,10 @@ def _is_link(path: Path) -> bool:
     isjunction = getattr(os.path, "isjunction", None)
     if isjunction is not None:
         return isjunction(path)
-    tag = getattr(os.lstat(path), "st_reparse_tag", 0)
+    try:
+        tag = getattr(os.lstat(path), "st_reparse_tag", 0)
+    except OSError:
+        return True                                # nicht pruefbar: wie ein Link behandeln
     return tag == getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", -1)
 
 
@@ -249,10 +257,15 @@ def restore_backup_archive(
         # 3. Workspace tauschen, 4. DB zuletzt; bei einem Fehler zurueck
         undo = None
         if staged_files:
-            if replace_workspace:
-                undo = _swap_workspace(staged_workspace, workspace_root, staging / "previous")
-            else:
-                undo = _merge_workspace(staged_workspace, workspace_root, staged_files, staging / "previous")
+            try:
+                if replace_workspace:
+                    undo = _swap_workspace(staged_workspace, workspace_root, staging / "previous")
+                else:
+                    undo = _merge_workspace(staged_workspace, workspace_root, staged_files, staging / "previous")
+            except PermissionError as exc:
+                raise WorkspaceBusyError(
+                    "Workspace ist in Benutzung (eine Datei darin ist geoeffnet). "
+                    "Programme schliessen und erneut versuchen; es wurde nichts geaendert.") from exc
         db_restored = False
         try:
             if staged_db is not None and db_path is not None:
@@ -288,6 +301,7 @@ def _restore_limit_bytes() -> int:
 def _validate_members(members: list[zipfile.ZipInfo]) -> None:
     total_size = 0
     seen: set[str] = set()
+    files: list[str] = []
     for member in members:
         path = _member_path(member)
         parts = path.parts
@@ -310,9 +324,16 @@ def _validate_members(members: list[zipfile.ZipInfo]) -> None:
             if key in seen:
                 raise ValueError(f"Backup archive contains a duplicate path: {member.filename}")
             seen.add(key)
+            files.append(key)
             total_size += max(0, member.file_size)
             if total_size > _restore_limit_bytes():
                 raise ValueError("Backup archive exceeds the configured restore size limit.")
+    for key in files:                                # Datei und Ordner mit demselben Namen
+        parent = PurePosixPath(key).parent
+        while parent.parts:
+            if parent.as_posix() in seen:
+                raise ValueError(f"Backup archive uses a file name as a folder: {parent.as_posix()}")
+            parent = parent.parent
 
 
 def _member_path(member: zipfile.ZipInfo) -> PurePosixPath:

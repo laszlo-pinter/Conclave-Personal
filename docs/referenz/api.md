@@ -306,6 +306,8 @@ importierte Tickets keinen Verlauf.
   Zwischenverzeichnis, tauscht dann den Workspace und spielt die Datenbank
   zuletzt ein. Schlägt ein Schritt fehl, bleiben Datenbank und Workspace
   unverändert. Trigger und Views aus der Backup-Datenbank werden verworfen.
+  Ist eine Datei im Workspace geöffnet (unter Windows z. B. im Editor),
+  antwortet der Restore mit `409`, `"status": "workspace_busy"`.
 - **Herkunft:** Jedes Backup enthält ein `manifest.json` mit Instanz-ID und
   einer Signatur über den Inhalt, abgeleitet aus `secret.key`. Stammt ein Backup
   nicht nachweislich von dieser Instanz (andere Instanz, verändert, ohne
