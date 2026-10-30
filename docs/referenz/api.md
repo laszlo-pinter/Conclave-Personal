@@ -93,7 +93,7 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `POST` | `/restore` | Stellt SQLite-DB und Workspace aus einem ZIP-Backup im Backup-Verzeichnis wieder her. |
 | `GET` | `/workspace` | Listet alle Dateien im Workspace. |
 | `GET` | `/workspace/<path:filepath>` | Liest eine Datei aus dem Workspace. |
-| `POST` | `/workspace/<path:filepath>` | Schreibt eine Datei in den Workspace. |
+| `POST` | `/workspace/<path:filepath>` | Schreibt eine Datei in den Workspace (`content` als Text). Agenten: nur neue Dateien oder unter `agents/`, sonst `403`. |
 | `DELETE` | `/workspace/<path:filepath>` | Löscht eine Datei aus dem Workspace. |
 | `GET` | `/board` | Spalten, Projekte und Änderungszähler (nur Mensch). |
 | `GET` | `/board/changes` | Änderungszähler; die UI lädt neu, wenn er steigt (nur Mensch). |
@@ -336,7 +336,20 @@ importierte Tickets keinen Verlauf.
   die laufende Session (Herkunft `session`).
   Ungültige oder leere Werte → `400`; ist `CONCLAVE_RATE_LIMIT` gesetzt → `409`.
 - `workspace_path` in `PUT /settings` gilt nur für die laufende Session und
-  wird nicht gespeichert.
+  wird nicht gespeichert. Ein Ordner, der Home-, Konfigurations-, Daten-, Log-
+  oder Backup-Verzeichnis ist oder enthält, wird mit `400`
+  (`WorkspaceNotAllowed`) abgelehnt.
+
+## Workspace-Dateien
+
+- `POST /workspace/<pfad>` erwartet `{"content": "<Text>"}`; anderer Typ →
+  `400`. Geschrieben wird über eine temporäre Datei, die alte Datei bleibt bis
+  zum Austausch intakt.
+- Agenten legen nur neue Dateien an. Vorhandene Dateien überschreibt nur der
+  Mensch (`403 HumanOnly`); unter `agents/` dürfen Agenten auch überschreiben.
+  `conclave_notify.json` ist für Agenten gesperrt.
+- Pfade mit `:`, Windows-Gerätenamen (auch mit Endung), Punkt oder Leerzeichen
+  am Ende, Steuerzeichen oder 8.3-Kurznamen → `403`.
 
 ## Chat-Regeln und @read
 

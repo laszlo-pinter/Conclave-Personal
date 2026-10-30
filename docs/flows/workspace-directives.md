@@ -61,7 +61,7 @@ unter Linux `~/Conclave/workspace`. Das gilt für alle Einstiegspunkte
 - **Trigger:** Nach Agent-Antwort, vor Message-Persistierung
 - **Regex:** `@save\(([^)]+)\)\s*\n(.*?)(?:@endsave|$)` (DOTALL)
 - **Aktion:** Schreibt Content zwischen @save und @endsave in workspace/output/. Fehlt `@endsave`, wird bis zum Ende der Antwort gespeichert.
-- **Security:** `resolve_output_path()` begrenzt Schreibzugriffe auf `workspace/output/`
+- **Security:** `resolve_output_path()` begrenzt Schreibzugriffe auf `workspace/output/`; geschrieben wird atomar (`write_text_atomic()`)
 - **Scope:** Nur workspace/output/ (schreibend) — für Agent-Directives ist der Rest schreibgeschützt. UI/API/CLI dürfen überall im Workspace schreiben (außer versteckten Pfaden), siehe Abschnitt 4.
 - **Limits:** `CONCLAVE_WORKSPACE_WRITE_LIMIT_BYTES`, Default `524288`
 - **Protokoll:** Der Schreibversuch erzeugt ein `tool_events`-DB-Ereignis
@@ -76,9 +76,10 @@ unter Linux `~/Conclave/workspace`. Das gilt für alle Einstiegspunkte
 
 - **GET /workspace** — Listet alle Dateien (Pfad, Größe, Änderungsdatum)
 - **GET /workspace/pfad** — Liest Dateiinhalt (UTF-8, 415 bei Binär)
-- **POST /workspace/pfad** — Schreibt Datei (Body: {content}) an beliebiger Stelle im Workspace, nicht nur in `output/`
+- **POST /workspace/pfad** — Schreibt Datei (Body: {content}, Text) an beliebiger Stelle im Workspace, nicht nur in `output/`; atomar über `write_text_atomic()`. Agenten: nur neue Dateien oder unter `agents/` (`agent_write_problem()`), `conclave_notify.json` gesperrt
 - **DELETE /workspace/pfad** — Löscht Datei
-- **Security:** `resolve_workspace_path()` und `is_hidden_workspace_path()` in `application/workspace_security.py`
+- **Security:** `resolve_workspace_path()` (inkl. `unsafe_path_component()` und `protected_files()`) und `is_hidden_workspace_path()` in `application/workspace_security.py`; der Ort des Workspace prüft `workspace_location_problem()` (Serverstart, `PUT /settings`)
+- **Test:** `tests/api/test_workspace_rules.py`
 - **Limits:** Lesen über UI/API: `CONCLAVE_WORKSPACE_UI_READ_LIMIT_BYTES`, Schreiben: `CONCLAVE_WORKSPACE_WRITE_LIMIT_BYTES`
 - **Test:** `tests/api/test_workspace_api.py`
 

@@ -358,10 +358,12 @@ def conclave_read_file(filepath: str) -> dict:
 
 @mcp.tool()
 def conclave_upload_file(filepath: str, content: str) -> dict:
-    """Legt eine Datei im Conclave-Workspace ab.
+    """Legt eine neue Datei im Conclave-Workspace ab.
 
     Agenten und du koennen die Datei danach lesen. Unterordner werden
-    automatisch erstellt.
+    automatisch erstellt. Vorhandene Dateien ueberschreibt nur der Mensch;
+    eigene Arbeitsdateien, die du spaeter aendern willst, gehoeren unter
+    "agents/" (dort ist Ueberschreiben erlaubt). conclave_notify.json ist gesperrt.
 
     Args:
         filepath: Relativer Pfad im Workspace (z.B. "ergebnis.md" oder "reports/zusammenfassung.txt")

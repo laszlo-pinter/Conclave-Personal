@@ -246,3 +246,29 @@ def test_invoke_participant_raises_when_no_adapter_and_no_registry(service):
             conversation_id=conversation.id,
             participant_id="model-a",
         )
+
+
+def test_save_directive_keeps_the_old_file_when_writing_fails(service, tmp_path, monkeypatch):
+    """R8: @save schreibt ueber eine temporaere Datei; ein Abbruch laesst die alte Datei stehen."""
+    import os
+
+    workspace = tmp_path / "workspace"
+    (workspace / "output").mkdir(parents=True)
+    (workspace / "output" / "report.md").write_text("alt", encoding="utf-8")
+    monkeypatch.setenv("CONCLAVE_WORKSPACE", str(workspace))
+    conversation = service.create_conversation()
+    service.register_participant(conversation_id=conversation.id, participant_id="model-a",
+                                 participant_type=ParticipantType.MODEL, name="Model A")
+    service.add_user_message(conversation.id, "Bitte speichern.")
+
+    def broken_replace(src, dst):
+        raise OSError("abgebrochen")
+
+    monkeypatch.setattr(os, "replace", broken_replace)
+    reply = service.invoke_participant(conversation_id=conversation.id, participant_id="model-a",
+                                       adapter=FakeModelAdapter("@save(report.md)\nneu\n@endsave"))
+    monkeypatch.undo()
+    assert (workspace / "output" / "report.md").read_text(encoding="utf-8") == "alt"
+    assert sorted(p.name for p in (workspace / "output").iterdir()) == ["report.md"]
+    reply = service.load_conversation(conversation.id).messages[-1].content
+    assert "FEHLER" in reply or "tool_event" in reply

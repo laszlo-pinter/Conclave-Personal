@@ -202,6 +202,21 @@ def _build_board(conn, config):
     return BoardService(repo, StatusFlow(config.board.statuses))
 
 
+def _check_workspace_location(config) -> None:
+    """Der Workspace darf Home-, Konfigurations-, Daten-, Log- und Backup-Verzeichnis nicht enthalten (R8)."""
+    from pathlib import Path
+
+    from conclave.application.workspace_security import workspace_location_problem, workspace_root
+    sqlite = getattr(config, "db_provider", "sqlite") == "sqlite"
+    db_file = Path(config.db_path) if sqlite else None
+    backup_env = os.environ.get("CONCLAVE_BACKUP_DIR", "").strip()
+    backup_dir = Path(backup_env) if backup_env else (db_file.parent / "backups" if db_file else None)
+    problem = workspace_location_problem(workspace_root(), backup_dir=backup_dir,
+                                         extra_files=(db_file,) if db_file else ())
+    if problem:
+        raise RuntimeError(f"Workspace ungueltig (CONCLAVE_WORKSPACE): {problem}")
+
+
 def _build_app(config: ConclaveConfig | None = None):
     """Baut die Flask-App mit allen Services."""
     if config is None:
@@ -210,6 +225,7 @@ def _build_app(config: ConclaveConfig | None = None):
     errors = validate_production_config(config)
     if errors:
         raise RuntimeError(f"Production-Config ungueltig: {'; '.join(errors)}")
+    _check_workspace_location(config)
 
     # DB-Provider waehlen
     if config.db_provider == "postgres":

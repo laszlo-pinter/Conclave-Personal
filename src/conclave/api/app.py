@@ -47,14 +47,17 @@ from conclave.cli.bootstrap import rate_limit_disabled, validate_rate_limit
 from conclave.cli.config import DEFAULT_RATE_LIMIT
 from conclave.application.workspace_security import (
     agent_read_limit_bytes,
+    agent_write_problem,
     assert_size_allowed,
     is_hidden_workspace_path,
     resolve_workspace_path,
+    workspace_location_problem,
     workspace_root,
     text_size,
     ui_read_limit_bytes,
     write_limit_bytes,
 )
+from conclave.application import workspace_security
 from conclave.infrastructure.log import active_log_file, get_logger, read_log_tail
 from conclave.runtime.toml_edit import set_toml_string
 from conclave.runtime.backup import (
@@ -1204,6 +1207,11 @@ def create_app(handler: CLIHandler, auth_service=None,
             workspace_path = str(workspace_path).strip()
             if not workspace_path:
                 return jsonify({"error": "workspace_path darf nicht leer sein."}), 400
+            db_file = _sqlite_db_path()
+            problem = workspace_location_problem(pathlib.Path(workspace_path), backup_dir=_backup_root(),
+                                                 extra_files=(db_file,) if db_file else ())
+            if problem:
+                return jsonify({"error": problem, "type": "WorkspaceNotAllowed"}), 400
             WORKSPACE = workspace_path
             os.environ["CONCLAVE_WORKSPACE"] = workspace_path
             os.makedirs(WORKSPACE, exist_ok=True)
@@ -1424,13 +1432,23 @@ def create_app(handler: CLIHandler, auth_service=None,
             return jsonify({"error": "Pfad nicht erlaubt"}), 403
         if is_hidden_workspace_path(resolved.path, root=resolved.root):
             return jsonify({"error": "Pfad nicht erlaubt"}), 403
-        body = request.get_json() or {}
-        content = body.get("content", "")
-        if text_size(str(content)) > write_limit_bytes():
+        body = request.get_json(silent=True)
+        content = body.get("content", "") if isinstance(body, dict) else None
+        if not isinstance(content, str):
+            return jsonify({"error": "content muss Text sein.", "type": "ValidationError"}), 400
+        if text_size(content) > write_limit_bytes():
             return jsonify({"error": "Datei zu gross", "limit_bytes": write_limit_bytes()}), 413
-        os.makedirs(os.path.dirname(resolved.path), exist_ok=True)
-        with open(resolved.path, "w", encoding="utf-8") as fh:
-            fh.write(content)
+        # Agenten: nur neue Dateien oder unter agents/; vorhandene ueberschreibt der Mensch (R8)
+        create_only = False
+        if g.principal.is_agent:
+            problem = agent_write_problem(resolved)
+            if problem:
+                return jsonify({"error": problem, "type": "HumanOnly"}), 403
+            create_only = not resolved.relative.startswith(f"{workspace_security.AGENT_WRITE_DIR}/")
+        try:
+            workspace_security.write_text_atomic(resolved.path, content, create_only=create_only)
+        except FileExistsError:
+            return jsonify({"error": "Vorhandene Dateien ueberschreibt nur der Mensch.", "type": "HumanOnly"}), 403
         return jsonify({"path": resolved.relative, "size": len(content)}), 201
 
     @app.delete("/workspace/<path:filepath>")

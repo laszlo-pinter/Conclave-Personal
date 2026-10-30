@@ -195,6 +195,20 @@ Oktober 2026):
 - Pfad-Traversal und absolute Ausbrüche werden blockiert.
 - Versteckte Pfade mit Komponenten wie `.private/` werden nicht gelesen oder
   angezeigt.
+- Pfadkomponenten mit `:`, Windows-Gerätenamen (`CON`, `NUL`, `COM1` usw.,
+  auch mit Endung), Punkt oder Leerzeichen am Ende, Steuerzeichen und
+  8.3-Kurznamen (`NAME~1`) werden abgelehnt.
+- Der Workspace darf Home-, Konfigurations-, Daten-, Log- und
+  Backup-Verzeichnis nicht sein oder enthalten, ebenso keine Token-,
+  Schlüssel- oder Datenbankdatei. Der Server startet mit einem solchen
+  `CONCLAVE_WORKSPACE` nicht; `PUT /settings` lehnt ihn mit `400` ab.
+  Token-, Schlüssel- und Datenbankdateien sind über den Workspace nie
+  erreichbar.
+- Agenten legen nur neue Dateien an; vorhandene Dateien überschreibt nur der
+  Mensch (`403`). Unter `agents/` dürfen Agenten auch überschreiben.
+  `conclave_notify.json` ist für Agenten gesperrt.
+- Dateien werden über eine temporäre Datei geschrieben und dann ausgetauscht;
+  bricht das Schreiben ab, bleibt die alte Datei erhalten.
 - Dateigrößenlimits verhindern versehentliche Vollimporte großer Dateien in
   Agent-Kontexte.
 - `context_files:` in den Chat-Regeln unterliegt denselben Grenzen wie

@@ -3,7 +3,6 @@ from collections.abc import AsyncIterator, Iterator
 import asyncio
 import dataclasses
 import inspect
-import os
 import re
 
 import uuid
@@ -19,6 +18,7 @@ from conclave.application.workspace_security import (
     is_agent_visible,
     resolve_output_path,
     resolve_workspace_path,
+    write_text_atomic,
     workspace_root,
     write_limit_bytes,
 )
@@ -404,9 +404,7 @@ class ConversationFlowService:
                     error="file_too_large",
                 )
             try:
-                os.makedirs(os.path.dirname(resolved.path), exist_ok=True)
-                with open(resolved.path, "w", encoding="utf-8") as f:
-                    f.write(file_content)
+                write_text_atomic(resolved.path, file_content)
                 return _legacy_or_event(
                     status="succeeded",
                     legacy_text=f"[Datei gespeichert: @workspace/output/{filepath}]",

@@ -14,6 +14,7 @@ from conclave.application.workspace_security import (
     assert_size_allowed,
     is_hidden_workspace_path,
     resolve_workspace_path,
+    write_text_atomic,
     text_size,
     ui_read_limit_bytes,
     workspace_root,
@@ -1079,10 +1080,11 @@ class CLIHandler:
             return CLIResult(success=False, message="Pfad nicht erlaubt.")
         if is_hidden_workspace_path(path, root=self._workspace_root()):
             return CLIResult(success=False, message="Pfad nicht erlaubt.")
+        if not isinstance(content, str):
+            return CLIResult(success=False, message="Inhalt muss Text sein.")
         if text_size(content) > write_limit_bytes():
             return CLIResult(success=False, message=f"Datei zu gross (Limit: {write_limit_bytes()} Bytes).")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+        write_text_atomic(path, content)
         return CLIResult(success=True, message="Datei gespeichert.",
                          data={"path": path.relative_to(self._workspace_root()).as_posix(),
                                "size": len(content)})
