@@ -78,6 +78,12 @@ den Wert ohne Anführungszeichen eintragen.
 | DEEPSEEK_API_KEY | Fallback für DeepSeek-Presets |
 | DASHSCOPE_API_KEY | Fallback für Qwen/DashScope-Presets |
 
+Ein Fallback-Key geht nur an den Host seines Presets (z. B. `OPENAI_API_KEY`
+nur an `api.openai.com`). Hat ein Agent eine eigene Adresse auf einem anderen
+Host, etwa ein Gateway, bekommt er keinen Fallback-Key; der Key wird dann beim
+Agent eingetragen. Ändern sich Adresse, Preset oder Provider eines Agents,
+verwirft Conclave den gespeicherten Key, außer er wird neu eingegeben.
+
 ## Agent-Seeding
 
 Beim Start von `conclave server`, `conclave desktop` und `conclave-api` werden

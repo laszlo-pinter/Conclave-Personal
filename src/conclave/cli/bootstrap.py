@@ -197,22 +197,14 @@ def _build_adapter_for_agent(agent, config: ConclaveConfig):
 
 
 def _fallback_key_for_agent(agent, config: ConclaveConfig) -> str:
-    api_key = {
+    """Key aus Konfiguration bzw. Umgebung, nur fuer den Host des Presets (R3)."""
+    from conclave.cli.provider_keys import fallback_key
+    return fallback_key(agent, {
         "anthropic": config.anthropic_api_key,
         "openai": config.openai_api_key,
         "openai-responses": config.openai_api_key,
         "gemini": config.gemini_api_key,
-    }.get(agent.provider, "")
-    if api_key:
-        return api_key
-
-    preset_name = agent.preset or agent.provider
-    if not preset_name:
-        return ""
-    from conclave.infrastructure.universal.presets import get_preset
-    preset = get_preset(preset_name) or {}
-    key_env = preset.get("api_key_env", "")
-    return env_secret(key_env) if key_env else ""
+    })
 
 
 def build_registry(

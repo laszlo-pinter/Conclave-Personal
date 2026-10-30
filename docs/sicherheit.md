@@ -166,6 +166,9 @@ Oktober 2026):
   Artefakten ausgeschlossen.
 - Agent-Keys werden lokal verschlüsselt gespeichert, wenn sie in der DB
   abgelegt werden.
+- Keys aus der Umgebung bzw. Konfiguration (`OPENAI_API_KEY` usw.) gehen nur
+  an den Host ihres Presets. Ein gespeicherter Agent-Key wird verworfen, wenn
+  sich Adresse, Preset oder Provider ändern und kein neuer Key eingegeben wird.
 - `CONCLAVE_SECRET_KEY` oder `CONCLAVE_SECRET_KEY_FILE` nach der Erstanlage
   nicht ohne Backup wechseln, sonst können verschlüsselte Werte unlesbar
   werden.

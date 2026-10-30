@@ -83,6 +83,18 @@ async function loadPresets(){
   sel.innerHTML=presetsData.map(p=>`<option value="${attr(p.name)}">${esc(p.label||p.name)}</option>`).join('');
 }
 
+// Adresse weicht vom Preset ab: Keys aus der Umgebung gehen dorthin nicht (R3)
+function updateApiUrlHint(){
+  const url=document.getElementById('aApiUrl').value.trim();
+  const p=presetsData.find(x=>x.name===document.getElementById('aPreset').value)||{};
+  let foreign=false;
+  if(url){
+    try{foreign=!p.api_url||new URL(url).hostname!==new URL(p.api_url.replace('{model}','m')).hostname;}
+    catch{foreign=true;}
+  }
+  document.getElementById('aApiUrlHint').hidden=!foreign;
+}
+
 function onPresetChange(){
   const name=document.getElementById('aPreset').value;
   const p=presetsData.find(x=>x.name===name);
@@ -99,6 +111,7 @@ function onPresetChange(){
   }
   // Erweiterte Felder setzen
   document.getElementById('aApiUrl').value=p.api_url||'';
+  updateApiUrlHint();
   document.getElementById('aResponsePath').value=p.response_path||'';
   document.getElementById('aMsgFormat').value=p.message_format||'standard';
   // Provider aus Preset-Name ableiten
@@ -136,6 +149,7 @@ function openAgentForm(id){
     document.getElementById('aResponsePath').value=a.response_path||'';
     document.getElementById('aMsgFormat').value=a.message_format||'standard';
     document.getElementById('aMaxMessages').value=a.max_messages??'';
+    updateApiUrlHint();
     if(a.system_prompt) sysEdited=true;
     const ro=document.querySelector(`#roleGroup .radio-opt[data-role="${a.role||''}"]`);
     if(ro){document.querySelectorAll('#roleGroup .radio-opt').forEach(el=>el.className='radio-opt');ro.classList.add(ro.dataset.role?'sel-role':'sel-none');}

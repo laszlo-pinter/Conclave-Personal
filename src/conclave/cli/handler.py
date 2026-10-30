@@ -8,7 +8,6 @@ import os
 from datetime import datetime, timezone
 
 from conclave.application.agent_service import AgentService
-from conclave.runtime.env import env_secret
 from conclave.application.conversation_flow import ConversationFlowService
 from conclave.application.orchestrator import Orchestrator, ParallelOrchestrator
 from conclave.application.workspace_security import (
@@ -149,16 +148,8 @@ class CLIHandler:
         }
 
     def _fallback_key_for_agent(self, agent: Agent) -> str:
-        if self._provider_fallback_keys.get(agent.provider):
-            return self._provider_fallback_keys[agent.provider]
-        preset_name = agent.preset or agent.provider
-        try:
-            from conclave.infrastructure.universal.presets import get_preset
-        except ImportError:
-            return ""
-        preset = get_preset(preset_name) or {}
-        key_env = preset.get("api_key_env", "")
-        return env_secret(key_env) if key_env else ""
+        from conclave.cli.provider_keys import fallback_key
+        return fallback_key(agent, self._provider_fallback_keys)
 
     def _run_to_dict(self, run) -> dict:
         usage = None
@@ -298,7 +289,9 @@ class CLIHandler:
 
         Ein leerer api_key bedeutet "gespeicherten Key behalten" - die UI zeigt
         gespeicherte Keys nie an und schickt sie daher beim Bearbeiten nicht mit.
-        Entfernt wird ein Key nur mit clear_api_key=True.
+        Entfernt wird ein Key mit clear_api_key=True, und wenn der Agent danach an
+        einen anderen Host sendet (Adresse, Preset oder Provider geaendert): Dann geht
+        der alte Key nicht an das neue Ziel, ausser er wird neu eingegeben (R3).
         """
         if not self._agent_service:
             return CLIResult(success=False, message="AgentService nicht verfügbar.")
@@ -306,7 +299,11 @@ class CLIHandler:
             if clear_api_key:
                 agent = replace(agent, api_key="")
             elif not agent.api_key:
-                agent = replace(agent, api_key=self._agent_service.get_agent(agent.id).api_key)
+                from conclave.cli.provider_keys import destination_host
+                stored = self._agent_service.get_agent(agent.id)
+                old_host, new_host = destination_host(stored), destination_host(agent)
+                same_target = bool(old_host) and old_host == new_host
+                agent = replace(agent, api_key=stored.api_key if same_target else "")
             self._agent_service.update_agent(agent)
             return CLIResult(success=True, message=f"Agent '{agent.id}' aktualisiert.",
                              data={"id": agent.id})

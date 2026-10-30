@@ -111,6 +111,7 @@ function _bindStaticUiEvents() {
   on('msgInput', 'input', (e) => autoResize(e.target))
   ;['aId','aName','aTopic'].forEach(id => on(id, 'input', updatePrompt))
   on('aPreset', 'change', onPresetChange)
+  on('aApiUrl', 'input', updateApiUrlHint)
   on('boardProject', 'change', onBoardFilter)
   on('boardShowDone', 'change', onBoardFilter)
   on('boardSearch', 'input', onBoardSearch)
