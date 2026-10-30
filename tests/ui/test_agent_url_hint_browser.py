@@ -16,6 +16,8 @@ def test_hint_appears_for_a_foreign_address(chromium, live_server):
         page.click("[data-action='toggle-advanced']")
         page.fill("#aApiUrl", "https://gateway.invalid/v1/chat/completions")
         assert hint.is_visible()
+        page.fill("#aApiUrl", "http://api.openai.com/v1/chat/completions")
+        assert hint.is_visible()                                            # gleicher Host, anderes Schema
         page.fill("#aApiUrl", "https://api.openai.com/v1/chat/completions")
         assert hint.is_hidden()                                             # gleicher Host
         assert errors == []

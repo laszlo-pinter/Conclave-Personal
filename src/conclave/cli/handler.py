@@ -133,7 +133,7 @@ class CLIHandler:
     def _agent_to_dict(self, a: Agent) -> dict:
         # api_key_set spiegelt den effektiven Stand: entweder eigener Key in DB
         # ODER ein Provider-Fallback-Key (aus .env / ConclaveConfig) verfuegbar.
-        effective_key = bool(a.api_key) or bool(self._fallback_key_for_agent(a))
+        effective_key = bool(a.api_key) or bool(self._fallback_key_for_agent(a, log=False))
         return {
             "id": a.id, "name": a.name, "provider": a.provider,
             "model": a.model, "role": a.role, "topic": a.topic,
@@ -147,9 +147,9 @@ class CLIHandler:
             "created_at": a.created_at.isoformat(),
         }
 
-    def _fallback_key_for_agent(self, agent: Agent) -> str:
+    def _fallback_key_for_agent(self, agent: Agent, *, log: bool = True) -> str:
         from conclave.cli.provider_keys import fallback_key
-        return fallback_key(agent, self._provider_fallback_keys)
+        return fallback_key(agent, self._provider_fallback_keys, log=log)
 
     def _run_to_dict(self, run) -> dict:
         usage = None

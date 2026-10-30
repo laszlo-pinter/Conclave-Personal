@@ -88,8 +88,12 @@ function updateApiUrlHint(){
   const url=document.getElementById('aApiUrl').value.trim();
   const p=presetsData.find(x=>x.name===document.getElementById('aPreset').value)||{};
   let foreign=false;
-  if(url){
-    try{foreign=!p.api_url||new URL(url).hostname!==new URL(p.api_url.replace('{model}','m')).hostname;}
+  if(url&&!p.api_url){foreign=true;}
+  else if(url){
+    try{
+      const a=new URL(url), b=new URL(p.api_url.replace('{model}','m'));
+      foreign=a.protocol!==b.protocol||a.hostname!==b.hostname;   // wie der Server: Schema und Host
+    }
     catch{foreign=true;}
   }
   document.getElementById('aApiUrlHint').hidden=!foreign;

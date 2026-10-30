@@ -54,7 +54,7 @@ def test_foreign_url_gets_no_fallback_key(config, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-env-openai")
     agent = Agent(id="a1", name="A", provider="openai", model="gpt-x", preset="openai", api_url=FOREIGN)
     headers = _sent_headers(agent, config)
-    assert headers is None or "Authorization" not in headers
+    assert headers is not None and "Authorization" not in headers          # Preset-Agent: Adapter wird gebaut
 
 
 def test_preset_url_still_uses_the_fallback_key(config):
@@ -135,3 +135,28 @@ def test_same_host_by_other_means_keeps_the_stored_key(agent_service):
     agent_service.create_agent(stored)
     assert handler.update_agent(replace(stored, api_key="", preset="", api_url="")).success
     assert agent_service.get_agent("k3").api_key == "sk-stored"
+
+
+def test_plain_http_to_the_preset_host_gets_no_key():
+    """Review R3: gleicher Host, aber http statt https - der Key ginge im Klartext."""
+    from conclave.cli.provider_keys import fallback_key
+    agent = Agent(id="h1", name="H", provider="openai", model="m", preset="openai",
+                  api_url="http://api.openai.com/v1/chat/completions")
+    assert fallback_key(agent, {"openai": "sk-env-openai"}) == ""
+
+
+def test_rejected_provider_key_falls_back_to_the_preset_key(monkeypatch):
+    """Review R3: provider openai, preset deepseek, beide Keys gesetzt: DEEPSEEK_API_KEY ist richtig."""
+    from conclave.cli.provider_keys import fallback_key
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-deep")
+    agent = Agent(id="a5", name="A", provider="openai", model="m", preset="deepseek")
+    assert fallback_key(agent, {"openai": "sk-env-openai"}) == "sk-deep"
+
+
+def test_agent_list_does_not_log_a_warning(agent_service, caplog):
+    from conclave.cli.handler import CLIHandler
+    handler = CLIHandler(None, agent_service=agent_service, provider_fallback_keys={"openai": "sk-env-openai"})
+    agent_service.create_agent(Agent(id="f2", name="F", provider="openai", model="m", preset="openai", api_url=FOREIGN))
+    with caplog.at_level("WARNING"):
+        handler.list_agents()
+    assert not [r for r in caplog.records if "nicht verwendet" in r.getMessage()]
