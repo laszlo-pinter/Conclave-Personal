@@ -115,11 +115,15 @@ def _check_role() -> None:
     gilt nur fuer genau dieses Token; ist der Server nicht erreichbar, wird beim naechsten
     Aufruf erneut geprueft.
     """
+    with _role_lock:                  # eine Pruefung zur Zeit: keine doppelte Anfrage oder Warnung
+        _check_role_locked()
+
+
+def _check_role_locked() -> None:
     global _confirmed_token
     token = read_token()
-    with _role_lock:
-        if token and token == _confirmed_token:
-            return
+    if token and token == _confirmed_token:
+        return
     try:
         r = httpx.get(f"{API_URL}/auth/whoami", headers=_headers(), timeout=10)
     except httpx.HTTPError as exc:
@@ -141,16 +145,19 @@ def _check_role() -> None:
         print(ALLOW_HUMAN_WARNING, file=sys.stderr, flush=True)
     elif role != "agent":
         raise ToolError("Die Rolle des Tokens liess sich nicht pruefen (GET /auth/whoami).")
-    with _role_lock:
-        _confirmed_token = token
+    _confirmed_token = token
 
 
 # ── Pfade: jedes Segment kodiert, nichts ausserhalb der vorgesehenen Route ─
 
 def _seg(value) -> str:
-    """Ein Pfadsegment: leer, "." und ".." abgelehnt, alles andere vollstaendig kodiert."""
+    """Ein Pfadsegment: leer, ".", ".." sowie "/" und "\\" abgelehnt, alles andere vollstaendig kodiert.
+
+    Schraegstriche werden abgelehnt statt kodiert: Der Server dekodiert den Pfad vor dem
+    Routing (WSGI), aus %2F wuerde wieder ein Trenner.
+    """
     text = str(value)
-    if text in ("", ".", ".."):
+    if text in ("", ".", "..") or "/" in text or "\\" in text:
         raise ToolError(f"Ungueltige ID bzw. ungueltiger Pfadteil: {text!r}")
     return quote(text, safe="")
 

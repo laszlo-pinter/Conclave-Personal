@@ -321,8 +321,8 @@ def test_ids_reach_only_their_route(recorded, value):
     for path in recorded:
         assert path.startswith(("/conversations/", "/consultations/")), path
         assert "/../" not in path and "?" not in path and "#" not in path, path
-    if value in ("..", "."):
-        assert recorded == []                                           # gar nicht erst angefragt
+    if value in ("..", ".") or "/" in value:
+        assert recorded == []                       # gar nicht erst angefragt (Server dekodiert %2F)
 
 
 
