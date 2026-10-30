@@ -31,17 +31,15 @@ _moveLegacyToken()
 
 // Token aus dem URL-Fragment (#token=…, von `conclave desktop`/`conclave web`).
 // Fragmente landen nicht in Server-Logs; die Adresszeile wird sofort bereinigt.
-// Ist schon ein ANDERES Token gespeichert, wird nicht still getauscht: Es wartet als
-// pendingToken auf die Rueckfrage (confirmPendingToken in auth.js).
+// Ein neues Token wird nie ungeprueft uebernommen: Es wartet als pendingToken, bis
+// confirmPendingToken (auth.js) seine Rolle kennt. Ein Mensch-Token in einem leeren Tab
+// (Start ueber conclave desktop/web) gilt sofort, sonst kommt eine Rueckfrage.
 function _takeTokenFromFragment() {
   const token = new URLSearchParams(window.location.hash.slice(1)).get('token')
   if (!token) return {token: '', pending: ''}
   history.replaceState(null, '', window.location.pathname + window.location.search)
-  const stored = storedValue(TOKEN_KEY)
-  if (stored && stored !== token) return {token: '', pending: token}
-  storeValue(TOKEN_KEY, token)
-  storeValue(API_URL_KEY, '')      // ein Token aus dem Fragment gehoert zu diesem Server
-  return {token, pending: ''}
+  if (storedValue(TOKEN_KEY) === token) return {token, pending: ''}
+  return {token: '', pending: token}
 }
 const _fragment = _takeTokenFromFragment()
 

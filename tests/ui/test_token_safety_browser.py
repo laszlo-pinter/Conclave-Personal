@@ -43,12 +43,15 @@ def test_fragment_token_does_not_replace_another_token_silently(chromium, live_s
     page = chromium.new_page()
     try:
         _open(page, live_server, live_server.token)
+        messages = []
+        page.on("dialog", lambda d: (messages.append(d.message), d.dismiss()))
         page.goto(f"{live_server.url}/#token=foo")
-        with page.expect_event("dialog", timeout=30000) as info:          # Rueckfrage nach whoami
-            page.reload()
-        dialog = info.value
-        assert "Rolle" in dialog.message or "role" in dialog.message
-        dialog.dismiss()
+        page.reload()
+        for _ in range(300):                                                 # Rueckfrage nach whoami
+            if messages:
+                break
+            page.wait_for_timeout(100)
+        assert messages and ("Rolle" in messages[0] or "role" in messages[0])
         page.locator("#apiDot.ok").wait_for(timeout=15000)
         assert page.evaluate("AppState.getState('apiKey')") == live_server.token
         assert page.evaluate("sessionStorage.getItem('conclave_api_key')") == live_server.token
@@ -130,3 +133,48 @@ def test_token_link_filter_uses_the_browsers_url_parser(chromium, live_server):
             assert "href" not in html, (raw, html)
     finally:
         page.close()
+
+
+
+def test_agent_token_link_in_a_new_tab_asks_first(chromium, live_server):
+    """Entscheidung Laszlo: auch ohne gespeichertes Token nachfragen, wenn die Rolle Agent ist."""
+    context = chromium.new_context()
+    page = context.new_page()
+    try:
+        messages = []
+        page.on("dialog", lambda d: (messages.append(d.message), d.dismiss()))
+        page.goto(f"{live_server.url}/#token={live_server.agent_token}")
+        page.locator("#apiDot.auth").wait_for(timeout=15000)
+        assert messages and "Agent" in messages[0]                         # ohne Token geblieben
+        assert page.evaluate("sessionStorage.getItem('conclave_api_key')") is None
+    finally:
+        context.close()
+
+
+def test_invalid_token_link_in_a_new_tab_asks_first(chromium, live_server):
+    context = chromium.new_context()
+    page = context.new_page()
+    try:
+        messages = []
+        page.on("dialog", lambda d: (messages.append(d.message), d.dismiss()))
+        page.goto(f"{live_server.url}/#token=fantasie")
+        page.locator("#apiDot.auth").wait_for(timeout=15000)
+        assert messages
+        page.locator("#apiDot.auth").wait_for(timeout=15000)
+        assert page.evaluate("sessionStorage.getItem('conclave_api_key')") is None
+    finally:
+        context.close()
+
+
+def test_human_token_in_a_new_tab_needs_no_question(chromium, live_server):
+    context = chromium.new_context()
+    page = context.new_page()
+    dialogs = []
+    page.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+    try:
+        page.goto(f"{live_server.url}/#token={live_server.token}")
+        page.locator("#apiDot.ok").wait_for(timeout=15000)
+        assert dialogs == []
+        assert page.evaluate("sessionStorage.getItem('conclave_api_key')") == live_server.token
+    finally:
+        context.close()

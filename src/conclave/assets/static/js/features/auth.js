@@ -35,7 +35,7 @@ function clearKey(){
 }
 
 
-// Token aus einem Link (#token=…) ersetzt ein vorhandenes nur nach Rueckfrage (R5).
+// Token aus dem Fragment (#token=…): erst die Rolle pruefen, dann uebernehmen oder nachfragen (R5).
 async function confirmPendingToken(){
   const pending=AppState.getState('pendingToken');
   if(!pending) return;
@@ -45,11 +45,13 @@ async function confirmPendingToken(){
     const r=await fetch(window.location.origin+'/auth/whoami',{headers:{'Authorization':'Bearer '+pending}});
     if(r.ok) role=(await r.json()).role||'';
   }catch{}
+  // Ohne gespeichertes Token gilt ein Mensch-Token sofort (Start ueber conclave desktop/web);
+  // ein Agent-Token, ein ungueltiges oder ein Wechsel brauchen eine Bestaetigung.
+  const silent=!storedValue(TOKEN_KEY)&&role==='human';
   const label=role==='human'?t('auth.roleHuman'):role==='agent'?t('auth.roleAgent'):t('auth.roleInvalid');
-  if(!window.confirm(t('auth.switchToken',{role:label}))) return;
+  if(!silent&&!window.confirm(t('auth.switchToken',{role:label}))) return;
   API=window.location.origin;
   apiKey=pending;
   storeValue(API_URL_KEY,'');
   storeValue(TOKEN_KEY,pending);
-  updateKeyUI();checkApi();loadConversations();loadAgents();
 }

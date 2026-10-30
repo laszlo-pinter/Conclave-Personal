@@ -144,8 +144,10 @@ Oktober 2026):
 - **Token in der UI:** Das Token liegt nur im `sessionStorage` des Tabs (bis
   v0.6.1 dauerhaft im `localStorage`; ein altes Token wird einmal übernommen
   und dort gelöscht). `conclave desktop` und `conclave web` übergeben es beim
-  Start im URL-Fragment. Ist schon ein anderes Token gespeichert, wechselt die
-  UI erst nach einer Rückfrage, die die Rolle des neuen Tokens nennt. Die Rolle
+  Start im URL-Fragment. Ein Token aus dem Fragment prüft die UI zuerst per
+  `/auth/whoami`: Ein Mensch-Token in einem Tab ohne gespeichertes Token gilt
+  sofort; ein Agent-Token, ein ungültiges Token oder ein Wechsel gegenüber dem
+  gespeicherten Token gelten erst nach einer Rückfrage, die die Rolle nennt. Die Rolle
   des aktuellen Zugangs („Mensch“ oder „Agent“) steht in der Seitenleiste.
   `conclave web --url` hängt das Token nur an lokale Adressen, nie an einen
   fremden Host.

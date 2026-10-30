@@ -129,12 +129,14 @@ if(typeof marked!=='undefined'){
 }
 initI18n();
 _bindStaticUiEvents();
-updateKeyUI();
-checkApi();
-confirmPendingToken();
-loadConversations();
-loadAgents();
-loadPresets();
+// Erst ein Token aus dem Fragment klaeren, dann mit dem gueltigen Token laden (R5)
+confirmPendingToken().finally(() => {
+  updateKeyUI();
+  checkApi();
+  loadConversations();
+  loadAgents();
+  loadPresets();
+});
 
 // Polling nur im aktiven Tab, mit laengeren Intervallen
 let _pollTimer = null;
