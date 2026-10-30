@@ -8,7 +8,7 @@ erzeugen, und das Token liegt nur im ``sessionStorage`` des Tabs.
 
 def _open(page, live_server, token):
     page.goto(f"{live_server.url}/#token={token}")
-    page.wait_for_function("document.getElementById('apiDot').className !== 'api-dot'", timeout=15000)
+    page.locator("#apiDot.ok, #apiDot.auth, #apiDot.err").wait_for(timeout=15000)
 
 
 def test_markdown_drops_class_but_keeps_code_language(chromium, live_server):
@@ -100,7 +100,7 @@ def test_old_local_storage_token_is_moved_once(chromium, live_server):
         page.goto(live_server.url + "/")
         page.evaluate(f"localStorage.setItem('conclave_api_key', '{live_server.token}')")
         page.reload()
-        page.wait_for_function("document.getElementById('apiDot').className === 'api-dot ok'", timeout=15000)
+        page.locator("#apiDot.ok").wait_for(timeout=15000)
         stored = page.evaluate("({s: sessionStorage.getItem('conclave_api_key'), l: localStorage.getItem('conclave_api_key')})")
         assert stored == {"s": live_server.token, "l": None}
     finally:
