@@ -24,6 +24,25 @@ ORIGINS = ("human", "agent", "system")
 # Verlaufseintraege fuer diese Felder (Plan 2, "Ticket-Verlauf")
 TRACKED_FIELDS = ("status", "title", "description", "human")
 POSITION_STEP = 1024.0      # Abstand der Karten nach dem Neunummerieren
+# Laengengrenzen (R6): Titel, Beschreibung bzw. Kommentar, Anzahl und Laenge der Tags
+TITLE_MAX = 300
+TEXT_MAX = 64 * 1024
+TAGS_MAX = 50
+TAG_MAX = 50
+
+
+def check_field_limits(*, title=None, text=None, tags=None, what: str = "Beschreibung") -> None:
+    """ValueError, wenn ein Feld die Grenzen ueberschreitet."""
+    if isinstance(title, str) and len(title) > TITLE_MAX:
+        raise ValueError(f"Titel hoechstens {TITLE_MAX} Zeichen.")
+    if isinstance(text, str) and len(text) > TEXT_MAX:
+        raise ValueError(f"{what} hoechstens {TEXT_MAX} Zeichen.")
+    if tags is not None:
+        tags = list(tags)
+        if len(tags) > TAGS_MAX:
+            raise ValueError(f"Hoechstens {TAGS_MAX} Tags.")
+        if any(isinstance(t, str) and len(t) > TAG_MAX for t in tags):
+            raise ValueError(f"Tags hoechstens {TAG_MAX} Zeichen.")
 
 
 def _now() -> datetime:

@@ -621,6 +621,8 @@
       <textarea id="rulesInput" rows="8" placeholder="z.B.&#10;- Antworte knapp und fokussiert&#10;- Nutze Aufzaehlungen&#10;- Maximal 3 Saetze pro Punkt&#10;- Sprich Deutsch"></textarea>
       <div class="field-hint" data-i18n="rules.hint">Werden als System-Instruktion an alle Agenten gesendet, bevor sie antworten.</div>
     </div>
+    <label class="board-check"><input type="checkbox" id="rulesModelRead"/> <span data-i18n="rules.modelRead">Modelle dürfen Dateien selbst lesen (@read)</span></label>
+    <div class="field-hint" data-i18n="rules.modelReadHint">Aus: Modelle sehen nur Dateien, die du mit @workspace/… einfügst.</div>
     <div class="modal-acts">
       <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayRules" data-i18n="common.cancel">Abbrechen</button>
       <button class="btn-confirm" data-action="save-rules" data-i18n="common.save">Speichern</button>

@@ -159,6 +159,7 @@ def test_build_service_records_workspace_read_tool_event(tmp_path, monkeypatch):
         name="Reader",
     )
     service.add_user_message(conversation.id, "Bitte lesen.")
+    service.set_model_read(conversation.id, True)                      # @read nur mit Freigabe (R6)
 
     updated = service.invoke_participant(
         conversation_id=conversation.id,
@@ -196,6 +197,7 @@ def test_build_service_records_failed_workspace_read_tool_event(tmp_path, monkey
         name="Reader",
     )
     service.add_user_message(conversation.id, "Bitte lesen.")
+    service.set_model_read(conversation.id, True)                      # @read nur mit Freigabe (R6)
 
     updated = service.invoke_participant(
         conversation_id=conversation.id,

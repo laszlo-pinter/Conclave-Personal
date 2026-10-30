@@ -10,6 +10,8 @@ from pathlib import Path
 DEFAULT_AGENT_READ_LIMIT_BYTES = 512 * 1024
 DEFAULT_UI_READ_LIMIT_BYTES = 2 * 1024 * 1024
 DEFAULT_WRITE_LIMIT_BYTES = 512 * 1024
+# Hoechstens so viele Dateien setzt eine Nachricht per @workspace bzw. eine Antwort per @read ein (R6)
+MAX_REFS_PER_MESSAGE = 10
 
 
 def _int_env(name: str, default: int) -> int:

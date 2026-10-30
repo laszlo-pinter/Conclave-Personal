@@ -5,15 +5,17 @@ async function openRulesModal(){
   try{
     const d=await req('GET',`/conversations/${pathSeg(currentConvId)}/rules`);
     currentRules=d.rules||'';
-  }catch{currentRules='';}
+    document.getElementById('rulesModelRead').checked=!!d.model_read;
+  }catch{currentRules='';document.getElementById('rulesModelRead').checked=false;}
   document.getElementById('rulesInput').value=currentRules;
   openOverlay('overlayRules');
 }
 
 async function saveRules(){
   const rules=document.getElementById('rulesInput').value;
+  const model_read=document.getElementById('rulesModelRead').checked;
   try{
-    await req('POST',`/conversations/${pathSeg(currentConvId)}/rules`,{rules});
+    await req('POST',`/conversations/${pathSeg(currentConvId)}/rules`,{rules,model_read});
     currentRules=rules;
     closeOverlay('overlayRules');
     toast(rules?t('rules.saved'):t('rules.removed'),'ok');

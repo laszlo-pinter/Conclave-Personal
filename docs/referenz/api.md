@@ -313,6 +313,20 @@ importierte Tickets keinen Verlauf.
 - `workspace_path` in `PUT /settings` gilt nur für die laufende Session und
   wird nicht gespeichert.
 
+## Chat-Regeln und @read
+
+`GET /conversations/<id>/rules` liefert `{"rules": "...", "model_read": false}`.
+`POST /conversations/<id>/rules` nimmt `rules` und optional `model_read`
+(`true`/`false`): Mit `true` dürfen Modelle in dieser Conversation Dateien per
+`@read()` lesen. Beide Routen nur mit dem Mensch-Token.
+
+## Größengrenzen
+
+Anfragen sind auf 10 MB begrenzt (`413 RequestTooLarge`), der Board-Import auf
+50 MB (`413 ImportTooLarge`). Board: Titel höchstens 300 Zeichen,
+Beschreibung und Kommentar höchstens 64 KB, höchstens 50 Tags zu je 50
+Zeichen (sonst `400 ValidationError` bzw. beim Import `ImportFormatError`).
+
 ## IDs
 
 Frei wählbare IDs (Participants, neue Agents) bestehen aus 1–64 Zeichen aus
@@ -337,7 +351,7 @@ Fehler kommen als JSON `{"error": "...", "type": "..."}`. Wichtige Codes:
 - `409` — Konflikt (z. B. Agent/Participant/Projekt existiert bereits, kein
   Rederecht, Ticket inzwischen geändert, Rate-Limit durch
   `CONCLAVE_RATE_LIMIT` gesperrt)
-- `413` — Board-Import größer als 50 MB (`ImportTooLarge`)
+- `413` — Anfrage größer als 10 MB (`RequestTooLarge`) bzw. Board-Import größer als 50 MB (`ImportTooLarge`)
 - `415` — POST ohne JSON bzw. `X-Conclave-Client`; Binärdatei im Workspace
 - `421` — `Host`-Header nicht erlaubt
 - `429` — eigenes Rate-Limit überschritten (`RateLimitExceeded`) oder

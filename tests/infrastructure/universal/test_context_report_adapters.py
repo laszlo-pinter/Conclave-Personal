@@ -35,8 +35,8 @@ def _msg(seq, content="x", author=None):
                    content=content, sequence=seq, created_at=datetime.now(timezone.utc))
 
 
-def _conv(messages, rules=""):
-    conv = Conversation(id="c", topic="t")
+def _conv(messages, rules="", model_read=True):
+    conv = Conversation(id="c", topic="t", model_read=model_read)
     conv.messages = messages
     conv.rules = rules
     return conv
@@ -295,3 +295,13 @@ def test_no_last_usage_in_call_path():
     """Abnahme K1: Usage nur noch als Rueckgabewert, kein Adapter-Zustand."""
     offenders = [str(p.relative_to(SRC)) for p in SRC.rglob("*.py") if "last_usage" in p.read_text(encoding="utf-8")]
     assert offenders == []
+
+
+
+def test_workspace_hint_offers_read_only_with_opt_in(workspace):
+    """R6: ohne Freigabe bietet der System-Prompt @read nicht an und verweist auf @workspace."""
+    from conclave.infrastructure.system_prompt import build_system_prompt
+    off = build_system_prompt(None, _conv([_msg(1)], model_read=False))
+    on = build_system_prompt(None, _conv([_msg(1)], model_read=True))
+    assert "@read(pfad" not in off and "ausgeschaltet" in off and "@save(" in off
+    assert "@read(pfad" in on

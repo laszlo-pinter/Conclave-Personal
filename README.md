@@ -320,8 +320,8 @@ An agent inside a specific conversation.
 A local folder for files, notes, context, and outputs: `CONCLAVE_WORKSPACE`,
 otherwise `~/Conclave/workspace`. Files are not listed or loaded as context
 automatically: users reference them with `@workspace/...` (for example
-`@workspace/notes.md`), agents can request specific files with `@read(...)`,
-and a `context_files:` line in the conversation rules adds workspace files to
+`@workspace/notes.md`), agents can request specific files with `@read(...)`
+once the human allows it for the conversation, and a `context_files:` line in the conversation rules adds workspace files to
 the system prompt.
 
 ### Run

@@ -111,7 +111,24 @@ MIGRATIONS: list[Migration] = [
         description="Board: Projekte, Tickets, Kommentare, Verlauf, Zaehler (Plan board.md, B1)",
         fn=lambda connection, is_postgres: _create_board_tables(connection, is_postgres),
     ),
+    Migration(
+        id="013_conversation_model_read",
+        description="Freigabe je Conversation: Modelle duerfen Dateien per @read lesen (R6)",
+        fn=lambda connection, is_postgres: _add_model_read_column(connection, is_postgres),
+    ),
 ]
+
+
+def _add_model_read_column(connection, is_postgres: bool) -> None:
+    if _has_column(connection, is_postgres, "conversations", "model_read"):
+        return
+    definition = "BOOLEAN NOT NULL DEFAULT FALSE" if is_postgres else "INTEGER NOT NULL DEFAULT 0"
+    statement = f"ALTER TABLE conversations ADD COLUMN model_read {definition}"
+    if is_postgres:
+        with connection.cursor() as cur:
+            cur.execute(statement)
+    else:
+        connection.execute(statement)
 
 
 def _create_runs_tables(connection, is_postgres: bool) -> None:

@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from conclave.domain.board import SLUG, parse_ref
+from conclave.domain.board import SLUG, check_field_limits, parse_ref
 
 MAX_PROJECTS = 200
 MAX_TASKS = 20_000
@@ -117,6 +117,10 @@ def parse_export(data, statuses) -> list[ImportedProject]:
                 raise ImportFormatError(f"{slug}#{number}: 'comments' muss eine Liste sein")
             if len(comments) > MAX_COMMENTS_PER_TASK:
                 raise ImportFormatError(f"{slug}#{number}: hoechstens {MAX_COMMENTS_PER_TASK} Kommentare")
+            try:
+                check_field_limits(title=t.get("title"), text=t.get("description"), tags=tags)
+            except ValueError as e:
+                raise ImportFormatError(f"{slug}#{number}: {e}") from None
             task = ImportedTask(
                 number=number, title=_str(t.get("title"), f"{slug}#{number}: Titel", allow_empty=False),
                 description=_str(t.get("description", "") or "", f"{slug}#{number}: Beschreibung"),
@@ -127,6 +131,10 @@ def parse_export(data, statuses) -> list[ImportedProject]:
                 if not isinstance(c, dict):
                     raise ImportFormatError(f"{slug}#{number}: Kommentar muss ein Objekt sein")
                 body = _str(c.get("body"), f"{slug}#{number}: Kommentar")
+                try:
+                    check_field_limits(text=body, what="Kommentar")
+                except ValueError as e:
+                    raise ImportFormatError(f"{slug}#{number}: {e}") from None
                 if body.strip():
                     task.comments.append(ImportedComment(
                         author=_str(c.get("author", "") or "", f"{slug}#{number}: Autor")[:100], body=body,

@@ -12,9 +12,15 @@ unter Linux `~/Conclave/workspace`. Das gilt für alle Einstiegspunkte
 ## 1. @workspace/datei — User referenziert Dateien
 
 - **Datei:** `application/conversation_flow.py:_expand_workspace_refs()`
-- **Trigger:** Vor jedem Provider-Call (im Snapshot, nicht in der DB)
+- **Trigger:** Vor jedem Provider-Call (im Snapshot, nicht in der DB), nur in
+  Nachrichten von Mensch und Agent, nicht in Modellantworten
 - **Regex:** `@work(?:space|place)/([\w./-]+)` — matcht @workspace/ und @workplace/
-- **Aktion:** Dateiinhalt wird inline eingefügt als Markdown-Codeblock
+- **Aktion:** Dateiinhalt wird inline eingefügt als Markdown-Codeblock, in einem
+  Durchlauf (eingefügter Text wird nicht erneut durchsucht). Jede Datei einmal
+  pro Nachricht (weitere Verweise: „siehe oben“), höchstens 10 Dateien und
+  zusammen höchstens das Agent-Leselimit.
+- **Protokoll:** Beim Speichern der Nachricht entsteht je Datei ein Tool-Event
+  `workspace.expand` (Pfad, Größe bzw. Fehler).
 - **Security:** `application/workspace_security.py:resolve_workspace_path()` blockt absolute Pfade und Traversal. `is_agent_visible()` blendet versteckte Pfadkomponenten aus.
 - **Limits:** `CONCLAVE_WORKSPACE_AGENT_READ_LIMIT_BYTES`, Default `524288`
 - **Fehler:** Pfad nicht erlaubt, Datei nicht gefunden, Dateigröße überschreitet das Limit, Datei nicht lesbar
@@ -24,8 +30,15 @@ unter Linux `~/Conclave/workspace`. Das gilt für alle Einstiegspunkte
 
 - **Datei:** `application/conversation_flow.py:_process_agent_directives_for_context()`
 - **Trigger:** Nach Agent-Antwort, vor Message-Persistierung
+- **Freigabe:** Standardmäßig aus. Der Mensch schaltet es je Conversation ein
+  (Dialog „Chat-Regeln“ bzw. `POST /conversations/<id>/rules` mit
+  `model_read: true`). Ohne Freigabe bleibt der Inhalt draußen, es entsteht ein
+  Tool-Event mit `error=read_not_allowed`, und der System-Prompt bietet `@read`
+  nicht an.
 - **Regex:** `@read\(([^)]+)\)`
-- **Aktion:** Ersetzt @read(pfad) durch Dateiinhalt als Markdown-Codeblock
+- **Aktion:** Ersetzt @read(pfad) durch Dateiinhalt als Markdown-Codeblock; je
+  Datei einmal, höchstens 10 Dateien und zusammen höchstens das Agent-Leselimit
+  pro Antwort
 - **Security:** Gleiche `resolve_workspace_path()`-/Hidden-Path-Prüfung wie `@workspace`
 - **Scope:** Gesamter Workspace (lesend)
 - **Limits:** `CONCLAVE_WORKSPACE_AGENT_READ_LIMIT_BYTES`, Default `524288`

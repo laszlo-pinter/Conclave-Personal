@@ -89,6 +89,7 @@ CONTENT_SECURITY_POLICY = "; ".join([
 PERMISSIONS_POLICY = "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
 
 BOARD_IMPORT_MAX_BYTES = 50 * 1024 * 1024    # Groesse des JSON-Exports, vor dem Parsen geprueft
+MAX_REQUEST_BYTES = 10 * 1024 * 1024         # alle anderen Anfragen (R6); der Import hat seine eigene Grenze
 
 # Ohne Token erreichbar (B12): UI-Seite, statische Dateien, Healthcheck, API-Doku.
 PUBLIC_GET_PATHS = frozenset({"/", "/health", "/api-docs", "/openapi.json"})
@@ -158,6 +159,14 @@ def create_app(handler: CLIHandler, auth_service=None,
         limiter = Limiter(get_remote_address, app=app, default_limits=[_current_rate_limit],
                           default_limits_exempt_when=lambda: rate_limit_disabled(rate_limit_state["value"]),
                           storage_uri="memory://")
+
+    if app.config.get("MAX_CONTENT_LENGTH") is None:      # Flask legt den Schluessel mit None an
+        app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
+
+    @app.errorhandler(413)
+    def _too_large(e):
+        return jsonify({"error": f"Anfrage zu gross (hoechstens {MAX_REQUEST_BYTES // (1024 * 1024)} MB).",
+                        "type": "RequestTooLarge"}), 413
 
     @app.errorhandler(429)
     def _rate_limited(e):
@@ -628,16 +637,23 @@ def create_app(handler: CLIHandler, auth_service=None,
         result = handler.show_conversation(conversation_id)
         if not result.success:
             return jsonify({"error": result.message}), 404
-        return jsonify({"rules": result.data.get("rules", "")}), 200
+        return jsonify({"rules": result.data.get("rules", ""),
+                        "model_read": bool(result.data.get("model_read", False))}), 200
 
     @app.post("/conversations/<conversation_id>/rules")
     def set_rules(conversation_id: str):
         body = request.get_json() or {}
         rules = body.get("rules", "")
+        model_read = body.get("model_read")
+        if model_read is not None and not isinstance(model_read, bool):
+            return jsonify({"error": "model_read muss true oder false sein.", "type": "ValidationError"}), 400
         result = handler.set_rules(conversation_id, rules)
         if not result.success:
             return jsonify({"error": result.message}), 404
-        return jsonify({"rules": rules}), 200
+        if model_read is not None:
+            handler.set_model_read(conversation_id, model_read)
+        current = handler.show_conversation(conversation_id).data
+        return jsonify({"rules": rules, "model_read": bool(current.get("model_read", False))}), 200
 
     # ── Floor management ─────────────────────────────────────────────────
 
@@ -1061,6 +1077,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         if (request.content_length or 0) > BOARD_IMPORT_MAX_BYTES:
             raise too_large
         # Mit Obergrenze lesen: greift auch ohne Content-Length (z. B. chunked)
+        request.max_content_length = BOARD_IMPORT_MAX_BYTES + 1    # eigene Grenze statt der allgemeinen (R6)
         raw = request.stream.read(BOARD_IMPORT_MAX_BYTES + 1)
         if len(raw) > BOARD_IMPORT_MAX_BYTES:
             raise too_large

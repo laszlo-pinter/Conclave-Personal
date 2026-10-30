@@ -13,6 +13,7 @@ from conclave.application.adapter_registry import AdapterRegistry
 from conclave.application.participant_service import ParticipantService
 from conclave.application.ports import AuditRepository, ContextReportRepository, ConversationRepository, MessageRepository, ModelAdapter, ParticipantRepository, RunRepository, StreamingModelAdapter, ToolEventRepository
 from conclave.application.workspace_security import (
+    MAX_REFS_PER_MESSAGE,
     agent_read_limit_bytes,
     assert_size_allowed,
     is_agent_visible,
@@ -31,6 +32,7 @@ from conclave.domain.errors import (
     NoFloorGranted,
     ParticipantNotRegistered,
 )
+from conclave.domain.message import MessageAuthorType
 from conclave.domain.model_response import Completion, completion_text
 from conclave.domain.participant import ParticipantType
 from conclave.domain.run import Run, UsageRecord
@@ -244,71 +246,87 @@ class ConversationFlowService:
         )
 
     @staticmethod
-    def _expand_workspace_refs(conversation: Conversation) -> Conversation:
-        """Expandiert @workspace/datei.md Referenzen in Messages.
-
-        Ersetzt @workspace/pfad durch den Dateiinhalt. Unlesbare oder
-        fehlende Dateien werden mit Fehlermeldung ersetzt.
-        """
+    def _expand_refs_in_text(content: str) -> tuple[str, list[dict]]:
+        """Setzt @workspace/pfad in einem Text ein: je Datei einmal, hoechstens MAX_REFS_PER_MESSAGE
+        Dateien und agent_read_limit Bytes zusammen, in einem Durchlauf (eingesetzter Text wird
+        nicht erneut durchsucht). Liefert den Text und je Datei einen Eintrag fuer das Tool-Event."""
         pattern = re.compile(r'@work(?:space|place)/([\w./-]+)')
         limit = agent_read_limit_bytes()
+        state = {"used": 0, "files": 0}
+        seen: dict[str, bool] = {}
+        records: list[dict] = []
+
+        def failed(path, error, text):
+            records.append({"path": path, "status": "failed", "error": error})
+            return text
+
+        def repl(match):
+            filepath = match.group(1)
+            stripped = filepath.rstrip(".,;:!?")
+            suffix = filepath[len(stripped):]
+            filepath = stripped
+            if filepath in seen:
+                return f"[Datei {filepath}: siehe oben]{suffix}" if seen[filepath] else f"[FEHLER: {filepath}]{suffix}"
+            seen[filepath] = False
+            if state["files"] >= MAX_REFS_PER_MESSAGE:
+                return failed(filepath, "too_many_refs",
+                              f"[FEHLER: hoechstens {MAX_REFS_PER_MESSAGE} Dateien pro Nachricht]{suffix}")
+            state["files"] += 1
+            resolved = resolve_workspace_path(filepath)
+            if resolved is None:
+                return failed(filepath, "path_not_allowed", f"[FEHLER: Pfad nicht erlaubt]{suffix}")
+            if not is_agent_visible(resolved.path, root=resolved.root) or not resolved.path.is_file():
+                return failed(filepath, "file_not_found", f"[FEHLER: {filepath} nicht gefunden]{suffix}")
+            if not assert_size_allowed(resolved.path, limit):
+                return failed(filepath, "file_too_large", f"[FEHLER: {filepath} ist zu gross]{suffix}")
+            try:
+                size = resolved.path.stat().st_size
+                if state["used"] + size > limit:
+                    return failed(filepath, "total_too_large",
+                                  f"[FEHLER: {filepath}: Gesamtgroesse der Dateien in dieser Nachricht "
+                                  f"ueberschritten]{suffix}")
+                with open(resolved.path, "r", encoding="utf-8") as f:
+                    file_content = f.read()
+            except Exception:
+                return failed(filepath, "not_readable", f"[FEHLER: {filepath} nicht lesbar]{suffix}")
+            state["used"] += size
+            seen[filepath] = True
+            records.append({"path": resolved.relative, "status": "succeeded",
+                            "bytes": len(file_content.encode("utf-8"))})
+            return f"\n--- Datei: {filepath} ---\n```\n{file_content}\n```\n{suffix}"
+
+        return pattern.sub(repl, content), records
+
+    @staticmethod
+    def _expand_workspace_refs(conversation: Conversation) -> Conversation:
+        """Setzt @workspace/-Verweise in Nachrichten von Mensch und Agent ein (nicht in
+        Modellantworten), mit den Grenzen aus _expand_refs_in_text."""
         changed = False
         new_messages = []
         for msg in conversation.messages:
-            matches = list(pattern.finditer(msg.content))
-            if not matches:
+            if msg.author_type != MessageAuthorType.USER or "@work" not in msg.content:
                 new_messages.append(msg)
                 continue
-            content = msg.content
-            for match in matches:
-                filepath = match.group(1)
-                suffix = ""
-                stripped_filepath = filepath.rstrip(".,;:!?")
-                if stripped_filepath != filepath:
-                    suffix = filepath[len(stripped_filepath):]
-                    filepath = stripped_filepath
-                original = match.group(0)
-                resolved = resolve_workspace_path(filepath)
-                if resolved is None:
-                    content = content.replace(original, f"[FEHLER: Pfad nicht erlaubt]{suffix}")
-                    continue
-                if not is_agent_visible(resolved.path, root=resolved.root):
-                    content = content.replace(original, f"[FEHLER: {filepath} nicht gefunden]{suffix}")
-                    continue
-                if resolved.path.is_file():
-                    if not assert_size_allowed(resolved.path, limit):
-                        content = content.replace(original, f"[FEHLER: {filepath} ist zu gross]{suffix}")
-                        continue
-                    try:
-                        with open(resolved.path, "r", encoding="utf-8") as f:
-                            file_content = f.read()
-                        content = content.replace(
-                            original,
-                            f"\n--- Datei: {filepath} ---\n```\n{file_content}\n```\n{suffix}"
-                        )
-                    except Exception:
-                        content = content.replace(original, f"[FEHLER: {filepath} nicht lesbar]{suffix}")
-                else:
-                    content = content.replace(original, f"[FEHLER: {filepath} nicht gefunden]{suffix}")
-            replaced = dataclasses.replace(msg, content=content)
-            new_messages.append(replaced)
+            content, _ = ConversationFlowService._expand_refs_in_text(msg.content)
+            new_messages.append(dataclasses.replace(msg, content=content))
             changed = True
         if changed:
             return dataclasses.replace(conversation, messages=new_messages)
         return conversation
 
     @staticmethod
-    def _process_agent_directives(content: str) -> str:
+    def _process_agent_directives(content: str, allow_read: bool = True) -> str:
         """Verarbeitet @save() und @read() Direktiven in Agent-Antworten.
 
         @save(datei)...@endsave — speichert Inhalt in workspace/output/
-        @read(pfad) — wird durch den Dateiinhalt aus dem Workspace ersetzt
+        @read(pfad) — wird durch den Dateiinhalt aus dem Workspace ersetzt (nur mit allow_read)
         """
         processed, _ = ConversationFlowService._process_agent_directives_for_context(
             content=content,
             conversation_id="",
             participant_id="",
             emit_tool_events=False,
+            allow_read=allow_read,
         )
         return processed
 
@@ -319,8 +337,14 @@ class ConversationFlowService:
         conversation_id: str,
         participant_id: str,
         emit_tool_events: bool,
+        allow_read: bool = False,
     ) -> tuple[str, list[ToolEvent]]:
-        """Verarbeitet Agent-Directives und gibt optionale Backend-Events zurueck."""
+        """Verarbeitet Agent-Directives und gibt optionale Backend-Events zurueck.
+
+        @read laeuft nur, wenn die Conversation es erlaubt (Freigabe durch den Menschen),
+        mit denselben Grenzen wie @workspace: je Datei einmal, hoechstens
+        MAX_REFS_PER_MESSAGE Dateien und agent_read_limit Bytes pro Antwort.
+        """
         root = workspace_root()
         events: list[ToolEvent] = []
 
@@ -396,6 +420,9 @@ class ConversationFlowService:
 
         # @read(pfad)
         read_pattern = re.compile(r'@read\(([^)]+)\)')
+        read_state = {"used": 0, "files": 0}
+        read_seen: set[str] = set()
+
         def _read_replace(match):
             filepath = match.group(1).strip()
             input_json = {"path": filepath}
@@ -421,6 +448,22 @@ class ConversationFlowService:
                 events.append(event)
                 return f"[tool_event:{event.id}]\n{legacy_text}"
 
+            if not allow_read:
+                return _legacy_or_event(
+                    status="failed",
+                    legacy_text=f"[@read({filepath}) nicht ausgefuehrt: in dieser Conversation nicht erlaubt]",
+                    error="read_not_allowed",
+                )
+            if filepath in read_seen:
+                return f"[Datei {filepath}: siehe oben]"
+            read_seen.add(filepath)
+            if read_state["files"] >= MAX_REFS_PER_MESSAGE:
+                return _legacy_or_event(
+                    status="failed",
+                    legacy_text=f"[FEHLER: hoechstens {MAX_REFS_PER_MESSAGE} Dateien pro Antwort]",
+                    error="too_many_refs",
+                )
+            read_state["files"] += 1
             resolved = resolve_workspace_path(filepath, root=root)
             if resolved is None:
                 return _legacy_or_event(
@@ -443,8 +486,17 @@ class ConversationFlowService:
                     error="file_too_large",
                 )
             try:
+                size = resolved.path.stat().st_size
+                if read_state["used"] + size > agent_read_limit_bytes():
+                    return _legacy_or_event(
+                        status="failed",
+                        legacy_text=f"[FEHLER: {filepath}: Gesamtgroesse der Dateien in dieser Antwort ueberschritten]",
+                        output_json={"path": resolved.relative},
+                        error="total_too_large",
+                    )
                 with open(resolved.path, "r", encoding="utf-8") as f:
                     file_content = f.read()
+                read_state["used"] += size
                 return _legacy_or_event(
                     status="succeeded",
                     legacy_text=f"\n--- Datei: {filepath} ---\n```\n{file_content}\n```\n",
@@ -470,12 +522,14 @@ class ConversationFlowService:
         content: str,
         conversation_id: str,
         participant_id: str,
+        allow_read: bool = False,
     ) -> tuple[str, list[ToolEvent]]:
         return self._process_agent_directives_for_context(
             content=content,
             conversation_id=conversation_id,
             participant_id=participant_id,
             emit_tool_events=self._tool_event_repo is not None,
+            allow_read=allow_read,
         )
 
     def _save_tool_events(self, events: list[ToolEvent], message_id: str) -> None:
@@ -519,6 +573,7 @@ class ConversationFlowService:
                 content=content,
                 conversation_id=conversation.id,
                 participant_id=participant_id,
+                allow_read=bool(getattr(conversation, "model_read", False)),
             )
         else:
             # Consultations: @save/@read in Modellantworten bleiben Text (Injection ueber Tickets)
@@ -545,6 +600,13 @@ class ConversationFlowService:
     def set_rules(self, conversation_id: str, rules: str) -> Conversation:
         conversation = self.load_conversation(conversation_id)
         conversation.rules = rules
+        self._conversation_repository.save(conversation)
+        return conversation
+
+    def set_model_read(self, conversation_id: str, allowed: bool) -> Conversation:
+        """Freigabe, ob Modelle in dieser Conversation Dateien per @read lesen duerfen (R6)."""
+        conversation = self.load_conversation(conversation_id)
+        conversation.model_read = bool(allowed)
         self._conversation_repository.save(conversation)
         return conversation
 
@@ -652,7 +714,24 @@ class ConversationFlowService:
         conversation = self.load_conversation(conversation_id)
         message = conversation.add_user_message(content, origin=origin)
         self._message_repository.save(message)
+        self._record_expansions(conversation_id, message, origin)
         return conversation
+
+    def _record_expansions(self, conversation_id: str, message, origin: str | None) -> None:
+        """Welche Dateien die Nachricht per @workspace einsetzt, einmal als Tool-Event (R6)."""
+        if self._tool_event_repo is None or "@work" not in message.content:
+            return
+        _, records = self._expand_refs_in_text(message.content)
+        events = [
+            ToolEvent.create(
+                conversation_id=conversation_id, participant_id=origin or "user", tool="workspace.expand",
+                status=r["status"], input_json={"path": r["path"]},
+                output_json={"path": r["path"], "bytes": r["bytes"]} if r["status"] == "succeeded" else {},
+                error=r.get("error"),
+            )
+            for r in records
+        ]
+        self._save_tool_events(events, message.id)
 
     def register_participant(
         self,

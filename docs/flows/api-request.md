@@ -41,7 +41,7 @@ Participant ist registriert, Agent hat einen passenden Adapter.
 
 14a. **Kontext-Report speichern** — `conversation_flow.py:_save_context_report()` speichert den Report des Aufrufs mit Run und (nach Schritt 16) Message. Bei einem Fehler hängt der Adapter den Report an die Exception; er wird dann nur mit dem fehlgeschlagenen Run gespeichert.
 
-15. **Agent-Direktiven verarbeiten** — `_store_model_response()` -> `_process_agent_response()` -> `_process_agent_directives_for_context()` schreibt `@save(...)`-Blöcke in `workspace/output/` und ersetzt `@read(...)` durch den Dateiinhalt. Ist ein ToolEventRepository gesetzt (Server und CLI immer), wird ein `@save`-Block durch `[tool_event:<id>]` ersetzt und vor einem `@read`-Inhalt `[tool_event:<id>]` eingefügt.
+15. **Agent-Direktiven verarbeiten** — `_store_model_response()` -> `_process_agent_response()` -> `_process_agent_directives_for_context()` schreibt `@save(...)`-Blöcke in `workspace/output/` und ersetzt `@read(...)` durch den Dateiinhalt, wenn die Conversation es erlaubt (`model_read`). Ist ein ToolEventRepository gesetzt (Server und CLI immer), wird ein `@save`-Block durch `[tool_event:<id>]` ersetzt und vor einem `@read`-Inhalt `[tool_event:<id>]` eingefügt.
 
 16. **Message persistieren** — `MessageRepository.save()` — Sequence atomar aus DB (MAX+1).
 

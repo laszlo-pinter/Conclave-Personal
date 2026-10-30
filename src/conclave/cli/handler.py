@@ -357,6 +357,14 @@ class CLIHandler:
             return CLIResult(success=False, message=f"Conversation '{conversation_id}' nicht gefunden.")
         return CLIResult(success=True, message=f"Thema gesetzt: {topic}", data={"topic": topic})
 
+    def set_model_read(self, conversation_id: str, allowed: bool) -> CLIResult:
+        """Freigabe fuer @read in Modellantworten (R6)."""
+        try:
+            self._service.set_model_read(conversation_id, allowed)
+        except ConversationNotFound:
+            return CLIResult(success=False, message=f"Conversation '{conversation_id}' nicht gefunden.")
+        return CLIResult(success=True, message="Freigabe gesetzt.", data={"model_read": bool(allowed)})
+
     def set_rules(self, conversation_id: str, rules: str) -> CLIResult:
         try:
             self._service.set_rules(conversation_id, rules)
@@ -483,6 +491,7 @@ class CLIHandler:
                     for p in conversation.participants
                 ],
                 "rules": conversation.rules,
+                "model_read": bool(getattr(conversation, "model_read", False)),
             },
         )
 

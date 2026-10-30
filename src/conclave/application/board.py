@@ -25,7 +25,16 @@ from datetime import UTC, datetime
 from typing import Callable
 
 from conclave.application.ports import BoardRepository
-from conclave.domain.board import POSITION_STEP, Project, StatusFlow, Task, TaskComment, TaskEvent, parse_ref
+from conclave.domain.board import (
+    POSITION_STEP,
+    Project,
+    StatusFlow,
+    Task,
+    TaskComment,
+    TaskEvent,
+    check_field_limits,
+    parse_ref,
+)
 from conclave.domain.errors import ConclaveError
 from conclave.domain.principal import Principal
 
@@ -201,6 +210,7 @@ class BoardService:
         if principal.is_agent and status == self.flow.last:
             raise _forbidden("Agenten legen keine erledigten Tickets an.")
         try:
+            check_field_limits(title=title, text=description, tags=tags)
             task = Task.create(project, title, status, description=description or "", tags=tuple(tags or ()),
                                position=self._end_position(project.id, status), human=bool(human))
         except (ValueError, TypeError) as e:
@@ -226,6 +236,10 @@ class BoardService:
                 raise _forbidden("Agenten duerfen die Markierung 'nur fuer Menschen' nicht entfernen.")
         if title is not None and (not isinstance(title, str) or not title.strip()):
             raise _invalid("Titel darf nicht leer sein.")
+        try:
+            check_field_limits(title=title, text=description, tags=tags)
+        except ValueError as e:
+            raise _invalid(str(e)) from None
 
         for name, new in (("title", title), ("description", description), ("status", status), ("human", human)):
             old = getattr(task, name)
@@ -291,6 +305,10 @@ class BoardService:
                       only_if_not_human: bool = False) -> TaskComment:
         if not isinstance(body, str) or not body.strip():
             raise _invalid("Kommentar darf nicht leer sein.")
+        try:
+            check_field_limits(text=body, what="Kommentar")
+        except ValueError as e:
+            raise _invalid(str(e)) from None
         comment = TaskComment.create(task.id, body, origin, actor_id=actor_id, author_name=str(author_name or "")[:100])
         if not self._repo.add_comment_checked(comment, only_if_not_human=only_if_not_human):
             if self._repo.get_task_by_id(task.id) is None:
@@ -311,6 +329,10 @@ class BoardService:
         comment = self._own_comment(principal, comment_id)
         if not isinstance(body, str) or not body.strip():
             raise _invalid("Kommentar darf nicht leer sein.")
+        try:
+            check_field_limits(text=body, what="Kommentar")
+        except ValueError as e:
+            raise _invalid(str(e)) from None
         comment.body, comment.updated_at = body, self._now()
         self._repo.update_comment(comment)
         return comment

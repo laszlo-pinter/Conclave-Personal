@@ -41,24 +41,17 @@ def test_markdown_token_links_lose_their_target(chromium, live_server):
 
 def test_fragment_token_does_not_replace_another_token_silently(chromium, live_server):
     page = chromium.new_page()
-    dialogs = []
-
-    def on_dialog(dialog):
-        dialogs.append(dialog.message)
-        dialog.dismiss()
-
-    page.on("dialog", on_dialog)
     try:
         _open(page, live_server, live_server.token)
         page.goto(f"{live_server.url}/#token=foo")
-        page.reload()
-        for _ in range(100):                                                # Rueckfrage nach whoami abwarten
-            if dialogs:
-                break
-            page.wait_for_timeout(100)
+        with page.expect_event("dialog", timeout=30000) as info:          # Rueckfrage nach whoami
+            page.reload()
+        dialog = info.value
+        assert "Rolle" in dialog.message or "role" in dialog.message
+        dialog.dismiss()
+        page.locator("#apiDot.ok").wait_for(timeout=15000)
         assert page.evaluate("AppState.getState('apiKey')") == live_server.token
         assert page.evaluate("sessionStorage.getItem('conclave_api_key')") == live_server.token
-        assert dialogs, "keine Rueckfrage"
     finally:
         page.close()
 

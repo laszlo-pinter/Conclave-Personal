@@ -13,6 +13,7 @@ def initialize_schema(connection: sqlite3.Connection) -> None:
             topic      TEXT NOT NULL DEFAULT '',
             floor      TEXT,
             rules      TEXT NOT NULL DEFAULT '',
+            model_read INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL
         )
     """)
