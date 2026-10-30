@@ -58,7 +58,8 @@ def live_server(tmp_path_factory):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            yield SimpleNamespace(url=f"http://127.0.0.1:{server.server_port}", token=config.api_key)
+            yield SimpleNamespace(url=f"http://127.0.0.1:{server.server_port}", token=config.api_key,
+                                  agent_token=config.agent_api_key)
         finally:
             server.shutdown()
             thread.join(timeout=5)

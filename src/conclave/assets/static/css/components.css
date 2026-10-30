@@ -336,3 +336,8 @@ select.sel:focus{border-color:var(--accent)}
 .board-event-change{color:var(--text);word-break:break-word}
 .board-event-details{width:100%}
 .board-event-details pre{white-space:pre-wrap;word-break:break-word;font-family:var(--font-mono);font-size:11px;background:var(--bg-3);padding:6px 8px;border-radius:var(--r);margin:4px 0}
+
+/* Rolle des Zugangs (R5) */
+.role-badge{margin-left:auto;font-family:var(--font-mono);font-size:10px;padding:2px 8px;border-radius:8px;border:1px solid var(--border-mid);color:var(--text-dim);background:var(--bg-3)}
+.role-badge[hidden]{display:none}
+.role-badge.role-agent{color:var(--floor-color);border-color:var(--floor-border);background:var(--floor-bg)}

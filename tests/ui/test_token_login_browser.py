@@ -17,7 +17,7 @@ def test_fragment_token_logs_in_and_is_removed_from_url(chromium, live_server):
         state = page.evaluate("""() => ({
             hash: window.location.hash,
             href: window.location.href,
-            stored: localStorage.getItem('conclave_api_key'),
+            stored: sessionStorage.getItem('conclave_api_key'),
             dot: document.getElementById('apiDot').className,
         })""")
         assert state["hash"] == ""
@@ -30,7 +30,7 @@ def test_fragment_token_logs_in_and_is_removed_from_url(chromium, live_server):
 
 
 def test_ui_without_token_loads_but_reports_auth_failure(chromium, live_server):
-    context = chromium.new_context()  # leerer localStorage
+    context = chromium.new_context()  # leerer Speicher
     page = context.new_page()
     try:
         response = page.goto(live_server.url + "/")

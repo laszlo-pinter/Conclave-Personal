@@ -93,10 +93,26 @@ function _createMarkdownPurifier(){
   if(typeof DOMPurify!=='function') return null;
   const purifier=DOMPurify(window);  // eigene Instanz, damit die Hooks lokal bleiben
   if(!purifier.isSupported) return null;
+  // class nur als Sprachangabe an code (Syntaxhervorhebung), sonst liessen sich App-Elemente nachbauen (R5)
+  purifier.addHook('uponSanitizeAttribute',(node,data)=>{
+    if(data.attrName==='class'&&!(node.tagName==='CODE'&&/^language-[\w+-]+$/.test(data.attrValue))){
+      data.keepAttr=false;
+    }
+  });
   purifier.addHook('afterSanitizeAttributes',node=>{
     if(node.tagName==='A'&&node.hasAttribute('href')){
-      node.setAttribute('target','_blank');
-      node.setAttribute('rel','noopener noreferrer');
+      const href=node.getAttribute('href').trim();
+      const fragment=href.includes('#')?href.slice(href.indexOf('#')+1):'';
+      let decoded=fragment;
+      try{decoded=decodeURIComponent(fragment);}catch{}
+      if(/token=/i.test(decoded)){
+        node.removeAttribute('href');            // Links duerfen kein Token setzen (R5)
+      }else if(href.startsWith('#')){
+        node.removeAttribute('target');          // Sprungmarke im selben Tab
+      }else{
+        node.setAttribute('target','_blank');
+        node.setAttribute('rel','noopener noreferrer');
+      }
     }
     // GFM-Tasklisten: nur deaktivierte Checkboxen
     if(node.tagName==='INPUT'){

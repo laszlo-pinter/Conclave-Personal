@@ -11,7 +11,9 @@ conclave desktop [--host 127.0.0.1] [--port 8000] [--debug]
 ```
 
 `desktop` startet den lokalen Server und öffnet die Web-UI im Browser.
-`web`, `desktop` und `conclave-watch` nutzen das Mensch-Token.
+`web`, `desktop` und `conclave-watch` nutzen das Mensch-Token. `web --url`
+übergibt es nur an lokale Adressen (`127.0.0.1`, `localhost`, `::1`), nie an
+einen fremden Host.
 Wenn der bevorzugte Port belegt ist, wählt `desktop` automatisch einen freien
 Port.
 

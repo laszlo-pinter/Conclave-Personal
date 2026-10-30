@@ -131,6 +131,7 @@ initI18n();
 _bindStaticUiEvents();
 updateKeyUI();
 checkApi();
+confirmPendingToken();
 loadConversations();
 loadAgents();
 loadPresets();

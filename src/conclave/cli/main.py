@@ -578,9 +578,13 @@ def _run_web(args) -> int:
     from conclave.runtime.api_token import read_token
     from conclave.runtime.browser import url_with_token
 
+    from conclave.runtime.browser import is_local_url
+
     config = ConclaveConfig.from_sources()
     url = args.url or _server_url(config.host, config.port)
-    open_browser(url_with_token(url, read_token()))
+    # Das Mensch-Token nur an eine lokale Adresse haengen, nie an einen fremden Host (R5)
+    own = not args.url or is_local_url(url)
+    open_browser(url_with_token(url, read_token()) if own else url)
     print(f"Conclave Web: {url}")
     return 0
 

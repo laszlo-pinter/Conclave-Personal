@@ -41,12 +41,32 @@ async function checkApi() {
     if (res.status === 401) {
       dot.className = 'api-dot auth'
       lbl.textContent = t('auth.failed')
+      setRoleBadge('')
     } else {
       dot.className = 'api-dot ok'
       lbl.textContent = t('auth.connected')
+      setRoleBadge(await whoami())
     }
   } catch {
     dot.className = 'api-dot err'
     lbl.textContent = t('common.apiUnreachable')
+    setRoleBadge('')
   }
+}
+
+async function whoami() {
+  try {
+    const r = await fetch(AppState.getState('api') + '/auth/whoami', {headers: authHeaders()})
+    return r.ok ? ((await r.json()).role || '') : ''
+  } catch { return '' }
+}
+
+// Rolle des Tokens sichtbar machen (R5): wer als Agent arbeitet, soll es sehen.
+function setRoleBadge(role) {
+  const badge = document.getElementById('roleBadge')
+  if (!badge) return
+  badge.hidden = !role
+  if (!role) return
+  badge.textContent = role === 'agent' ? t('auth.roleAgent') : t('auth.roleHuman')
+  badge.className = 'role-badge' + (role === 'agent' ? ' role-agent' : '')
 }

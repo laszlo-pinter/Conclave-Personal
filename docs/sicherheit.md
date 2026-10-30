@@ -132,12 +132,23 @@ Oktober 2026):
   `marked` in HTML gewandelt und anschließend mit DOMPurify gefiltert
   (`renderMarkdown()` in `static/js/utils.js`).
 - Erlaubt sind nur Text- und Strukturelemente (Absätze, Listen, Tabellen,
-  Code, Links). Skripte, Bilder, SVG, Formulare, `style`-, `id`- und
-  Event-Attribute werden entfernt. Einzige Ausnahme sind GFM-Aufgabenlisten:
+  Code, Links). Skripte, Bilder, SVG, Formulare, `style`-, `id`-, `class`-
+  und Event-Attribute werden entfernt; `class` bleibt nur als Sprachangabe
+  `language-*` an `code`. Einzige Ausnahme sind GFM-Aufgabenlisten:
   `input` bleibt nur als deaktivierte Checkbox erhalten, andere Eingabefelder
   werden entfernt.
-- Links sind nur mit `http(s)`, `mailto` oder `#` erlaubt und öffnen mit
-  `target="_blank"` und `rel="noopener noreferrer"`.
+- Links sind nur mit `http(s)`, `mailto` oder `#` erlaubt. Externe Links
+  öffnen mit `target="_blank"` und `rel="noopener noreferrer"`, Sprungmarken
+  (`#…`) im selben Tab. Links, deren Fragment `token=` enthält, verlieren ihr
+  Ziel.
+- **Token in der UI:** Das Token liegt nur im `sessionStorage` des Tabs (bis
+  v0.6.1 dauerhaft im `localStorage`; ein altes Token wird einmal übernommen
+  und dort gelöscht). `conclave desktop` und `conclave web` übergeben es beim
+  Start im URL-Fragment. Ist schon ein anderes Token gespeichert, wechselt die
+  UI erst nach einer Rückfrage, die die Rolle des neuen Tokens nennt. Die Rolle
+  des aktuellen Zugangs („Mensch“ oder „Agent“) steht in der Seitenleiste.
+  `conclave web --url` hängt das Token nur an lokale Adressen, nie an einen
+  fremden Host.
 - Ist DOMPurify nicht geladen, wird nie HTML ausgegeben, nur escapter Text.
 - Alle Bibliotheken und Schriften (DOMPurify, marked, highlight.js, Swagger UI,
   Syne, Syne Mono, DM Sans) werden lokal unter `static/vendor/` ausgeliefert;
