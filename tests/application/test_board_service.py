@@ -34,6 +34,7 @@ def _forbidden(fn, *args, **kwargs):
 
 def test_agent_cannot_move_to_or_from_the_last_column(board):
     board.create_task(AGENT, "api", "Ticket")
+    board.next_task(AGENT, task="api#1")                                    # erst uebernehmen (#51)
     board.update_task(AGENT, "api#1", status="review")                      # bis vor die letzte Spalte: ja
     _forbidden(board.update_task, AGENT, "api#1", status="done")
     board.update_task(HUMAN, "api#1", status="done")
@@ -126,10 +127,11 @@ def test_parallel_next_task_never_hands_out_a_ticket_twice(tmp_path, crypto):
 def test_history_shows_a_weakened_acceptance(board):
     board.create_task(HUMAN, "api", "T", description="## Abnahme\n- alle Tests gruen\n- Postgres geprueft")
     board.update_task(AGENT, "api#1", description="## Abnahme\n- Tests gruen")
-    board.update_task(AGENT, "api#1", title="T2", status="doing")
+    board.next_task(AGENT, task="api#1")                                    # uebernehmen statt PATCH (#51)
+    board.update_task(AGENT, "api#1", title="T2")
     events = board.history("api#1")
     assert [(e.field_name, e.origin, e.actor_id) for e in events] == [
-        ("description", "agent", "agent"), ("title", "agent", "agent"), ("status", "agent", "agent")]
+        ("description", "agent", "agent"), ("status", "agent", "agent"), ("title", "agent", "agent")]
     assert "Postgres geprueft" in events[0].old_value and "Postgres" not in events[0].new_value
 
 
@@ -369,3 +371,72 @@ def test_next_task_does_not_move_into_the_last_column_for_agents(crypto):
     assert err.value.status == 403
     assert svc.get_task("api#1").status == "offen"                          # nichts verschoben
     assert svc.next_task(HUMAN, "api").status == "erledigt"                 # Freigabe-Recht: erlaubt
+
+
+# ── conclave#51: gezielt uebernehmen, doing nicht ueberspringen ───────────
+
+def test_next_with_task_claims_exactly_that_ticket(board):
+    board.create_task(HUMAN, "api", "eins")
+    board.create_task(HUMAN, "api", "zwei")
+    taken = board.next_task(AGENT, task="api#2")
+    assert (taken.ref, taken.status) == ("api#2", "doing")
+    assert board.get_task("api#1").status == "todo"
+    [event] = board.history("api#2")
+    assert (event.old_value, event.new_value, event.origin) == ("todo", "doing", "agent")
+
+
+@pytest.mark.parametrize("prepare, status", [
+    (lambda b: b.update_task(HUMAN, "api#1", status="doing"), 409),        # schon uebernommen
+    (lambda b: b.update_task(HUMAN, "api#1", human=True), 403),            # nur fuer Menschen
+])
+def test_next_with_task_refuses_and_changes_nothing(board, prepare, status):
+    board.create_task(HUMAN, "api", "eins")
+    prepare(board)
+    before = board.get_task("api#1")
+    with pytest.raises(BoardError) as err:
+        board.next_task(AGENT, task="api#1")
+    assert err.value.status == status
+    after = board.get_task("api#1")
+    assert (after.status, after.version) == (before.status, before.version)
+
+
+def test_next_with_unknown_task_is_404(board):
+    with pytest.raises(BoardError) as err:
+        board.next_task(AGENT, task="api#99")
+    assert err.value.status == 404
+
+
+def test_parallel_targeted_claims_have_one_winner(crypto, tmp_path):
+    conn = ThreadLocalConnection(tmp_path / "b.db")
+    initialize_schema(conn)
+    svc = BoardService(SQLiteBoardRepository(conn, crypto, autocommit=True), StatusFlow())
+    svc.create_project(HUMAN, "api", "API")
+    svc.create_task(HUMAN, "api", "eins")
+    results = []
+
+    def take():
+        try:
+            results.append(svc.next_task(AGENT, task="api#1").ref)
+        except BoardError as e:
+            results.append(e.status)
+
+    threads = [threading.Thread(target=take) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert results.count("api#1") == 1 and set(results) - {"api#1"} <= {409}
+
+
+def test_agent_cannot_skip_doing(board):
+    board.create_task(HUMAN, "api", "eins")
+    with pytest.raises(BoardError) as err:
+        board.update_task(AGENT, "api#1", status="review")
+    assert err.value.status == 403 and "uebernehmen" in str(err.value)
+    with pytest.raises(BoardError):
+        board.update_task(AGENT, "api#1", status="doing")                     # nur ueber next(task=...)
+    board.next_task(AGENT, task="api#1")
+    assert board.update_task(AGENT, "api#1", status="review").status == "review"
+    assert board.update_task(AGENT, "api#1", status="doing").status == "doing"   # Rueckweg erlaubt
+    board.update_task(HUMAN, "api#1", status="todo")
+    assert board.update_task(HUMAN, "api#1", status="review").status == "review"  # der Mensch darf alles

@@ -37,6 +37,9 @@ Wer schreibt, ergibt sich aus dem Token, nicht aus einem Feld der Anfrage:
 - **Tickets „nur für Menschen“** gibt `next_task` nie an Agenten; Agenten
   können sie nur lesen. Agenten dürfen die Markierung setzen, aber nicht
   entfernen.
+- **Übernehmen statt Überspringen:** Aus der ersten Spalte kommt ein Agent nur
+  über `next_task` heraus (oberstes oder bestimmtes Ticket); ein Sprung
+  `todo → review` per Änderung ergibt `403`. Der Rückweg `review → doing` geht.
 - **Kommentare von Agenten und von Conclave sind unveränderlich**, auch für den
   Menschen, ebenso importierte. Der Mensch kann eigene Kommentare ändern und
   löschen.
@@ -100,9 +103,11 @@ wenigen Sekunden nach.
 1. **Plan:** Mensch und Agent schreiben einen Plan. Jedes Arbeitspaket wird ein
    Ticket mit Ziel, Ausgangslage, Inhalt und Abnahme. Offene Entscheidungen
    werden eigene Tickets „nur für Menschen“.
-2. **Holen:** Der umsetzende Agent nimmt per `conclave_board_next` das oberste
-   freie Ticket der ersten Spalte; Conclave schiebt es atomar in die zweite,
-   zwei Agenten erwischen nie dasselbe Ticket.
+2. **Übernehmen:** Vor der Arbeit übernimmt der Agent das Ticket, mit
+   `conclave_board_next` das oberste freie der ersten Spalte oder mit
+   `conclave_board_next(task="api#12")` genau dieses. Conclave schiebt es atomar
+   in die zweite Spalte; zwei Agenten erwischen nie dasselbe Ticket, und das
+   Board zeigt, woran gearbeitet wird.
 3. **Umsetzen:** Der Agent arbeitet, testet und schreibt Branch, Commits und
    Testergebnis als Kommentar ans Ticket. Dann schiebt er es nach `review`.
 4. **Zweitmeinung:** Mit `conclave_consult` holt er Meinungen mehrerer Modelle

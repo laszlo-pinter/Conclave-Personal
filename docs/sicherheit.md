@@ -244,9 +244,11 @@ setzt seine Regeln am Token durch, nicht an Angaben in der Anfrage:
 - **Agenten** lesen erledigte Tickets und Tickets „nur für Menschen“ nur
   (erledigte dürfen sie kommentieren), dürfen die Markierung „nur für
   Menschen“ setzen, aber nicht entfernen, und bekommen solche Tickets nie über
-  `next_task`. Die Prüfungen laufen im selben Schreibvorgang wie die Änderung
-  (keine Lücke zwischen Prüfen und Schreiben); `next_task` vergibt jedes Ticket
-  genau einmal.
+  `next_task`. Aus der ersten Spalte kommen sie nur über `next_task` heraus
+  (oberstes oder bestimmtes Ticket), sodass jede Übernahme im Verlauf steht.
+  Die Prüfungen laufen im selben Schreibvorgang wie die Änderung (keine Lücke
+  zwischen Prüfen und Schreiben); `next_task` vergibt jedes Ticket genau
+  einmal.
 - **Unveränderliche Kommentare:** Kommentare von Agenten, von Conclave und
   importierte kann niemand ändern oder löschen; der Mensch nur seine eigenen.
 - **Verlauf:** Änderungen an Status, Titel, Beschreibung und Markierung werden

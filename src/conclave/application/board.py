@@ -230,6 +230,10 @@ class BoardService:
             status = self.flow_check(status)
             if principal.is_agent and status != task.status and self.flow.last in (status, task.status):
                 raise _forbidden("Nach und aus der letzten Spalte schiebt nur, wer das Freigabe-Recht hat.")
+            # Agenten uebernehmen ein Ticket sichtbar und atomar, statt "doing" zu ueberspringen (#51)
+            if principal.is_agent and status != task.status and task.status == self.flow.first:
+                raise _forbidden(f"Erst uebernehmen: conclave_board_next(task=\"{task.ref}\") "
+                                 "bzw. POST /board/next mit task.")
         if human is not None:
             human = bool(human)
             if principal.is_agent and task.human and not human:
@@ -269,8 +273,9 @@ class BoardService:
 
     # ── next_task ────────────────────────────────────────────────────────
 
-    def next_task(self, principal: Principal, slug: str | None = None) -> Task | None:
-        """Oberstes Ticket der ersten Spalte (ohne 'nur fuer Menschen') atomar in die zweite.
+    def next_task(self, principal: Principal, slug: str | None = None, task: str | None = None) -> Task | None:
+        """Oberstes Ticket der ersten Spalte (ohne 'nur fuer Menschen') atomar in die zweite;
+        mit ``task`` genau dieses Ticket (conclave#51).
 
         Ist die zweite Spalte zugleich die letzte (zwei Spalten), waere das ein Schritt nach
         "erledigt"; der braucht das Freigabe-Recht wie jede andere Bewegung dorthin (R4).
@@ -279,6 +284,8 @@ class BoardService:
         if second == self.flow.last:
             self._require_approval(principal)
         origin, actor_id = self.actor(principal)
+        if task is not None:
+            return self._claim(task, origin, actor_id)
         for candidate in self.list_tasks(slug, [first]):
             if candidate.human:
                 continue
@@ -287,6 +294,24 @@ class BoardService:
             if self._repo.claim_task(candidate.id, first, second, position, self._now(), event):
                 return self._repo.get_task_by_id(candidate.id)
         return None
+
+    def _claim(self, ref: str, origin, actor_id) -> Task:
+        """Ein bestimmtes Ticket atomar uebernehmen; sonst klarer Fehler, ohne Aenderung."""
+        first, second = self.flow.first, self.flow.second
+        task = self.get_task(ref)
+        if task.human:
+            raise _forbidden(f"Ticket '{ref}' ist nur fuer Menschen und wird nicht uebernommen.")
+        if task.status != first:
+            raise BoardError(f"Ticket '{ref}' steht nicht in '{first}' (sondern in '{task.status}'), "
+                             "ist also schon uebernommen oder weiter.", 409, "NotClaimable")
+        event = TaskEvent.create(task.id, "status", first, second, origin, actor_id=actor_id)
+        if self._repo.claim_task(task.id, first, second, self._end_position(task.project_id, second),
+                                 self._now(), event):
+            return self._repo.get_task_by_id(task.id)
+        current = self.get_task(ref)
+        if current.human:
+            raise _forbidden(f"Ticket '{ref}' ist nur fuer Menschen und wird nicht uebernommen.")
+        raise BoardError(f"Ticket '{ref}' wurde inzwischen uebernommen.", 409, "NotClaimable")
 
     # ── Kommentare ───────────────────────────────────────────────────────
 

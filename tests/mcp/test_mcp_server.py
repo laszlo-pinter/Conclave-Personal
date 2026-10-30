@@ -391,6 +391,7 @@ def test_board_get_does_not_repeat_long_descriptions_and_list_filters_search(con
     httpx.post(f"{url}/board/projects", json={"slug": "api", "name": "API"}, headers=h)
     _json("conclave_board_create", {"project": "api", "title": "Suchwort eins", "description": "x" * 3000})
     _json("conclave_board_create", {"project": "api", "title": "Suchwort zwei"})
+    _json("conclave_board_next", {"task": "api#1"})                          # uebernehmen (#51)
     _json("conclave_board_update", {"task": "api#1", "description": "y" * 3000, "status": "review"})
     detail = _json("conclave_board_get", {"task": "api#1"})
     assert {"field": "description", "new": "(geaendert)", "origin": "agent"} in detail["history"]
@@ -437,3 +438,18 @@ def test_instructions_name_the_conclave_board_as_authoritative():
     text = server.mcp.instructions or ""
     assert "massgebliche Ort fuer Arbeitspakete" in text and "nicht parallel" in text
     assert "festgelegt hat" not in text                    # Uebergangsregel aus B4 entfaellt
+
+
+
+def test_board_next_with_task_and_malformed_reference(conclave_api):
+    import httpx
+    url, human, _agent = conclave_api
+    h = {"Authorization": f"Bearer {human}"}
+    httpx.post(f"{url}/board/projects", json={"slug": "api", "name": "API"}, headers=h)
+    for title in ("eins", "zwei"):
+        httpx.post(f"{url}/board/tasks", json={"project": "api", "title": title}, headers=h)
+    assert _json("conclave_board_next", {"task": "api#2"})["task"] == "api#2"
+    again = _call("conclave_board_next", {"task": "api#2"})
+    assert again.is_error and "409" in _text(again)
+    bad = _call("conclave_board_next", {"task": "../x"})
+    assert bad.is_error and "API" not in _text(bad)

@@ -232,6 +232,7 @@ def test_live_refresh_after_api_changes(chromium, board_server):
         # Ein Agent arbeitet ueber die API; die UI zieht ohne Neuladen nach
         _task(board_server.agent, title="Vom Agenten")
         board_server.agent.post("/board/projects/api/tasks/1/comments", json={"body": "Branch board"})
+        assert board_server.agent.post("/board/next", json={"task": "api#1"}).status_code == 200
         assert board_server.agent.patch("/board/projects/api/tasks/1", json={"status": "review"}).status_code == 200
         _card(page, "api#2").wait_for(timeout=15000)
         page.locator("#boardTaskComments .board-comment[data-origin='agent']").wait_for(timeout=15000)

@@ -242,7 +242,11 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
   `400`.
 - **`POST /board/next`** (`{"project": "api"}` optional): schiebt das oberste
   Ticket der ersten Spalte ohne Markierung „nur für Menschen“ atomar in die
-  zweite und liefert es (`{"task": ...}`, `null` wenn keines frei ist).
+  zweite und liefert es (`{"task": ...}`, `null` wenn keines frei ist). Mit
+  `{"task": "api#12"}` genau dieses Ticket; steht es nicht in der ersten Spalte
+  oder wurde inzwischen übernommen, `409 NotClaimable`; „nur für Menschen“
+  `403`; unbekannt `404`. Agenten verlassen die erste Spalte nur so: Eine
+  Statusänderung per `PATCH` aus der ersten Spalte ergibt `403`.
 - **Kommentare** `POST .../comments` mit `body` (Markdown), optional
   `author_name` (Anzeigename). `origin` (`human`/`agent`/`system`/`null`) und
   `actor_id` setzt der Server aus dem Token; solche Felder im Body werden

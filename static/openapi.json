@@ -2058,7 +2058,7 @@
     },
     "/board/next": {
       "post": {
-        "summary": "Oberstes freies Ticket der ersten Spalte uebernehmen (atomar).",
+        "summary": "Oberstes freies Ticket der ersten Spalte uebernehmen (atomar); mit ``task`` genau dieses.",
         "tags": [
           "board"
         ],
