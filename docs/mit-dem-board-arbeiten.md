@@ -44,8 +44,9 @@ Wer schreibt, ergibt sich aus dem Token, nicht aus einem Feld der Anfrage:
   zurück in die erste Spalte, steht es wieder an seiner Prioritätsstelle. In den
   anderen Spalten zählt der Arbeitsstand: wer ankommt, steht hinten.
 - **Übernehmen statt Überspringen:** Aus der ersten Spalte kommt ein Agent nur
-  über `next_task` heraus (oberstes oder bestimmtes Ticket); ein Sprung
-  `todo → review` per Änderung ergibt `403`. Der Rückweg `review → doing` geht.
+  über `next_task` heraus (oberstes oder bestimmtes Ticket); jede andere
+  Statusänderung aus der ersten Spalte ergibt `403`, auch `todo → doing`. Der
+  Rückweg `review → doing` geht.
 - **Kommentare von Agenten und von Conclave sind unveränderlich**, auch für den
   Menschen, ebenso importierte. Der Mensch kann eigene Kommentare ändern und
   löschen.

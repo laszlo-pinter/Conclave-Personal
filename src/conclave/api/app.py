@@ -1014,9 +1014,9 @@ def create_app(handler: CLIHandler, auth_service=None,
         """Oberstes freies Ticket der ersten Spalte uebernehmen (atomar); mit ``task`` genau dieses."""
         body = request.get_json(silent=True) or {}
         ref = body.get("task")
-        if ref is not None and not isinstance(ref, str):
+        if ref is not None and (not isinstance(ref, str) or not ref.strip()):
             raise BoardError("task muss eine Ticket-Referenz wie 'api#12' sein.", 400, "ValidationError")
-        task = _board().next_task(g.principal, body.get("project") or None, task=ref or None)
+        task = _board().next_task(g.principal, body.get("project") or None, task=ref)
         return jsonify({"task": task_to_dict(task) if task else None}), 200
 
     def _ref(slug: str, number: int) -> str:

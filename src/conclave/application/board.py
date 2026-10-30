@@ -321,6 +321,9 @@ class BoardService:
             self._require_approval(principal)
         origin, actor_id = self.actor(principal)
         if task is not None:
+            ticket = self.get_task(task)                       # 400 bei ungueltiger, 404 bei fehlender Referenz
+            if slug and ticket.project_slug != slug:
+                raise _invalid(f"Ticket '{task}' gehoert nicht zum Projekt '{slug}'.")
             return self._claim(task, origin, actor_id)
         for candidate in self.list_tasks(slug, [first]):
             if candidate.human:

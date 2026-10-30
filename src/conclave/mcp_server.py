@@ -455,10 +455,10 @@ def conclave_board_next(project: str = "", task: str = "") -> dict:
             raise ToolError(str(e)) from None
         body["task"] = task
     data = _post("/board/next", body)
-    task = data.get("task")
-    if task is None:
+    taken = data.get("task")
+    if taken is None:
         return {"task": None, "message": "Kein freies Ticket."}
-    return {**_brief(task), "note": BOARD_DATA_NOTE, "description": task["description"]}
+    return {**_brief(taken), "note": BOARD_DATA_NOTE, "description": taken["description"]}
 
 
 @mcp.tool()

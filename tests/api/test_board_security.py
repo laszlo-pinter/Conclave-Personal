@@ -287,3 +287,13 @@ def test_human_sets_rank_and_next_follows(client):
     assert client.patch(f"{URL}/2", json={"rank": "hoch"}, headers=_bearer(HUMAN)).status_code == 400
     taken = client.post("/board/next", json={"project": "api"}, headers=_bearer(AGENT)).get_json()["task"]
     assert taken["ref"] == "api#3"
+
+
+def test_targeted_next_rejects_empty_ref_and_other_project(client):
+    """Review #51: leere Referenz und abweichendes Projekt sind Fehler, kein stilles 'oberstes Ticket'."""
+    _task(client)
+    assert client.post("/board/next", json={"task": ""}, headers=_bearer(AGENT)).status_code == 400
+    client.post("/board/projects", json={"slug": "web", "name": "Web"}, headers=_bearer(HUMAN))
+    resp = client.post("/board/next", json={"task": "api#1", "project": "web"}, headers=_bearer(AGENT))
+    assert resp.status_code == 400
+    assert client.get(f"{URL}/1", headers=_bearer(HUMAN)).get_json()["status"] == "todo"
