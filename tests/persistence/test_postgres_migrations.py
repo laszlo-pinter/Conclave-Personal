@@ -63,3 +63,17 @@ def test_failing_migration_is_rolled_back_and_aborts(pg):
     assert not _table_exists(pg, "r1_a") and not _table_exists(pg, "r1_b")
     assert not {"900_broken", "901_after"} & _applied(pg)
     assert pg.get_transaction_status() == psycopg2.extensions.TRANSACTION_STATUS_IDLE
+
+
+
+def test_without_autocommit_the_failing_migration_is_rolled_back_too(pg):
+    """Review R1: auch eine Verbindung ohne Autocommit (Transaktion implizit) bleibt sauber."""
+    from conclave.infrastructure.postgres.schema import initialize_schema
+    initialize_schema(pg)
+    pg.autocommit = False
+    broken = [Migration(id="900_broken", description="zweite Anweisung scheitert",
+                        statements=("CREATE TABLE r1_a (x INTEGER)", "INSERT INTO gibt_es_nicht VALUES (1)"))]
+    with pytest.raises(MigrationError, match="900_broken"):
+        run_migrations(pg, is_postgres=True, migrations=broken)
+    pg.autocommit = True
+    assert not _table_exists(pg, "r1_a") and "900_broken" not in _applied(pg)

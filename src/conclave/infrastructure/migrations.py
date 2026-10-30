@@ -474,8 +474,8 @@ def _begin(connection, is_postgres: bool) -> None:
             with connection.cursor() as cur:
                 cur.execute("BEGIN")
         return
-    if connection.in_transaction:
-        connection.commit()
+    if connection.in_transaction:                 # fremde halbe Arbeit nicht mit festschreiben
+        raise RuntimeError("Vor der Migration ist noch eine Transaktion offen.")
     connection.execute("BEGIN IMMEDIATE")         # DDL ist in SQLite transaktional
 
 
@@ -511,6 +511,10 @@ def run_migrations(connection, is_postgres: bool = False, migrations: list[Migra
     Raises: MigrationError, wenn eine Migration fehlschlaegt; dann ist sie
         zurueckgerollt, nicht eingetragen, und spaetere laufen nicht.
     """
+    if not is_postgres and connection.in_transaction:   # fremde halbe Arbeit nicht mit festschreiben
+        connection.rollback()
+        raise MigrationError("(vor den Migrationen)", None,
+                             RuntimeError("Vor den Migrationen war noch eine Transaktion offen."))
     _ensure_migrations_table(connection, is_postgres)
     applied = _get_applied(connection, is_postgres)
     executed = []
@@ -518,17 +522,20 @@ def run_migrations(connection, is_postgres: bool = False, migrations: list[Migra
     for migration in MIGRATIONS if migrations is None else migrations:
         if migration.id in applied:
             continue
-        _begin(connection, is_postgres)
         try:
+            _begin(connection, is_postgres)
             _apply_migration(connection, migration, is_postgres)
             _record_migration(connection, migration, is_postgres)
+            _finish(connection, is_postgres, ok=True)
         except Exception as e:
-            _finish(connection, is_postgres, ok=False)
+            try:
+                _finish(connection, is_postgres, ok=False)
+            except Exception as rollback_error:  # noqa: BLE001 - die eigentliche Ursache bleibt die Meldung
+                logger.error("Rollback der Migration %s fehlgeschlagen: %s", migration.id, rollback_error)
             logger.error("Migration %s fehlgeschlagen, zurueckgerollt: %s", migration.id, e)
             if isinstance(e, MigrationError):
                 raise
             raise MigrationError(migration.id, None, e) from e
-        _finish(connection, is_postgres, ok=True)
         executed.append(migration.id)
         logger.info("Migration %s ausgefuehrt: %s", migration.id, migration.description)
 

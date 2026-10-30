@@ -105,10 +105,10 @@ def test_all_migrations_have_description():
 
 # ── R1 (conclave#31): Migrationen fail-closed ─────────────────────────────
 
-def _broken(conn_ok_table="r1_a"):
+def _broken(created_table="r1_a"):
     return [
         Migration(id="900_broken", description="zweite Anweisung scheitert",
-                  statements=(f"CREATE TABLE {conn_ok_table} (x INTEGER)",
+                  statements=(f"CREATE TABLE {created_table} (x INTEGER)",
                               "INSERT INTO conversations (id, status) VALUES ('r1', 'open')",
                               "INSERT INTO gibt_es_nicht VALUES (1)")),
         Migration(id="901_after", description="darf nicht laufen", statements=("CREATE TABLE r1_b (x INTEGER)",)),
@@ -160,3 +160,34 @@ def test_column_migration_adds_only_missing_columns(db):
     cols = {row[1] for row in db.execute("PRAGMA table_info(agents)")}
     assert {"preset", "api_url", "response_path", "message_format"} <= cols
     assert "003_agent_universal_fields" in _get_applied(db, is_postgres=False)
+
+
+
+def test_open_transaction_of_the_caller_is_not_committed(db):
+    """Review R1: halbe Arbeit des Aufrufers wird nicht still mit festgeschrieben."""
+    from conclave.infrastructure.migrations import MigrationError
+    run_migrations(db, is_postgres=False)
+    db.execute("INSERT INTO conversations (id, status) VALUES ('halb', 'open')")      # offene Transaktion
+    assert db.in_transaction
+    with pytest.raises(MigrationError, match="Transaktion offen"):
+        run_migrations(db, is_postgres=False, migrations=_broken())
+    assert not db.in_transaction
+    assert db.execute("SELECT count(*) FROM conversations WHERE id = 'halb'").fetchone() == (0,)
+    assert "r1_a" not in _tables(db)                                   # keine Migration gelaufen
+
+
+def test_commit_failure_is_reported_with_the_migration(db, monkeypatch):
+    import conclave.infrastructure.migrations as m
+    run_migrations(db, is_postgres=False)
+    real = m._finish
+
+    def failing_commit(connection, is_postgres, ok):
+        if ok:
+            raise RuntimeError("commit gescheitert")
+        real(connection, is_postgres, ok)
+
+    monkeypatch.setattr(m, "_finish", failing_commit)
+    ok = [Migration(id="902_ok", description="laeuft, Commit scheitert", statements=("CREATE TABLE r1_c (x INTEGER)",))]
+    with pytest.raises(m.MigrationError, match="902_ok.*commit gescheitert"):
+        run_migrations(db, is_postgres=False, migrations=ok)
+    assert "r1_c" not in _tables(db) and not db.in_transaction
