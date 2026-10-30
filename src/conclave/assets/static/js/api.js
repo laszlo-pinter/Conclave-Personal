@@ -6,7 +6,12 @@ function authHeaders() {
   return h
 }
 
+// Bis ein Token aus dem URL-Fragment geprueft ist (confirmPendingToken, R5), warten alle
+// Anfragen; sonst liefe ein frueher Klick ohne Token. main.js setzt die Promise beim Start.
+let tokenReady = Promise.resolve()
+
 async function req(method, path, body) {
+  await tokenReady
   const API = AppState.getState('api')
   const opts = {method, headers: authHeaders()}
   if (body !== undefined) opts.body = JSON.stringify(body)

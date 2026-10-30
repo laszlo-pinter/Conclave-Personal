@@ -17,10 +17,14 @@ unter Linux `~/Conclave/workspace`. Das gilt für alle Einstiegspunkte
 - **Regex:** `@work(?:space|place)/([\w./-]+)` — matcht @workspace/ und @workplace/
 - **Aktion:** Dateiinhalt wird inline eingefügt als Markdown-Codeblock, in einem
   Durchlauf (eingefügter Text wird nicht erneut durchsucht). Jede Datei einmal
-  pro Nachricht (weitere Verweise: „siehe oben“), höchstens 10 Dateien und
-  zusammen höchstens das Agent-Leselimit.
+  pro Nachricht, gezählt nach aufgelöstem Pfad (weitere Verweise: „siehe
+  oben“), höchstens 10 Dateien pro Nachricht und zusammen höchstens das
+  Agent-Leselimit pro Prompt; neuere Nachrichten haben dabei Vorrang.
 - **Protokoll:** Beim Speichern der Nachricht entsteht je Datei ein Tool-Event
-  `workspace.expand` (Pfad, Größe bzw. Fehler).
+  `workspace.expand` (Pfad, Größe bzw. Fehler). Eingesetzt wird bei jedem
+  Aufruf mit dem dann aktuellen Dateistand; ändert sich eine Datei später,
+  kann der gesendete Inhalt vom protokollierten abweichen. Consultations
+  protokollieren nichts, weil sie Ticket-Verweise nie einsetzen.
 - **Security:** `application/workspace_security.py:resolve_workspace_path()` blockt absolute Pfade und Traversal. `is_agent_visible()` blendet versteckte Pfadkomponenten aus.
 - **Limits:** `CONCLAVE_WORKSPACE_AGENT_READ_LIMIT_BYTES`, Default `524288`
 - **Fehler:** Pfad nicht erlaubt, Datei nicht gefunden, Dateigröße überschreitet das Limit, Datei nicht lesbar

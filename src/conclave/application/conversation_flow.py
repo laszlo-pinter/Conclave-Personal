@@ -246,13 +246,16 @@ class ConversationFlowService:
         )
 
     @staticmethod
-    def _expand_refs_in_text(content: str) -> tuple[str, list[dict]]:
-        """Setzt @workspace/pfad in einem Text ein: je Datei einmal, hoechstens MAX_REFS_PER_MESSAGE
-        Dateien und agent_read_limit Bytes zusammen, in einem Durchlauf (eingesetzter Text wird
-        nicht erneut durchsucht). Liefert den Text und je Datei einen Eintrag fuer das Tool-Event."""
+    def _expand_refs_in_text(content: str, budget: dict | None = None) -> tuple[str, list[dict]]:
+        """Setzt @workspace/pfad in einem Text ein: je Datei einmal (nach aufgeloestem Pfad),
+        hoechstens MAX_REFS_PER_MESSAGE Dateien, in einem Durchlauf (eingesetzter Text wird nicht
+        erneut durchsucht). ``budget`` ({"used": Bytes}) teilen sich alle Nachrichten eines Prompts;
+        zusammen hoechstens agent_read_limit. Liefert den Text und je Datei einen Eintrag fuer das
+        Tool-Event."""
         pattern = re.compile(r'@work(?:space|place)/([\w./-]+)')
         limit = agent_read_limit_bytes()
-        state = {"used": 0, "files": 0}
+        budget = {"used": 0} if budget is None else budget
+        state = {"files": 0}
         seen: dict[str, bool] = {}
         records: list[dict] = []
 
@@ -265,14 +268,15 @@ class ConversationFlowService:
             stripped = filepath.rstrip(".,;:!?")
             suffix = filepath[len(stripped):]
             filepath = stripped
-            if filepath in seen:
-                return f"[Datei {filepath}: siehe oben]{suffix}" if seen[filepath] else f"[FEHLER: {filepath}]{suffix}"
-            seen[filepath] = False
+            resolved = resolve_workspace_path(filepath)
+            key = resolved.relative if resolved is not None else filepath   # a.md und ./a.md sind eine Datei
+            if key in seen:
+                return f"[Datei {filepath}: siehe oben]{suffix}" if seen[key] else f"[FEHLER: {filepath}]{suffix}"
+            seen[key] = False
             if state["files"] >= MAX_REFS_PER_MESSAGE:
                 return failed(filepath, "too_many_refs",
                               f"[FEHLER: hoechstens {MAX_REFS_PER_MESSAGE} Dateien pro Nachricht]{suffix}")
             state["files"] += 1
-            resolved = resolve_workspace_path(filepath)
             if resolved is None:
                 return failed(filepath, "path_not_allowed", f"[FEHLER: Pfad nicht erlaubt]{suffix}")
             if not is_agent_visible(resolved.path, root=resolved.root) or not resolved.path.is_file():
@@ -281,16 +285,16 @@ class ConversationFlowService:
                 return failed(filepath, "file_too_large", f"[FEHLER: {filepath} ist zu gross]{suffix}")
             try:
                 size = resolved.path.stat().st_size
-                if state["used"] + size > limit:
+                if budget["used"] + size > limit:
                     return failed(filepath, "total_too_large",
-                                  f"[FEHLER: {filepath}: Gesamtgroesse der Dateien in dieser Nachricht "
+                                  f"[FEHLER: {filepath}: Gesamtgroesse der eingefuegten Dateien "
                                   f"ueberschritten]{suffix}")
                 with open(resolved.path, "r", encoding="utf-8") as f:
                     file_content = f.read()
             except Exception:
                 return failed(filepath, "not_readable", f"[FEHLER: {filepath} nicht lesbar]{suffix}")
-            state["used"] += size
-            seen[filepath] = True
+            budget["used"] += size
+            seen[key] = True
             records.append({"path": resolved.relative, "status": "succeeded",
                             "bytes": len(file_content.encode("utf-8"))})
             return f"\n--- Datei: {filepath} ---\n```\n{file_content}\n```\n{suffix}"
@@ -300,22 +304,24 @@ class ConversationFlowService:
     @staticmethod
     def _expand_workspace_refs(conversation: Conversation) -> Conversation:
         """Setzt @workspace/-Verweise in Nachrichten von Mensch und Agent ein (nicht in
-        Modellantworten), mit den Grenzen aus _expand_refs_in_text."""
+        Modellantworten), mit den Grenzen aus _expand_refs_in_text. Das Byte-Budget gilt fuer den
+        ganzen Prompt; neuere Nachrichten haben Vorrang."""
         changed = False
+        budget = {"used": 0}
         new_messages = []
-        for msg in conversation.messages:
+        for msg in reversed(conversation.messages):
             if msg.author_type != MessageAuthorType.USER or "@work" not in msg.content:
                 new_messages.append(msg)
                 continue
-            content, _ = ConversationFlowService._expand_refs_in_text(msg.content)
+            content, _ = ConversationFlowService._expand_refs_in_text(msg.content, budget)
             new_messages.append(dataclasses.replace(msg, content=content))
             changed = True
         if changed:
-            return dataclasses.replace(conversation, messages=new_messages)
+            return dataclasses.replace(conversation, messages=list(reversed(new_messages)))
         return conversation
 
     @staticmethod
-    def _process_agent_directives(content: str, allow_read: bool = True) -> str:
+    def _process_agent_directives(content: str, allow_read: bool = False) -> str:
         """Verarbeitet @save() und @read() Direktiven in Agent-Antworten.
 
         @save(datei)...@endsave — speichert Inhalt in workspace/output/
@@ -454,9 +460,11 @@ class ConversationFlowService:
                     legacy_text=f"[@read({filepath}) nicht ausgefuehrt: in dieser Conversation nicht erlaubt]",
                     error="read_not_allowed",
                 )
-            if filepath in read_seen:
+            resolved = resolve_workspace_path(filepath, root=root)
+            key = resolved.relative if resolved is not None else filepath
+            if key in read_seen:
                 return f"[Datei {filepath}: siehe oben]"
-            read_seen.add(filepath)
+            read_seen.add(key)
             if read_state["files"] >= MAX_REFS_PER_MESSAGE:
                 return _legacy_or_event(
                     status="failed",
@@ -464,7 +472,6 @@ class ConversationFlowService:
                     error="too_many_refs",
                 )
             read_state["files"] += 1
-            resolved = resolve_workspace_path(filepath, root=root)
             if resolved is None:
                 return _legacy_or_event(
                     status="failed",
@@ -710,11 +717,14 @@ class ConversationFlowService:
             return []
         return self._tool_event_repo.list_by_conversation(conversation_id)
 
-    def add_user_message(self, conversation_id: str, content: str, origin: str | None = None) -> Conversation:
+    def add_user_message(self, conversation_id: str, content: str, origin: str | None = None,
+                         record_expansions: bool = True) -> Conversation:
+        """``record_expansions=False`` fuer Texte, deren Verweise nie eingesetzt werden (Consultations)."""
         conversation = self.load_conversation(conversation_id)
         message = conversation.add_user_message(content, origin=origin)
         self._message_repository.save(message)
-        self._record_expansions(conversation_id, message, origin)
+        if record_expansions:
+            self._record_expansions(conversation_id, message, origin)
         return conversation
 
     def _record_expansions(self, conversation_id: str, message, origin: str | None) -> None:

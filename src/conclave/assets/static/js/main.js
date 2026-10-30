@@ -130,7 +130,8 @@ if(typeof marked!=='undefined'){
 initI18n();
 _bindStaticUiEvents();
 // Erst ein Token aus dem Fragment klaeren, dann mit dem gueltigen Token laden (R5)
-confirmPendingToken().finally(() => {
+tokenReady = confirmPendingToken().catch(() => {})
+tokenReady.finally(() => {
   updateKeyUI();
   checkApi();
   loadConversations();

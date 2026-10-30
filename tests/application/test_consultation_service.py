@@ -166,6 +166,10 @@ def test_workspace_refs_in_ticket_are_not_expanded(env):
     prompt = env.reviewers["gpt"].prompts[0]
     assert "@workspace/geheim.md" in prompt and "GEHEIMER-INHALT" not in prompt
     assert all("GEHEIMER-INHALT" not in body for _, body in _comments(env, "api#30"))
+    # R6-Review: der Ticket-Text loest auch kein (falsches) workspace.expand-Event aus
+    conv = env.flow.load_conversation(env.repo.list_by_source_ref(env.source, "api#30")[0].conversation_id)
+    assert all(e.tool != "workspace.expand"
+               for m in conv.messages for e in env.flow.list_tool_events_by_message(m.id))
 
 
 def test_directives_in_answers_are_not_executed(env):

@@ -201,13 +201,16 @@ Oktober 2026):
   `@workspace/` und `@read()`: nur Dateien im Workspace, keine versteckten
   Pfade, Agent-Leselimit.
 - `@workspace/` wird nur in Nachrichten von Mensch und Agent eingesetzt, je Datei
-  einmal, höchstens 10 Dateien und zusammen höchstens das Agent-Leselimit pro
-  Nachricht; jede eingesetzte Datei steht als Tool-Event im Verlauf.
+  einmal (auch bei anderer Schreibweise des Pfads), höchstens 10 Dateien pro
+  Nachricht und zusammen höchstens das Agent-Leselimit pro Prompt (neuere
+  Nachrichten zuerst); jede Datei steht beim Speichern der Nachricht einmal als
+  Tool-Event im Verlauf. Texte, deren Verweise nie eingesetzt werden (Tickets
+  in Consultations), erzeugen keine solchen Einträge.
 - `@read()` in Modellantworten ist standardmäßig aus und wird nur nach Freigabe
   durch den Menschen je Conversation ausgeführt, mit denselben Grenzen.
 - Anfragen sind auf 10 MB begrenzt (`413 RequestTooLarge`), der Board-Import auf
   50 MB. Board-Felder haben Längengrenzen (Titel 300 Zeichen, Beschreibung und
-  Kommentar 64 KB, höchstens 50 Tags zu je 50 Zeichen).
+  Kommentar 65.536 Zeichen, höchstens 50 Tags zu je 50 Zeichen).
 - `POST /restore` stellt nur Backups aus dem Backup-Verzeichnis wieder her
   (Dateiname, keine Pfade) und leert den Workspace nur nach ausdrücklicher
   Bestätigung. ZIP-Inhalte werden auf Pfad-Traversal, Symlinks und Größe

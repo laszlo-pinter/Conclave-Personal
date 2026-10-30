@@ -324,7 +324,7 @@ importierte Tickets keinen Verlauf.
 
 Anfragen sind auf 10 MB begrenzt (`413 RequestTooLarge`), der Board-Import auf
 50 MB (`413 ImportTooLarge`). Board: Titel höchstens 300 Zeichen,
-Beschreibung und Kommentar höchstens 64 KB, höchstens 50 Tags zu je 50
+Beschreibung und Kommentar höchstens 65.536 Zeichen, höchstens 50 Tags zu je 50
 Zeichen (sonst `400 ValidationError` bzw. beim Import `ImportFormatError`).
 
 ## IDs

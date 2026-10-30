@@ -128,3 +128,29 @@ def test_read_works_after_opt_in_and_is_limited(service):
     assert message.content.count("AAA") == 1
     assert sum(f"F{i}\n" in message.content for i in range(12)) == 9      # a.md + 9 weitere = 10
     assert svc.load_conversation(cid).model_read is True
+
+
+# ── Review R6 ─────────────────────────────────────────────────────────────
+
+def test_same_file_by_other_spelling_counts_once(workspace):
+    [msg] = _expanded(_conv(_msg("@workspace/a.md @workspace/./a.md @workplace/a.md")))
+    assert msg.content.count("AAA") == 1
+
+
+def test_total_budget_per_prompt_prefers_newer_messages(workspace, monkeypatch):
+    monkeypatch.setenv("CONCLAVE_WORKSPACE_AGENT_READ_LIMIT_BYTES", "5")
+    old, new = _expanded(_conv(_msg("@workspace/f1.md @workspace/f2.md"), _msg("@workspace/f3.md @workspace/f4.md", n=2)))
+    assert "F3" in new.content and "F4" in new.content                    # neueste zuerst
+    assert "F1" not in old.content or "F2" not in old.content             # zusammen hoechstens 5 Bytes
+    assert "Gesamtgroesse" in old.content
+
+
+def test_directive_helper_does_not_read_by_default(workspace):
+    out = ConversationFlowService._process_agent_directives("@read(a.md)")
+    assert "AAA" not in out and "nicht erlaubt" in out
+
+
+def test_consultation_prompt_records_no_expansion_events(service):
+    svc, cid = service
+    conv = svc.add_user_message(cid, "Ticket: siehe @workspace/a.md", record_expansions=False)
+    assert svc.list_tool_events_by_message(conv.messages[-1].id) == []

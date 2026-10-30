@@ -13,7 +13,7 @@ def test_base_install_has_desktop_runtime_dependencies():
     project = _pyproject()["project"]
     deps = set(project["dependencies"])
 
-    assert "flask>=3.0" in deps
+    assert "flask>=3.1" in deps
     assert "flask-limiter>=4.0" in deps
     assert "cryptography>=42.0" in deps
 

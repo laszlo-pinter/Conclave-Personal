@@ -178,3 +178,32 @@ def test_human_token_in_a_new_tab_needs_no_question(chromium, live_server):
         assert page.evaluate("sessionStorage.getItem('conclave_api_key')") == live_server.token
     finally:
         context.close()
+
+
+def test_early_click_waits_for_the_token_check(chromium, live_server):
+    """Review R6: Ein Klick, bevor das Fragment-Token geprueft ist, laedt mit diesem Token, nicht ohne."""
+    context = chromium.new_context()
+    page = context.new_page()
+    held = []
+    page.route("**/auth/whoami", lambda route: held.append(route))          # Pruefung haengt vorerst
+    statuses = []
+    page.on("response", lambda r: r.url.endswith("/workspace") and statuses.append(r.status))
+    try:
+        page.goto(f"{live_server.url}/#token={live_server.token}", wait_until="domcontentloaded")
+        for _ in range(100):
+            if held:
+                break
+            page.wait_for_timeout(50)
+        page.click("[data-action='switch-tab'][data-tab='workspace']")
+        page.wait_for_timeout(500)
+        assert statuses == []                                               # wartet auf die Pruefung
+        for route in held:
+            route.continue_()
+        page.unroute("**/auth/whoami")
+        for _ in range(100):
+            if statuses:
+                break
+            page.wait_for_timeout(100)
+        assert statuses and all(s == 200 for s in statuses), statuses
+    finally:
+        context.close()

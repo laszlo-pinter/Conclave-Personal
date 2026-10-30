@@ -238,7 +238,7 @@ class BoardService:
             raise _invalid("Titel darf nicht leer sein.")
         try:
             check_field_limits(title=title, text=description, tags=tags)
-        except ValueError as e:
+        except (ValueError, TypeError) as e:
             raise _invalid(str(e)) from None
 
         for name, new in (("title", title), ("description", description), ("status", status), ("human", human)):

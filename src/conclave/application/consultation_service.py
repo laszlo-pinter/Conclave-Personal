@@ -90,7 +90,8 @@ class ConsultationService:
             self._flow.register_participant(conversation_id=conversation.id, participant_id=pid,
                                             participant_type=ParticipantType.MODEL, name=self._name(pid))
         self._flow.set_rules(conversation.id, RULES)
-        self._flow.add_user_message(conversation.id, build_prompt(c, ticket))
+        # Ticket-Inhalt wird nie per @workspace eingesetzt (Snapshot ohne Expansion), also auch nicht protokolliert
+        self._flow.add_user_message(conversation.id, build_prompt(c, ticket), record_expansions=False)
 
         errors = self._ask_reviewers(c, conversation.id)
         self._deliver_all(c, errors)
