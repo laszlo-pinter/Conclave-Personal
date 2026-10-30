@@ -126,8 +126,8 @@ class CLIHandler:
                  provider_fallback_keys: dict[str, str] | None = None):
         self._service = service
         self._agent_service = agent_service
-        # Provider-Map fuer ENV/Config-Fallback-Keys (z.B. anthropic -> ANTHROPIC_API_KEY).
-        # Wird nur fuer die UI-Anzeige (api_key_set) genutzt, nicht fuer den Adapter-Build.
+        # Provider-Map fuer ENV/Config-Fallback-Keys (z.B. anthropic -> ANTHROPIC_API_KEY), fuer die
+        # Anzeige (api_key_set) und den Agent-Test; die Regeln stehen in cli/provider_keys.py (R3).
         self._provider_fallback_keys = provider_fallback_keys or {}
 
     def _agent_to_dict(self, a: Agent) -> dict:
@@ -299,10 +299,10 @@ class CLIHandler:
             if clear_api_key:
                 agent = replace(agent, api_key="")
             elif not agent.api_key:
-                from conclave.cli.provider_keys import destination_host
+                from conclave.cli.provider_keys import destination
                 stored = self._agent_service.get_agent(agent.id)
-                old_host, new_host = destination_host(stored), destination_host(agent)
-                same_target = bool(old_host) and old_host == new_host
+                old, new = destination(stored), destination(agent)
+                same_target = bool(old[1]) and old == new
                 agent = replace(agent, api_key=stored.api_key if same_target else "")
             self._agent_service.update_agent(agent)
             return CLIResult(success=True, message=f"Agent '{agent.id}' aktualisiert.",

@@ -36,7 +36,6 @@ function closeOverlay(id){document.getElementById(id).classList.remove('open');}
 function scrollBottom(){const el=document.getElementById('messages');el.scrollTop=el.scrollHeight;}
 function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,120)+'px';}
 function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}}
-// Maskiert fuer HTML-Text und Attributwerte (& < > " ').
 // Pfadsegment fuer API-URLs (R4): jede ID vollstaendig kodiert. "." und ".." loest der
 // Browser auch kodiert (%2e%2e) als Pfadschritt auf, deshalb werden sie abgelehnt.
 function pathSeg(value){
@@ -44,6 +43,7 @@ function pathSeg(value){
   if(s===''||s==='.'||s==='..') throw new Error(t('api.invalidPathPart',{value:s}));
   return encodeURIComponent(s);
 }
+// Maskiert fuer HTML-Text und Attributwerte (& < > " ').
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function attr(s){return esc(s);}
 

@@ -99,7 +99,8 @@ def test_api_key_set_shows_false_for_a_foreign_url(agent_service, monkeypatch):
 
 
 @pytest.mark.parametrize("change", [{"api_url": FOREIGN}, {"provider": "deepseek", "preset": ""},
-                                    {"preset": "deepseek"}])
+                                    {"preset": "deepseek"},
+                                    {"api_url": "http://api.openai.com/v1/chat/completions"}])   # Klartext
 def test_changed_target_drops_the_stored_key(agent_service, change):
     from dataclasses import replace
 

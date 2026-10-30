@@ -318,7 +318,8 @@ importierte Tickets keinen Verlauf.
 Frei wählbare IDs (Participants, neue Agents) bestehen aus 1–64 Zeichen aus
 `A-Z`, `a-z`, `0-9`, `.`, `-` und `_`; `.` und `..` allein sind nicht
 erlaubt. Sonst antwortet die API mit `400 ValidationError`. Bestehende Agents
-mit anderen IDs bleiben nutzbar.
+mit anderen IDs lassen sich weiter bearbeiten, testen und löschen, aber nicht
+mehr als Participant hinzufügen; dafür den Agent mit passender ID neu anlegen.
 
 ## Fehlercodes
 

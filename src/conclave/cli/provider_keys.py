@@ -43,9 +43,9 @@ def effective_url(agent) -> str:
     return _preset(agent.preset).get("api_url", "") if agent.preset else ""
 
 
-def destination_host(agent) -> str:
-    """Host, der Keys dieses Agents erhaelt; beim nativen Adapter der Host des Provider-Presets."""
-    return _host(effective_url(agent) or _preset(agent.provider).get("api_url", ""))
+def destination(agent) -> tuple[str, str]:
+    """(Schema, Host), die Keys dieses Agents erhalten; beim nativen Adapter die des Provider-Presets."""
+    return _origin(effective_url(agent) or _preset(agent.provider).get("api_url", ""))
 
 
 def key_may_be_sent(agent, source: str) -> bool:
