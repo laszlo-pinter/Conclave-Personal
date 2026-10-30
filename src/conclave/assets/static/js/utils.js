@@ -101,16 +101,18 @@ function _createMarkdownPurifier(){
   });
   purifier.addHook('afterSanitizeAttributes',node=>{
     if(node.tagName==='A'&&node.hasAttribute('href')){
-      const href=node.getAttribute('href').trim();
-      const fragment=href.includes('#')?href.slice(href.indexOf('#')+1):'';
+      const href=node.getAttribute('href');
+      // Fragment so bestimmen wie der Browser beim Oeffnen (URL-Parser entfernt u. a. Tabs und
+      // Zeilenumbrueche) und so lesen wie der Login (URLSearchParams auf location.hash).
+      let fragment='', parsed=true;
+      try{fragment=new URL(href,window.location.href).hash.slice(1);}catch{parsed=false;}
       let decoded=fragment;
       try{decoded=decodeURIComponent(fragment);}catch{}
-      // so lesen wie der Login (state.js, URLSearchParams), dazu die Textpruefung als zweite Huerde
-      let hasToken=false;
-      try{hasToken=new URLSearchParams(fragment).has('token');}catch{hasToken=true;}
+      let hasToken=!parsed;
+      try{hasToken=hasToken||new URLSearchParams(fragment).has('token');}catch{hasToken=true;}
       if(hasToken||/token=/i.test(decoded)||/token=/i.test(fragment)){
         node.removeAttribute('href');            // Links duerfen kein Token setzen (R5)
-      }else if(href.startsWith('#')){
+      }else if(href.trim().startsWith('#')){
         node.removeAttribute('target');          // Sprungmarke im selben Tab
       }else{
         node.setAttribute('target','_blank');

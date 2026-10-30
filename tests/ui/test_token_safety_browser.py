@@ -114,3 +114,19 @@ def test_token_link_filter_parses_like_the_login(chromium, live_server):
             assert parsed, link                                        # der Login wuerde das Token lesen
     finally:
         page.close()
+
+
+
+def test_token_link_filter_uses_the_browsers_url_parser(chromium, live_server):
+    """Review R5 (2): Tabs und Zeilenumbrueche entfernt der Browser beim Parsen - der Filter auch."""
+    page = chromium.new_page()
+    try:
+        _open(page, live_server, live_server.token)
+        for raw in ['<a href="http://127.0.0.1:8000/#to&#9;ken=abc">x</a>',
+                    '<a href="http://127.0.0.1:8000/#to&#10;ken=abc">x</a>',
+                    '<a href="#to&#13;ken=abc">x</a>',
+                    '<a href="#a=1&amp;tok&#9;en=abc">x</a>']:
+            html = page.evaluate("v => renderMarkdown(v)", raw)
+            assert "href" not in html, (raw, html)
+    finally:
+        page.close()
