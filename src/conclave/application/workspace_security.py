@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,7 +17,8 @@ DEFAULT_WRITE_LIMIT_BYTES = 512 * 1024
 MAX_REFS_PER_MESSAGE = 10
 # Hier duerfen Agenten auch vorhandene Dateien ueberschreiben; sonst nur neue anlegen (R8)
 AGENT_WRITE_DIR = "agents"
-# Fuer Agenten gesperrt (Marker fuer den Hook des Agent-Hosts)
+# Fuer Agenten gesperrt (Marker fuer den Hook des Agent-Hosts); Vergleich ohne Gross/Klein,
+# weil Windows und macOS Conclave_Notify.json als dieselbe Datei behandeln
 AGENT_BLOCKED_FILES = frozenset({"conclave_notify.json"})
 
 # Windows-Geraetenamen, auch mit Endung (CON, con.txt, COM1.log ...)
@@ -128,7 +130,7 @@ def resolve_output_path(relative_path: str, root: Path | None = None) -> Workspa
     """Loest einen Agent-Output-Pfad unterhalb von workspace/output auf."""
     root = (root or workspace_root()).resolve()
     output_root = (root / "output").resolve()
-    if not relative_path or Path(relative_path).is_absolute():
+    if not relative_path or not isinstance(relative_path, str) or Path(relative_path).is_absolute():
         return None
     if any(unsafe_path_component(part) for part in _parts(relative_path)):
         return None
@@ -137,6 +139,8 @@ def resolve_output_path(relative_path: str, root: Path | None = None) -> Workspa
         path.relative_to(output_root)
         path.relative_to(root)
     except ValueError:
+        return None
+    if path in protected_files():
         return None
     return WorkspacePath(root=root, path=path)
 
@@ -166,7 +170,7 @@ def text_size(content: str) -> int:
 def agent_write_problem(resolved: WorkspacePath) -> str | None:
     """Grund, warum ein Agent hier nicht schreiben darf, sonst None (R8, E-S1 a)."""
     rel = Path(resolved.relative)
-    if rel.as_posix() in AGENT_BLOCKED_FILES:
+    if rel.as_posix().casefold() in AGENT_BLOCKED_FILES:
         return "Diese Datei ist fuer Agenten gesperrt."
     if rel.parts and rel.parts[0] == AGENT_WRITE_DIR:
         return None
@@ -174,6 +178,27 @@ def agent_write_problem(resolved: WorkspacePath) -> str | None:
         return (f"Vorhandene Dateien ueberschreibt nur der Mensch. Neue Datei anlegen "
                 f"oder unter {AGENT_WRITE_DIR}/ schreiben.")
     return None
+
+
+def _current_umask() -> int:
+    mask = os.umask(0o022)
+    os.umask(mask)
+    return mask
+
+
+# Einmal beim Laden gelesen: os.umask setzt den Wert prozessweit und ist nicht threadsicher
+_UMASK = _current_umask() if os.name != "nt" else 0
+
+
+def _keep_mode(tmp: Path, target: Path) -> None:
+    """mkstemp legt 0600 an; die neue Datei bekommt die Rechte der alten bzw. 0666 minus umask."""
+    if os.name == "nt":
+        return
+    try:
+        mode = stat.S_IMODE(target.stat().st_mode)
+    except FileNotFoundError:
+        mode = 0o666 & ~_UMASK
+    os.chmod(tmp, mode)
 
 
 def write_text_atomic(path: Path, content: str, *, create_only: bool = False) -> None:
@@ -185,16 +210,20 @@ def write_text_atomic(path: Path, content: str, *, create_only: bool = False) ->
     fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=".conclave-write-", suffix=".tmp")
     tmp = Path(tmp_name)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
+        # Zeilenenden wie bisher mit open("w"): unter Windows CRLF
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(content)
             fh.flush()
             os.fsync(fh.fileno())
+        _keep_mode(tmp, path)
         if create_only:
             try:
                 os.link(tmp, path)            # scheitert, wenn die Datei inzwischen existiert
             except FileExistsError:
                 raise
             except OSError:
+                # Dateisystem ohne Hardlinks (FAT/exFAT, manche Netzlaufwerke): pruefen und tauschen,
+                # mit einem kleinen Fenster zwischen beidem
                 if path.exists():
                     raise FileExistsError(str(path)) from None
                 os.replace(tmp, path)

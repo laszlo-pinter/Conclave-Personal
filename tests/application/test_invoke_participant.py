@@ -271,4 +271,4 @@ def test_save_directive_keeps_the_old_file_when_writing_fails(service, tmp_path,
     assert (workspace / "output" / "report.md").read_text(encoding="utf-8") == "alt"
     assert sorted(p.name for p in (workspace / "output").iterdir()) == ["report.md"]
     reply = service.load_conversation(conversation.id).messages[-1].content
-    assert "FEHLER" in reply or "tool_event" in reply
+    assert "[FEHLER beim Speichern von 'report.md'" in reply

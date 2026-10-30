@@ -89,6 +89,30 @@ def test_agent_cannot_write_the_notify_marker(env):
     assert not (env.workspace / "conclave_notify.json").exists()
 
 
+@pytest.mark.parametrize("name", ["Conclave_Notify.json", "CONCLAVE_NOTIFY.JSON", "conclave_Notify.json"])
+def test_agent_cannot_write_the_notify_marker_in_another_case(env, name):
+    assert _write(env, "agent", name, "{}").status_code == 403
+    assert not any(p.name.lower() == "conclave_notify.json" for p in env.workspace.iterdir())
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX-Dateirechte")
+def test_atomic_write_keeps_the_file_mode(env):
+    target = env.workspace / "plan.md"
+    target.write_text("alt", encoding="utf-8")
+    target.chmod(0o640)
+    ws.write_text_atomic(target, "neu")
+    assert (target.stat().st_mode & 0o777) == 0o640
+    fresh = env.workspace / "neu.md"
+    ws.write_text_atomic(fresh, "x")
+    assert (fresh.stat().st_mode & 0o777) == (0o666 & ~ws._UMASK)
+
+
+def test_output_path_rules_match_the_workspace_rules(env):
+    assert ws.resolve_output_path(123, root=env.workspace) is None
+    assert ws.resolve_output_path("a.txt:ads", root=env.workspace) is None
+    assert ws.resolve_output_path("bericht.md", root=env.workspace) is not None
+
+
 def test_human_overwrites_existing_files(env):
     (env.workspace / "plan.md").write_text("alt", encoding="utf-8")
     assert _write(env, "human", "plan.md", "neu").status_code == 201
