@@ -13,6 +13,9 @@ Rechte (Plan, Abschnitt 3). "Freigabe-Recht" ist eine eigene Pruefung
 - Kommentare: nur eigene Kommentare des Menschen sind aenderbar; Kommentare von
   Agenten und von Conclave (``system``) sind unveraenderlich.
 - Projekte anlegen/umbenennen/loeschen und Tickets loeschen: nur mit Freigabe-Recht.
+- Anlegen: Agenten nur in die erste Spalte. Jedes Ticket traegt seine Herkunft; Anlegen,
+  Tags, Position und Kommentar-Aenderungen stehen im Verlauf, Projekt-Aenderungen und
+  geloeschte Tickets im Projekt-Verlauf (R9).
 
 Geschrieben wird optimistisch (Versionsnummer): Hat seit dem Lesen jemand das Ticket
 geaendert, gilt die Pruefung nicht mehr fuer den neuen Stand -> 409 statt Ueberschreiben.
@@ -21,6 +24,7 @@ geaendert, gilt die Pruefung nicht mehr fuer den neuen Stand -> 409 statt Uebers
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Callable
 
@@ -28,6 +32,7 @@ from conclave.application.ports import BoardRepository
 from conclave.domain.board import (
     POSITION_STEP,
     Project,
+    ProjectEvent,
     StatusFlow,
     Task,
     TaskComment,
@@ -41,6 +46,7 @@ from conclave.domain.principal import Principal
 # Unterschreitet der Abstand zweier Nachbarn diese Grenze, wird die Spalte neu nummeriert.
 MIN_POSITION_GAP = 1e-6
 SYSTEM_ACTOR = "conclave"
+LAST_STATUS_KEY = "last_status"
 
 
 class BoardError(ConclaveError):
@@ -100,7 +106,9 @@ class BoardService:
             raise _invalid(str(e)) from None
         if self._repo.get_project(slug) is not None:
             raise BoardError(f"Projekt '{slug}' gibt es schon.", 409, "ProjectExists")
-        self._repo.create_project(project)
+        origin, actor_id = self.actor(principal)
+        self._repo.create_project(project, ProjectEvent.create(project.id, "created", None, project.name, origin,
+                                                               actor_id=actor_id))
         return project
 
     def rename_project(self, principal: Principal, slug: str, name: str) -> Project:
@@ -108,7 +116,10 @@ class BoardService:
         self._require_approval(principal, project)
         if not isinstance(name, str) or not name.strip():
             raise _invalid("Projektname darf nicht leer sein.")
-        self._repo.rename_project(slug, name)
+        if name != project.name:
+            origin, actor_id = self.actor(principal)
+            self._repo.rename_project(slug, name, ProjectEvent.create(project.id, "name", project.name, name, origin,
+                                                                      actor_id=actor_id))
         return self._project(slug)
 
     def delete_project(self, principal: Principal, slug: str) -> None:
@@ -155,6 +166,9 @@ class BoardService:
 
     def history(self, ref: str) -> list[TaskEvent]:
         return self._repo.list_events(self.get_task(ref).id)
+
+    def project_history(self, slug: str) -> list[ProjectEvent]:
+        return self._repo.list_project_events(self._project(slug).id)
 
     def change_token(self) -> int:
         return self._repo.change_token()
@@ -229,8 +243,10 @@ class BoardService:
                     human: bool = False, status: str | None = None) -> Task:
         project = self._project(slug)
         status = self.flow_check(status) if status is not None else self.flow.first
-        if principal.is_agent and status == self.flow.last:
-            raise _forbidden("Agenten legen keine erledigten Tickets an.")
+        if principal.is_agent and status != self.flow.first:
+            raise _forbidden(f"Agenten legen Tickets nur in '{self.flow.first}' an; "
+                             "weiter geht es ueber next_task.")
+        origin, actor_id = self.actor(principal)
         try:
             check_field_limits(title=title, text=description, tags=tags)
             task = Task.create(project, title, status, description=description or "", tags=tuple(tags or ()),
@@ -238,15 +254,23 @@ class BoardService:
                                rank=self._next_rank(project.id))
         except (ValueError, TypeError) as e:
             raise _invalid(str(e)) from None
-        return self._repo.create_task(task)
+        task.origin, task.actor_id, task.created_by = origin, actor_id, actor_id
+        event = TaskEvent.create(task.id, "created", None, status, origin, actor_id=actor_id)
+        return self._repo.create_task(task, event)
 
     def update_task(self, principal: Principal, ref: str, *, title: str | None = None,
                     description: str | None = None, tags=None, status: str | None = None,
-                    human: bool | None = None, index: int | None = None, rank: float | None = None) -> Task:
+                    human: bool | None = None, index: int | None = None, rank: float | None = None,
+                    version: int | None = None) -> Task:
         """Aendert die uebergebenen Felder. ``index`` setzt den Platz in der (neuen) Spalte: in der
         ersten Spalte ist das die Prioritaet (rank), sonst die Position. Prioritaet aendert nur der
-        Mensch (P1)."""
+        Mensch (P1). ``version``: nur aendern, wenn das Ticket noch diese Version hat (R9)."""
+        if version is not None and (isinstance(version, bool) or not isinstance(version, int)):
+            raise _invalid("version muss eine ganze Zahl sein.")
         task = self.get_task(ref)
+        if version is not None and version != task.version:
+            raise BoardError(f"Ticket '{ref}' hat inzwischen Version {task.version} (erwartet {version}); "
+                             "bitte neu laden.", 409, "Conflict")
         self._guard_edit(principal, task)
         if principal.is_agent and (index is not None or rank is not None):
             raise _forbidden("Die Prioritaet setzt nur der Mensch (bzw. der Plan); Agenten sortieren nicht um.")
@@ -281,14 +305,22 @@ class BoardService:
                 events.append(TaskEvent.create(task.id, name, old, new, origin, actor_id=actor_id))
                 setattr(task, name, new)
         if tags is not None:
-            task.tags = tuple(dict.fromkeys(t.strip() for t in tags if isinstance(t, str) and t.strip()))
+            new_tags = tuple(dict.fromkeys(t.strip() for t in tags if isinstance(t, str) and t.strip()))
+            if new_tags != task.tags:
+                events.append(TaskEvent.create(task.id, "tags", _tags_value(task.tags), _tags_value(new_tags),
+                                               origin, actor_id=actor_id))
+                task.tags = new_tags
 
         moved_column = any(e.field_name == "status" for e in events)
         new_rank = float(rank) if rank is not None else None
         if index is not None and task.status == self.flow.first:
             new_rank = self._rank_at(task, int(index))
         elif index is not None:
-            task.position = self._position_at(task, task.status, int(index))
+            new_position = self._position_at(task, task.status, int(index))
+            if new_position != task.position and not moved_column:
+                events.append(TaskEvent.create(task.id, "position", task.position, new_position, origin,
+                                               actor_id=actor_id))
+            task.position = new_position
         if moved_column and not (index is not None and task.status != self.flow.first):
             task.position = self._end_position(task.project_id, task.status)
         if new_rank is not None and new_rank != task.rank:
@@ -303,9 +335,13 @@ class BoardService:
         return task
 
     def delete_task(self, principal: Principal, ref: str) -> None:
+        """Loescht Ticket samt Kommentaren und Verlauf; im Projekt-Verlauf bleibt ein Eintrag."""
         self._require_approval(principal)
         task = self.get_task(ref)
-        self._repo.delete_task(task.id)
+        origin, actor_id = self.actor(principal)
+        tombstone = ProjectEvent.create(task.project_id, "task_deleted", f"{task.ref}: {task.title} ({task.status})",
+                                        None, origin, actor_id=actor_id)
+        self._repo.delete_task(task.id, tombstone)
 
     # ── next_task ────────────────────────────────────────────────────────
 
@@ -397,13 +433,40 @@ class BoardService:
             check_field_limits(text=body, what="Kommentar")
         except ValueError as e:
             raise _invalid(str(e)) from None
+        origin, actor_id = self.actor(principal)
+        event = TaskEvent.create(comment.task_id, "comment", comment.body, body, origin, actor_id=actor_id)
         comment.body, comment.updated_at = body, self._now()
-        self._repo.update_comment(comment)
+        if not self._repo.update_comment(comment, event):
+            raise BoardError("Kommentar nicht gefunden.", 404, "CommentNotFound")
         return comment
 
     def delete_comment(self, principal: Principal, comment_id: str) -> None:
-        self._own_comment(principal, comment_id)
-        self._repo.delete_comment(comment_id)
+        """Soft-Delete: der Kommentar verschwindet aus der Liste, sein Inhalt bleibt im Verlauf."""
+        comment = self._own_comment(principal, comment_id)
+        origin, actor_id = self.actor(principal)
+        event = TaskEvent.create(comment.task_id, "comment", comment.body, None, origin, actor_id=actor_id)
+        if not self._repo.delete_comment(comment_id, self._now(), event):
+            raise BoardError("Kommentar nicht gefunden.", 404, "CommentNotFound")
+
+    # ── Spalten (R9) ─────────────────────────────────────────────────────
+
+    def sync_flow(self) -> int:
+        """Gleicht die gespeicherte letzte Spalte mit der Konfiguration ab. Wurde sie umbenannt
+        (alter Name fehlt in den Spalten), ziehen ihre Tickets in die neue letzte Spalte mit,
+        damit sie erledigt bleiben. Liefert die Zahl verschobener Tickets."""
+        stored = self._repo.get_setting(LAST_STATUS_KEY)
+        moved = 0
+        if stored and stored != self.flow.last and stored not in self.flow.statuses:
+            for task in self._repo.list_tasks(None, [stored]):
+                event = TaskEvent.create(task.id, "status", stored, self.flow.last, "system", actor_id=SYSTEM_ACTOR)
+                task.status = self.flow.last
+                task.position = self._end_position(task.project_id, self.flow.last)
+                task.updated_at = self._now()
+                if self._repo.update_task(task, [event]):
+                    moved += 1
+        if stored != self.flow.last:
+            self._repo.set_setting(LAST_STATUS_KEY, self.flow.last)
+        return moved
 
     # ── Import ───────────────────────────────────────────────────────────
 
@@ -412,6 +475,7 @@ class BoardService:
         from conclave.application.board_import import ImportFormatError, parse_export
 
         self._require_approval(principal)
+        origin, actor_id = self.actor(principal)
         try:
             projects = parse_export(data, self.flow.statuses)
         except ImportFormatError as e:
@@ -422,7 +486,8 @@ class BoardService:
             project = self._repo.get_project(imported.slug)
             if project is None:
                 project = Project.create(imported.slug, imported.name)
-                self._repo.create_project(project)
+                self._repo.create_project(project, ProjectEvent.create(project.id, "created", None, project.name,
+                                                                       origin, actor_id=actor_id))
                 summary["projects_created"] += 1
             for it in imported.tasks:
                 ref = f"{project.slug}#{it.number}"
@@ -434,18 +499,24 @@ class BoardService:
                                    position=self._end_position(project.id, it.status), human=it.human,
                                    rank=self._next_rank(project.id))
                 task.number, task.created_at, task.updated_at = it.number, it.created_at, it.updated_at
+                task.created_by = "import"                 # Herkunft des Inhalts unbekannt (origin None)
                 comments = []
                 for ic in it.comments:
                     comment = TaskComment.create(task.id, ic.body, None, author_name=ic.author)
                     comment.created_at = ic.created_at
                     comments.append(comment)
-                if not self._repo.import_task(task, comments):    # Ticket und Kommentare zusammen
+                event = TaskEvent.create(task.id, "created", None, "import", origin, actor_id=actor_id)
+                if not self._repo.import_task(task, comments, event):    # Ticket und Kommentare zusammen
                     summary["tasks_skipped"] += 1          # Nummer inzwischen vergeben
                     summary["skipped_refs"].append(ref)
                     continue
                 summary["tasks_imported"] += 1
                 summary["comments_imported"] += len(comments)
         return summary
+
+
+def _tags_value(tags) -> str:
+    return json.dumps(list(tags), ensure_ascii=False)
 
 
 # ── Darstellung fuer API und MCP ─────────────────────────────────────────
@@ -463,7 +534,7 @@ def task_to_dict(task: Task) -> dict:
         "ref": task.ref, "project": task.project_slug, "number": task.number, "title": task.title,
         "description": task.description, "tags": list(task.tags), "status": task.status,
         "position": task.position, "rank": task.rank, "human": task.human, "assignee": task.assignee,
-        "version": task.version,
+        "version": task.version, "origin": task.origin, "created_by": task.created_by,
         "created_at": _iso(task.created_at), "updated_at": _iso(task.updated_at),
     }
 
@@ -475,5 +546,10 @@ def comment_to_dict(comment: TaskComment) -> dict:
 
 
 def event_to_dict(event: TaskEvent) -> dict:
+    return {"field": event.field_name, "old": event.old_value, "new": event.new_value, "origin": event.origin,
+            "actor_id": event.actor_id, "created_at": _iso(event.created_at)}
+
+
+def project_event_to_dict(event: ProjectEvent) -> dict:
     return {"field": event.field_name, "old": event.old_value, "new": event.new_value, "origin": event.origin,
             "actor_id": event.actor_id, "created_at": _iso(event.created_at)}

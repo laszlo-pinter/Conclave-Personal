@@ -137,12 +137,42 @@ def test_origin_fields_in_comment_body_are_ignored(client, extra):
     assert (data["origin"], data["actor_id"], data["author_name"]) == ("agent", "agent", "Laszlo")
 
 
-@pytest.mark.parametrize("extra", [{"origin": "human"}, {"version": 99}, {"number": 5}, {"assignee": "x"}])
+@pytest.mark.parametrize("extra", [{"origin": "human"}, {"created_by": "human"}, {"number": 5}, {"assignee": "x"}])
 def test_task_fields_outside_the_list_are_rejected(client, extra):
     _task(client)
     assert client.patch(f"{URL}/1", json=extra, headers=_bearer(AGENT)).status_code == 400
     assert client.post("/board/tasks", json={"project": "api", "title": "T", **extra},
                        headers=_bearer(AGENT)).status_code == 400
+
+
+def test_patch_with_stale_version_is_a_conflict(client):
+    """R9: ``version`` beim Aendern; veraltet -> 409, nichts geschrieben. Beim Anlegen nicht erlaubt."""
+    _task(client)
+    version = client.get(f"{URL}/1", headers=_bearer(HUMAN)).get_json()["version"]
+    assert client.patch(f"{URL}/1", json={"title": "Neu", "version": version}, headers=_bearer(HUMAN)).status_code == 200
+    resp = client.patch(f"{URL}/1", json={"title": "Alt", "version": version}, headers=_bearer(AGENT))
+    assert resp.status_code == 409 and resp.get_json()["type"] == "Conflict"
+    assert client.get(f"{URL}/1", headers=_bearer(HUMAN)).get_json()["title"] == "Neu"
+    assert client.patch(f"{URL}/1", json={"version": "2"}, headers=_bearer(HUMAN)).status_code == 400
+    assert client.post("/board/tasks", json={"project": "api", "title": "T", "version": 1},
+                       headers=_bearer(HUMAN)).status_code == 400
+
+
+def test_agent_cannot_create_a_ticket_in_review(client):
+    resp = client.post("/board/tasks", json={"project": "api", "title": "T", "status": "review"},
+                       headers=_bearer(AGENT))
+    assert resp.status_code == 403
+    assert client.get("/board/tasks?project=api", headers=_bearer(HUMAN)).get_json()["tasks"] == []
+
+
+def test_created_event_and_project_history_through_the_api(client):
+    _task(client)
+    events = client.get(f"{URL}/1/history", headers=_bearer(HUMAN)).get_json()["history"]
+    assert (events[0]["field"], events[0]["origin"]) == ("created", "human")
+    assert client.delete(f"{URL}/1", headers=_bearer(HUMAN)).status_code == 204
+    project = client.get("/board/projects/api/history", headers=_bearer(HUMAN)).get_json()["history"]
+    assert [e["field"] for e in project][-1] == "task_deleted"
+    assert client.get("/board/projects/api/history", headers=_bearer(AGENT)).status_code == 403
 
 
 def test_history_records_the_agent_not_a_claimed_author(client):
@@ -151,7 +181,8 @@ def test_history_records_the_agent_not_a_claimed_author(client):
                         headers=_bearer(AGENT)).status_code == 400                    # unbekanntes Feld
     client.post("/board/next", json={"task": "api#1", "author_name": "Laszlo"}, headers=_bearer(AGENT))
     events = client.get(f"{URL}/1/history", headers=_bearer(HUMAN)).get_json()["history"]
-    assert [(e["field"], e["origin"], e["actor_id"]) for e in events] == [("status", "agent", "agent")]
+    assert [(e["field"], e["origin"], e["actor_id"]) for e in events] == [("created", "human", "human"),
+                                                                          ("status", "agent", "agent")]
 
 
 # ── Import mit falschem oder feindlichem Format ──────────────────────────

@@ -50,9 +50,16 @@ Wer schreibt, ergibt sich aus dem Token, nicht aus einem Feld der Anfrage:
 - **Kommentare von Agenten und von Conclave sind unveränderlich**, auch für den
   Menschen, ebenso importierte. Der Mensch kann eigene Kommentare ändern und
   löschen.
-- **Verlauf:** Jede Änderung von Status, Titel, Beschreibung und Markierung
-  wird mit altem und neuem Wert gespeichert, so lässt sich etwa erkennen, ob
-  jemand die Abnahmekriterien abgeschwächt hat.
+- **Verlauf:** Das Anlegen und jede Änderung von Status, Titel, Beschreibung,
+  Markierung, Priorität, Tags und Position wird mit altem und neuem Wert und
+  Herkunft gespeichert, so lässt sich etwa erkennen, ob jemand die
+  Abnahmekriterien abgeschwächt hat. Bearbeitete und gelöschte Kommentare
+  stehen ebenfalls im Verlauf. Jedes Ticket zeigt, wer es angelegt hat
+  (`created_by`); Agenten legen Tickets nur in der ersten Spalte an.
+- **Projekt-Verlauf:** Anlegen, Umbenennen und gelöschte Tickets eines Projekts
+  (`GET /board/projects/<slug>/history`).
+- **Gleichzeitig ändern:** Wer beim Ändern die gelesene `version` mitgibt,
+  überschreibt keine Änderung, die inzwischen ein anderer gemacht hat (`409`).
 - Löschen, Projekte verwalten und der Import sind dem Menschen vorbehalten.
 
 Die Grenze aus [Sicherheit](sicherheit.md#grenze-gleicher-betriebssystem-benutzer)
@@ -157,7 +164,8 @@ Invoke-RestMethod -Method Post http://localhost:8000/board/import `
   `skipped_refs`). Neue Kommentare zu einem schon importierten Ticket werden
   **nicht** nachgetragen.
 - Importierte Kommentare haben keine belegte Herkunft („unbekannt“), auch wenn
-  der Export einen Autor nennt. Importierte Tickets haben keinen Verlauf.
+  der Export einen Autor nennt. Importierte Tickets haben als Verlauf nur den
+  Eintrag „Angelegt“ (Herkunft: wer importiert hat, Wert `import`).
 - Status, die in `[board] statuses` fehlen, lehnt der Import ab; die Spalten
   vorher passend einstellen.
 

@@ -357,7 +357,7 @@ def test_board_tools_workflow_rights_and_data_note(conclave_api):
 
     detail = _json("conclave_board_get", {"task": "api#2"})
     assert detail["comments"][0] == {"origin": "agent", "author": "cc", "body": "Commit abc"}
-    assert [h["new"] for h in detail["history"]] == ["doing", "review"]
+    assert [h["new"] for h in detail["history"]] == ["todo", "doing", "review"]
     listed = _json("conclave_board_list", {"query": "abnahme"})["tasks"]
     assert [t["task"] for t in listed] == ["api#2"]
 

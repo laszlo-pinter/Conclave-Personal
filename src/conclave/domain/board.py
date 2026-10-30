@@ -21,8 +21,11 @@ SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,39}\Z")
 REF = re.compile(r"([a-z0-9][a-z0-9-]{0,39})#([1-9][0-9]{0,8})\Z")
 DEFAULT_STATUSES = ("todo", "doing", "review", "done")
 ORIGINS = ("human", "agent", "system")
-# Verlaufseintraege fuer diese Felder (Plan 2, "Ticket-Verlauf")
-TRACKED_FIELDS = ("status", "title", "description", "human", "rank")
+# Verlaufseintraege fuer diese Felder (Plan 2, "Ticket-Verlauf"); "created" ist das Anlegen,
+# "comment" Bearbeiten/Loeschen eines Kommentars (alt -> neu bzw. -> None), R9
+TRACKED_FIELDS = ("created", "status", "title", "description", "human", "rank", "tags", "position", "comment")
+# Verlauf eines Projekts: Anlegen, Umbenennen, geloeschte Tickets (Tombstone), R9
+PROJECT_FIELDS = ("created", "name", "task_deleted")
 POSITION_STEP = 1024.0      # Abstand der Karten nach dem Neunummerieren
 # Laengengrenzen (R6): Titel, Beschreibung bzw. Kommentar, Anzahl und Laenge der Tags
 TITLE_MAX = 300
@@ -140,8 +143,12 @@ class Task:
     version: int = 1                # optimistische Sperre: jede Aenderung erhoeht sie
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
+    origin: str | None = None       # wer angelegt hat (aus dem Token), None = importiert/unbekannt (R9)
+    actor_id: str | None = None     # vorerst die Rolle, spaeter der Benutzer
+    created_by: str = ""            # Anzeige: Rolle, "import" oder leer (aelter als R9)
 
     def __post_init__(self) -> None:
+        check_origin(self.origin)
         if not self.title.strip():
             raise ValueError("Titel darf nicht leer sein")
         self.tags = tuple(dict.fromkeys(t.strip() for t in self.tags if t and t.strip()))
@@ -204,3 +211,26 @@ class TaskEvent:
                actor_id: str | None = None) -> "TaskEvent":
         return TaskEvent(id=_id(), task_id=task_id, field_name=field_name, old_value=event_value(old),
                          new_value=event_value(new), origin=origin, actor_id=actor_id)
+
+
+@dataclass
+class ProjectEvent:
+    id: str
+    project_id: str
+    field_name: str
+    old_value: str | None
+    new_value: str | None
+    origin: str | None
+    actor_id: str | None = None
+    created_at: datetime = field(default_factory=_now)
+
+    def __post_init__(self) -> None:
+        check_origin(self.origin)
+        if self.field_name not in PROJECT_FIELDS:
+            raise ValueError(f"Projekt-Verlauf nur fuer {PROJECT_FIELDS}")
+
+    @staticmethod
+    def create(project_id: str, field_name: str, old, new, origin: str | None, *,
+               actor_id: str | None = None) -> "ProjectEvent":
+        return ProjectEvent(id=_id(), project_id=project_id, field_name=field_name, old_value=event_value(old),
+                            new_value=event_value(new), origin=origin, actor_id=actor_id)

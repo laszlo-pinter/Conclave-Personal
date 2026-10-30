@@ -56,7 +56,7 @@ def test_event_value_keeps_the_full_text():
     long = "Abnahme\n" + "x" * 5000 + "\n- Postgres geprueft"
     assert event_value(long) == long and event_value(True) == "True" and event_value(None) is None
     with pytest.raises(ValueError):
-        TaskEvent.create("t", "tags", "a", "b", "human")           # nur verfolgte Felder
+        TaskEvent.create("t", "assignee", "a", "b", "human")       # nur verfolgte Felder
 
 
 def test_task_tags_are_deduplicated_and_trimmed():

@@ -41,7 +41,9 @@ from conclave.domain.participant import ParticipantType
 from conclave.domain.principal import HUMAN_PRINCIPAL
 from conclave.api.access import HUMAN_ONLY_ERROR, agent_may
 from conclave.application.consultations import ConsultationRequestError
-from conclave.application.board import BoardError, comment_to_dict, event_to_dict, project_to_dict, task_to_dict
+from conclave.application.board import (
+    BoardError, comment_to_dict, event_to_dict, project_event_to_dict, project_to_dict, task_to_dict,
+)
 from conclave.domain.errors import TaskNotFound, TaskSourceError
 from conclave.cli.bootstrap import rate_limit_disabled, validate_rate_limit
 from conclave.cli.config import DEFAULT_RATE_LIMIT
@@ -954,6 +956,9 @@ def create_app(handler: CLIHandler, auth_service=None,
         rank = body.get("rank")
         if rank is not None and (isinstance(rank, bool) or not isinstance(rank, (int, float))):
             raise BoardError("rank muss eine Zahl sein.", 400, "ValidationError")
+        version = body.get("version")
+        if version is not None and (isinstance(version, bool) or not isinstance(version, int)):
+            raise BoardError("version muss eine ganze Zahl sein.", 400, "ValidationError")
 
     def _flag(name: str, default: bool = False) -> bool:
         return request.args.get(name, "true" if default else "false").lower() in ("1", "true", "yes")
@@ -1036,13 +1041,14 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     @app.patch("/board/projects/<slug>/tasks/<int:number>")
     def board_update_task(slug: str, number: int):
-        """Ticket aendern: title, description, tags, status, human, index (Position in der Spalte)."""
+        """Ticket aendern: title, description, tags, status, human, index (Position in der Spalte);
+        mit ``version`` nur, wenn das Ticket noch diesen Stand hat (sonst 409, R9)."""
         body = _json_object()
-        _check_task_fields(body, {"title", "description", "tags", "status", "human", "index", "rank"})
+        _check_task_fields(body, {"title", "description", "tags", "status", "human", "index", "rank", "version"})
         task = _board().update_task(g.principal, _ref(slug, number), title=body.get("title"),
                                     description=body.get("description"), tags=body.get("tags"),
                                     status=body.get("status"), human=body.get("human"), index=body.get("index"),
-                                    rank=body.get("rank"))
+                                    rank=body.get("rank"), version=body.get("version"))
         return jsonify(task_to_dict(task)), 200
 
     @app.delete("/board/projects/<slug>/tasks/<int:number>")
@@ -1066,8 +1072,13 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     @app.get("/board/projects/<slug>/tasks/<int:number>/history")
     def board_history(slug: str, number: int):
-        """Verlauf eines Tickets (Status, Titel, Beschreibung, Markierung)."""
+        """Verlauf eines Tickets: Anlegen und jede Aenderung mit Herkunft."""
         return jsonify({"history": [event_to_dict(e) for e in _board().history(_ref(slug, number))]}), 200
+
+    @app.get("/board/projects/<slug>/history")
+    def board_project_history(slug: str):
+        """Verlauf eines Projekts: Anlegen, Umbenennen, geloeschte Tickets (R9)."""
+        return jsonify({"history": [project_event_to_dict(e) for e in _board().project_history(slug)]}), 200
 
     @app.put("/board/comments/<comment_id>")
     def board_edit_comment(comment_id: str):

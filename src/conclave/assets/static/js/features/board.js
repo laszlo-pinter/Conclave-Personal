@@ -269,7 +269,7 @@ function _boardEvent(ev) {
   item.append(_boardEl('span', 'board-time', _boardDate(ev.created_at)),
               _boardEl('span', 'board-origin origin-' + (ev.origin || 'unknown'), originLabel(ev.origin)),
               _boardEl('span', 'board-event-field', t('board.field.' + ev.field)));
-  if (ev.field === 'description') {
+  if (ev.field === 'description' || ev.field === 'comment') {
     // Volltext nur aufklappbar, damit der Verlauf lesbar bleibt
     const details = _boardEl('details', 'board-event-details');
     details.append(_boardEl('summary', '', t('board.showChange')),

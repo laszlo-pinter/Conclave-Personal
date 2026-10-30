@@ -80,6 +80,7 @@ HUMAN_ONLY = frozenset({
     ("GET", "/board"),
     ("GET", "/board/changes"),
     ("GET", "/board/projects/<slug>/tasks/<int:number>/comments"),
+    ("GET", "/board/projects/<slug>/history"),
     ("POST", "/board/projects"),
     ("PUT", "/board/projects/<slug>"),
     ("DELETE", "/board/projects/<slug>"),

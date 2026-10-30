@@ -389,7 +389,7 @@ def _task_path(task: str) -> str:
 
 def _brief(t: dict) -> dict:
     return {"task": t["ref"], "title": t["title"], "status": t["status"], "tags": t["tags"],
-            "human_only": t["human"]}
+            "human_only": t["human"], "created_by": t.get("created_by") or "unbekannt"}
 
 
 @mcp.tool()
@@ -432,7 +432,8 @@ def conclave_board_get(task: str) -> dict:
         "comments": [{"origin": c["origin"], "author": c["author_name"], "body": c["body"]}
                      for c in t.get("comments", [])],
         # lange Texte nicht wiederholen: Beschreibungsaenderungen nur als Hinweis (voller Verlauf ueber REST)
-        "history": [{"field": h["field"], "new": "(geaendert)" if h["field"] == "description" else h["new"],
+        "history": [{"field": h["field"],
+                     "new": "(geaendert)" if h["field"] in ("description", "comment") else h["new"],
                      "origin": h["origin"]} for h in history],
     }
 
@@ -482,7 +483,8 @@ def conclave_board_create(project: str, title: str, description: str = "", tags:
 
 @mcp.tool()
 def conclave_board_update(task: str, status: str = "", title: str = "", description: str | None = None,
-                          tags: list[str] | None = None, human_only: bool | None = None) -> dict:
+                          tags: list[str] | None = None, human_only: bool | None = None,
+                          version: int | None = None) -> dict:
     """Aendert ein Ticket; nur uebergebene Felder. Nach done schiebt nur der Mensch.
 
     Args:
@@ -492,6 +494,8 @@ def conclave_board_update(task: str, status: str = "", title: str = "", descript
         description: neue Beschreibung (Markdown)
         tags: neue Schlagworte (ersetzen die alten)
         human_only: True markiert das Ticket als "nur fuer Menschen" (entfernen darf nur der Mensch)
+        version: Version aus conclave_board_get; hat sich das Ticket seither geaendert, wird nichts
+            geschrieben (Fehler 409), statt fremde Aenderungen zu ueberschreiben
     """
     body = {}
     if status:
@@ -506,6 +510,8 @@ def conclave_board_update(task: str, status: str = "", title: str = "", descript
         body["human"] = human_only
     if not body:
         raise ToolError("Nichts zu aendern: mindestens ein Feld angeben.")
+    if version is not None:
+        body["version"] = version
     return _brief(_patch(_task_path(task), body))
 
 

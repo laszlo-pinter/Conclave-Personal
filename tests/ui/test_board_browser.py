@@ -190,8 +190,10 @@ def test_status_change_and_comment_from_task_view(chromium, board_server):
         assert task["status"] == "done"
         assert [(c["origin"], c["body"]) for c in task["comments"]] == [("human", "Abgenommen")]
         events = board_server.human.get("/board/projects/api/tasks/1/history").json()["history"]
-        assert [(e["field"], e["new"], e["origin"]) for e in events] == [("status", "done", "human")]
-        assert page.locator("#boardTaskHistory .board-event").count() == 1
+        assert [(e["field"], e["new"], e["origin"]) for e in events] == [("created", "todo", "agent"),
+                                                                          ("status", "done", "human")]
+        assert page.locator("#boardTaskHistory .board-event").count() == 2
+        assert page.locator("#boardTaskHistory .board-event-field").first.inner_text() == "Angelegt"
         assert errors == [] and _csp_problems(page) == []
     finally:
         page.close()

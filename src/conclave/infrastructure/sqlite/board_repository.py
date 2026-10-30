@@ -8,7 +8,9 @@
   Ausnahme. Sonst hielte eine halbe Transaktion den Schreib-Lock und wuerde mit dem
   naechsten Schreibzugriff desselben Threads festgeschrieben.
 - Loeschen ist eine Anweisung; Kommentare, Verlauf, Tickets und Zaehler haengen per
-  ``ON DELETE CASCADE`` daran (Fremdschluessel sind unter SQLite eingeschaltet).
+  ``ON DELETE CASCADE`` daran (Fremdschluessel sind unter SQLite eingeschaltet). Ein
+  geloeschtes Ticket hinterlaesst einen Eintrag im Projekt-Verlauf, geloeschte Kommentare
+  bleiben als Zeile mit ``deleted_at`` (Inhalt im Verlauf), R9.
 - Freitext (Projektname, Titel, Beschreibung, Tags, Kommentare, Verlaufswerte) wird
   wie Nachrichten verschluesselt, wenn ein CryptoService gesetzt ist.
 - Jede aendernde Schreiboperation erhoeht den Aenderungszaehler (``board_meta``).
@@ -23,12 +25,16 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 
-from conclave.domain.board import POSITION_STEP, Project, Task, TaskComment, TaskEvent
+from conclave.domain.board import POSITION_STEP, Project, ProjectEvent, Task, TaskComment, TaskEvent
 
 MIN_SQLITE = (3, 35)       # UPDATE ... RETURNING
 
 _TASK_COLUMNS = ("t.id, t.project_id, p.slug, t.number, t.title, t.description, t.tags, t.status, t.position, "
-                 "t.human, t.assignee, t.created_at, t.updated_at, t.version, t.rank")
+                 "t.human, t.assignee, t.created_at, t.updated_at, t.version, t.rank, t.origin, t.actor_id, "
+                 "t.created_by")
+_INSERT_TASK = ("INSERT INTO board_tasks (id, project_id, number, title, description, tags, status, position, "
+                "rank, human, assignee, updated_at, created_at, origin, actor_id, created_by) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 
 
 class _NotInserted(Exception):
@@ -120,12 +126,14 @@ class SQLiteBoardRepository:
     def _project(self, row) -> Project:
         return Project(id=row[0], slug=row[1], name=self._dec(row[2]), created_at=_ts(row[3]))
 
-    def create_project(self, project: Project) -> None:
+    def create_project(self, project: Project, event: ProjectEvent | None = None) -> None:
         with self._tx():
             self._execute("INSERT INTO board_projects (id, slug, name, created_at) VALUES (?, ?, ?, ?)",
                           (project.id, project.slug, self._enc(project.name), self._dt(project.created_at)))
             self._execute("INSERT INTO board_counters (project_id, next_number) VALUES (?, 1)", (project.id,))
             self._bump()
+            if event is not None:
+                self._insert_project_event(event)
 
     def get_project(self, slug: str) -> Project | None:
         row = self._one("SELECT id, slug, name, created_at FROM board_projects WHERE slug = ?", (slug,))
@@ -135,12 +143,14 @@ class SQLiteBoardRepository:
         return [self._project(r) for r in self._all(
             "SELECT id, slug, name, created_at FROM board_projects ORDER BY slug")]
 
-    def rename_project(self, slug: str, name: str) -> bool:
+    def rename_project(self, slug: str, name: str, event: ProjectEvent | None = None) -> bool:
         with self._tx():
             changed = self._rowcount("UPDATE board_projects SET name = ? WHERE slug = ?",
                                      (self._enc(name), slug))
             if changed:
                 self._bump()
+                if event is not None:
+                    self._insert_project_event(event)
         return changed == 1
 
     def delete_project(self, slug: str) -> bool:
@@ -158,39 +168,42 @@ class SQLiteBoardRepository:
         return Task(id=row[0], project_id=row[1], project_slug=row[2], number=row[3], title=self._dec(row[4]),
                     description=self._dec(row[5]) or "", tags=tuple(json.loads(tags)) if tags else (),
                     status=row[7], position=float(row[8]), human=bool(row[9]), assignee=row[10],
-                    created_at=_ts(row[11]), updated_at=_ts(row[12]), version=int(row[13]), rank=float(row[14]))
+                    created_at=_ts(row[11]), updated_at=_ts(row[12]), version=int(row[13]), rank=float(row[14]),
+                    origin=row[15], actor_id=row[16], created_by=row[17] or "")
 
     def _task_params(self, task: Task) -> tuple:
         return (self._enc(task.title), self._enc(task.description), self._enc(json.dumps(list(task.tags))),
                 task.status, task.position, task.rank, self._bool(task.human), task.assignee,
                 self._dt(task.updated_at))
 
-    def create_task(self, task: Task) -> Task:
-        """Legt das Ticket an und vergibt die naechste Nummer des Projekts."""
+    def _origin_params(self, task: Task) -> tuple:
+        return (self._dt(task.created_at), task.origin, task.actor_id, task.created_by or "")
+
+    def create_task(self, task: Task, event: TaskEvent | None = None) -> Task:
+        """Legt das Ticket an und vergibt die naechste Nummer des Projekts; mit dem Ereignis
+        ``created`` in derselben Transaktion."""
         with self._tx():
             row = self._one("UPDATE board_counters SET next_number = next_number + 1 WHERE project_id = ? "
                             "RETURNING next_number - 1", (task.project_id,))
             if row is None:
                 raise ValueError("Unbekanntes Projekt")
             number = int(row[0])
-            self._execute(
-                "INSERT INTO board_tasks (id, project_id, number, title, description, tags, status, position, "
-                "rank, human, assignee, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (task.id, task.project_id, number, *self._task_params(task), self._dt(task.created_at)))
+            self._execute(_INSERT_TASK, (task.id, task.project_id, number, *self._task_params(task),
+                                         *self._origin_params(task)))
             self._bump()
+            if event is not None:
+                self._insert_event(event)
         task.number = number
         return task
 
-    def import_task(self, task: Task, comments=()) -> bool:
+    def import_task(self, task: Task, comments=(), event: TaskEvent | None = None) -> bool:
         """Uebernimmt ein Ticket mit vorgegebener Nummer samt Kommentaren (Import, atomar);
         der Zaehler des Projekts springt mit. ``False``, wenn die Nummer inzwischen vergeben ist."""
         try:
             with self._tx():
                 inserted = self._rowcount(
-                    "INSERT INTO board_tasks (id, project_id, number, title, description, tags, status, position, "
-                    "rank, human, assignee, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-                    "ON CONFLICT (project_id, number) DO NOTHING",
-                    (task.id, task.project_id, task.number, *self._task_params(task), self._dt(task.created_at)))
+                    _INSERT_TASK + " ON CONFLICT (project_id, number) DO NOTHING",
+                    (task.id, task.project_id, task.number, *self._task_params(task), *self._origin_params(task)))
                 if inserted != 1:
                     raise _NotInserted()
                 self._execute("UPDATE board_counters SET next_number = MAX(next_number, ?) WHERE project_id = ?",
@@ -204,6 +217,8 @@ class SQLiteBoardRepository:
                         (comment.id, comment.task_id, self._enc(comment.body), comment.origin, comment.actor_id,
                          self._enc(comment.author_name), seq, self._dt(comment.created_at),
                          self._dt(comment.updated_at)))
+                if event is not None:
+                    self._insert_event(event)
         except _NotInserted:
             return False
         return True
@@ -273,12 +288,14 @@ class SQLiteBoardRepository:
                     self._insert_event(event)
         return changed == 1
 
-    def delete_task(self, task_id: str) -> bool:
-        """Eine Anweisung; Kommentare und Verlauf folgen per CASCADE."""
+    def delete_task(self, task_id: str, tombstone: ProjectEvent | None = None) -> bool:
+        """Kommentare und Verlauf folgen per CASCADE; ``tombstone`` bleibt im Projekt-Verlauf."""
         with self._tx():
             changed = self._rowcount("DELETE FROM board_tasks WHERE id = ?", (task_id,))
             if changed:
                 self._bump()
+                if tombstone is not None:
+                    self._insert_project_event(tombstone)
         return changed == 1
 
     # ── Positionen ───────────────────────────────────────────────────────
@@ -337,27 +354,35 @@ class SQLiteBoardRepository:
 
     def get_comment(self, comment_id: str) -> TaskComment | None:
         row = self._one("SELECT id, task_id, body, origin, actor_id, author_name, created_at, updated_at "
-                        "FROM board_comments WHERE id = ?", (comment_id,))
+                        "FROM board_comments WHERE id = ? AND deleted_at IS NULL", (comment_id,))
         return self._comment(row) if row else None
 
     def list_comments(self, task_id: str) -> list[TaskComment]:
         return [self._comment(r) for r in self._all(
             "SELECT id, task_id, body, origin, actor_id, author_name, created_at, updated_at "
-            "FROM board_comments WHERE task_id = ? ORDER BY seq", (task_id,))]
+            "FROM board_comments WHERE task_id = ? AND deleted_at IS NULL ORDER BY seq", (task_id,))]
 
-    def update_comment(self, comment: TaskComment) -> bool:
+    def update_comment(self, comment: TaskComment, event: TaskEvent | None = None) -> bool:
         with self._tx():
-            changed = self._rowcount("UPDATE board_comments SET body = ?, updated_at = ? WHERE id = ?",
-                                     (self._enc(comment.body), self._dt(comment.updated_at), comment.id))
+            changed = self._rowcount(
+                "UPDATE board_comments SET body = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+                (self._enc(comment.body), self._dt(comment.updated_at), comment.id))
             if changed:
                 self._bump()
+                if event is not None:
+                    self._insert_event(event)
         return changed == 1
 
-    def delete_comment(self, comment_id: str) -> bool:
+    def delete_comment(self, comment_id: str, deleted_at=None, event: TaskEvent | None = None) -> bool:
+        """Soft-Delete: die Zeile bleibt mit ``deleted_at``, der Inhalt steht im Verlauf (R9)."""
         with self._tx():
-            changed = self._rowcount("DELETE FROM board_comments WHERE id = ?", (comment_id,))
+            changed = self._rowcount(
+                "UPDATE board_comments SET body = '', deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+                (self._dt(deleted_at or datetime.now().astimezone()), comment_id))
             if changed:
                 self._bump()
+                if event is not None:
+                    self._insert_event(event)
         return changed == 1
 
     # ── Verlauf ──────────────────────────────────────────────────────────
@@ -380,3 +405,30 @@ class SQLiteBoardRepository:
                           new_value=self._dec(r[4]), origin=r[5], actor_id=r[6], created_at=_ts(r[7]))
                 for r in self._all("SELECT id, task_id, field, old_value, new_value, origin, actor_id, created_at "
                                    "FROM board_events WHERE task_id = ? ORDER BY seq", (task_id,))]
+
+    # ── Projekt-Verlauf (R9) ─────────────────────────────────────────────
+
+    def _insert_project_event(self, event: ProjectEvent) -> None:
+        seq = self._bump()
+        self._execute(
+            "INSERT INTO board_project_events (id, project_id, field, old_value, new_value, origin, actor_id, seq, "
+            "created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (event.id, event.project_id, event.field_name, self._enc(event.old_value), self._enc(event.new_value),
+             event.origin, event.actor_id, seq, self._dt(event.created_at)))
+
+    def list_project_events(self, project_id: str) -> list[ProjectEvent]:
+        return [ProjectEvent(id=r[0], project_id=r[1], field_name=r[2], old_value=self._dec(r[3]),
+                             new_value=self._dec(r[4]), origin=r[5], actor_id=r[6], created_at=_ts(r[7]))
+                for r in self._all("SELECT id, project_id, field, old_value, new_value, origin, actor_id, created_at "
+                                   "FROM board_project_events WHERE project_id = ? ORDER BY seq", (project_id,))]
+
+    # ── Einstellungen (R9: zuletzt bekannte letzte Spalte) ───────────────
+
+    def get_setting(self, key: str) -> str | None:
+        row = self._one("SELECT value FROM board_settings WHERE key = ?", (key,))
+        return row[0] if row else None
+
+    def set_setting(self, key: str, value: str) -> None:
+        with self._tx():
+            self._execute("INSERT INTO board_settings (key, value) VALUES (?, ?) "
+                          "ON CONFLICT (key) DO UPDATE SET value = excluded.value", (key, value))

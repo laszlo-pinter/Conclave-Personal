@@ -222,7 +222,11 @@ Das eigene Board (siehe [Mit dem Board arbeiten](../mit-dem-board-arbeiten.md)).
 
 Spalten nachträglich umzubenennen ändert gespeicherte Tickets nicht: Tickets
 mit einem Status, der nicht mehr in `statuses` steht, zeigt die UI nicht an,
-bis die Spalte wieder da ist.
+bis die Spalte wieder da ist. Ausnahme ist die letzte Spalte: Fehlt ihr alter
+Name in `statuses`, verschiebt Conclave beim Start deren Tickets in die neue
+letzte Spalte, damit sie erledigt bleiben (Verlaufseintrag mit Herkunft
+`system`). Kommt nur eine Spalte hinter der alten letzten dazu, bleiben die
+Tickets, wo sie sind.
 
 Das Board braucht SQLite ab Version 3.35 (bei Python 3.11 und 3.12 üblich)
 oder PostgreSQL.

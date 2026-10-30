@@ -199,7 +199,13 @@ def _build_board(conn, config):
     else:
         from conclave.infrastructure.sqlite.board_repository import SQLiteBoardRepository
         repo = SQLiteBoardRepository(conn, crypto, autocommit=True)
-    return BoardService(repo, StatusFlow(config.board.statuses))
+    board = BoardService(repo, StatusFlow(config.board.statuses))
+    moved = board.sync_flow()          # umbenannte letzte Spalte: erledigte Tickets ziehen mit (R9)
+    if moved:
+        from conclave.infrastructure.log import get_logger
+        get_logger("api.server").info("Board: %s erledigte Tickets in die umbenannte letzte Spalte verschoben",
+                                      moved)
+    return board
 
 
 def _check_workspace_location(config) -> None:

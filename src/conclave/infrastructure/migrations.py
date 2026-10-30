@@ -121,7 +121,50 @@ MIGRATIONS: list[Migration] = [
         description="Prioritaet je Ticket (rank), uebernommen aus der bisherigen Position (P1)",
         fn=lambda connection, is_postgres: _add_board_rank(connection, is_postgres),
     ),
+    Migration(
+        id="015_board_history",
+        description="Herkunft der Tickets, geloeschte Kommentare, Projekt-Verlauf und Board-Einstellungen (R9)",
+        fn=lambda connection, is_postgres: _add_board_history(connection, is_postgres),
+    ),
 ]
+
+
+def _board_history_tables(ts: str) -> list[str]:
+    return [
+        f"""CREATE TABLE IF NOT EXISTS board_project_events (
+            id         TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL REFERENCES board_projects(id) ON DELETE CASCADE,
+            field      TEXT NOT NULL,
+            old_value  TEXT,
+            new_value  TEXT,
+            origin     TEXT,
+            actor_id   TEXT,
+            seq        INTEGER NOT NULL DEFAULT 0,
+            created_at {ts} NOT NULL
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_board_project_events ON board_project_events(project_id, seq)",
+        """CREATE TABLE IF NOT EXISTS board_settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )""",
+    ]
+
+
+def _add_board_history(connection, is_postgres: bool) -> None:
+    ts = "TIMESTAMPTZ" if is_postgres else "TEXT"
+    statements = []
+    for column, ddl in (("origin", "TEXT"), ("actor_id", "TEXT"), ("created_by", "TEXT NOT NULL DEFAULT ''")):
+        if not _has_column(connection, is_postgres, "board_tasks", column):
+            statements.append(f"ALTER TABLE board_tasks ADD COLUMN {column} {ddl}")
+    if not _has_column(connection, is_postgres, "board_comments", "deleted_at"):
+        statements.append(f"ALTER TABLE board_comments ADD COLUMN deleted_at {ts}")
+    statements += _board_history_tables(ts)
+    for statement in statements:
+        if is_postgres:
+            with connection.cursor() as cur:
+                cur.execute(statement)
+        else:
+            connection.execute(statement)
 
 
 def _add_board_rank(connection, is_postgres: bool) -> None:
@@ -392,6 +435,9 @@ def _create_board_tables(connection, is_postgres: bool) -> None:
             version     INTEGER NOT NULL DEFAULT 1,
             created_at  {ts} NOT NULL,
             updated_at  {ts} NOT NULL,
+            origin      TEXT,
+            actor_id    TEXT,
+            created_by  TEXT NOT NULL DEFAULT '',
             UNIQUE(project_id, number)
         )""",
         f"""CREATE TABLE IF NOT EXISTS board_comments (
@@ -403,7 +449,8 @@ def _create_board_tables(connection, is_postgres: bool) -> None:
             author_name TEXT NOT NULL DEFAULT '',
             seq         INTEGER NOT NULL DEFAULT 0,
             created_at  {ts} NOT NULL,
-            updated_at  {ts}
+            updated_at  {ts},
+            deleted_at  {ts}
         )""",
         f"""CREATE TABLE IF NOT EXISTS board_events (
             id         TEXT PRIMARY KEY,
@@ -420,6 +467,7 @@ def _create_board_tables(connection, is_postgres: bool) -> None:
             key   TEXT PRIMARY KEY,
             value INTEGER NOT NULL
         )""",
+        *_board_history_tables(ts),
         "INSERT INTO board_meta (key, value) VALUES ('changes', 0) ON CONFLICT (key) DO NOTHING",
         "CREATE INDEX IF NOT EXISTS idx_board_tasks_column ON board_tasks(project_id, status, position)",
         "CREATE INDEX IF NOT EXISTS idx_board_comments_task ON board_comments(task_id, seq)",

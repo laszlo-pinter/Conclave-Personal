@@ -155,7 +155,8 @@ def test_project_creation_is_atomic_and_deletes_cascade(repo, pg):
             WHERE tc.table_name LIKE 'board_%' ORDER BY 1""")
         rules = cur.fetchall()
     assert rules and all(rule == "CASCADE" for _, rule in rules)
-    assert {t for t, _ in rules} == {"board_comments", "board_counters", "board_events", "board_tasks"}
+    assert {t for t, _ in rules} == {"board_comments", "board_counters", "board_events", "board_tasks",
+                                     "board_project_events"}
 
 
 # ── B2: Dienst gegen Postgres ─────────────────────────────────────────────
@@ -174,14 +175,14 @@ def test_service_history_and_comment_order_on_postgres(pg, crypto):
     svc.create_project(HUMAN, "api", "API")
     svc.create_task(HUMAN, "api", "T", description="alt")
     svc.update_task(HUMAN, "api#1", title="T2", description="neu", status="doing", human=True)   # #51: Mensch verschiebt direkt
-    assert [e.field_name for e in svc.history("api#1")] == ["title", "description", "status", "human"]
+    assert [e.field_name for e in svc.history("api#1")] == ["created", "title", "description", "status", "human"]
     for i in range(10):
         svc.add_comment(HUMAN, "api#1", f"k{i}")
     assert [c.body for c in svc.comments("api#1")] == [f"k{i}" for i in range(10)]
     with pg.cursor() as cur:
         cur.execute("SELECT seq FROM board_events ORDER BY seq")
         seqs = [r[0] for r in cur.fetchall()]
-    assert len(set(seqs)) == 4                                    # eindeutig, in einer Anweisung vergeben
+    assert len(set(seqs)) == 5                                    # eindeutig, in einer Anweisung vergeben
 
 
 def test_service_update_of_a_vanished_task_writes_no_history(pg, crypto):
@@ -256,8 +257,8 @@ def test_optimistic_update_and_flag_guard_on_postgres(pg, crypto):
     assert repo.claim_task(now.id, "todo", "doing", 1.0, now.updated_at, claim_event) is False   # markiert
     assert repo.claim_task(now.id, "todo", "doing", 1.0, now.updated_at) is False
     with pg.cursor() as cur:
-        cur.execute("SELECT count(*) FROM board_events")
-        assert cur.fetchone() == (0,)
+        cur.execute("SELECT count(*) FROM board_events WHERE field <> 'created'")
+        assert cur.fetchone() == (0,)                                   # nur das Anlegen (R9)
 
 
 def test_agent_comment_guard_on_postgres(pg, crypto):
@@ -320,3 +321,48 @@ def test_rank_orders_todo_and_renumbers_on_postgres(pg, crypto):
     assert order[0] == "api#1" and sorted(order) == ["api#1", "api#2", "api#3"]
     svc.update_task(HUMAN, "api#3", index=0)
     assert svc.next_task(AGENT, "api").ref == "api#3"
+
+
+# ── R9: Herkunft und vollstaendiger Verlauf auf Postgres ──────────────────
+
+def test_history_with_origin_on_postgres(pg, crypto, board_sample_export):
+    from conclave.domain.principal import AGENT_PRINCIPAL as AGENT
+    from conclave.domain.principal import HUMAN_PRINCIPAL as HUMAN
+    svc = _service(pg, crypto)
+    svc.create_project(HUMAN, "api", "API")
+    svc.rename_project(HUMAN, "api", "API-Server")
+    svc.create_task(AGENT, "api", "Vom Agenten", tags=["a"])
+    task = svc.get_task("api#1")
+    assert (task.origin, task.created_by) == ("agent", "agent")
+    svc.update_task(HUMAN, "api#1", tags=["a", "b"], version=task.version)
+    comment = svc.add_comment(HUMAN, "api#1", "Erst")
+    svc.edit_comment(HUMAN, comment.id, "Dann")
+    svc.delete_comment(HUMAN, comment.id)
+    assert svc.comments("api#1") == []
+    fields = [(e.field_name, e.origin) for e in svc.history("api#1")]
+    assert fields == [("created", "agent"), ("tags", "human"), ("comment", "human"), ("comment", "human")]
+    svc.delete_task(HUMAN, "api#1")
+    project = [(e.field_name, e.origin) for e in svc.project_history("api")]
+    assert project == [("created", "human"), ("name", "human"), ("task_deleted", "human")]
+
+    svc.import_export(HUMAN, board_sample_export)
+    assert [(e.field_name, e.new_value) for e in svc.history("conclave#7")][0] == ("created", "import")
+    assert svc.get_task("conclave#7").created_by == "import"
+
+
+def test_stale_version_and_last_column_rename_on_postgres(pg, crypto):
+    from conclave.application.board import BoardError, BoardService
+    from conclave.domain.board import StatusFlow
+    from conclave.domain.principal import HUMAN_PRINCIPAL as HUMAN
+    from conclave.infrastructure.postgres.board_repository import PostgresBoardRepository
+    svc = _service(pg, crypto)
+    svc.sync_flow()
+    svc.create_project(HUMAN, "api", "API")
+    task = svc.create_task(HUMAN, "api", "T")
+    svc.update_task(HUMAN, "api#1", status="done", version=task.version)
+    with pytest.raises(BoardError) as e:
+        svc.update_task(HUMAN, "api#1", title="X", version=task.version)
+    assert e.value.status == 409
+    renamed = BoardService(PostgresBoardRepository(pg, crypto), StatusFlow(("todo", "doing", "review", "fertig")))
+    assert renamed.sync_flow() == 1
+    assert renamed.get_task("api#1").status == "fertig"

@@ -105,11 +105,12 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `GET` | `/board/search` | Suche in Titel, Tags, Beschreibung und Kommentaren (`q`, `project`, `include_done`). |
 | `POST` | `/board/next` | Oberstes freies Ticket der ersten Spalte übernehmen (atomar). |
 | `GET` | `/board/projects/<slug>/tasks/<int:number>` | Ein Ticket mit Kommentaren. |
-| `PATCH` | `/board/projects/<slug>/tasks/<int:number>` | Ticket ändern: `title`, `description`, `tags`, `status`, `human`, `index`. |
+| `PATCH` | `/board/projects/<slug>/tasks/<int:number>` | Ticket ändern: `title`, `description`, `tags`, `status`, `human`, `index`, `rank`, optional `version`. |
 | `DELETE` | `/board/projects/<slug>/tasks/<int:number>` | Ticket löschen (nur Mensch). |
 | `GET` | `/board/projects/<slug>/tasks/<int:number>/comments` | Kommentare mit Herkunft (nur Mensch; Agenten lesen sie über das Ticket). |
 | `POST` | `/board/projects/<slug>/tasks/<int:number>/comments` | Kommentar schreiben; die Herkunft kommt aus dem Token. |
-| `GET` | `/board/projects/<slug>/tasks/<int:number>/history` | Verlauf (Status, Titel, Beschreibung, Markierung). |
+| `GET` | `/board/projects/<slug>/tasks/<int:number>/history` | Verlauf mit Herkunft: Anlegen und jede Änderung. |
+| `GET` | `/board/projects/<slug>/history` | Projekt-Verlauf: Anlegen, Umbenennen, gelöschte Tickets (nur Mensch). |
 | `PUT` | `/board/comments/<comment_id>` | Eigenen Kommentar ändern (nur Mensch). |
 | `DELETE` | `/board/comments/<comment_id>` | Eigenen Kommentar löschen (nur Mensch). |
 | `POST` | `/board/import` | JSON-Export eines Kanzo-Boards übernehmen (nur Mensch, idempotent). |
@@ -232,16 +233,21 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
 {"ref": "api#12", "project": "api", "number": 12, "title": "Login reparieren",
  "description": "## Abnahme\n...", "tags": ["ui"], "status": "doing",
  "position": 1024.0, "human": false, "assignee": null, "version": 3,
- "created_at": "...", "updated_at": "..."}
+ "origin": "agent", "created_by": "agent", "created_at": "...", "updated_at": "..."}
 ```
 
 - **Anlegen** `POST /board/tasks`: `project` und `title` Pflicht, optional
-  `description`, `tags`, `human`, `status` (Standard: erste Spalte).
+  `description`, `tags`, `human`, `status` (Standard: erste Spalte; Agenten
+  nur die erste Spalte, sonst `403`). `origin` und `created_by` setzt der
+  Server aus dem Token (`created_by: "import"` für importierte Tickets, leer
+  für Tickets von vor dieser Version).
 - **Ändern** `PATCH`: nur übergebene Felder. `index` setzt den Platz in der
   (neuen) Spalte, gezählt ohne das Ticket selbst: in der ersten Spalte die
   Priorität (`rank`), sonst die Position. `rank` (Zahl) setzt die Priorität
   direkt; kleiner steht weiter oben. `index` und `rank` nur mit dem
   Mensch-Token, sonst `403 HumanOnly`. Unbekannte Felder ergeben `400`.
+  Mit `version` (aus dem zuletzt gelesenen Ticket) wird nur geschrieben, wenn
+  das Ticket noch diesen Stand hat; sonst `409 Conflict`.
 - **Priorität:** Die erste Spalte und `POST /board/next` folgen `rank`, dann der
   Nummer; neue Tickets bekommen den nächsten Rang. In den anderen Spalten zählt
   die Position (Reihenfolge des Ankommens).
@@ -257,11 +263,22 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
   `actor_id` setzt der Server aus dem Token; solche Felder im Body werden
   ignoriert.
 - **Verlauf** `GET .../history`: `field`, `old`, `new` (vollständig), `origin`,
-  `actor_id`, `created_at`.
+  `actor_id`, `created_at`. Felder: `created` (Anlegen, `new` = Spalte bzw.
+  `import`), `status`, `title`, `description`, `human`, `rank`, `tags` (JSON-Liste),
+  `position` (Umsortieren in einer Spalte) und `comment` (Bearbeiten: alt → neu,
+  Löschen: alt → `null`). Gelöschte Kommentare verschwinden aus der Liste, ihr
+  Inhalt bleibt im Verlauf.
+- **Projekt-Verlauf** `GET /board/projects/<slug>/history` (nur Mensch):
+  `created`, `name` (Umbenennen) und `task_deleted` (Referenz, Titel und Spalte
+  des gelöschten Tickets). Ein gelöschtes Ticket nimmt seinen eigenen Verlauf
+  mit; dieser Eintrag bleibt.
+- **Spalten umbenennen:** Wird die letzte Spalte in `[board] statuses`
+  umbenannt, verschiebt Conclave beim Start die Tickets der alten letzten Spalte
+  in die neue (Verlauf mit Herkunft `system`), damit sie erledigt bleiben.
 
 Regeln für das Agent-Token (Fehler `403 HumanOnly`): nicht nach oder aus der
-letzten Spalte schieben, erledigte Tickets nur lesen und kommentieren, keine
-erledigten Tickets anlegen, Tickets „nur für Menschen“ nur lesen, die
+letzten Spalte schieben, erledigte Tickets nur lesen und kommentieren, Tickets
+nur in der ersten Spalte anlegen, Tickets „nur für Menschen“ nur lesen, die
 Markierung setzen, aber nicht entfernen. Kommentare ändern und löschen nur der
 Mensch und nur eigene. Gleichzeitige Änderungen am selben Ticket: `409
 Conflict`.
@@ -277,8 +294,9 @@ ImportFormatError`). Antwort:
 ```
 
 Ticket-Nummern bleiben erhalten; vorhandene Tickets werden übersprungen, ohne
-neue Kommentare nachzutragen. Importierte Kommentare haben `origin: null`,
-importierte Tickets keinen Verlauf.
+neue Kommentare nachzutragen. Importierte Kommentare haben `origin: null`;
+importierte Tickets haben `origin: null`, `created_by: "import"` und als
+einzigen Verlaufseintrag `created` mit der Herkunft dessen, der importiert hat.
 
 ## Backup und Restore
 
