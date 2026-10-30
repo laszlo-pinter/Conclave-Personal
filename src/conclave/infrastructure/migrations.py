@@ -116,7 +116,26 @@ MIGRATIONS: list[Migration] = [
         description="Freigabe je Conversation: Modelle duerfen Dateien per @read lesen (R6)",
         fn=lambda connection, is_postgres: _add_model_read_column(connection, is_postgres),
     ),
+    Migration(
+        id="014_board_rank",
+        description="Prioritaet je Ticket (rank), uebernommen aus der bisherigen Position (P1)",
+        fn=lambda connection, is_postgres: _add_board_rank(connection, is_postgres),
+    ),
 ]
+
+
+def _add_board_rank(connection, is_postgres: bool) -> None:
+    if _has_column(connection, is_postgres, "board_tasks", "rank"):
+        return
+    real = "DOUBLE PRECISION" if is_postgres else "REAL"
+    statements = (f"ALTER TABLE board_tasks ADD COLUMN rank {real} NOT NULL DEFAULT 0",
+                  "UPDATE board_tasks SET rank = position")      # sichtbare Reihenfolge bleibt
+    for statement in statements:
+        if is_postgres:
+            with connection.cursor() as cur:
+                cur.execute(statement)
+        else:
+            connection.execute(statement)
 
 
 def _add_model_read_column(connection, is_postgres: bool) -> None:
@@ -367,6 +386,7 @@ def _create_board_tables(connection, is_postgres: bool) -> None:
             tags        TEXT NOT NULL DEFAULT '[]',
             status      TEXT NOT NULL,
             position    {real} NOT NULL DEFAULT 0,
+            rank        {real} NOT NULL DEFAULT 0,
             human       {boolean},
             assignee    TEXT,
             version     INTEGER NOT NULL DEFAULT 1,

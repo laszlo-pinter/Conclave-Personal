@@ -440,3 +440,58 @@ def test_agent_cannot_skip_doing(board):
     assert board.update_task(AGENT, "api#1", status="doing").status == "doing"   # Rueckweg erlaubt
     board.update_task(HUMAN, "api#1", status="todo")
     assert board.update_task(HUMAN, "api#1", status="review").status == "review"  # der Mensch darf alles
+
+
+# ── P1 (conclave#56): Prioritaet nur durch Plan oder Mensch ───────────────
+
+def _todo(board):
+    return [t.ref for t in board.list_tasks("api", ["todo"])]
+
+
+def test_new_tickets_keep_plan_order_by_rank(board):
+    for title in ("eins", "zwei", "drei"):
+        board.create_task(HUMAN, "api", title)
+    ranks = [board.get_task(f"api#{n}").rank for n in (1, 2, 3)]
+    assert ranks == sorted(ranks) and len(set(ranks)) == 3
+    assert _todo(board) == ["api#1", "api#2", "api#3"]
+
+
+@pytest.mark.parametrize("field", [{"index": 0}, {"rank": 1.0}])
+def test_agent_cannot_change_priority(board, field):
+    board.create_task(HUMAN, "api", "eins")
+    board.create_task(HUMAN, "api", "zwei")
+    before = board.history("api#2")
+    with pytest.raises(BoardError) as err:
+        board.update_task(AGENT, "api#2", **field)
+    assert err.value.status == 403 and err.value.type == "HumanOnly"
+    assert board.history("api#2") == before and _todo(board) == ["api#1", "api#2"]
+
+
+def test_ticket_back_in_todo_returns_to_its_rank(board):
+    for title in ("eins", "zwei", "drei"):
+        board.create_task(HUMAN, "api", title)
+    board.next_task(AGENT, task="api#1")
+    board.update_task(AGENT, "api#1", status="review")
+    board.update_task(AGENT, "api#1", status="todo")                       # zurueck (z. B. Nacharbeit)
+    assert _todo(board) == ["api#1", "api#2", "api#3"]                      # nicht ans Ende
+
+
+def test_human_reorders_and_next_task_follows(board):
+    for title in ("eins", "zwei", "drei"):
+        board.create_task(HUMAN, "api", title)
+    board.update_task(HUMAN, "api#3", index=0)                              # Drag & Drop nach oben
+    assert _todo(board) == ["api#3", "api#1", "api#2"]
+    [event] = [e for e in board.history("api#3") if e.field_name == "rank"]
+    assert event.origin == "human"
+    assert board.next_task(AGENT, "api").ref == "api#3"
+    board.update_task(HUMAN, "api#2", rank=-5.0)                            # Feld "Prioritaet"
+    assert board.next_task(AGENT, "api").ref == "api#2"
+
+
+def test_moving_forward_is_work_state_not_priority(board):
+    for title in ("eins", "zwei"):
+        board.create_task(HUMAN, "api", title)
+    board.next_task(AGENT, task="api#2")
+    board.next_task(AGENT, task="api#1")
+    doing = [t.ref for t in board.list_tasks("api", ["doing"])]
+    assert doing == ["api#2", "api#1"]                                      # Reihenfolge des Ankommens

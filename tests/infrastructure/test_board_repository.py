@@ -407,3 +407,25 @@ def test_key_in_both_sections_logs_that_kanzo_is_ignored(tmp_path, monkeypatch, 
     with caplog.at_level("WARNING"):
         _build_app(ConclaveConfig(db_path=tmp_path / "c.db", kanzo=kanzo))
     assert any("ignoriert" in r.getMessage() and "reviewers" in r.getMessage() for r in caplog.records)
+
+
+def test_migration_014_takes_rank_from_position(tmp_path):
+    """P1: bestehende Boards behalten ihre sichtbare Reihenfolge."""
+    import sqlite3
+    from conclave.infrastructure.migrations import MIGRATIONS, run_migrations
+    conn = sqlite3.connect(tmp_path / "alt.db")
+    before = [m for m in MIGRATIONS if m.id != "014_board_rank"]
+    for table in ("conversations (id TEXT PRIMARY KEY, status TEXT)", "agents (id TEXT PRIMARY KEY)",
+                  "audit_log (id TEXT PRIMARY KEY)", "messages (id TEXT PRIMARY KEY, content TEXT)"):
+        conn.execute(f"CREATE TABLE {table}")
+    run_migrations(conn, migrations=before)
+    conn.execute("ALTER TABLE board_tasks DROP COLUMN rank")                # Stand vor P1 (012 ohne rank)
+    conn.commit()
+    conn.execute("INSERT INTO board_projects (id, slug, name, created_at) VALUES ('p', 'api', 'API', '2026')")
+    for n, pos in ((1, 3072.0), (2, 1024.0), (3, 2048.0)):
+        conn.execute("INSERT INTO board_tasks (id, project_id, number, title, status, position, human, created_at, "
+                     "updated_at) VALUES (?, 'p', ?, 't', 'todo', ?, 0, '2026', '2026')", (f"t{n}", n, pos))
+    conn.commit()
+    run_migrations(conn)
+    rows = conn.execute("SELECT number FROM board_tasks ORDER BY rank").fetchall()
+    assert [r[0] for r in rows] == [2, 3, 1]

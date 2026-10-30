@@ -173,7 +173,7 @@ def test_service_history_and_comment_order_on_postgres(pg, crypto):
     svc = _service(pg, crypto)
     svc.create_project(HUMAN, "api", "API")
     svc.create_task(HUMAN, "api", "T", description="alt")
-    svc.update_task(AGENT, "api#1", title="T2", description="neu", status="doing", human=True)
+    svc.update_task(HUMAN, "api#1", title="T2", description="neu", status="doing", human=True)   # #51: Mensch verschiebt direkt
     assert [e.field_name for e in svc.history("api#1")] == ["title", "description", "status", "human"]
     for i in range(10):
         svc.add_comment(HUMAN, "api#1", f"k{i}")
@@ -301,3 +301,22 @@ def test_import_conflict_on_postgres_writes_nothing(pg, crypto, board_sample_exp
     with pg.cursor() as cur:
         cur.execute("SELECT count(*) FROM board_comments")
         assert cur.fetchone() == (3,)
+
+
+
+def test_rank_orders_todo_and_renumbers_on_postgres(pg, crypto):
+    """P1: Prioritaet ordnet die erste Spalte; bei engem Abstand werden die Raenge neu verteilt."""
+    from conclave.domain.principal import AGENT_PRINCIPAL as AGENT
+    from conclave.domain.principal import HUMAN_PRINCIPAL as HUMAN
+
+    svc = _service(pg, crypto)
+    svc.create_project(HUMAN, "api", "API")
+    for title in ("eins", "zwei", "drei"):
+        svc.create_task(HUMAN, "api", title)
+    for _ in range(60):                                           # zwingt irgendwann renumber_ranks
+        svc.update_task(HUMAN, "api#3", index=1)
+        svc.update_task(HUMAN, "api#2", index=1)
+    order = [t.ref for t in svc.list_tasks("api", ["todo"])]
+    assert order[0] == "api#1" and sorted(order) == ["api#1", "api#2", "api#3"]
+    svc.update_task(HUMAN, "api#3", index=0)
+    assert svc.next_task(AGENT, "api").ref == "api#3"

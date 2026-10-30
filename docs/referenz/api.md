@@ -237,9 +237,14 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
 
 - **Anlegen** `POST /board/tasks`: `project` und `title` Pflicht, optional
   `description`, `tags`, `human`, `status` (Standard: erste Spalte).
-- **Ändern** `PATCH`: nur übergebene Felder; `index` setzt die Position in der
-  (neuen) Spalte, gezählt ohne das Ticket selbst. Unbekannte Felder ergeben
-  `400`.
+- **Ändern** `PATCH`: nur übergebene Felder. `index` setzt den Platz in der
+  (neuen) Spalte, gezählt ohne das Ticket selbst: in der ersten Spalte die
+  Priorität (`rank`), sonst die Position. `rank` (Zahl) setzt die Priorität
+  direkt; kleiner steht weiter oben. `index` und `rank` nur mit dem
+  Mensch-Token, sonst `403 HumanOnly`. Unbekannte Felder ergeben `400`.
+- **Priorität:** Die erste Spalte und `POST /board/next` folgen `rank`, dann der
+  Nummer; neue Tickets bekommen den nächsten Rang. In den anderen Spalten zählt
+  die Position (Reihenfolge des Ankommens).
 - **`POST /board/next`** (`{"project": "api"}` optional): schiebt das oberste
   Ticket der ersten Spalte ohne Markierung „nur für Menschen“ atomar in die
   zweite und liefert es (`{"task": ...}`, `null` wenn keines frei ist). Mit

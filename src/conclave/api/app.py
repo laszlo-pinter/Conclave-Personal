@@ -946,6 +946,9 @@ def create_app(handler: CLIHandler, auth_service=None,
         index = body.get("index")
         if index is not None and (isinstance(index, bool) or not isinstance(index, int)):
             raise BoardError("index muss eine ganze Zahl sein.", 400, "ValidationError")
+        rank = body.get("rank")
+        if rank is not None and (isinstance(rank, bool) or not isinstance(rank, (int, float))):
+            raise BoardError("rank muss eine Zahl sein.", 400, "ValidationError")
 
     def _flag(name: str, default: bool = False) -> bool:
         return request.args.get(name, "true" if default else "false").lower() in ("1", "true", "yes")
@@ -1030,10 +1033,11 @@ def create_app(handler: CLIHandler, auth_service=None,
     def board_update_task(slug: str, number: int):
         """Ticket aendern: title, description, tags, status, human, index (Position in der Spalte)."""
         body = _json_object()
-        _check_task_fields(body, {"title", "description", "tags", "status", "human", "index"})
+        _check_task_fields(body, {"title", "description", "tags", "status", "human", "index", "rank"})
         task = _board().update_task(g.principal, _ref(slug, number), title=body.get("title"),
                                     description=body.get("description"), tags=body.get("tags"),
-                                    status=body.get("status"), human=body.get("human"), index=body.get("index"))
+                                    status=body.get("status"), human=body.get("human"), index=body.get("index"),
+                                    rank=body.get("rank"))
         return jsonify(task_to_dict(task)), 200
 
     @app.delete("/board/projects/<slug>/tasks/<int:number>")

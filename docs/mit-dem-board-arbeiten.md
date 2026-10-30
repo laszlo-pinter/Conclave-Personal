@@ -37,6 +37,12 @@ Wer schreibt, ergibt sich aus dem Token, nicht aus einem Feld der Anfrage:
 - **Tickets „nur für Menschen“** gibt `next_task` nie an Agenten; Agenten
   können sie nur lesen. Agenten dürfen die Markierung setzen, aber nicht
   entfernen.
+- **Priorität setzt der Mensch:** Die Reihenfolge der ersten Spalte ist die
+  Priorität (`rank`). Neue Tickets kommen ans Ende, so bleibt die Reihenfolge
+  des Plans erhalten. Umsortieren (Drag & Drop in der ersten Spalte, `index`
+  oder `rank`) darf nur der Mensch; Agenten bekommen `403`. Kommt ein Ticket
+  zurück in die erste Spalte, steht es wieder an seiner Prioritätsstelle. In den
+  anderen Spalten zählt der Arbeitsstand: wer ankommt, steht hinten.
 - **Übernehmen statt Überspringen:** Aus der ersten Spalte kommt ein Agent nur
   über `next_task` heraus (oberstes oder bestimmtes Ticket); ein Sprung
   `todo → review` per Änderung ergibt `403`. Der Rückweg `review → doing` geht.

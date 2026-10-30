@@ -266,3 +266,24 @@ def test_agent_cannot_jump_from_todo_to_review(client):
     resp = client.patch(f"{URL}/1", json={"status": "review"}, headers=_bearer(AGENT))
     assert resp.status_code == 403 and "uebernehmen" in resp.get_json()["error"]
     assert _changes(client) == before
+
+
+# ── P1 (conclave#56): Prioritaet nur durch den Menschen ───────────────────
+
+@pytest.mark.parametrize("body", [{"index": 0}, {"rank": 1}, {"rank": 0.5, "title": "x"}])
+def test_agent_cannot_reorder_over_rest(client, body):
+    _task(client)
+    _task(client)
+    before = _changes(client)
+    resp = client.patch(f"{URL}/2", json=body, headers=_bearer(AGENT))
+    assert resp.status_code == 403 and resp.get_json()["type"] == "HumanOnly"
+    assert _changes(client) == before
+
+
+def test_human_sets_rank_and_next_follows(client):
+    for _ in range(3):
+        _task(client)
+    assert client.patch(f"{URL}/3", json={"rank": -1}, headers=_bearer(HUMAN)).get_json()["rank"] == -1
+    assert client.patch(f"{URL}/2", json={"rank": "hoch"}, headers=_bearer(HUMAN)).status_code == 400
+    taken = client.post("/board/next", json={"project": "api"}, headers=_bearer(AGENT)).get_json()["task"]
+    assert taken["ref"] == "api#3"

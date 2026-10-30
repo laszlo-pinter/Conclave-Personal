@@ -71,9 +71,9 @@ class PostgresBoardRepository(SQLiteBoardRepository):
         row = self._one(
             "WITH n AS (UPDATE board_counters SET next_number = next_number + 1 WHERE project_id = ? "
             "           RETURNING next_number - 1 AS number) "
-            "INSERT INTO board_tasks (id, project_id, number, title, description, tags, status, position, human, "
-            "assignee, updated_at, created_at) "
-            "SELECT ?, ?, n.number, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM n RETURNING number",
+            "INSERT INTO board_tasks (id, project_id, number, title, description, tags, status, position, rank, "
+            "human, assignee, updated_at, created_at) "
+            "SELECT ?, ?, n.number, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM n RETURNING number",
             (task.project_id, task.id, task.project_id, *self._task_params(task), task.created_at))
         if row is None:
             raise ValueError("Unbekanntes Projekt")
@@ -83,8 +83,8 @@ class PostgresBoardRepository(SQLiteBoardRepository):
 
     _IMPORT_TASK = (
         "WITH u AS (INSERT INTO board_tasks (id, project_id, number, title, description, tags, status, "
-        "           position, human, assignee, updated_at, created_at) "
-        "           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "           position, rank, human, assignee, updated_at, created_at) "
+        "           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "           ON CONFLICT (project_id, number) DO NOTHING RETURNING project_id, number), "
         "     n AS (UPDATE board_counters SET next_number = GREATEST(next_number, (SELECT number FROM u) + 1) "
         "           WHERE project_id = (SELECT project_id FROM u) RETURNING project_id), "
@@ -119,6 +119,15 @@ class PostgresBoardRepository(SQLiteBoardRepository):
             (POSITION_STEP, project_id, status))
         self._bump()
 
+    def renumber_ranks(self, project_id: str) -> None:
+        """Eine Anweisung, wie renumber_column."""
+        self._execute(
+            "UPDATE board_tasks t SET rank = s.rn * ? FROM ("
+            "  SELECT id, ROW_NUMBER() OVER (ORDER BY rank, number) AS rn FROM board_tasks"
+            "  WHERE project_id = ?) s WHERE s.id = t.id",
+            (POSITION_STEP, project_id))
+        self._bump()
+
     def add_comment(self, comment: TaskComment, *, only_if_not_human: bool = False) -> bool:
         result = self._execute(
             "WITH t AS (SELECT 1 FROM board_tasks WHERE id = ? AND (NOT human OR ?)), "
@@ -145,7 +154,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
     _EVENT_ROW = "SELECT ?, ?, ?, ?, ?, ?, ?, c.value - ?, ?::timestamptz FROM c, u"
     _UPDATE_WITH_EVENTS = (
         "WITH u AS (UPDATE board_tasks SET title = ?, description = ?, tags = ?, status = ?, position = ?, "
-        "           human = ?, assignee = ?, updated_at = ?, version = version + 1 "
+        "           rank = ?, human = ?, assignee = ?, updated_at = ?, version = version + 1 "
         "           WHERE id = ? AND version = ? RETURNING id), "
         "     c AS (UPDATE board_meta SET value = value + ? WHERE key = 'changes' "
         "           AND EXISTS (SELECT 1 FROM u) RETURNING value) "

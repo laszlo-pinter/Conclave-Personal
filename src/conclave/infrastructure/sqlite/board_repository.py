@@ -28,7 +28,7 @@ from conclave.domain.board import POSITION_STEP, Project, Task, TaskComment, Tas
 MIN_SQLITE = (3, 35)       # UPDATE ... RETURNING
 
 _TASK_COLUMNS = ("t.id, t.project_id, p.slug, t.number, t.title, t.description, t.tags, t.status, t.position, "
-                 "t.human, t.assignee, t.created_at, t.updated_at, t.version")
+                 "t.human, t.assignee, t.created_at, t.updated_at, t.version, t.rank")
 
 
 class _NotInserted(Exception):
@@ -158,11 +158,12 @@ class SQLiteBoardRepository:
         return Task(id=row[0], project_id=row[1], project_slug=row[2], number=row[3], title=self._dec(row[4]),
                     description=self._dec(row[5]) or "", tags=tuple(json.loads(tags)) if tags else (),
                     status=row[7], position=float(row[8]), human=bool(row[9]), assignee=row[10],
-                    created_at=_ts(row[11]), updated_at=_ts(row[12]), version=int(row[13]))
+                    created_at=_ts(row[11]), updated_at=_ts(row[12]), version=int(row[13]), rank=float(row[14]))
 
     def _task_params(self, task: Task) -> tuple:
         return (self._enc(task.title), self._enc(task.description), self._enc(json.dumps(list(task.tags))),
-                task.status, task.position, self._bool(task.human), task.assignee, self._dt(task.updated_at))
+                task.status, task.position, task.rank, self._bool(task.human), task.assignee,
+                self._dt(task.updated_at))
 
     def create_task(self, task: Task) -> Task:
         """Legt das Ticket an und vergibt die naechste Nummer des Projekts."""
@@ -174,7 +175,7 @@ class SQLiteBoardRepository:
             number = int(row[0])
             self._execute(
                 "INSERT INTO board_tasks (id, project_id, number, title, description, tags, status, position, "
-                "human, assignee, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "rank, human, assignee, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (task.id, task.project_id, number, *self._task_params(task), self._dt(task.created_at)))
             self._bump()
         task.number = number
@@ -187,7 +188,7 @@ class SQLiteBoardRepository:
             with self._tx():
                 inserted = self._rowcount(
                     "INSERT INTO board_tasks (id, project_id, number, title, description, tags, status, position, "
-                    "human, assignee, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                    "rank, human, assignee, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                     "ON CONFLICT (project_id, number) DO NOTHING",
                     (task.id, task.project_id, task.number, *self._task_params(task), self._dt(task.created_at)))
                 if inserted != 1:
@@ -245,7 +246,8 @@ class SQLiteBoardRepository:
         """
         with self._tx():
             changed = self._rowcount(
-                "UPDATE board_tasks SET title = ?, description = ?, tags = ?, status = ?, position = ?, human = ?, "
+                "UPDATE board_tasks SET title = ?, description = ?, tags = ?, status = ?, position = ?, rank = ?, "
+                "human = ?, "
                 "assignee = ?, updated_at = ?, version = version + 1 WHERE id = ? AND version = ?",
                 (*self._task_params(task), task.id, task.version))
             if changed:
@@ -297,6 +299,20 @@ class SQLiteBoardRepository:
             self._bump()
             for index, (task_id, _pos) in enumerate(self.column_positions(project_id, status), start=1):
                 self._execute("UPDATE board_tasks SET position = ? WHERE id = ?", (index * POSITION_STEP, task_id))
+
+    # ── Prioritaet (P1) ──────────────────────────────────────────────────
+
+    def max_rank(self, project_id: str) -> float:
+        row = self._one("SELECT MAX(rank) FROM board_tasks WHERE project_id = ?", (project_id,))
+        return float(row[0]) if row and row[0] is not None else 0.0
+
+    def renumber_ranks(self, project_id: str) -> None:
+        """Raenge des Projekts auf gleichmaessige Abstaende setzen, Reihenfolge bleibt (wie renumber_column)."""
+        with self._tx():
+            self._bump()
+            rows = self._all("SELECT id FROM board_tasks WHERE project_id = ? ORDER BY rank, number", (project_id,))
+            for index, (task_id,) in enumerate(rows, start=1):
+                self._execute("UPDATE board_tasks SET rank = ? WHERE id = ?", (index * POSITION_STEP, task_id))
 
     # ── Kommentare ───────────────────────────────────────────────────────
 

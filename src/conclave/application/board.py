@@ -129,8 +129,10 @@ class BoardService:
         return task
 
     def _sort_key(self, task: Task):
+        """Erste Spalte nach Prioritaet (rank), die anderen nach Arbeitsstand (position, P1)."""
         order = {s: i for i, s in enumerate(self.flow.statuses)}
-        return (task.project_slug, order.get(task.status, len(order)), task.position, task.number)
+        place = task.rank if task.status == self.flow.first else task.position
+        return (task.project_slug, order.get(task.status, len(order)), place, task.number)
 
     def list_tasks(self, slug: str | None = None, statuses=None, include_done: bool = False) -> list[Task]:
         """In Board-Reihenfolge (Spalten wie konfiguriert); erledigte nur auf Wunsch."""
@@ -176,6 +178,26 @@ class BoardService:
         column = self._repo.column_positions(project_id, status)
         return (column[-1][1] + POSITION_STEP) if column else POSITION_STEP
 
+    def _next_rank(self, project_id: str) -> float:
+        """Neue Tickets ans Ende der Prioritaet: die Reihenfolge des Plans bleibt erhalten (P1)."""
+        return self._repo.max_rank(project_id) + POSITION_STEP
+
+    def _rank_at(self, task: Task, index: int) -> float:
+        """Rang fuer ``index`` in der ersten Spalte (ohne das Ticket selbst); nummeriert die Raenge
+        des Projekts neu, wenn zwischen den Nachbarn kein Platz mehr ist."""
+        for attempt in range(2):
+            ranks = sorted(t.rank for t in self.list_tasks(task.project_slug, [self.flow.first]) if t.id != task.id)
+            index = max(0, min(index, len(ranks)))
+            low = ranks[index - 1] if index > 0 else (ranks[0] - 2 * POSITION_STEP if ranks else 0.0)
+            high = ranks[index] if index < len(ranks) else low + 2 * POSITION_STEP
+            middle = (low + high) / 2
+            if high - low >= MIN_POSITION_GAP and low < middle < high:
+                return middle
+            if attempt == 0:
+                self._repo.renumber_ranks(task.project_id)
+                task.rank = self._repo.get_task_by_id(task.id).rank
+        raise BoardError("Prioritaet konnte nicht bestimmt werden.", 409, "PositionConflict")
+
     def _position_at(self, task: Task, status: str, index: int) -> float:
         """Position fuer ``index`` in der Spalte (ohne das Ticket selbst); nummeriert neu,
         wenn zwischen den Nachbarn kein Platz mehr ist."""
@@ -212,17 +234,25 @@ class BoardService:
         try:
             check_field_limits(title=title, text=description, tags=tags)
             task = Task.create(project, title, status, description=description or "", tags=tuple(tags or ()),
-                               position=self._end_position(project.id, status), human=bool(human))
+                               position=self._end_position(project.id, status), human=bool(human),
+                               rank=self._next_rank(project.id))
         except (ValueError, TypeError) as e:
             raise _invalid(str(e)) from None
         return self._repo.create_task(task)
 
     def update_task(self, principal: Principal, ref: str, *, title: str | None = None,
                     description: str | None = None, tags=None, status: str | None = None,
-                    human: bool | None = None, index: int | None = None) -> Task:
-        """Aendert die uebergebenen Felder. ``index`` setzt die Position in der (neuen) Spalte."""
+                    human: bool | None = None, index: int | None = None, rank: float | None = None) -> Task:
+        """Aendert die uebergebenen Felder. ``index`` setzt den Platz in der (neuen) Spalte: in der
+        ersten Spalte ist das die Prioritaet (rank), sonst die Position. Prioritaet aendert nur der
+        Mensch (P1)."""
         task = self.get_task(ref)
         self._guard_edit(principal, task)
+        if principal.is_agent and (index is not None or rank is not None):
+            raise _forbidden("Die Prioritaet setzt nur der Mensch (bzw. der Plan); Agenten sortieren nicht um.")
+        if rank is not None and (isinstance(rank, bool) or not isinstance(rank, (int, float))
+                                 or rank != rank or rank in (float("inf"), float("-inf"))):
+            raise _invalid("rank muss eine Zahl sein.")
         origin, actor_id = self.actor(principal)
         events: list[TaskEvent] = []
 
@@ -254,10 +284,16 @@ class BoardService:
             task.tags = tuple(dict.fromkeys(t.strip() for t in tags if isinstance(t, str) and t.strip()))
 
         moved_column = any(e.field_name == "status" for e in events)
-        if index is not None:
+        new_rank = float(rank) if rank is not None else None
+        if index is not None and task.status == self.flow.first:
+            new_rank = self._rank_at(task, int(index))
+        elif index is not None:
             task.position = self._position_at(task, task.status, int(index))
-        elif moved_column:
+        if moved_column and not (index is not None and task.status != self.flow.first):
             task.position = self._end_position(task.project_id, task.status)
+        if new_rank is not None and new_rank != task.rank:
+            events.append(TaskEvent.create(task.id, "rank", task.rank, new_rank, origin, actor_id=actor_id))
+            task.rank = new_rank
         task.updated_at = self._now()
         # Ticket und Verlauf zusammen, nur wenn seit dem Lesen niemand geaendert hat
         if not self._repo.update_task(task, events):
@@ -392,7 +428,8 @@ class BoardService:
                     summary["skipped_refs"].append(ref)
                     continue
                 task = Task.create(project, it.title, it.status, description=it.description, tags=it.tags,
-                                   position=self._end_position(project.id, it.status), human=it.human)
+                                   position=self._end_position(project.id, it.status), human=it.human,
+                                   rank=self._next_rank(project.id))
                 task.number, task.created_at, task.updated_at = it.number, it.created_at, it.updated_at
                 comments = []
                 for ic in it.comments:
@@ -422,7 +459,8 @@ def task_to_dict(task: Task) -> dict:
     return {
         "ref": task.ref, "project": task.project_slug, "number": task.number, "title": task.title,
         "description": task.description, "tags": list(task.tags), "status": task.status,
-        "position": task.position, "human": task.human, "assignee": task.assignee, "version": task.version,
+        "position": task.position, "rank": task.rank, "human": task.human, "assignee": task.assignee,
+        "version": task.version,
         "created_at": _iso(task.created_at), "updated_at": _iso(task.updated_at),
     }
 

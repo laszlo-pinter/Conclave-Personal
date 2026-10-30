@@ -241,6 +241,8 @@ setzt seine Regeln am Token durch, nicht an Angaben in der Anfrage:
 - **Freigabe-Recht** (heute: der Mensch): nach und aus der letzten Spalte
   schieben, löschen, Projekte verwalten, importieren. Mit dem Agent-Token
   ergibt das `403 HumanOnly`, ohne dass etwas geschrieben wird.
+- **Priorität** (`rank`, Reihenfolge der ersten Spalte und von `next_task`)
+  ändert nur der Mensch; Agenten bekommen für `index` und `rank` `403`.
 - **Agenten** lesen erledigte Tickets und Tickets „nur für Menschen“ nur
   (erledigte dürfen sie kommentieren), dürfen die Markierung „nur für
   Menschen“ setzen, aber nicht entfernen, und bekommen solche Tickets nie über

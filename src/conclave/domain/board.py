@@ -22,7 +22,7 @@ REF = re.compile(r"([a-z0-9][a-z0-9-]{0,39})#([1-9][0-9]{0,8})\Z")
 DEFAULT_STATUSES = ("todo", "doing", "review", "done")
 ORIGINS = ("human", "agent", "system")
 # Verlaufseintraege fuer diese Felder (Plan 2, "Ticket-Verlauf")
-TRACKED_FIELDS = ("status", "title", "description", "human")
+TRACKED_FIELDS = ("status", "title", "description", "human", "rank")
 POSITION_STEP = 1024.0      # Abstand der Karten nach dem Neunummerieren
 # Laengengrenzen (R6): Titel, Beschreibung bzw. Kommentar, Anzahl und Laenge der Tags
 TITLE_MAX = 300
@@ -133,9 +133,10 @@ class Task:
     status: str
     description: str = ""
     tags: tuple[str, ...] = ()
-    position: float = 0.0
+    position: float = 0.0           # Platz in der Spalte (Arbeitsstand: wer ankommt, steht hinten)
     human: bool = False
     assignee: str | None = None     # Mehrbenutzerbetrieb, vorerst leer
+    rank: float = 0.0               # Prioritaet (P1): ordnet die erste Spalte, setzt nur der Mensch
     version: int = 1                # optimistische Sperre: jede Aenderung erhoeht sie
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
@@ -153,9 +154,10 @@ class Task:
 
     @staticmethod
     def create(project: Project, title: str, status: str, *, description: str = "", tags=(),
-               position: float = 0.0, human: bool = False) -> "Task":
+               position: float = 0.0, human: bool = False, rank: float = 0.0) -> "Task":
         return Task(id=_id(), project_id=project.id, project_slug=project.slug, number=None, title=title,
-                    status=status, description=description, tags=tuple(tags), position=position, human=human)
+                    status=status, description=description, tags=tuple(tags), position=position, human=human,
+                    rank=rank)
 
 
 @dataclass
