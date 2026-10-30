@@ -105,3 +105,19 @@ def test_old_local_storage_token_is_moved_once(chromium, live_server):
         assert stored == {"s": live_server.token, "l": None}
     finally:
         context.close()
+
+
+
+def test_token_link_filter_parses_like_the_login(chromium, live_server):
+    """Review R5: ungueltig kodiertes Fragment (decodeURIComponent wirft), URLSearchParams liest trotzdem token."""
+    page = chromium.new_page()
+    try:
+        _open(page, live_server, live_server.token)
+        for link in ["[x](http://127.0.0.1:8000/#%E0&%74oken=abc)", "[y](#%E0&%74oken=abc)",
+                     "[z](#a=1&t%6Fken=abc)", "[w](#%74%6F%6B%65%6E=abc)"]:
+            html = page.evaluate("v => renderMarkdown(v)", link)
+            assert "href" not in html, (link, html)
+            parsed = page.evaluate("v => new URLSearchParams(v).has('token')", link.split("#", 1)[1].rstrip(")"))
+            assert parsed, link                                        # der Login wuerde das Token lesen
+    finally:
+        page.close()

@@ -576,9 +576,7 @@ def _server_url(host: str, port: int) -> str:
 
 def _run_web(args) -> int:
     from conclave.runtime.api_token import read_token
-    from conclave.runtime.browser import url_with_token
-
-    from conclave.runtime.browser import is_local_url
+    from conclave.runtime.browser import is_local_url, url_with_token
 
     config = ConclaveConfig.from_sources()
     url = args.url or _server_url(config.host, config.port)

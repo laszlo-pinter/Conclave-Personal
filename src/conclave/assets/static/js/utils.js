@@ -105,7 +105,10 @@ function _createMarkdownPurifier(){
       const fragment=href.includes('#')?href.slice(href.indexOf('#')+1):'';
       let decoded=fragment;
       try{decoded=decodeURIComponent(fragment);}catch{}
-      if(/token=/i.test(decoded)){
+      // so lesen wie der Login (state.js, URLSearchParams), dazu die Textpruefung als zweite Huerde
+      let hasToken=false;
+      try{hasToken=new URLSearchParams(fragment).has('token');}catch{hasToken=true;}
+      if(hasToken||/token=/i.test(decoded)||/token=/i.test(fragment)){
         node.removeAttribute('href');            // Links duerfen kein Token setzen (R5)
       }else if(href.startsWith('#')){
         node.removeAttribute('target');          // Sprungmarke im selben Tab
