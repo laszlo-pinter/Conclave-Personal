@@ -1,11 +1,15 @@
 # src/conclave/infrastructure/migrations.py
 """Einfaches Schema-Migrationssystem.
 
-Jede Migration hat eine ID und ein SQL-Statement (oder eine Funktion).
-Die Tabelle _migrations trackt welche Migrationen bereits gelaufen sind.
-Neue Migrationen werden beim Start automatisch ausgefuehrt.
+Jede Migration hat eine ID und fuegt Spalten hinzu, fuehrt Anweisungen aus
+oder ruft eine Funktion auf. Die Tabelle _migrations haelt fest, welche
+Migrationen gelaufen sind; neue laufen beim Start automatisch.
 
-Migrationen sind idempotent und werden nur einmal ausgefuehrt.
+Jede Migration laeuft in einer eigenen Transaktion und wird im selben Schritt
+eingetragen. Schlaegt sie fehl, wird alles zurueckgerollt, nichts eingetragen
+und der Start mit ``MigrationError`` abgebrochen. Spalten, die schon da sind
+(z. B. weil das Grundschema sie anlegt), werden vorher geprueft und nicht
+erneut angelegt.
 """
 
 from __future__ import annotations
@@ -17,12 +21,27 @@ from typing import Callable
 logger = logging.getLogger("conclave.migrations")
 
 
-@dataclass
+@dataclass(frozen=True)
 class Migration:
     id: str
     description: str
-    sql: str | None = None
+    # (Tabelle, Spalte, Definition): ADD COLUMN nur, wenn die Spalte fehlt
+    columns: tuple[tuple[str, str, str], ...] = ()
+    statements: tuple[str, ...] = ()
     fn: Callable | None = None
+
+
+class MigrationError(RuntimeError):
+    """Eine Migration ist fehlgeschlagen; die Datenbank ist unveraendert, der Start bricht ab."""
+
+    def __init__(self, migration_id: str, statement: str | None, cause: Exception):
+        where = f" bei Anweisung {statement.strip()[:200]!r}" if statement else ""
+        super().__init__(
+            f"Migration {migration_id} fehlgeschlagen{where}: {type(cause).__name__}: {cause}. "
+            "Die Migration wurde zurueckgerollt und nicht eingetragen; der Start wird abgebrochen. "
+            "Datenbank-Backup und Log pruefen."
+        )
+        self.migration_id = migration_id
 
 
 # ── Alle Migrationen in chronologischer Reihenfolge ─────────────────────
@@ -31,26 +50,25 @@ MIGRATIONS: list[Migration] = [
     Migration(
         id="001_audit_token_columns",
         description="Token-Spalten fuer audit_log",
-        sql="ALTER TABLE audit_log ADD COLUMN input_tokens INTEGER; "
-            "ALTER TABLE audit_log ADD COLUMN output_tokens INTEGER",
+        columns=(("audit_log", "input_tokens", "INTEGER"), ("audit_log", "output_tokens", "INTEGER")),
     ),
     Migration(
         id="002_conversation_rules",
         description="Rules-Spalte fuer Conversations",
-        sql="ALTER TABLE conversations ADD COLUMN rules TEXT NOT NULL DEFAULT ''",
+        columns=(("conversations", "rules", "TEXT NOT NULL DEFAULT ''"),),
     ),
     Migration(
         id="003_agent_universal_fields",
         description="UniversalAdapter-Felder fuer Agents",
-        sql="ALTER TABLE agents ADD COLUMN preset TEXT NOT NULL DEFAULT ''; "
-            "ALTER TABLE agents ADD COLUMN api_url TEXT NOT NULL DEFAULT ''; "
-            "ALTER TABLE agents ADD COLUMN response_path TEXT NOT NULL DEFAULT ''; "
-            "ALTER TABLE agents ADD COLUMN message_format TEXT NOT NULL DEFAULT 'standard'",
+        columns=(("agents", "preset", "TEXT NOT NULL DEFAULT ''"),
+                 ("agents", "api_url", "TEXT NOT NULL DEFAULT ''"),
+                 ("agents", "response_path", "TEXT NOT NULL DEFAULT ''"),
+                 ("agents", "message_format", "TEXT NOT NULL DEFAULT 'standard'")),
     ),
     Migration(
         id="004_agent_api_key_enc",
         description="Verschluesselte API-Key-Spalte fuer Agents",
-        sql="ALTER TABLE agents ADD COLUMN api_key_enc TEXT NOT NULL DEFAULT ''",
+        columns=(("agents", "api_key_enc", "TEXT NOT NULL DEFAULT ''"),),
     ),
     Migration(
         id="005_personal_runs",
@@ -70,7 +88,7 @@ MIGRATIONS: list[Migration] = [
     Migration(
         id="008_agent_max_messages",
         description="Kuerzungslimit pro Agent (NULL = globaler Default, 0 = keine Kuerzung)",
-        sql="ALTER TABLE agents ADD COLUMN max_messages INTEGER",
+        columns=(("agents", "max_messages", "INTEGER"),),
     ),
     Migration(
         id="009_consultations",
@@ -80,13 +98,13 @@ MIGRATIONS: list[Migration] = [
     Migration(
         id="010_consultation_channels",
         description="Consultation-Kanal beschreibt den Zugang: rest -> human, mcp -> agent (E3)",
-        sql="UPDATE consultations SET channel = 'human' WHERE channel = 'rest'; "
-            "UPDATE consultations SET channel = 'agent' WHERE channel = 'mcp'",
+        statements=("UPDATE consultations SET channel = 'human' WHERE channel = 'rest'",
+                    "UPDATE consultations SET channel = 'agent' WHERE channel = 'mcp'"),
     ),
     Migration(
         id="011_message_origin",
         description="Herkunft von User-Nachrichten (human/agent, NULL = unbekannt)",
-        sql="ALTER TABLE messages ADD COLUMN origin TEXT",
+        columns=(("messages", "origin", "TEXT"),),
     ),
     Migration(
         id="012_board",
@@ -414,19 +432,61 @@ def _get_applied(connection, is_postgres: bool) -> set[str]:
         return {row[0] for row in connection.execute("SELECT id FROM _migrations").fetchall()}
 
 
-def _apply_migration(connection, migration: Migration, is_postgres: bool) -> None:
-    """Fuehrt eine einzelne Migration aus."""
-    if migration.fn:
-        migration.fn(connection, is_postgres)
-    elif migration.sql:
-        statements = [s.strip() for s in migration.sql.split(";") if s.strip()]
+def _has_column(connection, is_postgres: bool, table: str, column: str) -> bool:
+    if is_postgres:
+        with connection.cursor() as cur:
+            cur.execute("SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() "
+                        "AND table_name = %s AND column_name = %s", (table, column))
+            return cur.fetchone() is not None
+    # PRAGMA nimmt keine Parameter; Tabellennamen kommen nur aus MIGRATIONS (Konstanten)
+    return any(row[1] == column for row in connection.execute(f"PRAGMA table_info({table})"))  # nosec B608
+
+
+def _execute(connection, is_postgres: bool, migration: Migration, statement: str) -> None:
+    try:
         if is_postgres:
             with connection.cursor() as cur:
-                for stmt in statements:
-                    cur.execute(stmt)
+                cur.execute(statement)
         else:
-            for stmt in statements:
-                connection.execute(stmt)
+            connection.execute(statement)
+    except Exception as e:
+        raise MigrationError(migration.id, statement, e) from e
+
+
+def _apply_migration(connection, migration: Migration, is_postgres: bool) -> None:
+    """Fuehrt eine einzelne Migration aus (innerhalb der Transaktion des Runners)."""
+    for table, column, definition in migration.columns:
+        if not _has_column(connection, is_postgres, table, column):
+            _execute(connection, is_postgres, migration, f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+    for statement in migration.statements:
+        _execute(connection, is_postgres, migration, statement)
+    if migration.fn:
+        migration.fn(connection, is_postgres)
+
+
+def _pg_autocommit(connection) -> bool:
+    return bool(getattr(connection, "autocommit", False))
+
+
+def _begin(connection, is_postgres: bool) -> None:
+    if is_postgres:
+        if _pg_autocommit(connection):            # ohne BEGIN liefe jede Anweisung fuer sich
+            with connection.cursor() as cur:
+                cur.execute("BEGIN")
+        return
+    if connection.in_transaction:
+        connection.commit()
+    connection.execute("BEGIN IMMEDIATE")         # DDL ist in SQLite transaktional
+
+
+def _finish(connection, is_postgres: bool, ok: bool) -> None:
+    if is_postgres and _pg_autocommit(connection):
+        with connection.cursor() as cur:
+            cur.execute("COMMIT" if ok else "ROLLBACK")
+    elif ok:
+        connection.commit()
+    else:
+        connection.rollback()
 
 
 def _record_migration(connection, migration: Migration, is_postgres: bool) -> None:
@@ -444,32 +504,32 @@ def _record_migration(connection, migration: Migration, is_postgres: bool) -> No
         )
 
 
-def run_migrations(connection, is_postgres: bool = False) -> list[str]:
-    """Fuehrt alle ausstehenden Migrationen aus.
+def run_migrations(connection, is_postgres: bool = False, migrations: list[Migration] | None = None) -> list[str]:
+    """Fuehrt alle ausstehenden Migrationen aus, jede in einer eigenen Transaktion.
 
     Returns: Liste der ausgefuehrten Migrations-IDs.
+    Raises: MigrationError, wenn eine Migration fehlschlaegt; dann ist sie
+        zurueckgerollt, nicht eingetragen, und spaetere laufen nicht.
     """
     _ensure_migrations_table(connection, is_postgres)
     applied = _get_applied(connection, is_postgres)
     executed = []
 
-    for migration in MIGRATIONS:
+    for migration in MIGRATIONS if migrations is None else migrations:
         if migration.id in applied:
             continue
+        _begin(connection, is_postgres)
         try:
             _apply_migration(connection, migration, is_postgres)
             _record_migration(connection, migration, is_postgres)
-            if is_postgres:
-                connection.commit()
-            else:
-                connection.commit()
-            executed.append(migration.id)
-            logger.info("Migration %s ausgefuehrt: %s", migration.id, migration.description)
         except Exception as e:
-            logger.warning("Migration %s uebersprungen (vermutlich bereits vorhanden): %s",
-                           migration.id, e)
-            if is_postgres:
-                connection.rollback()
-            # Bei SQLite kein explizites Rollback noetig
+            _finish(connection, is_postgres, ok=False)
+            logger.error("Migration %s fehlgeschlagen, zurueckgerollt: %s", migration.id, e)
+            if isinstance(e, MigrationError):
+                raise
+            raise MigrationError(migration.id, None, e) from e
+        _finish(connection, is_postgres, ok=True)
+        executed.append(migration.id)
+        logger.info("Migration %s ausgefuehrt: %s", migration.id, migration.description)
 
     return executed

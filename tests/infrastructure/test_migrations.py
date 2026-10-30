@@ -20,6 +20,8 @@ def db():
     conn.execute("CREATE TABLE conversations (id TEXT PRIMARY KEY, status TEXT NOT NULL)")
     conn.execute("CREATE TABLE agents (id TEXT PRIMARY KEY, name TEXT NOT NULL, provider TEXT NOT NULL, model TEXT NOT NULL, created_at TEXT NOT NULL)")
     conn.execute("CREATE TABLE audit_log (id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, operation TEXT NOT NULL, conversation_id TEXT NOT NULL, participant_id TEXT NOT NULL, provider TEXT NOT NULL, model TEXT NOT NULL, success INTEGER NOT NULL, error_message TEXT, user_id TEXT)")
+    # 011 ergaenzt messages; der alte Runner hatte das Fehlen der Tabelle still uebergangen (R1)
+    conn.execute("CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, content TEXT NOT NULL)")
     conn.commit()
     return conn
 
@@ -81,15 +83,14 @@ def test_migration_skips_already_existing_columns():
             created_at TEXT NOT NULL
         )
     """)
+    conn.execute("CREATE TABLE messages (id TEXT PRIMARY KEY, content TEXT NOT NULL, origin TEXT)")
     conn.commit()
 
-    # Sollte nicht crashen, sondern Migrationen ueberspringen
-    executed = run_migrations(conn, is_postgres=False)
-    # Alle werden als "uebersprungen" geloggt, aber trotzdem in _migrations recorded
-    # (weil das Schema schon vollstaendig ist)
+    # Vorhandene Spalten werden erkannt; die Migrationen gelten als erledigt (R1)
+    run_migrations(conn, is_postgres=False)
     applied = _get_applied(conn, is_postgres=False)
-    # Mindestens _migrations Tabelle existiert
-    assert isinstance(applied, set)
+    assert {"001_audit_token_columns", "002_conversation_rules", "003_agent_universal_fields",
+            "004_agent_api_key_enc", "011_message_origin"} <= applied
 
 
 def test_all_migrations_have_unique_ids():
@@ -100,3 +101,62 @@ def test_all_migrations_have_unique_ids():
 def test_all_migrations_have_description():
     for m in MIGRATIONS:
         assert m.description, f"Migration {m.id} hat keine Beschreibung"
+
+
+# ── R1 (conclave#31): Migrationen fail-closed ─────────────────────────────
+
+def _broken(conn_ok_table="r1_a"):
+    return [
+        Migration(id="900_broken", description="zweite Anweisung scheitert",
+                  statements=(f"CREATE TABLE {conn_ok_table} (x INTEGER)",
+                              "INSERT INTO conversations (id, status) VALUES ('r1', 'open')",
+                              "INSERT INTO gibt_es_nicht VALUES (1)")),
+        Migration(id="901_after", description="darf nicht laufen", statements=("CREATE TABLE r1_b (x INTEGER)",)),
+    ]
+
+
+def _tables(conn):
+    return {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+
+
+def test_failing_migration_aborts_and_leaves_nothing_behind(db):
+    from conclave.infrastructure.migrations import MigrationError
+    run_migrations(db, is_postgres=False)
+    with pytest.raises(MigrationError) as err:
+        run_migrations(db, is_postgres=False, migrations=_broken())
+    assert "900_broken" in str(err.value) and "gibt_es_nicht" in str(err.value)
+    assert not db.in_transaction                                       # keine offene Transaktion
+    assert not {"r1_a", "r1_b"} & _tables(db)                          # DDL zurueckgerollt, 901 nicht gelaufen
+    assert db.execute("SELECT count(*) FROM conversations WHERE id = 'r1'").fetchone() == (0,)
+    assert not {"900_broken", "901_after"} & _get_applied(db, is_postgres=False)
+
+
+def test_repaired_migration_runs_cleanly_afterwards(db):
+    from conclave.infrastructure.migrations import MigrationError
+    run_migrations(db, is_postgres=False)
+    with pytest.raises(MigrationError):
+        run_migrations(db, is_postgres=False, migrations=_broken())
+    fixed = [Migration(id="900_broken", description="repariert", statements=("CREATE TABLE r1_a (x INTEGER)",)),
+             _broken()[1]]
+    assert run_migrations(db, is_postgres=False, migrations=fixed) == ["900_broken", "901_after"]
+    assert {"r1_a", "r1_b"} <= _tables(db)
+
+
+def test_fresh_database_has_no_migration_warnings_and_records_all(tmp_path, caplog):
+    from conclave.infrastructure.sqlite.connection import ThreadLocalConnection
+    from conclave.infrastructure.sqlite.schema import initialize_schema
+    conn = ThreadLocalConnection(tmp_path / "frisch.db")
+    with caplog.at_level("INFO", logger="conclave.migrations"):
+        initialize_schema(conn)
+        initialize_schema(conn)                                        # zweiter Start
+    assert [r for r in caplog.records if r.levelno >= 30] == []
+    assert _get_applied(conn, is_postgres=False) == {m.id for m in MIGRATIONS}
+
+
+def test_column_migration_adds_only_missing_columns(db):
+    db.execute("ALTER TABLE agents ADD COLUMN preset TEXT NOT NULL DEFAULT ''")   # teilweise vorhanden
+    db.commit()
+    run_migrations(db, is_postgres=False)
+    cols = {row[1] for row in db.execute("PRAGMA table_info(agents)")}
+    assert {"preset", "api_url", "response_path", "message_format"} <= cols
+    assert "003_agent_universal_fields" in _get_applied(db, is_postgres=False)
