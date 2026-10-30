@@ -3,7 +3,7 @@
 async function openRulesModal(){
   if(!currentConvId){toast(t('conv.chooseFirst'),'err');return;}
   try{
-    const d=await req('GET',`/conversations/${currentConvId}/rules`);
+    const d=await req('GET',`/conversations/${pathSeg(currentConvId)}/rules`);
     currentRules=d.rules||'';
   }catch{currentRules='';}
   document.getElementById('rulesInput').value=currentRules;
@@ -13,7 +13,7 @@ async function openRulesModal(){
 async function saveRules(){
   const rules=document.getElementById('rulesInput').value;
   try{
-    await req('POST',`/conversations/${currentConvId}/rules`,{rules});
+    await req('POST',`/conversations/${pathSeg(currentConvId)}/rules`,{rules});
     currentRules=rules;
     closeOverlay('overlayRules');
     toast(rules?t('rules.saved'):t('rules.removed'),'ok');
@@ -126,7 +126,7 @@ async function uploadWsFile(input){
   const reader=new FileReader();
   reader.onload=async function(e){
     try{
-      await req('POST',`/workspace/${file.name}`,{content:e.target.result});
+      await req('POST',_wsPathUrl(file.name),{content:e.target.result});
       toast(t('workspace.uploaded', {name: file.name}),'ok');
       loadWorkspace();
     }catch(err){toast(err.message,'err');}
@@ -146,7 +146,7 @@ async function saveWsText(){
   const content=document.getElementById('wsFileContent').value;
   if(!name){toast(t('workspace.fileNameRequired'),'err');return;}
   try{
-    await req('POST',`/workspace/${name}`,{content});
+    await req('POST',_wsPathUrl(name),{content});
     toast(t('workspace.saved', {name}),'ok');
     closeOverlay('overlayWsText');
     loadWorkspace();
@@ -167,7 +167,7 @@ function insertWorkspaceRef(path){
 let wsViewer=null; // {path, size, content, markdown, mode}
 
 function _wsPathUrl(path){
-  return '/workspace/'+String(path).split('/').map(encodeURIComponent).join('/');
+  return '/workspace/'+String(path).split('/').map(pathSeg).join('/');
 }
 
 async function openWorkspaceFile(path,size){

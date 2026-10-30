@@ -256,8 +256,14 @@ class BoardService:
     # ── next_task ────────────────────────────────────────────────────────
 
     def next_task(self, principal: Principal, slug: str | None = None) -> Task | None:
-        """Oberstes Ticket der ersten Spalte (ohne 'nur fuer Menschen') atomar in die zweite."""
+        """Oberstes Ticket der ersten Spalte (ohne 'nur fuer Menschen') atomar in die zweite.
+
+        Ist die zweite Spalte zugleich die letzte (zwei Spalten), waere das ein Schritt nach
+        "erledigt"; der braucht das Freigabe-Recht wie jede andere Bewegung dorthin (R4).
+        """
         first, second = self.flow.first, self.flow.second
+        if second == self.flow.last:
+            self._require_approval(principal)
         origin, actor_id = self.actor(principal)
         for candidate in self.list_tasks(slug, [first]):
             if candidate.human:

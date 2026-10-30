@@ -24,7 +24,7 @@ function renderFloorUI(){
 
 async function grantFloor(pid){
   try{
-    await req('POST',`/conversations/${currentConvId}/floor/grant`,{participant_id:pid});
+    await req('POST',`/conversations/${pathSeg(currentConvId)}/floor/grant`,{participant_id:pid});
     currentFloor=pid;renderFloorUI();
     const p=participants.find(x=>x.id===pid);
     toast(t('floor.hasFloor', {name: p?.name||pid}),'floor');
@@ -32,7 +32,7 @@ async function grantFloor(pid){
 }
 
 async function revokeFloor(){
-  try{await req('POST',`/conversations/${currentConvId}/floor/revoke`);currentFloor=null;renderFloorUI();toast(t('floor.revoked'),'ok');}
+  try{await req('POST',`/conversations/${pathSeg(currentConvId)}/floor/revoke`);currentFloor=null;renderFloorUI();toast(t('floor.revoked'),'ok');}
   catch(e){toast(e.message,'err');}
 }
 
@@ -44,9 +44,9 @@ async function invokeWithFloor(){
   // safe-html: statisches Markup + Uebersetzung ohne Platzhalter
   btn.innerHTML=`<span class="spinner"></span> ${t('floor.answering')}`;
   try{
-    await req('POST',`/conversations/${currentConvId}/floor/invoke`);
+    await req('POST',`/conversations/${pathSeg(currentConvId)}/floor/invoke`);
     currentFloor=null;
-    const conv=await req('GET',`/conversations/${currentConvId}`);
+    const conv=await req('GET',`/conversations/${pathSeg(currentConvId)}`);
     renderMessages(conv.messages||[]);renderFloorUI();
     toast(t('input.answerReceived'),'ok');
   }catch(e){toast(e.message,'err');}

@@ -217,7 +217,7 @@ Das eigene Board (siehe [Mit dem Board arbeiten](../mit-dem-board-arbeiten.md)).
 
 | Schlüssel | Default | Bedeutung |
 |---|---|---|
-| `statuses` | `["todo", "doing", "review", "done"]` | Spalten in dieser Reihenfolge, mindestens zwei, ohne Doppelte; Namen aus Kleinbuchstaben, Ziffern und `-` (höchstens 40 Zeichen). Neue Tickets landen in der ersten, die letzte gilt als erledigt (nur der Mensch schiebt dorthin). `next_task` schiebt von der ersten in die zweite. |
+| `statuses` | `["todo", "doing", "review", "done"]` | Spalten in dieser Reihenfolge, mindestens zwei, ohne Doppelte; Namen aus Kleinbuchstaben, Ziffern und `-` (höchstens 40 Zeichen). Neue Tickets landen in der ersten, die letzte gilt als erledigt (nur der Mensch schiebt dorthin). `next_task` schiebt von der ersten in die zweite; bei nur zwei Spalten ist das ein Schritt nach „erledigt“ und deshalb nur mit Freigabe-Recht möglich. |
 | `source` | `internal`, oder `kanzo`, wenn `[kanzo] url` bzw. `CONCLAVE_KANZO_URL` gesetzt ist | Woher Consultations Tickets lesen: `internal` (eigenes Board, Kommentare mit Herkunft `system`) oder `kanzo` (externes Kanzo unter `[kanzo] url`). |
 
 Spalten nachträglich umzubenennen ändert gespeicherte Tickets nicht: Tickets

@@ -126,3 +126,30 @@ def test_mcp_server_refuses_the_human_token(monkeypatch, capsys):
         server._check_role()
     assert HUMAN_TOKEN not in capsys.readouterr().err
     assert seen["auth"] == f"Bearer {HUMAN_TOKEN}"
+
+
+# ── R4 (conclave#34): frei waehlbare IDs ──────────────────────────────────
+
+@pytest.mark.parametrize("pid", ["../x", "../../../backup?", "a/b", "x?y=1", "x#y", ".", "..", "a b", "x" * 65, "ä"])
+def test_participant_ids_are_checked(app, pid):
+    c = app.test_client()
+    conv = c.post("/conversations", json={}, headers=_bearer(AGENT_TOKEN)).get_json()["conversation_id"]
+    for token in (AGENT_TOKEN, HUMAN_TOKEN):
+        resp = c.post(f"/conversations/{conv}/participants", json={"participant_id": pid, "name": "P"},
+                      headers=_bearer(token))
+        assert resp.status_code == 400 and resp.get_json()["type"] == "ValidationError", (pid, token)
+
+
+def test_valid_participant_id_is_accepted(app):
+    c = app.test_client()
+    conv = c.post("/conversations", json={}, headers=_bearer(AGENT_TOKEN)).get_json()["conversation_id"]
+    resp = c.post(f"/conversations/{conv}/participants", json={"participant_id": "gpt-5.1_x", "name": "P"},
+                  headers=_bearer(AGENT_TOKEN))
+    assert resp.status_code == 201
+
+
+@pytest.mark.parametrize("agent_id", ["../x", "a/b", "..", "x?y"])
+def test_new_agent_ids_are_checked(app, agent_id):
+    resp = app.test_client().post("/agents", json={"id": agent_id, "name": "A", "model": "m"},
+                                  headers=_bearer(HUMAN_TOKEN))
+    assert resp.status_code == 400 and resp.get_json()["type"] == "ValidationError"

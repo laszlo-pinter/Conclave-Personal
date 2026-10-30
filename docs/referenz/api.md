@@ -313,6 +313,13 @@ importierte Tickets keinen Verlauf.
 - `workspace_path` in `PUT /settings` gilt nur für die laufende Session und
   wird nicht gespeichert.
 
+## IDs
+
+Frei wählbare IDs (Participants, neue Agents) bestehen aus 1–64 Zeichen aus
+`A-Z`, `a-z`, `0-9`, `.`, `-` und `_`; `.` und `..` allein sind nicht
+erlaubt. Sonst antwortet die API mit `400 ValidationError`. Bestehende Agents
+mit anderen IDs bleiben nutzbar.
+
 ## Fehlercodes
 
 Fehler kommen als JSON `{"error": "...", "type": "..."}`. Wichtige Codes:

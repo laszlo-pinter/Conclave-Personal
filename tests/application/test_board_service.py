@@ -354,3 +354,18 @@ def test_agent_comment_respects_a_flag_set_meanwhile(board, monkeypatch):
     monkeypatch.undo()
     assert board.comments("api#1") == [] and board.change_token() == token     # nichts geschrieben
     assert board.add_comment(HUMAN, "api#1", "der Mensch darf").origin == "human"
+
+
+# ── R4 (conclave#34): zwei Spalten, next_task schiebt nicht nach done ─────
+
+def test_next_task_does_not_move_into_the_last_column_for_agents(crypto):
+    conn = sqlite3.connect(":memory:")
+    initialize_schema(conn)
+    svc = BoardService(SQLiteBoardRepository(conn, crypto, autocommit=True), StatusFlow(("offen", "erledigt")))
+    svc.create_project(HUMAN, "api", "API")
+    svc.create_task(HUMAN, "api", "T")
+    with pytest.raises(BoardError) as err:
+        svc.next_task(AGENT, "api")
+    assert err.value.status == 403
+    assert svc.get_task("api#1").status == "offen"                          # nichts verschoben
+    assert svc.next_task(HUMAN, "api").status == "erledigt"                 # Freigabe-Recht: erlaubt

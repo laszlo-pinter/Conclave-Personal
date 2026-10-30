@@ -3,6 +3,7 @@
 import json as _json
 import logging
 import os
+import re
 import time
 
 try:
@@ -120,6 +121,15 @@ def parse_allowed_hosts(raw: str) -> set[tuple[str, str]]:
 def is_host_allowed(host_header: str, allowed: set[tuple[str, str]]) -> bool:
     host, port = _split_host(host_header or "")
     return bool(host) and ((host, "") in allowed or (host, port) in allowed)
+
+
+# Frei waehlbare IDs landen in URL-Pfaden (UI, MCP); nur sichere Zeichen, kein "." oder ".." (R4)
+_ID_RE = re.compile(r"[A-Za-z0-9._-]{1,64}\Z")
+ID_RULE_ERROR = "ID: 1-64 Zeichen aus A-Z, a-z, 0-9, Punkt, Bindestrich und Unterstrich; nicht '.' oder '..'."
+
+
+def _valid_id(value) -> bool:
+    return isinstance(value, str) and bool(_ID_RE.match(value)) and value not in (".", "..")
 
 
 def create_app(handler: CLIHandler, auth_service=None,
@@ -470,6 +480,8 @@ def create_app(handler: CLIHandler, auth_service=None,
         model    = body.get("model", "")
         if not agent_id or not name or not model:
             return jsonify({"error": "id, name und model sind erforderlich."}), 400
+        if not _valid_id(agent_id):
+            return jsonify({"error": ID_RULE_ERROR, "type": "ValidationError"}), 400
         try:
             agent = Agent(
                 id=agent_id, name=name, provider=provider, model=model,
@@ -695,6 +707,8 @@ def create_app(handler: CLIHandler, auth_service=None,
 
         if not participant_id or not name:
             return jsonify({"error": "participant_id und name sind erforderlich.", "type": "ValidationError"}), 400
+        if not _valid_id(participant_id):
+            return jsonify({"error": ID_RULE_ERROR, "type": "ValidationError"}), 400
         if ptype_str not in ("model", "user"):
             return jsonify({"error": "type muss 'model' oder 'user' sein.", "type": "ValidationError"}), 400
         # Z2b: Agenten treten nie als Mensch auf, also keine Participants vom Typ user.

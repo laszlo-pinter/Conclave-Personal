@@ -46,9 +46,9 @@ async function addParticipant(){
   const pid=document.getElementById('pFormId').value.trim(),name=document.getElementById('pFormName').value.trim(),type=document.getElementById('pFormType').value;
   if(!pid||!name){toast(t('common.requiredIdName'),'err');return;}
   try{
-    await req('POST',`/conversations/${currentConvId}/participants`,{participant_id:pid,name,type});
+    await req('POST',`/conversations/${pathSeg(currentConvId)}/participants`,{participant_id:pid,name,type});
     closeOverlay('overlayParticipant');toast(t('participants.registered', {name}),'ok');
-    const d=await req('GET',`/conversations/${currentConvId}`);
+    const d=await req('GET',`/conversations/${pathSeg(currentConvId)}`);
     participants=d.participants||[];renderBadges();renderFloorUI();
   }catch(e){toast(e.message,'err');}
 }

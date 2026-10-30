@@ -49,7 +49,7 @@ async function runAutoloop(){
 
   try{
     const hdrs={'Content-Type':'application/json'};if(apiKey)hdrs['Authorization']='Bearer '+apiKey;
-    const res=await fetch(`${API}/conversations/${currentConvId}/auto-loop`,{
+    const res=await fetch(`${API}/conversations/${pathSeg(currentConvId)}/auto-loop`,{
       method:'POST',headers:hdrs,
       body:JSON.stringify({sequence:seq,stop_signal:stopSignal,max_rounds:maxRounds,rotation}),
     });
@@ -75,7 +75,7 @@ async function runAutoloop(){
     finishLive();
     banner.remove();
     // Echte Messages mit korrekten Sequenznummern nachladen.
-    const data=await req('GET',`/conversations/${currentConvId}`);
+    const data=await req('GET',`/conversations/${pathSeg(currentConvId)}`);
     renderMessages(data.messages||[]);
     toast(t('autoloop.finished'),'ok');
   }catch(e){

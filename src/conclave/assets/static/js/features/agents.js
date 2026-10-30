@@ -206,7 +206,7 @@ async function saveAgent(){
   try{
     const body={id,name,provider,model,role,topic,system_prompt,preset,api_url,response_path,message_format,max_messages};
     if(api_key) body.api_key=api_key;
-    if(editingAgentId) await req('PUT',`/agents/${editingAgentId}`,body);
+    if(editingAgentId) await req('PUT',`/agents/${pathSeg(editingAgentId)}`,body);
     else await req('POST','/agents',body);
     editingAgentId=id;
     toast(wasEditing?t('agents.updated'):t('agents.created'),'ok');
@@ -224,7 +224,7 @@ async function testAgent(){
   const btn=document.getElementById('btnTestAgent');
   btn.disabled=true;btn.textContent=t('agents.testing');
   try{
-    const d=await req('POST',`/agents/${editingAgentId}/test`);
+    const d=await req('POST',`/agents/${pathSeg(editingAgentId)}/test`);
     if(d.success) toast(`Test OK: ${d.message}`,'ok');
     else toast(t('agents.testFailed', {message: d.message}),'err');
   }catch(e){toast(e.message,'err');}
@@ -232,7 +232,7 @@ async function testAgent(){
 }
 
 async function deleteAgent(id){
-  try{await req('DELETE',`/agents/${id}`);toast(t('agents.deleted'),'ok');await loadAgents();}
+  try{await req('DELETE',`/agents/${pathSeg(id)}`);toast(t('agents.deleted'),'ok');await loadAgents();}
   catch(e){toast(e.message,'err');}
 }
 

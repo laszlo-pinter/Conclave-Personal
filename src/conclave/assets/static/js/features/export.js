@@ -3,7 +3,7 @@
 async function exportConv(){
   if(!currentConvId){toast(t('workspace.noConversation'),'err');return;}
   try{
-    const d=await req('GET',`/conversations/${currentConvId}/export`);
+    const d=await req('GET',`/conversations/${pathSeg(currentConvId)}/export`);
     const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
