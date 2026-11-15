@@ -110,7 +110,7 @@ def _model_messages(env):
 # ── Speicherung ──────────────────────────────────────────────────────────
 
 def test_invoke_saves_report_linked_to_message_and_run(env):
-    with patch("httpx.post", return_value=_ok()):
+    with patch("conclave.infrastructure.universal.adapter._http_post", return_value=_ok()):
         env.service.invoke_participant(env.conv_id, "p1")
     message = _model_messages(env)[-1]
     record = env.reports.get_by_message(message.id)
@@ -124,7 +124,7 @@ def test_invoke_saves_report_linked_to_message_and_run(env):
 def test_stream_saves_report_with_stream_usage(env):
     final = {"choices": [], "usage": {"prompt_tokens": 9, "completion_tokens": 2}}
     lines = _sse({"choices": [{"delta": {"content": "Hallo"}}]}, final)
-    with patch("httpx.stream", lambda *a, **k: _StreamResponse(lines)):
+    with patch("conclave.infrastructure.universal.adapter._http_stream", lambda *a, **k: _StreamResponse(lines)):
         assert "".join(env.service.stream_participant(env.conv_id, "p1")) == "Hallo"
     record = env.reports.get_by_message(_model_messages(env)[-1].id)
     assert (record.input_tokens, record.output_tokens) == (9, 2)
@@ -136,7 +136,7 @@ def test_stream_saves_report_with_stream_usage(env):
     ([_http_error(503)] * 4, 4),                 # Retries erschoepft -> ProviderUnavailable
 ])
 def test_failed_call_saves_report_without_message(env, responses, attempts):
-    with patch("httpx.post", side_effect=list(responses)):
+    with patch("conclave.infrastructure.universal.adapter._http_post", side_effect=list(responses)):
         with pytest.raises(Exception):
             env.service.invoke_participant(env.conv_id, "p1")
     records = env.reports.list_by_conversation(env.conv_id)
@@ -150,7 +150,7 @@ def test_failed_call_saves_report_without_message(env, responses, attempts):
 
 
 def test_parallel_orchestration_links_reports_to_messages(env):
-    with patch("httpx.post", side_effect=lambda *a, **k: _ok()):
+    with patch("conclave.infrastructure.universal.adapter._http_post", side_effect=lambda *a, **k: _ok()):
         result = env.handler.orchestrate_parallel(env.conv_id, [["p1", "p2"]])
     assert result.success
     for response in result.data["responses"]:
@@ -159,7 +159,7 @@ def test_parallel_orchestration_links_reports_to_messages(env):
 
 
 def test_parallel_stream_response_events_carry_context(env):
-    with patch("httpx.post", side_effect=lambda *a, **k: _ok()):
+    with patch("conclave.infrastructure.universal.adapter._http_post", side_effect=lambda *a, **k: _ok()):
         events = list(env.handler.orchestrate_parallel_stream(env.conv_id, [["p1", "p2"]]))
     responses = [e for e in events if e["event"] == "response"]
     assert len(responses) == 2
@@ -167,7 +167,7 @@ def test_parallel_stream_response_events_carry_context(env):
 
 
 def test_auto_loop_response_events_carry_context(env):
-    with patch("httpx.post", side_effect=lambda *a, **k: _ok("fertig @done")):
+    with patch("conclave.infrastructure.universal.adapter._http_post", side_effect=lambda *a, **k: _ok("fertig @done")):
         events = list(env.handler.auto_loop(env.conv_id, ["p1"], max_rounds=1))
     response = next(e for e in events if e["event"] == "response")
     assert response["context"]["messages_total"] == 1
@@ -175,14 +175,14 @@ def test_auto_loop_response_events_carry_context(env):
 
 
 def test_delete_conversation_removes_reports(env):
-    with patch("httpx.post", return_value=_ok()):
+    with patch("conclave.infrastructure.universal.adapter._http_post", return_value=_ok()):
         env.service.invoke_participant(env.conv_id, "p1")
     env.service.delete_conversation(env.conv_id)
     assert env.reports.list_by_conversation(env.conv_id) == []
 
 
 def test_export_contains_context_reports(env):
-    with patch("httpx.post", side_effect=[_http_error(400), _ok()]):
+    with patch("conclave.infrastructure.universal.adapter._http_post", side_effect=[_http_error(400), _ok()]):
         with pytest.raises(Exception):
             env.service.invoke_participant(env.conv_id, "p1")
         env.service.invoke_participant(env.conv_id, "p1")
@@ -194,7 +194,7 @@ def test_export_contains_context_reports(env):
 # ── API ──────────────────────────────────────────────────────────────────
 
 def test_conversation_messages_include_compact_context(env):
-    with patch("httpx.post", return_value=_ok()):
+    with patch("conclave.infrastructure.universal.adapter._http_post", return_value=_ok()):
         env.service.invoke_participant(env.conv_id, "p1")
     data = env.client().get(f"/conversations/{env.conv_id}").get_json()
     user_msg, model_msg = data["messages"]
@@ -207,7 +207,7 @@ def test_conversation_messages_include_compact_context(env):
 
 
 def test_message_context_endpoint_returns_full_report(env):
-    with patch("httpx.post", return_value=_ok()):
+    with patch("conclave.infrastructure.universal.adapter._http_post", return_value=_ok()):
         env.service.invoke_participant(env.conv_id, "p1")
     message = _model_messages(env)[-1]
     response = env.client().get(f"/conversations/{env.conv_id}/messages/{message.id}/context")
@@ -230,8 +230,8 @@ def test_message_context_endpoint_404s(env):
 
 
 def test_context_preview_does_not_call_provider(env):
-    with patch("httpx.post", side_effect=AssertionError("Vorschau darf keinen Provider aufrufen")), \
-         patch("httpx.stream", side_effect=AssertionError("Vorschau darf keinen Provider aufrufen")):
+    with patch("conclave.infrastructure.universal.adapter._http_post", side_effect=AssertionError("Vorschau darf keinen Provider aufrufen")), \
+         patch("conclave.infrastructure.universal.adapter._http_stream", side_effect=AssertionError("Vorschau darf keinen Provider aufrufen")):
         response = env.client().get(f"/conversations/{env.conv_id}/participants/p1/context-preview")
     assert response.status_code == 200
     data = response.get_json()

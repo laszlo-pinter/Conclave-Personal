@@ -109,6 +109,7 @@ ID gibt (bestehende Agents werden nicht verändert):
 | CONCLAVE_WORKSPACE_AGENT_READ_LIMIT_BYTES | 524288 | Max. Dateigröße für `@workspace/...`, `@read(...)` und `context_files:` in Agent-Kontexten |
 | CONCLAVE_WORKSPACE_UI_READ_LIMIT_BYTES | 2097152 | Max. Dateigröße für UI/API/CLI-Lesezugriffe |
 | CONCLAVE_WORKSPACE_WRITE_LIMIT_BYTES | 524288 | Max. Größe für Workspace-Schreibzugriffe und `@save(...)` |
+| CONCLAVE_OLLAMA_PORT | 11434 | Port des lokalen Providers (Ollama). `localhost` ist nur für den Provider `ollama` und nur auf diesem Port erlaubt; entfernte Provider brauchen `https` |
 | CONCLAVE_MAX_MESSAGES | 25 | Max. Nachrichten pro Provider-Call für Preset-Agents (UniversalAdapter), wenn am Agenten kein eigenes Limit gesetzt ist. Die nativen Anthropic-/OpenAI-Adapter kürzen nur mit Agent-Limit. Pro Agent: Feld `max_messages` (leer = dieser Default, `0` = keine Kürzung) |
 
 Versteckte Pfade, also Komponenten mit führendem Punkt wie `.private/`,

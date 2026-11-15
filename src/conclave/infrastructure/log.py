@@ -8,6 +8,8 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+from conclave.domain.errors import redact_secrets
+
 CONCLAVE_PREFIX = "conclave."
 
 # Felder, die nicht ins JSON-Output sollen (Python-interne LogRecord-Attribute)
@@ -113,7 +115,7 @@ class JsonFormatter(logging.Formatter):
     """Formatiert Log-Records als einzeilige JSON-Objekte."""
 
     def format(self, record: logging.LogRecord) -> str:
-        record.message = record.getMessage()
+        record.message = redact_secrets(record.getMessage(), urls=False)   # Keys nie ins Log
         entry: dict[str, Any] = {
             "timestamp": self.formatTime(record, self.datefmt),
             "level": record.levelname,

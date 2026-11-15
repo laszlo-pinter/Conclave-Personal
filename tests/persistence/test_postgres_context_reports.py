@@ -242,18 +242,18 @@ def test_context_reports_have_enforced_foreign_keys(env):
 
 def test_invoke_failure_and_stream_store_linked_reports(env):
     service, handler, conv_id, _conn = env
-    with patch("httpx.post", lambda *a, **k: _ok()):
+    with patch("conclave.infrastructure.universal.adapter._http_post", lambda *a, **k: _ok()):
         result = handler.invoke_participant(conv_id, "p1")
     record = service.get_context_report_for_message(result.data["message_id"])
     assert record.run_id and record.input_tokens == 42
     assert record.report.skipped_context_files[0]["path"] == "fehlt.md"   # Regeln aus Postgres
 
-    with patch("httpx.post", _bad), pytest.raises(ValueError):
+    with patch("conclave.infrastructure.universal.adapter._http_post", _bad), pytest.raises(ValueError):
         handler.invoke_participant(conv_id, "p1")
     failed = [r for r in service.list_context_reports(conv_id) if r.message_id is None]
     assert len(failed) == 1 and failed[0].run_id
 
-    with patch("httpx.stream", _Stream):
+    with patch("conclave.infrastructure.universal.adapter._http_stream", _Stream):
         assert "".join(service.stream_participant(conv_id, "p1")) == "Hi"
     last = service.load_conversation(conv_id).messages[-1]
     assert service.get_context_report_for_message(last.id).input_tokens == 9
@@ -261,14 +261,14 @@ def test_invoke_failure_and_stream_store_linked_reports(env):
 
 def test_parallel_paths_link_reports_and_delete_removes_everything(env):
     service, handler, conv_id, conn = env
-    with patch("httpx.post", lambda *a, **k: _ok()):
+    with patch("conclave.infrastructure.universal.adapter._http_post", lambda *a, **k: _ok()):
         result = handler.orchestrate_parallel(conv_id, [["p1", "p2"]])
         events = list(handler.orchestrate_parallel_stream(conv_id, [["p1", "p2"]]))
     assert result.success
     assert all(service.get_context_report_for_message(r["message_id"]) for r in result.data["responses"])
     assert sum(1 for e in events if e["event"] == "response" and e.get("context")) == 2
 
-    with patch("httpx.post", lambda *a, **k: _ok("fertig @done")):
+    with patch("conclave.infrastructure.universal.adapter._http_post", lambda *a, **k: _ok("fertig @done")):
         loop = list(handler.auto_loop(conv_id, ["p1"], max_rounds=1))
     assert any(e["event"] == "response" and e.get("context") for e in loop)
 

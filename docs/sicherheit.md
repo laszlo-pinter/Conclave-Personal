@@ -259,10 +259,19 @@ Oktober 2026):
 - Lokale Ollama-Modelle können ohne API-Key betrieben werden.
 - Provider-Fehler liefern `429` (Rate-Limit), `504` (Timeout) oder `502`
   (nicht erreichbar, sonstige Fehler).
-- Custom-Provider-URLs werden gegen SSRF-Risiken geprüft. Private,
-  reservierte, Loopback- und Link-Local-Ziele werden blockiert; DNS-Auflösung
-  auf solche Ziele wird ebenfalls abgelehnt. Localhost ist nur für explizite
-  lokale Provider wie Ollama erlaubt.
+- Ausgehende Verbindungen zu Providern sind auf öffentliche Adressen
+  beschränkt. Conclave löst den Namen bei jeder Anfrage auf, prüft jede
+  Adresse und verbindet sich mit der geprüften Adresse; Host-Header und
+  TLS-Servername bleiben beim Namen. Nicht auflösbare Namen werden abgelehnt.
+- Entfernte Provider nur über `https`. `localhost` ist nur für den lokalen
+  Provider (Ollama) erlaubt, und nur auf dessen Port
+  (`CONCLAVE_OLLAMA_PORT`, Standard `11434`). Ein Agent mit einer nicht mehr
+  erlaubten URL wird beim Start übersprungen; sein Aufruf nennt den Grund.
+- Provider-Keys stehen in Headern, nicht in der URL (Gemini:
+  `x-goog-api-key`).
+- Fehlermeldungen an Clients und im Log enthalten keine Provider-URLs und
+  keine Keys. Unbekannte Fehler erscheinen nur mit ihrem Typ, Details stehen
+  im Server-Log. Streams melden Fehler als `data: [ERROR] {"error": ..., "type": ...}`.
 
 ## Board
 

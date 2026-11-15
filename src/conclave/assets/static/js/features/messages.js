@@ -109,7 +109,8 @@ async function streamP(){
       const{value,done:d}=await reader.read();done=d;
       for(const line of dec.decode(value||new Uint8Array(),{stream:!done}).split('\n')){
         if(!line.startsWith('data: '))continue;
-        const p=line.slice(6);if(p==='[DONE]'||p.startsWith('[ERROR]')){done=true;break;}
+        const p=line.slice(6);if(p==='[DONE]'){done=true;break;}
+        if(p.startsWith('[ERROR]')){let m='';try{m=JSON.parse(p.slice(7)).error||'';}catch(_){}if(m)toast(m,'err');done=true;break;}
         buf+=p;sc.textContent=buf;sc.appendChild(cursor);scrollBottom();
       }
     }

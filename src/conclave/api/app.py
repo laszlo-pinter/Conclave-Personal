@@ -46,7 +46,7 @@ from conclave.application.consultations import ConsultationRequestError
 from conclave.application.board import (
     BoardError, comment_to_dict, event_to_dict, project_event_to_dict, project_to_dict, task_to_dict,
 )
-from conclave.domain.errors import TaskNotFound, TaskSourceError
+from conclave.domain.errors import TaskNotFound, TaskSourceError, public_message, redact_secrets
 from conclave.cli.bootstrap import rate_limit_disabled, validate_rate_limit
 from conclave.cli.config import DEFAULT_RATE_LIMIT, LimitSettings
 from conclave.application.conversation_flow import RUN_ORIGIN
@@ -441,12 +441,12 @@ def create_app(handler: CLIHandler, auth_service=None,
     # ── Error Handler ────────────────────────────────────────────────────
 
     def _error_json(e: Exception, status: int):
-        return jsonify({"error": str(e), "type": type(e).__name__}), status
+        return jsonify({"error": public_message(e), "type": type(e).__name__}), status
 
     def _cli_error_json(result: CLIResult, default_status: int):
         data = result.data or {}
         status = int(data.get("status", default_status))
-        payload = {"error": result.message}
+        payload = {"error": redact_secrets(result.message or "")}
         if data.get("type"):
             payload["type"] = data["type"]
         return jsonify(payload), status
@@ -909,8 +909,8 @@ def create_app(handler: CLIHandler, auth_service=None,
                     yield f"data: {_json.dumps(event)}\n\n"
                 yield "data: [DONE]\n\n"
             except Exception as e:
-                logger.exception("orchestrate-parallel-stream Fehler: %s", e)
-                yield f"data: {_json.dumps({'event': 'stop', 'reason': 'error', 'message': str(e)})}\n\n"
+                logger.error("orchestrate-parallel-stream Fehler: %s", public_message(e))
+                yield f"data: {_json.dumps({'event': 'stop', 'reason': 'error', 'message': public_message(e)})}\n\n"
                 yield "data: [DONE]\n\n"
 
         return Response(
@@ -929,7 +929,9 @@ def create_app(handler: CLIHandler, auth_service=None,
                     yield f"data: {token}\n\n"
                 yield "data: [DONE]\n\n"
             except Exception as e:
-                yield f"data: [ERROR] {e}\n\n"
+                logger.error("stream Fehler: %s", public_message(e))
+                error = {"error": public_message(e), "type": type(e).__name__}
+                yield f"data: [ERROR] {_json.dumps(error)}\n\n"
 
         return Response(
             stream_with_context(generate()),
@@ -968,8 +970,8 @@ def create_app(handler: CLIHandler, auth_service=None,
                     yield f"data: {_json.dumps(event)}\n\n"
                 yield "data: [DONE]\n\n"
             except Exception as e:
-                logger.exception("auto-loop Fehler: %s", e)
-                yield f"data: {_json.dumps({'event': 'stop', 'reason': 'error', 'message': str(e)})}\n\n"
+                logger.error("auto-loop Fehler: %s", public_message(e))
+                yield f"data: {_json.dumps({'event': 'stop', 'reason': 'error', 'message': public_message(e)})}\n\n"
                 yield "data: [DONE]\n\n"
 
         return Response(

@@ -134,10 +134,10 @@ class TestMessageFormat:
 class TestComplete:
     """UniversalAdapter.complete() fuer verschiedene Provider."""
 
-    @patch("conclave.infrastructure.universal.adapter.httpx")
+    @patch("conclave.infrastructure.universal.adapter._http_post")
     def test_openai_compatible(self, mock_httpx):
         from conclave.infrastructure.universal.adapter import UniversalAdapter
-        mock_httpx.post.return_value = _mock_response(json_data={
+        mock_httpx.return_value = _mock_response(json_data={
             "choices": [{"message": {"content": "OpenAI sagt Hallo"}}],
             "usage": {"prompt_tokens": 10, "completion_tokens": 5},
         })
@@ -154,10 +154,10 @@ class TestComplete:
         assert result.usage.input_tokens == 10
         assert result.usage.output_tokens == 5
 
-    @patch("conclave.infrastructure.universal.adapter.httpx")
+    @patch("conclave.infrastructure.universal.adapter._http_post")
     def test_gemini_format(self, mock_httpx):
         from conclave.infrastructure.universal.adapter import UniversalAdapter
-        mock_httpx.post.return_value = _mock_response(json_data={
+        mock_httpx.return_value = _mock_response(json_data={
             "candidates": [{"content": {"parts": [{"text": "Gemini sagt Hallo"}]}}],
             "usageMetadata": {"promptTokenCount": 8, "candidatesTokenCount": 4},
         })
@@ -175,10 +175,10 @@ class TestComplete:
         assert result.text == "Gemini sagt Hallo"
         assert result.usage.input_tokens == 8
 
-    @patch("conclave.infrastructure.universal.adapter.httpx")
+    @patch("conclave.infrastructure.universal.adapter._http_post")
     def test_ollama_format(self, mock_httpx):
         from conclave.infrastructure.universal.adapter import UniversalAdapter
-        mock_httpx.post.return_value = _mock_response(json_data={
+        mock_httpx.return_value = _mock_response(json_data={
             "message": {"content": "Llama sagt Hallo"},
             "eval_count": 12, "prompt_eval_count": 6,
         })
@@ -196,10 +196,10 @@ class TestComplete:
         result = adapter.complete(_conversation(), _participant())
         assert result.text == "Llama sagt Hallo"
 
-    @patch("conclave.infrastructure.universal.adapter.httpx")
+    @patch("conclave.infrastructure.universal.adapter._http_post")
     def test_system_prompt_injected(self, mock_httpx):
         from conclave.infrastructure.universal.adapter import UniversalAdapter
-        mock_httpx.post.return_value = _mock_response(json_data={
+        mock_httpx.return_value = _mock_response(json_data={
             "choices": [{"message": {"content": "OK"}}],
         })
         adapter = UniversalAdapter(
@@ -210,16 +210,16 @@ class TestComplete:
             system_prompt="Du bist ein Analyst.",
         )
         adapter.complete(_conversation(), _participant())
-        call_args = mock_httpx.post.call_args
+        call_args = mock_httpx.call_args
         body = call_args.kwargs.get("json") or call_args[1].get("json")
         messages = body.get("messages", [])
         assert messages[0]["role"] == "system"
         assert "Analyst" in messages[0]["content"]
 
-    @patch("conclave.infrastructure.universal.adapter.httpx")
+    @patch("conclave.infrastructure.universal.adapter._http_post")
     def test_chat_rules_injected(self, mock_httpx):
         from conclave.infrastructure.universal.adapter import UniversalAdapter
-        mock_httpx.post.return_value = _mock_response(json_data={
+        mock_httpx.return_value = _mock_response(json_data={
             "choices": [{"message": {"content": "OK"}}],
         })
         adapter = UniversalAdapter(
@@ -231,15 +231,15 @@ class TestComplete:
         conv = _conversation()
         conv.rules = "Antworte knapp."
         adapter.complete(conv, _participant())
-        call_args = mock_httpx.post.call_args
+        call_args = mock_httpx.call_args
         body = call_args.kwargs.get("json") or call_args[1].get("json")
         messages = body.get("messages", [])
         assert any("knapp" in m.get("content", "") for m in messages)
 
-    @patch("conclave.infrastructure.universal.adapter.httpx")
+    @patch("conclave.infrastructure.universal.adapter._http_post")
     def test_api_key_in_header(self, mock_httpx):
         from conclave.infrastructure.universal.adapter import UniversalAdapter
-        mock_httpx.post.return_value = _mock_response(json_data={
+        mock_httpx.return_value = _mock_response(json_data={
             "choices": [{"message": {"content": "OK"}}],
         })
         adapter = UniversalAdapter(
@@ -249,15 +249,15 @@ class TestComplete:
             response_path="choices[0].message.content",
         )
         adapter.complete(_conversation(), _participant())
-        call_args = mock_httpx.post.call_args
+        call_args = mock_httpx.call_args
         headers = call_args.kwargs.get("headers") or call_args[1].get("headers")
         assert "my-secret-key" in str(headers)
 
-    @patch("conclave.infrastructure.universal.adapter.httpx")
+    @patch("conclave.infrastructure.universal.adapter._http_post")
     def test_no_api_key_no_auth_header(self, mock_httpx):
         """Ollama braucht keinen Key — kein Auth-Header."""
         from conclave.infrastructure.universal.adapter import UniversalAdapter
-        mock_httpx.post.return_value = _mock_response(json_data={
+        mock_httpx.return_value = _mock_response(json_data={
             "message": {"content": "OK"},
         })
         adapter = UniversalAdapter(
@@ -268,14 +268,14 @@ class TestComplete:
             provider_name="ollama",
         )
         adapter.complete(_conversation(), _participant())
-        call_args = mock_httpx.post.call_args
+        call_args = mock_httpx.call_args
         headers = call_args.kwargs.get("headers") or call_args[1].get("headers")
         assert "Authorization" not in headers
 
-    @patch("conclave.infrastructure.universal.adapter.httpx")
+    @patch("conclave.infrastructure.universal.adapter._http_post")
     def test_http_error_raises(self, mock_httpx):
         from conclave.infrastructure.universal.adapter import UniversalAdapter
-        mock_httpx.post.return_value = _mock_response(status_code=500)
+        mock_httpx.return_value = _mock_response(status_code=500)
         adapter = UniversalAdapter(
             api_url="https://api.example.com",
             api_key="key",
@@ -285,10 +285,10 @@ class TestComplete:
         with pytest.raises(Exception):
             adapter.complete(_conversation(), _participant())
 
-    @patch("conclave.infrastructure.universal.adapter.httpx")
+    @patch("conclave.infrastructure.universal.adapter._http_post")
     def test_client_error_includes_provider_body(self, mock_httpx):
         from conclave.infrastructure.universal.adapter import UniversalAdapter
-        mock_httpx.post.return_value = _mock_response(
+        mock_httpx.return_value = _mock_response(
             status_code=400,
             json_data={"error": {"message": "Model Not Exist"}},
         )
@@ -302,7 +302,7 @@ class TestComplete:
         with pytest.raises(ValueError, match="Model Not Exist"):
             adapter.complete(_conversation(), _participant())
 
-    @patch("conclave.infrastructure.universal.adapter.httpx")
+    @patch("conclave.infrastructure.universal.adapter._http_post")
     def test_provider_property(self, mock_httpx):
         from conclave.infrastructure.universal.adapter import UniversalAdapter
         adapter = UniversalAdapter(
@@ -314,7 +314,7 @@ class TestComplete:
         )
         assert adapter.provider == "gemini"
 
-    @patch("conclave.infrastructure.universal.adapter.httpx")
+    @patch("conclave.infrastructure.universal.adapter._http_post")
     def test_provider_default_custom(self, mock_httpx):
         from conclave.infrastructure.universal.adapter import UniversalAdapter
         adapter = UniversalAdapter(
@@ -334,10 +334,10 @@ class TestReasoningContent:
     """extracts_reasoning=True liest choices[0].message.reasoning_content
     und prependet es als <think>...</think>-Block vor den content."""
 
-    @patch("conclave.infrastructure.universal.adapter.httpx")
+    @patch("conclave.infrastructure.universal.adapter._http_post")
     def test_reasoning_prepended_when_present(self, mock_httpx):
         from conclave.infrastructure.universal.adapter import UniversalAdapter
-        mock_httpx.post.return_value = _mock_response(json_data={
+        mock_httpx.return_value = _mock_response(json_data={
             "choices": [{"message": {
                 "content": "Die Antwort ist 4.",
                 "reasoning_content": "2 + 2 ergibt 4.",
@@ -353,10 +353,10 @@ class TestReasoningContent:
         result = adapter.complete(_conversation(), _participant())
         assert result.text == "<think>\n2 + 2 ergibt 4.\n</think>\n\nDie Antwort ist 4."
 
-    @patch("conclave.infrastructure.universal.adapter.httpx")
+    @patch("conclave.infrastructure.universal.adapter._http_post")
     def test_reasoning_unchanged_when_field_missing(self, mock_httpx):
         from conclave.infrastructure.universal.adapter import UniversalAdapter
-        mock_httpx.post.return_value = _mock_response(json_data={
+        mock_httpx.return_value = _mock_response(json_data={
             "choices": [{"message": {"content": "Antwort ohne Reasoning."}}],
             "usage": {"prompt_tokens": 10, "completion_tokens": 5},
         })
@@ -370,10 +370,10 @@ class TestReasoningContent:
         assert result.text == "Antwort ohne Reasoning."
         assert "<think>" not in result.text
 
-    @patch("conclave.infrastructure.universal.adapter.httpx")
+    @patch("conclave.infrastructure.universal.adapter._http_post")
     def test_reasoning_unchanged_when_field_empty(self, mock_httpx):
         from conclave.infrastructure.universal.adapter import UniversalAdapter
-        mock_httpx.post.return_value = _mock_response(json_data={
+        mock_httpx.return_value = _mock_response(json_data={
             "choices": [{"message": {
                 "content": "Antwort ohne Reasoning.",
                 "reasoning_content": "",
@@ -390,11 +390,11 @@ class TestReasoningContent:
         assert result.text == "Antwort ohne Reasoning."
         assert "<think>" not in result.text
 
-    @patch("conclave.infrastructure.universal.adapter.httpx")
+    @patch("conclave.infrastructure.universal.adapter._http_post")
     def test_reasoning_ignored_when_flag_false(self, mock_httpx):
         """Auch wenn reasoning_content da ist: ohne Flag wird es ignoriert."""
         from conclave.infrastructure.universal.adapter import UniversalAdapter
-        mock_httpx.post.return_value = _mock_response(json_data={
+        mock_httpx.return_value = _mock_response(json_data={
             "choices": [{"message": {
                 "content": "Antwort.",
                 "reasoning_content": "Reasoning das ignoriert werden soll.",
@@ -412,10 +412,10 @@ class TestReasoningContent:
         assert "<think>" not in result.text
         assert "Reasoning" not in result.text
 
-    @patch("conclave.infrastructure.universal.adapter.httpx")
+    @patch("conclave.infrastructure.universal.adapter._http_post")
     def test_reasoning_strips_whitespace(self, mock_httpx):
         from conclave.infrastructure.universal.adapter import UniversalAdapter
-        mock_httpx.post.return_value = _mock_response(json_data={
+        mock_httpx.return_value = _mock_response(json_data={
             "choices": [{"message": {
                 "content": "X",
                 "reasoning_content": "   reasoning mit leerzeichen   \n",
@@ -458,16 +458,11 @@ class TestUrlValidation:
 
     def test_allows_localhost_when_explicitly_allowed(self):
         from conclave.infrastructure.universal.adapter import _validate_url
-        _validate_url("http://localhost:11434/api/chat", allow_localhost=True)
+        _validate_url("http://localhost:11434/api/chat", local_port=11434)
 
     def test_blocks_private_ip_literal(self):
         from conclave.infrastructure.universal.adapter import _validate_url
         with pytest.raises(ValueError):
-            _validate_url("http://169.254.169.254/latest/meta-data")
+            _validate_url("https://169.254.169.254/latest/meta-data")
 
-    @patch("conclave.infrastructure.universal.adapter.socket.getaddrinfo")
-    def test_blocks_hostname_resolving_to_private_ip(self, getaddrinfo):
-        from conclave.infrastructure.universal.adapter import _validate_url
-        getaddrinfo.return_value = [(None, None, None, "", ("10.0.0.5", 443))]
-        with pytest.raises(ValueError):
-            _validate_url("https://internal.example.test/v1")
+    # Namen prueft der Transport bei jeder Anfrage (tests/infrastructure/universal/test_egress.py)

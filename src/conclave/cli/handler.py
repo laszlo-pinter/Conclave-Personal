@@ -29,6 +29,7 @@ from conclave.domain.errors import (
     EmptyConversation,
     ParticipantAlreadyRegistered,
     ParticipantNotRegistered,
+    public_message,
 )
 from conclave.domain.participant import ParticipantType
 
@@ -246,7 +247,7 @@ class CLIHandler:
                 "provider": agent.provider,
                 "model": agent.model,
                 "latency_ms": latency_ms,
-                "message": str(e)[:200],
+                "message": public_message(e)[:200],
                 "hint": "Provider erreichbar, API-Key und Modellnamen pruefen.",
             }
 
@@ -764,7 +765,7 @@ class CLIHandler:
                         "ok": False,
                         "slot": slot,
                         "participant": participant_id,
-                        "message": str(exc),
+                        "message": public_message(exc),
                         "type": type(exc).__name__,
                         "status": status,
                     }

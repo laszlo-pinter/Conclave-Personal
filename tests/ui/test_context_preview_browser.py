@@ -20,7 +20,7 @@ def _no_provider_calls():
         calls.append(args)
         raise AssertionError("Die Vorschau darf keinen Provider aufrufen")
 
-    return calls, patch("httpx.post", fail), patch("httpx.stream", fail)
+    return calls, patch("conclave.infrastructure.universal.adapter._http_post", fail), patch("conclave.infrastructure.universal.adapter._http_stream", fail)
 
 
 def test_preview_shows_truncation_for_selected_participant(chromium, context_server):

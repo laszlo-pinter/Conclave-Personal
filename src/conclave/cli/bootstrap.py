@@ -234,7 +234,13 @@ def build_registry(
 
         # Eager: vorhandene Agents beim Start laden
         for agent in agent_service.list_agents():
-            adapter = _build_adapter_for_agent(agent, config)
+            try:
+                adapter = _build_adapter_for_agent(agent, config)
+            except ValueError as exc:
+                # Nicht erlaubte URL: Start geht weiter, der Aufruf meldet den Grund
+                from conclave.infrastructure.log import get_logger
+                get_logger("cli.bootstrap").warning("Agent '%s' nicht geladen: %s", agent.id, exc)
+                continue
             if adapter:
                 registry.register(agent.id, adapter)
 

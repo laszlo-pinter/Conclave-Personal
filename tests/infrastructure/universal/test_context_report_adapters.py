@@ -81,7 +81,7 @@ def test_executed_body_is_the_prepared_body():
     conv = _conv([_msg(1, "Frage")])
     prepared = adapter.prepare_request(conv, PART)
     recorder = _Recorder([_ok()])
-    with patch("httpx.post", recorder):
+    with patch("conclave.infrastructure.universal.adapter._http_post", recorder):
         result = adapter.complete(conv, PART)
     assert recorder.bodies == [prepared.body]
     assert isinstance(result, Completion)
@@ -149,7 +149,7 @@ def test_resilient_adapter_builds_request_once_and_counts_attempts(workspace):
 
     recorder = _Recorder([fail_and_change_file, _ok()])
     adapter = ResilientAdapter(UniversalAdapter(api_url=API_URL, api_key="k", model="m"), sleep_fn=lambda s: None)
-    with patch("httpx.post", recorder):
+    with patch("conclave.infrastructure.universal.adapter._http_post", recorder):
         result = adapter.complete(conv, PART)
     assert len(recorder.bodies) == 2
     assert recorder.bodies[0] == recorder.bodies[1]
@@ -160,7 +160,7 @@ def test_resilient_adapter_builds_request_once_and_counts_attempts(workspace):
 def test_resilient_adapter_single_attempt_keeps_report():
     recorder = _Recorder([_ok()])
     adapter = ResilientAdapter(UniversalAdapter(api_url=API_URL, api_key="k", model="m"))
-    with patch("httpx.post", recorder):
+    with patch("conclave.infrastructure.universal.adapter._http_post", recorder):
         result = adapter.complete(_conv([_msg(1)]), PART)
     assert result.report.attempts == 1
 
@@ -180,7 +180,7 @@ def test_concurrent_calls_of_same_adapter_keep_their_own_usage():
     def call(question):
         results[question] = adapter.complete(_conv([_msg(1, question)]), PART)
 
-    with patch("httpx.post", lambda url, json=None, **kw: respond(json)):
+    with patch("conclave.infrastructure.universal.adapter._http_post", lambda url, json=None, **kw: respond(json)):
         threads = [threading.Thread(target=call, args=(q,)) for q in ("kurz", "deutlich laenger")]
         for t in threads:
             t.start()
@@ -217,7 +217,7 @@ def test_parallel_flow_records_each_run_with_its_own_usage(service, db_connectio
             service.async_complete_participant(conv.id, "p1"),
         )
 
-    with patch("httpx.post", respond):
+    with patch("conclave.infrastructure.universal.adapter._http_post", respond):
         texts = asyncio.run(both())
     runs = run_repo.list_by_conversation(conv.id)
     assert sorted(texts) == ["111", "222"]

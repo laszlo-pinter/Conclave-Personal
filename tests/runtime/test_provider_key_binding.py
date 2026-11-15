@@ -38,11 +38,11 @@ def _sent_headers(agent, config):
         return None
     response = MagicMock(status_code=200)
     response.json.return_value = {"choices": [{"message": {"content": "ok"}}], "usage": {}}
-    with patch("conclave.infrastructure.universal.adapter.httpx") as httpx_mock, \
+    with patch("conclave.infrastructure.universal.adapter._http_post") as httpx_mock, \
             patch("conclave.infrastructure.universal.adapter._validate_url"):
-        httpx_mock.post.return_value = response
+        httpx_mock.return_value = response
         adapter.complete(_conversation(), _participant(agent.id))
-        return httpx_mock.post.call_args.kwargs["headers"]
+        return httpx_mock.call_args.kwargs["headers"]
 
 
 @pytest.fixture

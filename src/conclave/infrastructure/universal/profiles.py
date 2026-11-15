@@ -225,17 +225,17 @@ class OpenAIResponsesProfile:
 
 
 class GeminiProfile:
-    """Google Gemini — model in URL, key als Query-Parameter, eigenes Message-Format."""
+    """Google Gemini — model in URL, Key im Header x-goog-api-key, eigenes Message-Format."""
 
     def build_url(self, base_url: str, model: str, api_key: str) -> tuple[str, dict]:
-        url = base_url.replace("{model}", model) if model else base_url
-        params = {}
-        if api_key:
-            params["key"] = api_key
-        return url, params
+        # Der Key gehoert nicht in die URL: die steht in Fehlermeldungen und Logs
+        return (base_url.replace("{model}", model) if model else base_url), {}
 
     def build_headers(self, api_key: str) -> dict:
-        return {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["x-goog-api-key"] = api_key
+        return headers
 
     def build_body(
         self, messages: list[dict], model: str, system: str | None

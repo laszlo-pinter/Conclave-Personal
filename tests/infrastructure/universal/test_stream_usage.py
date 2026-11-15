@@ -101,13 +101,13 @@ def _stream_text(service, conv_id):
 
 def test_stream_after_complete_does_not_reuse_old_usage(conversation_with_agent):
     service, conv, adapter, run_repo = conversation_with_agent
-    with patch("httpx.post", return_value=_completion(usage=(11, 22))):
+    with patch("conclave.infrastructure.universal.adapter._http_post", return_value=_completion(usage=(11, 22))):
         service.invoke_participant(conversation_id=conv.id, participant_id="p1")
     invoke_run = next(r for r in run_repo.list_by_conversation(conv.id) if r.kind == "invoke")
     assert invoke_run.usage.input_tokens == 11
 
     service.add_user_message(conv.id, "Noch eine Frage")
-    with patch("httpx.stream", _StreamRecorder(_sse([_delta("Hal"), _delta("lo")]))):
+    with patch("conclave.infrastructure.universal.adapter._http_stream", _StreamRecorder(_sse([_delta("Hal"), _delta("lo")]))):
         assert _stream_text(service, conv.id) == "Hallo"
 
     assert not hasattr(adapter, "last_usage")
@@ -119,7 +119,7 @@ def test_stream_after_complete_does_not_reuse_old_usage(conversation_with_agent)
 def test_stream_with_usage_in_last_chunk_stores_real_tokens(conversation_with_agent):
     service, conv, adapter, run_repo = conversation_with_agent
     final = {"choices": [], "usage": {"prompt_tokens": 120, "completion_tokens": 7}}
-    with patch("httpx.stream", _StreamRecorder(_sse([_delta("Ja"), final]))):
+    with patch("conclave.infrastructure.universal.adapter._http_stream", _StreamRecorder(_sse([_delta("Ja"), final]))):
         assert _stream_text(service, conv.id) == "Ja"
 
     stream_run = next(r for r in run_repo.list_by_conversation(conv.id) if r.kind == "stream")
@@ -135,9 +135,9 @@ def test_stream_options_only_for_providers_that_support_them(conversation_with_a
     part = Participant(id="p1", conversation_id="c", participant_type=ParticipantType.MODEL, name="GPT")
 
     with_usage, without_usage = _StreamRecorder(_sse([_delta("x")])), _StreamRecorder(_sse([_delta("x")]))
-    with patch("httpx.stream", with_usage):
+    with patch("conclave.infrastructure.universal.adapter._http_stream", with_usage):
         list(_adapter(stream_usage=True).stream(conv, part))
-    with patch("httpx.stream", without_usage):
+    with patch("conclave.infrastructure.universal.adapter._http_stream", without_usage):
         list(_adapter(stream_usage=False).stream(conv, part))
 
     assert with_usage.bodies[0]["stream_options"] == {"include_usage": True}
@@ -177,7 +177,7 @@ def _run_stream(adapter, lines):
     conv = Conversation(id="c", topic="t")
     part = Participant(id="a", conversation_id="c", participant_type=ParticipantType.MODEL, name="A")
     recorder = _StreamRecorder(lines)
-    with patch("httpx.stream", recorder):
+    with patch("conclave.infrastructure.universal.adapter._http_stream", recorder):
         chunks = list(adapter.stream(conv, part))
     final = chunks[-1]
     assert isinstance(final, Completion) and final.text == ""
@@ -277,7 +277,7 @@ def test_claude_preset_stream_persists_answer_end_to_end(service, db_connection)
         + _ev("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Antwort"}})
         + _ev("message_delta", {"type": "message_delta", "usage": {"output_tokens": 6}})
     )
-    with patch("httpx.stream", _StreamRecorder(lines)):
+    with patch("conclave.infrastructure.universal.adapter._http_stream", _StreamRecorder(lines)):
         streamed = "".join(service.stream_participant(conv.id, "claude"))
     assert streamed == "Antwort"
     saved = service.load_conversation(conv.id).messages[-1]
