@@ -230,3 +230,11 @@ def test_json_log_masks_keys_in_messages():
     record = logging.LogRecord("t", logging.ERROR, __file__, 1, "Anfrage mit Bearer %s", ("sk-geheim123456",), None)
     line = JsonFormatter().format(record)
     assert "sk-geheim123456" not in line and "Bearer ***" in line
+
+
+def test_update_agent_hides_unexpected_errors(client, handler):
+    """R12-Review V1: auch ausserhalb der Provider-Pfade kein str(exc) an Clients."""
+    handler.get_agent.side_effect = RuntimeError("geheim C:/Users/x/AppData/secret.key")
+    res = client.put("/agents/a1", json={"name": "A", "model": "m"})
+    assert res.status_code == 400
+    assert "geheim" not in res.get_data(as_text=True) and "secret.key" not in res.get_data(as_text=True)

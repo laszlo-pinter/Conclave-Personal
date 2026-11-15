@@ -634,8 +634,8 @@ def create_app(handler: CLIHandler, auth_service=None,
                 max_messages=max_messages,
                 created_at=created_at,
             )
-        except (ValueError, Exception) as e:
-            return jsonify({"error": str(e)}), 400
+        except Exception as e:
+            return jsonify({"error": public_message(e)}), 400
         # Ohne neuen api_key bleibt der gespeicherte Key erhalten; entfernen nur ausdruecklich
         result = handler.update_agent(agent, clear_api_key=body.get("clear_api_key") is True)
         if not result.success:

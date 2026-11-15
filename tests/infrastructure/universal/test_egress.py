@@ -193,3 +193,14 @@ def test_server_starts_with_an_agent_whose_url_is_no_longer_allowed(tmp_path):
     assert "neu" in registry._adapters and "alt" not in registry._adapters
     with pytest.raises(ValueError, match="https"):
         registry.get_for("alt")
+
+
+def test_connects_to_a_checked_ipv6_address():
+    """R12-Review V2: Pinning mit IPv6 (Klammern in der URL, Host und SNI bleiben)."""
+    recorder = Recorder()
+    with _client(Resolver(["2606:4700::1"]), recorder) as c:
+        assert c.post("https://api.example.com/v1/chat", json={}).status_code == 200
+    [request] = recorder.requests
+    assert request.url.host == "2606:4700::1" and "[2606:4700::1]" in str(request.url)
+    assert request.headers["host"] == "api.example.com"
+    assert request.extensions["sni_hostname"] == "api.example.com"
