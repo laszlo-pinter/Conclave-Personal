@@ -218,3 +218,45 @@ def test_migration_018_adds_the_lease_to_existing_consultations(tmp_path):
     repo = SQLiteConsultationRepository(conn, autocommit=True)
     assert repo.get(old.id).lease_until is None
     assert [c.id for c in repo.list_expired_running(datetime.now(UTC))] == [old.id]   # alte Laeufe gelten als ohne Lease
+
+
+# ── Nacharbeit aus dem Review (V1, V2) ──────────────────────────────────────
+
+def test_retry_that_fails_again_updates_the_error(env):
+    """V1: Eine wiederholte Zustellung, die erneut scheitert, schreibt den neuen Fehler."""
+    from conclave.domain.consultation import PENDING
+
+    class Down:
+        def __init__(self, message):
+            self.message = message
+
+        def add_comment(self, *a, **k):
+            raise ConnectionError(self.message)
+
+    sink = env.svc._sink
+    env.svc._sink = Down("erster Ausfall")
+    c = env.new(reviewers=("gpt",))
+    env.svc.run(c)
+    assert env.repo.get(c.id).status == FAILED and "erster Ausfall" in env.repo.get(c.id).error
+    [d] = env.repo.list_deliveries(c.id)
+    d.status = PENDING                                              # wie der Retry ueber die API
+    env.repo.save_delivery(d)
+    env.svc._sink = Down("zweiter Ausfall")
+    env.svc.deliver_pending(env.repo.get(c.id))
+    again = env.repo.get(c.id)
+    assert again.status == FAILED and "zweiter Ausfall" in again.error
+    env.svc._sink = sink
+    [d] = env.repo.list_deliveries(c.id)
+    d.status = PENDING
+    env.repo.save_delivery(d)
+    env.svc.deliver_pending(env.repo.get(c.id))
+    assert env.repo.get(c.id).status == DONE                        # FAILED -> DONE nach erfolgreichem Retry
+
+
+def test_list_finds_consultations_by_an_unnormalized_reference(repo):
+    """V2: Gespeichert wird api#12; auch api#012 findet sie."""
+    requests = ConsultationRequests(repo, _Worker(), _Source(), allowed_reviewers=["gpt"], max_per_hour=5,
+                                    source="board")
+    requests.create({"task": "api#012", "question": "?"}, AGENT_PRINCIPAL)
+    for ref in ("api#12", "api#012", "api#0012"):
+        assert len(requests.list_for(ref)["consultations"]) == 1, ref

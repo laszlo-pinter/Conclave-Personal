@@ -11,6 +11,12 @@ from dataclasses import dataclass, field
 TASK_REF = re.compile(r"^[a-z0-9][a-z0-9_-]*#\d+\Z")
 
 
+def normalize_ref(ref: str) -> str:
+    """``api#012`` -> ``api#12``: so zaehlen und finden Consultations dieselbe Referenz (R10)."""
+    project, number = ref.split("#", 1)
+    return f"{project}#{int(number)}"
+
+
 @dataclass(frozen=True)
 class TicketComment:
     author: str

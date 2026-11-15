@@ -81,7 +81,8 @@ class ConsultationService:
     def run(self, c: Consultation) -> None:
         ticket = self._source.get_task(c.source_ref)
         if ticket.human and c.channel != HUMAN:            # nur der Mensch-Zugang darf (Z3)
-            self._finish(c, FAILED, "Ticket ist nur fuer Menschen (human) - Anfragen von Agenten werden abgelehnt.")
+            self._finish(c, FAILED, "Ticket ist nur fuer Menschen (human) - Anfragen von Agenten werden abgelehnt.",
+                         expected=RUNNING)
             return
 
         conversation = self._flow.create_conversation(topic=f"{c.source}:{c.source_ref} · {c.id}")
@@ -95,10 +96,11 @@ class ConsultationService:
         self._flow.add_user_message(conversation.id, build_prompt(c, ticket), record_expansions=False)
 
         errors = self._ask_reviewers(c, conversation.id)
-        self._deliver_all(c, errors)
+        self._deliver_all(c, errors, expected=RUNNING)
 
     def deliver_pending(self, c: Consultation) -> None:
-        self._deliver_all(c, [], only_pending=True)
+        # Retry: Ausgangspunkt ist der gelesene Stand (z. B. failed oder interrupted)
+        self._deliver_all(c, [], only_pending=True, expected=c.status)
 
     # ── Reviewer ─────────────────────────────────────────────────────────
 
@@ -130,14 +132,16 @@ class ConsultationService:
 
     # ── Zustellung ───────────────────────────────────────────────────────
 
-    def _deliver_all(self, c: Consultation, errors: list[str], *, only_pending: bool = False) -> None:
+    def _deliver_all(self, c: Consultation, errors: list[str], *, only_pending: bool = False,
+                     expected: str = RUNNING) -> None:
         # Erneut pruefen (R10): Inzwischen "nur fuer Menschen" -> kein Kommentar, Abbruch
         if c.channel != HUMAN and self._source.get_task(c.source_ref).human:
             for d in self._repo.list_deliveries(c.id):
                 if d.status != DELIVERED:
                     d.status, d.error = FAILED, "Ticket inzwischen nur fuer Menschen"
                     self._repo.save_delivery(d)
-            self._finish(c, FAILED, "Ticket ist inzwischen nur fuer Menschen (human) - keine Kommentare.")
+            self._finish(c, FAILED, "Ticket ist inzwischen nur fuer Menschen (human) - keine Kommentare.",
+                         expected=expected)
             return
         deliveries = self._repo.list_deliveries(c.id)
         messages = {}
@@ -160,9 +164,9 @@ class ConsultationService:
         failed = [d for d in deliveries if d.status != DELIVERED]
         problems = errors + [f"{d.participant_id}: {d.error}" for d in failed if d.error]
         if delivered and not failed:
-            self._finish(c, DONE, "; ".join(errors) or None)
+            self._finish(c, DONE, "; ".join(errors) or None, expected=expected)
         else:
-            self._finish(c, FAILED, "; ".join(problems) or "Keine Reviewer-Antwort.")
+            self._finish(c, FAILED, "; ".join(problems) or "Keine Reviewer-Antwort.", expected=expected)
 
     def _deliver(self, c: Consultation, d: ConsultationDelivery, answer: str) -> None:
         d.attempts += 1
@@ -198,10 +202,10 @@ class ConsultationService:
         model = getattr(adapter, "_model", "") or getattr(getattr(adapter, "_adapter", None), "_model", "")
         return f"{provider}, {model}" if model else provider
 
-    def _finish(self, c: Consultation, status: str, error: str | None) -> None:
-        """Statuswechsel nur aus dem Stand, mit dem der Lauf begonnen hat; wurde die Consultation
-        inzwischen anders gesetzt (z. B. unterbrochen), bleibt das stehen (R10)."""
-        expected = c.status if c.status != status else RUNNING
+    def _finish(self, c: Consultation, status: str, error: str | None, *, expected: str) -> None:
+        """Statuswechsel nur aus ``expected``, dem Stand, mit dem Lauf bzw. Retry begonnen hat; wurde
+        die Consultation inzwischen anders gesetzt (z. B. unterbrochen), bleibt das stehen (R10).
+        Gleicher Status ist erlaubt, dann wird nur der Fehlertext erneuert (Retry, der wieder scheitert)."""
         if not self._repo.transition(c, expected, status, error=error or None):
             logger.warning("Consultation %s: Status nicht gesetzt (%s -> %s), inzwischen geaendert",
                            c.id, expected, status)

@@ -30,7 +30,7 @@ from conclave.domain.consultation import (
 )
 from conclave.domain.errors import ConclaveError
 from conclave.domain.principal import HUMAN, Principal
-from conclave.domain.ticket import TASK_REF
+from conclave.domain.ticket import TASK_REF, normalize_ref
 
 MAX_QUESTION = 4000
 MAX_CONTEXT = 8000
@@ -122,8 +122,11 @@ class ConsultationRequests:
         if not isinstance(source_ref, str) or not TASK_REF.match(source_ref):
             raise ConsultationRequestError("source_ref muss eine Ticket-Referenz wie 'api#12' sein.",
                                            400, "ValidationError")
-        return {"consultations": [self._to_dict(c) for c in self._repo.list_by_source_ref(self._source_name,
-                                                                                          source_ref)]}
+        # Gespeichert ist die normalisierte Referenz; api#012 findet so auch api#12
+        refs = dict.fromkeys((normalize_ref(source_ref), source_ref))
+        found = {c.id: c for ref in refs for c in self._repo.list_by_source_ref(self._source_name, ref)}
+        ordered = sorted(found.values(), key=lambda c: (c.created_at, c.id), reverse=True)
+        return {"consultations": [self._to_dict(c) for c in ordered]}
 
     # ── Wiederholen ──────────────────────────────────────────────────────
 
