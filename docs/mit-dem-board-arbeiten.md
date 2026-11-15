@@ -156,6 +156,20 @@ Den Review-Status setzt nur der Reviewer-Zugang. Ein Agent, der Code schreibt,
 kann sich also nicht selbst grün geben, solange er das Reviewer-Token nicht
 lesen kann.
 
+**Arbeitsweise des umsetzenden Agenten**, die sich mit dem Review bewährt hat:
+
+1. Tickets nur über `conclave_board_next` holen; nach `review` schiebt er
+   selbst, mit Branch, Commits und Testergebnis als Kommentar. Der Reviewer
+   prüft genau die genannten Commits.
+2. Nicht auf den Menschen warten: grün ist keine Freigabe.
+3. Höchstens ein offenes Review: Steht ein eigenes Ticket noch ohne Ergebnis in
+   `review`, wartet der Agent mit dem nächsten (er arbeitet aber weiter).
+4. Gelb unterbricht nicht: erst das aktuelle Ticket fertig, dann das gelbe.
+5. Rot stoppt: am nächsten sauberen Punkt (Commit) anhalten, das am aktuellen
+   Ticket vermerken und das rote Ticket nehmen.
+6. Punkt für Punkt antworten: „B1 behoben (`abc1234`), V1 umgesetzt,
+   V2 abgelehnt: …“.
+
 ## Import aus Kanzo
 
 Ein Kanzo-Board lässt sich übernehmen. Kanzo exportiert, Conclave importiert
