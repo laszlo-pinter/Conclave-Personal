@@ -293,7 +293,11 @@ werden alle abgelösten Schlüssel gelöscht, und ältere Backups gelten als fre
 - Bricht ein Restore ab (Absturz, beendeter Prozess), rollt der nächste Start
   von Server oder Restore ihn zurück: Der alte Workspace kommt wieder an seinen
   Platz, passend zur alten Datenbank. Das automatische Backup
-  `conclave-pre-restore-*` bleibt erhalten.
+  `conclave-pre-restore-*` bleibt erhalten. Bricht er erst beim Einspielen der
+  Datenbank ab, ist der Stand unklar: Dann rollt Conclave nichts zurück, sondern
+  meldet im Log, dass das Sicherheits-Backup einzuspielen ist. Lässt sich ein
+  Rest nicht zurückrollen (z. B. eine geöffnete Datei), steht das im Log, und
+  der Start geht weiter.
 - Backups tragen eine Signatur, abgeleitet aus `secret.key`. Ein Backup ohne
   belegte eigene Herkunft wird erst nach Bestätigung eingespielt; vorher zeigt
   Conclave die Agents und Ziel-URLs aus dem Backup. Trigger und Views aus

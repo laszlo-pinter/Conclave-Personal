@@ -311,6 +311,8 @@ def restore_backup_archive(
         db_restored = False
         try:
             if staged_db is not None and db_path is not None:
+                # Ab hier ist der Stand nach einem Absturz unklar: nicht automatisch zurueckrollen
+                (staging / _DB_STARTED).write_text("", encoding="utf-8")
                 _restore_db(staged_db, db_path)
                 db_restored = True
         except BaseException:
@@ -332,11 +334,17 @@ def restore_backup_archive(
 
 # ── Abgebrochener Restore (R15) ─────────────────────────────────────────────
 
-_OWNER, _JOURNAL, _DONE = "owner", "journal.json", "done"
+_OWNER, _JOURNAL, _DB_STARTED, _DONE = "owner", "journal.json", "db_started", "done"
 
 
 def _write_json(path: Path, data: dict) -> None:
-    path.write_text(json.dumps(data), encoding="utf-8")
+    """Atomar: Temp-Datei, dann rename (das Ziel gibt es noch nicht). Nie ein halbes Journal."""
+    tmp = path.with_name(path.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as handle:
+        handle.write(json.dumps(data))
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.rename(tmp, path)
 
 
 def recover_interrupted_restores(workspace_root: Path) -> int:
@@ -344,8 +352,10 @@ def recover_interrupted_restores(workspace_root: Path) -> int:
 
     Ein Staging-Ordner gehoert einem laufenden Restore, solange dessen Prozess lebt; den
     laesst die Pruefung in Ruhe. Ohne Journal wurde nichts getauscht, mit ``done`` ist der
-    Restore fertig: dann wird nur aufgeraeumt. Sonst wird der alte Workspace wiederhergestellt;
-    die DB ist dann noch die alte (sie wird zuletzt und in einer Transaktion eingespielt).
+    Restore fertig: dann wird nur aufgeraeumt. Lief schon das Einspielen der DB
+    (``db_started``), ist der Stand unklar: dann wird nichts zurueckgerollt, sondern auf das
+    Sicherheits-Backup verwiesen. Sonst kommt der alte Workspace zurueck; die DB ist in diesem
+    Fall noch die alte. Fehler beim Zurueckrollen werden gemeldet und halten den Start nicht auf.
     """
     workspace_root = workspace_root.expanduser().resolve()
     parent = workspace_root.parent
@@ -362,14 +372,65 @@ def recover_interrupted_restores(workspace_root: Path) -> int:
             continue
         if _process_alive(pid):
             continue
-        journal = staging / _JOURNAL
-        if journal.is_file() and not (staging / _DONE).exists():
-            _roll_back(staging, workspace_root, json.loads(journal.read_text(encoding="utf-8")))
-            recovered += 1
-            logger.warning("Abgebrochener Restore zurueckgerollt: alter Workspace wiederhergestellt; "
-                           "das Sicherheits-Backup conclave-pre-restore-* bleibt erhalten")
-        shutil.rmtree(staging, ignore_errors=True)
+        try:
+            if _recover_one(staging, workspace_root):
+                recovered += 1
+        except OSError as exc:
+            logger.error("Abgebrochener Restore in %s nicht zurueckgerollt (%s). Programme schliessen, die "
+                         "Dateien im Workspace geoeffnet haben, und neu starten; das Sicherheits-Backup "
+                         "conclave-pre-restore-* bleibt erhalten", staging, type(exc).__name__)
     return recovered
+
+
+def _recover_one(staging: Path, workspace_root: Path) -> bool:
+    """True, wenn zurueckgerollt wurde. Raeumt nur auf, was sicher nicht mehr gebraucht wird."""
+    journal_path = staging / _JOURNAL
+    moved = (staging / "previous").exists()
+    if (staging / _DONE).exists() or not journal_path.exists():
+        if not journal_path.exists() and moved:
+            logger.warning("Reste eines Restores ohne Journal in %s bleiben liegen", staging)
+            return False
+        shutil.rmtree(staging, ignore_errors=True)     # fertig oder vor dem Tausch abgebrochen
+        return False
+    journal = _read_journal(journal_path)
+    if journal is None:
+        if moved:
+            logger.warning("Journal in %s unlesbar; verschobene Dateien bleiben dort liegen", staging)
+            return False
+        logger.warning("Journal in %s unlesbar; es wurde nichts getauscht, Reste entfernt", staging)
+        shutil.rmtree(staging, ignore_errors=True)
+        return False
+    if (staging / _DB_STARTED).exists():
+        logger.warning("Restore ist beim Einspielen der Datenbank abgebrochen; Stand unklar, nichts "
+                       "zurueckgerollt. Das Sicherheits-Backup conclave-pre-restore-* einspielen; die Reste "
+                       "liegen in %s", staging)
+        return False
+    _roll_back(staging, workspace_root, journal)
+    logger.warning("Abgebrochener Restore zurueckgerollt: alter Workspace wiederhergestellt; "
+                   "das Sicherheits-Backup conclave-pre-restore-* bleibt erhalten")
+    shutil.rmtree(staging, ignore_errors=True)
+    return True
+
+
+def _read_journal(path: Path) -> dict | None:
+    """Journal lesen und pruefen; None, wenn es unlesbar ist oder unsichere Pfade enthaelt."""
+    try:
+        journal = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(journal, dict) or journal.get("mode") not in ("replace", "merge"):
+        return None
+    files = journal.get("files")
+    if not isinstance(files, list) or not all(isinstance(f, str) and _safe_relative(f) for f in files):
+        return None
+    return journal
+
+
+def _safe_relative(rel: str) -> bool:
+    """Wie bei Archiv-Eintraegen: relativ, ohne Laufwerk, ohne "." und ".." (Defense in Depth)."""
+    if not rel or "\\" in rel or ":" in rel or rel.startswith("/"):
+        return False
+    return all(part not in ("", ".", "..") for part in rel.split("/"))
 
 
 def _roll_back(staging: Path, workspace_root: Path, journal: dict) -> None:

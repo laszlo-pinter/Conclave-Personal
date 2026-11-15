@@ -170,10 +170,8 @@ RESTORE_CRASH = """
 @pytest.mark.parametrize("replace, crash_at, before, crash_in_db", [
     (True, 1, False, False),    # alter Workspace weggeschoben, neuer noch nicht da: Ordner fehlt
     (True, 2, False, False),    # neuer Workspace liegt schon da, DB noch alt
-    (True, 99, False, True),    # Absturz beim Einspielen der DB
     (False, 1, False, False),   # Zusammenfuehren: ueberschriebene Datei weggeschoben
     (False, 2, False, False),   # Zusammenfuehren: erste neue Datei eingespielt
-    (False, 99, False, True),   # Zusammenfuehren fertig, Absturz bei der DB
 ])
 def test_crash_during_restore_is_rolled_back_on_next_start(restore_env, replace, crash_at, before, crash_in_db):
     tmp_path, workspace, db, archive = restore_env
@@ -235,3 +233,105 @@ def test_server_start_rolls_back_a_crashed_restore(restore_env, monkeypatch):
     monkeypatch.setenv("CONCLAVE_WORKSPACE", str(workspace))
     _build_app(ConclaveConfig(db_path=tmp_path / "server.db", api_key="cvh_x", agent_api_key="cva_y"))
     assert _state(workspace) == old
+
+
+# ── Nacharbeit aus dem Review (B1, V1, V2) ──────────────────────────────────
+
+def _dead_staging(tmp_path, journal_text, previous=False):
+    staging = tmp_path / ".workspace-restore-tot"
+    staging.mkdir()
+    (staging / "owner").write_text("999999999", encoding="utf-8")       # Prozess gibt es nicht
+    (staging / "journal.json").write_text(journal_text, encoding="utf-8")
+    if previous:
+        (staging / "previous" / "notes").mkdir(parents=True)
+        (staging / "previous" / "notes" / "rest.md").write_text("rest", encoding="utf-8")
+    return staging
+
+
+@pytest.mark.parametrize("replace", [True, False])
+def test_crash_during_the_db_restore_is_reported_not_rolled_back(restore_env, caplog, replace):
+    """V1: Ab dem Start der DB ist der Stand unklar; nichts automatisch zurueckrollen, warnen."""
+    import logging
+    tmp_path, workspace, db, archive = restore_env
+    _run_crashing(RESTORE_CRASH, archive=str(archive), db=str(db), workspace=str(workspace),
+                  backups=str(tmp_path / "backups"), replace=replace, crash_at=99, before=False, crash_in_db=True)
+    after_crash = _state(workspace)
+    caplog.set_level(logging.WARNING)
+    assert recover_interrupted_restores(workspace) == 0
+    assert _state(workspace) == after_crash                              # unveraendert
+    assert list(tmp_path.glob(".workspace-restore-*"))                   # Reste bleiben fuer den Menschen
+    assert any("conclave-pre-restore" in r.getMessage() for r in caplog.records)
+
+
+def test_truncated_journal_does_not_block_the_start(restore_env, caplog):
+    """B1: Ein abgeschnittenes Journal (Absturz beim Schreiben): nichts getauscht, aufraeumen, warnen."""
+    import logging
+    from conclave.api.server import _build_app
+    from conclave.cli.config import ConclaveConfig
+    tmp_path, workspace, _, _ = restore_env
+    old = _state(workspace)
+    staging = _dead_staging(tmp_path, '{"mode": "repl')
+    caplog.set_level(logging.WARNING)
+    assert recover_interrupted_restores(workspace) == 0
+    assert not staging.exists() and _state(workspace) == old
+    _dead_staging(tmp_path, '{"mode": "repl')
+    _build_app(ConclaveConfig(db_path=tmp_path / "server.db", api_key="cvh_x", agent_api_key="cva_y"))
+    assert any("Journal" in r.getMessage() for r in caplog.records)
+
+
+def test_unreadable_journal_next_to_moved_files_keeps_them(restore_env):
+    """B1: Liegen schon verschobene Dateien im Staging, wird nichts geloescht."""
+    tmp_path, workspace, _, _ = restore_env
+    staging = _dead_staging(tmp_path, "kaputt", previous=True)
+    assert recover_interrupted_restores(workspace) == 0
+    assert (staging / "previous" / "notes" / "rest.md").read_text(encoding="utf-8") == "rest"
+
+
+def test_failing_roll_back_is_reported_and_the_start_goes_on(restore_env, monkeypatch, caplog):
+    """B1: Eine offene Datei (PermissionError) verhindert den Start nicht stumm."""
+    import logging
+    from conclave.runtime import backup
+    tmp_path, workspace, _, _ = restore_env
+    staging = _dead_staging(tmp_path, json.dumps({"mode": "replace", "files": ["notes/neu.md"]}), previous=True)
+
+    def busy(*args, **kwargs):
+        raise PermissionError("Datei ist geoeffnet")
+
+    monkeypatch.setattr(backup, "_roll_back", busy)
+    caplog.set_level(logging.ERROR)
+    assert recover_interrupted_restores(workspace) == 0
+    assert staging.is_dir()                                              # nichts verloren
+    assert any(str(staging.name) in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize("bad", ["../aussen.md", "/abs/datei.md", "C:/x.md", "notes/../../x.md", "./x.md"])
+def test_journal_paths_outside_the_workspace_are_not_applied(restore_env, bad):
+    """V2: Pfade im Journal werden wie Archiv-Eintraege geprueft."""
+    tmp_path, workspace, _, _ = restore_env
+    outside = tmp_path / "aussen.md"
+    outside.write_text("bleibt", encoding="utf-8")
+    staging = _dead_staging(tmp_path, json.dumps({"mode": "merge", "files": [bad]}), previous=True)
+    assert recover_interrupted_restores(workspace) == 0
+    assert outside.read_text(encoding="utf-8") == "bleibt"
+    assert staging.is_dir()                                              # nicht angewendet, nicht geloescht
+
+
+def test_crash_while_writing_the_journal_changes_nothing(restore_env):
+    """B1: Das Journal entsteht atomar; ein Absturz dabei hinterlaesst kein halbes Journal."""
+    tmp_path, workspace, db, archive = restore_env
+    old = _state(workspace)
+    _run_crashing("""
+        from pathlib import Path
+        from conclave.runtime import backup
+        def crash(*args, **kwargs):
+            os._exit(3)                       # Temp-Datei geschrieben, noch nicht umbenannt
+        backup.os.rename = crash
+        backup.restore_backup_archive(backup_path=Path(P["archive"]), db_path=Path(P["db"]),
+                                      workspace_root=Path(P["workspace"]), backup_dir=Path(P["backups"]),
+                                      secret=b"geheim")
+    """, archive=str(archive), db=str(db), workspace=str(workspace), backups=str(tmp_path / "backups"))
+    [staging] = tmp_path.glob(".workspace-restore-*")
+    assert not (staging / "journal.json").exists()
+    assert recover_interrupted_restores(workspace) == 0
+    assert _state(workspace) == old and _marker(db) == "alte db"
+    assert not list(tmp_path.glob(".workspace-restore-*"))
