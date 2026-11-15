@@ -532,7 +532,8 @@ class BoardService:
             raise _invalid(str(e)) from None
         name = str(author_name or "")[:100]
         comment = TaskComment.create(task.id, body, origin, actor_id=actor_id, author_name=name)
-        by = name or actor_id
+        # Anzeigename ist frei waehlbar; die Rolle aus dem Token steht immer dabei
+        by = f"{name} ({origin})" if name else origin
         task.control_ack_by, task.control_ack_at, task.updated_at = by, self._now(), self._now()
         event = TaskEvent.create(task.id, "control_ack", None, by, origin, actor_id=actor_id)
         if not self._repo.update_task(task, [event], comment):
@@ -546,7 +547,7 @@ class BoardService:
         """Offene Steuertickets mit Herkunft Mensch, die fuer ``slug`` gelten (ohne slug: alle)."""
         open_statuses = [s for s in self.flow.statuses if s != self.flow.last]
         found = []
-        for task in self._repo.list_tasks(None, open_statuses):
+        for task in self._repo.list_tasks(None, open_statuses, kind="control"):
             if task.kind != "control" or task.origin != "human":
                 continue
             if slug is None or task.control_scope == "all" or task.project_slug == slug:

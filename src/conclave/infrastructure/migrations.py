@@ -165,10 +165,11 @@ def _add_board_control(connection, is_postgres: bool) -> None:
     columns = (("kind", "TEXT NOT NULL DEFAULT 'task'"), ("control", "TEXT"),
                ("control_scope", "TEXT NOT NULL DEFAULT ''"), ("control_ack_by", "TEXT NOT NULL DEFAULT ''"),
                ("control_ack_at", ts))
-    for column, ddl in columns:
-        if _has_column(connection, is_postgres, "board_tasks", column):
-            continue
-        statement = f"ALTER TABLE board_tasks ADD COLUMN {column} {ddl}"
+    statements = [f"ALTER TABLE board_tasks ADD COLUMN {column} {ddl}" for column, ddl in columns
+                  if not _has_column(connection, is_postgres, "board_tasks", column)]
+    # Steuertickets werden bei jeder Board-Antwort gelesen (Feld control)
+    statements.append("CREATE INDEX IF NOT EXISTS idx_board_tasks_kind ON board_tasks(kind, status)")
+    for statement in statements:
         if is_postgres:
             with connection.cursor() as cur:
                 cur.execute(statement)

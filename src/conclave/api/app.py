@@ -1010,8 +1010,9 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     @app.post("/board/tasks")
     def board_create_task():
-        """Ticket anlegen; neue Tickets landen in der ersten Spalte. Steuertickets (nur Mensch):
-        kind=control, control=pause|hint, scope=project|all."""
+        """Ticket anlegen; neue Tickets landen in der ersten Spalte.
+
+        Steuertickets (nur Mensch): kind=control, control=pause|hint, scope=project|all (P6)."""
         body = _json_object()
         _check_task_fields(body, {"project", "title", "description", "tags", "status", "human", "kind", "control",
                                   "scope"})

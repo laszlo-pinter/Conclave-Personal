@@ -79,7 +79,7 @@ def test_hint_acknowledged_shows_on_the_card_and_leaves_control(client):
     resp = client.post(f"{URL}/2/comments", json={"body": "Verstanden", "author_name": "cc"}, headers=_bearer(AGENT))
     assert resp.status_code == 201 and resp.get_json()["control"]["hints"] == []
     card = client.get(f"{URL}/2", headers=_bearer(HUMAN)).get_json()
-    assert card["kind"] == "control" and card["directive"]["ack_by"] == "cc" and card["status"] == "todo"
+    assert card["kind"] == "control" and card["directive"]["ack_by"] == "cc (agent)" and card["status"] == "todo"
 
 
 def test_ordinary_ticket_with_pause_text_triggers_nothing(client):

@@ -120,9 +120,9 @@ def test_hint_stays_until_an_agent_acknowledges_it(board):
     board.add_comment(AGENT, hint.ref, "Verstanden, mache ich", author_name="cc")
     assert board.control_state()["hints"] == []
     task = board.get_task(hint.ref)
-    assert (task.control_ack_by, task.status) == ("cc", "todo")       # schliesst weiter der Mensch
-    assert task_to_dict(task)["directive"]["ack_by"] == "cc"
-    assert ("control_ack", "cc", "agent") in [(e.field_name, e.new_value, e.origin) for e in board.history(hint.ref)]
+    assert (task.control_ack_by, task.status) == ("cc (agent)", "todo")   # schliesst weiter der Mensch
+    assert task_to_dict(task)["directive"]["ack_by"] == "cc (agent)"
+    assert ("control_ack", "cc (agent)", "agent") in [(e.field_name, e.new_value, e.origin) for e in board.history(hint.ref)]
 
 
 def test_hint_does_not_stop_next(board):
@@ -136,3 +136,33 @@ def test_control_state_lists_open_pauses_with_scope(board):
     state = board.control_state()
     assert [(p["task"], p["scope"]) for p in state["pauses"]] == [(p1.ref, "api"), (p2.ref, "all")]
     assert [p["task"] for p in board.control_state(slug="web")["pauses"]] == [p2.ref]
+
+
+# ── Nacharbeit aus dem Review (V1, V2) ──────────────────────────────────────
+
+def test_acknowledgement_names_the_role_not_only_a_claimed_name(board):
+    hint = board.create_task(HUMAN, "api", "Hinweis", kind="control", control="hint")
+    board.add_comment(AGENT, hint.ref, "ok", author_name="Laszlo")
+    assert board.get_task(hint.ref).control_ack_by == "Laszlo (agent)"
+
+
+def test_acknowledgement_without_a_name_uses_the_role(board):
+    hint = board.create_task(HUMAN, "api", "Hinweis", kind="control", control="hint")
+    board.add_comment(AGENT, hint.ref, "ok")
+    assert board.get_task(hint.ref).control_ack_by == "agent"
+
+
+def test_control_state_reads_only_control_tickets(board, monkeypatch):
+    seen = []
+    real = board._repo.list_tasks
+
+    def spy(slug=None, statuses=None, kind=None):
+        seen.append(kind)
+        return real(slug, statuses, kind=kind)
+
+    monkeypatch.setattr(board._repo, "list_tasks", spy)
+    _pause(board)
+    seen.clear()
+    board.control_state()
+    assert seen == ["control"]
+    assert {t.kind for t in real(None, None, kind="control")} == {"control"}

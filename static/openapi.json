@@ -2021,7 +2021,7 @@
         }
       },
       "post": {
-        "summary": "Ticket anlegen; neue Tickets landen in der ersten Spalte. Steuertickets (nur Mensch):",
+        "summary": "Ticket anlegen; neue Tickets landen in der ersten Spalte.",
         "tags": [
           "board"
         ],

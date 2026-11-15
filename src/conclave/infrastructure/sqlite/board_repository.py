@@ -250,9 +250,10 @@ class SQLiteBoardRepository:
                         "WHERE t.id = ?", (task_id,))
         return self._task(row) if row else None
 
-    def list_tasks(self, slug: str | None = None, statuses=None) -> list[Task]:
+    def list_tasks(self, slug: str | None = None, statuses=None, kind: str | None = None) -> list[Task]:
         """Sortiert nach Projekt, Status (alphabetisch) und Position; die Reihenfolge der
-        Spalten legt der Dienst fest, nicht das Repository."""
+        Spalten legt der Dienst fest, nicht das Repository. ``kind`` filtert z. B. die
+        Steuertickets (P6) in SQL statt im Dienst."""
         sql = f"SELECT {_TASK_COLUMNS} FROM board_tasks t JOIN board_projects p ON p.id = t.project_id"  # nosec B608
         where, params = [], []
         if slug is not None:
@@ -264,6 +265,9 @@ class SQLiteBoardRepository:
                 return []
             where.append("t.status IN (" + ", ".join("?" for _ in statuses) + ")")
             params.extend(statuses)
+        if kind is not None:
+            where.append("t.kind = ?")
+            params.append(kind)
         if where:
             sql += " WHERE " + " AND ".join(where)
         sql += " ORDER BY p.slug, t.status, t.position, t.number"

@@ -417,7 +417,7 @@ def test_control_tickets_on_postgres(pg, crypto):
         svc.next_task(AGENT)
     assert e.value.type == "Paused"
     svc.add_comment(AGENT, hint.ref, "Verstanden", author_name="cc")
-    assert svc.get_task(hint.ref).control_ack_by == "cc"
+    assert svc.get_task(hint.ref).control_ack_by == "cc (agent)"
     assert svc.control_state()["hints"] == []
     svc.update_task(HUMAN, pause.ref, status="done")
     assert svc.next_task(AGENT).ref == "api#1"

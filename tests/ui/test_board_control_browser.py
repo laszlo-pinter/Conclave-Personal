@@ -103,7 +103,7 @@ def test_acknowledged_hint_shows_who_acknowledged(chromium, board_server):
         assert "noch nicht quittiert" in item.inner_text()
         assert board_server.agent.post("/board/projects/api/tasks/2/comments",
                                        json={"body": "Verstanden", "author_name": "cc"}).status_code == 201
-        page.locator("#boardControl .board-control-ack", has_text="quittiert von cc").wait_for(timeout=15000)
+        page.locator("#boardControl .board-control-ack", has_text="quittiert von cc (agent)").wait_for(timeout=15000)
         assert errors == []
     finally:
         context.close()
