@@ -104,6 +104,52 @@ class BoardSettings:
         return cls(statuses=flow.statuses, source=source)
 
 
+DEFAULT_AGENT_RATE_LIMIT = "60 per minute"
+
+
+def _rate_limit_problem(value: str) -> str | None:
+    if value.strip().lower() in ("off", "none", "0", ""):
+        return None
+    try:
+        from limits import parse_many
+    except ImportError:  # flask-limiter nicht installiert: Begrenzung ist ohnehin aus
+        return None
+    try:
+        parse_many(value)
+    except ValueError:
+        return f"ungueltiges Rate-Limit {value!r} (Beispiel: '60 per minute')"
+    return None
+
+
+@dataclass(frozen=True)
+class LimitSettings:
+    """Abschnitt [limits] in config.toml: Grenzen fuer Agenten (R11). 0 schaltet ein Budget ab.
+
+    Budgets gelten fuer die letzten 24 Stunden und zaehlen Tokens (Eingabe plus Ausgabe) der
+    Modelllaeufe, die ein Agent ausgeloest hat - je Agent-Zugang und je Conversation.
+    """
+    agent_tokens_per_day: int = 2_000_000
+    conversation_tokens_per_day: int = 500_000
+    agent_concurrent_runs: int = 2
+    agent_rate_limit: str = DEFAULT_AGENT_RATE_LIMIT
+
+    @classmethod
+    def from_section(cls, section: dict) -> "LimitSettings":
+        values = {}
+        for name in ("agent_tokens_per_day", "conversation_tokens_per_day", "agent_concurrent_runs"):
+            if name in section:
+                value = section[name]
+                if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                    raise ValueError(f"[limits] {name} muss eine ganze Zahl ab 0 sein")
+                values[name] = value
+        if "agent_rate_limit" in section:
+            value = section["agent_rate_limit"]
+            if not isinstance(value, str) or _rate_limit_problem(value):
+                raise ValueError(f"[limits] agent_rate_limit: {_rate_limit_problem(str(value)) or 'Text erwartet'}")
+            values["agent_rate_limit"] = value.strip()
+        return cls(**values)
+
+
 @dataclass
 class ConclaveConfig:
     db_provider: str = "sqlite"                                  # "sqlite" | "postgres"
@@ -134,6 +180,7 @@ class ConclaveConfig:
     # Consultations (Kanzo)
     kanzo: KanzoSettings = field(default_factory=KanzoSettings)
     board: BoardSettings = field(default_factory=BoardSettings)
+    limits: LimitSettings = field(default_factory=LimitSettings)
 
     @classmethod
     def from_sources(
@@ -191,6 +238,7 @@ class ConclaveConfig:
         kanzo = KanzoSettings.from_section(data.get("kanzo", {}), data.get("consultations", {}))
         kanzo_url_set = "url" in data.get("kanzo", {}) or bool(os.environ.get("CONCLAVE_KANZO_URL", "").strip())
         board = BoardSettings.from_section(data.get("board", {}), kanzo_url_set=kanzo_url_set)
+        limits = LimitSettings.from_section(data.get("limits", {}))
         return cls(
             db_provider=provider,
             db_path=db_path,
@@ -213,6 +261,7 @@ class ConclaveConfig:
             mode=mode,
             kanzo=kanzo,
             board=board,
+            limits=limits,
         )
 
 

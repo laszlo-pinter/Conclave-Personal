@@ -141,6 +141,11 @@ MIGRATIONS: list[Migration] = [
         description="Consultations: Lease je Lauf statt pauschalem Abbruch beim Start (R10)",
         fn=lambda connection, is_postgres: _add_consultation_lease(connection, is_postgres),
     ),
+    Migration(
+        id="019_run_origin",
+        description="Herkunft je Lauf (human/agent) fuer die Budgets der Agenten (R11)",
+        fn=lambda connection, is_postgres: _add_run_origin(connection, is_postgres),
+    ),
 ]
 
 
@@ -163,6 +168,20 @@ def _board_history_tables(ts: str) -> list[str]:
             value TEXT NOT NULL
         )""",
     ]
+
+
+def _add_run_origin(connection, is_postgres: bool) -> None:
+    statements = []
+    if not _has_column(connection, is_postgres, "runs", "origin"):
+        statements.append("ALTER TABLE runs ADD COLUMN origin TEXT")
+    statements.append("CREATE INDEX IF NOT EXISTS idx_runs_origin ON runs(origin, started_at)")
+    statements.append("CREATE INDEX IF NOT EXISTS idx_runs_conversation_started ON runs(conversation_id, started_at)")
+    for statement in statements:
+        if is_postgres:
+            with connection.cursor() as cur:
+                cur.execute(statement)
+        else:
+            connection.execute(statement)
 
 
 def _add_consultation_lease(connection, is_postgres: bool) -> None:

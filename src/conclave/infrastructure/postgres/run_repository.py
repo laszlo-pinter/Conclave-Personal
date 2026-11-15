@@ -132,3 +132,25 @@ class PostgresRunRepository:
             error=row[7],
             usage=usage,
         )
+
+    # ── Budgets der Agenten (R11) ────────────────────────────────────────
+
+    def mark_origin(self, conversation_id: str, since: datetime, origin: str) -> None:
+        with self._connection.cursor() as cur:
+            cur.execute("UPDATE runs SET origin = %s WHERE conversation_id = %s AND started_at >= %s "
+                        "AND origin IS NULL", (origin, conversation_id, since))
+
+    def tokens_since(self, since: datetime, *, origin: str | None = None,
+                     conversation_id: str | None = None) -> int:
+        sql = ("SELECT COALESCE(SUM(COALESCE(u.input_tokens, 0) + COALESCE(u.output_tokens, 0)), 0) "
+               "FROM usage_records u JOIN runs r ON r.id = u.run_id WHERE r.started_at >= %s")
+        params = [since]
+        if origin is not None:
+            sql += " AND r.origin = %s"
+            params.append(origin)
+        if conversation_id is not None:
+            sql += " AND r.conversation_id = %s"
+            params.append(conversation_id)
+        with self._connection.cursor() as cur:
+            cur.execute(sql, tuple(params))
+            return int(cur.fetchone()[0])

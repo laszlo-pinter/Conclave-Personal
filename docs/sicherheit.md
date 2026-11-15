@@ -79,6 +79,11 @@ Anfrage spielen dafür keine Rolle.
   bewusst freigegeben werden. Agenten dürfen nicht löschen, keine Einstellungen,
   Agents, Backups oder Logs sehen oder ändern, keine Consultations wiederholen
   und nur Participants vom Typ `model` anlegen.
+- **Grenzen für Agenten:** Tagesbudget in Tokens für alle Agenten und je
+  Conversation, höchstens N gleichzeitige Modellläufe, eigenes Rate-Limit
+  (`[limits]`, siehe [Konfiguration](referenz/konfiguration.md#grenzen-für-agenten)).
+  Erschöpft → `429` mit Angabe, welche Grenze greift. Das Rate-Limit zählt nach
+  Zugang und IP, Agenten bremsen die UI also nicht aus.
 - **Herkunft:** Nachrichten über `POST /conversations/<id>/messages` tragen
   `origin: human|agent` aus dem Token (UI: „über Agent“). Ältere Nachrichten
   und Wege ohne Token (CLI) haben `origin: null` (unbekannt). Für die Modelle

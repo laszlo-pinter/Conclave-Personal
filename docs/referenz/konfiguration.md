@@ -18,7 +18,7 @@ wenige Werte ein Fallback (siehe [TOML-Config](#toml-config)).
 | CONCLAVE_PORT | 8000 | Server-Port |
 | CONCLAVE_LOG_LEVEL | INFO | DEBUG / INFO / WARNING / ERROR |
 | CONCLAVE_DEBUG | — | `1` oder `true` aktiviert den Debug-Modus (wie `--debug`). Abgelehnt im Production-Modus und bei Nicht-Loopback-`CONCLAVE_HOST` |
-| CONCLAVE_RATE_LIMIT | 120 per minute | Anfragen je Route und Client-IP, Syntax von flask-limiter (`120/minute; 2000/hour`), `off`, `none`, `0` oder leer schalten ab. Auch als `[server] rate_limit` in der TOML-Config oder in der UI unter Settings (wirkt sofort); die Umgebungsvariable hat Vorrang und sperrt die UI-Änderung |
+| CONCLAVE_RATE_LIMIT | 120 per minute | Anfragen je Route, Zugang (Mensch, Agent) und Client-IP, Syntax von flask-limiter (`120/minute; 2000/hour`), `off`, `none`, `0` oder leer schalten ab. Auch als `[server] rate_limit` in der TOML-Config oder in der UI unter Settings (wirkt sofort); die Umgebungsvariable hat Vorrang und sperrt die UI-Änderung |
 | CONCLAVE_CONFIG_FILE | plattformabhängig | Pfad der `config.toml` (z. B. getrennt für Testinstanzen) |
 | CONCLAVE_LOG_DIR | plattformabhängig | Verzeichnis für `conclave-server.log` (z. B. getrennt für Testinstanzen) |
 | CONCLAVE_SERVER_THREADS | 16 | Threads des WSGI-Servers (waitress). Laufende Streams belegen je einen Thread |
@@ -162,6 +162,7 @@ Aus der TOML-Datei werden nur diese Schlüssel gelesen; alles andere ist nur
   Vorrang hat `CONCLAVE_DB_PATH`, dann `path`, dann der Plattformdefault
   (für alle Einstiegspunkte).
 - `[server]` `rate_limit`
+- `[limits]` Grenzen für Agenten (siehe unten)
 - `[board]` `statuses`, `source` (Board und Quelle der Consultations, siehe
   unten)
 - `[consultations]` `reviewers`, `max_per_hour`, `comment_max_chars`
@@ -233,6 +234,31 @@ Tickets, wo sie sind.
 
 Das Board braucht SQLite ab Version 3.35 (bei Python 3.11 und 3.12 üblich)
 oder PostgreSQL.
+
+## Grenzen für Agenten
+
+`[limits]` begrenzt, was Agenten (Agent-Token) über Conclave an Modellen
+verbrauchen. Budgets zählen Tokens (Eingabe plus Ausgabe) der letzten 24 Stunden
+für Läufe, die ein Agent über `invoke`, `orchestrate` oder `orchestrate-parallel`
+ausgelöst hat. `0` schaltet eine Grenze ab. Für den Menschen gilt keine dieser
+Grenzen.
+
+```toml
+[limits]
+agent_tokens_per_day = 2000000        # alle Agenten zusammen
+conversation_tokens_per_day = 500000  # je Conversation, für Agenten
+agent_concurrent_runs = 2             # gleichzeitige Modellläufe von Agenten
+agent_rate_limit = "60 per minute"    # eigenes Rate-Limit für Agent-Anfragen
+```
+
+| Schlüssel | Standard | Bedeutung |
+|---|---|---|
+| `agent_tokens_per_day` | `2000000` | Tagesbudget aller Agent-Läufe; erschöpft → `429 AgentBudgetExceeded` |
+| `conversation_tokens_per_day` | `500000` | Tagesbudget je Conversation für Agenten; erschöpft → `429 ConversationBudgetExceeded` (auch gegen Schleifen, die dieselbe Conversation immer wieder anstoßen) |
+| `agent_concurrent_runs` | `2` | Höchstens so viele Modellläufe von Agenten gleichzeitig; sonst `429 TooManyAgentRuns` |
+| `agent_rate_limit` | `60 per minute` | Rate-Limit für Anfragen mit dem Agent- oder Reviewer-Token, getrennt vom allgemeinen `rate_limit`; die UI bleibt so bedienbar, auch wenn Agenten viel anfragen |
+
+Consultations zählen nicht zum Budget; für sie gilt `[consultations] max_per_hour`.
 
 ## Consultations
 

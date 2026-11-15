@@ -469,8 +469,11 @@ Fehler kommen als JSON `{"error": "...", "type": "..."}`. Wichtige Codes:
 - `413` — Anfrage größer als 10 MB (`RequestTooLarge`) bzw. Board-Import größer als 50 MB (`ImportTooLarge`)
 - `415` — POST ohne JSON bzw. `X-Conclave-Client`; Binärdatei im Workspace
 - `421` — `Host`-Header nicht erlaubt
-- `429` — eigenes Rate-Limit überschritten (`RateLimitExceeded`) oder
-  Provider-Rate-Limit nach ausgeschöpften Retries (`ProviderRateLimit`)
+- `429` — eigenes Rate-Limit überschritten (`RateLimitExceeded`; getrennt nach
+  Zugang, Agenten mit eigener Grenze), Grenze für Agenten erreicht
+  (`AgentBudgetExceeded`, `ConversationBudgetExceeded`, `TooManyAgentRuns`, siehe
+  [Konfiguration](konfiguration.md#grenzen-für-agenten)) oder Provider-Rate-Limit
+  nach ausgeschöpften Retries (`ProviderRateLimit`)
 - `502` — Provider-Fehler (`ProviderUnavailable` u. a.), kein Adapter
   (`AdapterNotFound`)
 - `503` — Board oder Consultations in dieser Instanz nicht verfügbar

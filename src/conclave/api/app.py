@@ -4,7 +4,9 @@ import json as _json
 import logging
 import os
 import re
+import threading
 import time
+from datetime import datetime, timedelta, timezone
 
 try:
     from flask import Flask, Response, g, jsonify, request, stream_with_context, send_file as flask_send_file
@@ -46,7 +48,7 @@ from conclave.application.board import (
 )
 from conclave.domain.errors import TaskNotFound, TaskSourceError
 from conclave.cli.bootstrap import rate_limit_disabled, validate_rate_limit
-from conclave.cli.config import DEFAULT_RATE_LIMIT
+from conclave.cli.config import DEFAULT_RATE_LIMIT, LimitSettings
 from conclave.application.workspace_security import (
     agent_read_limit_bytes,
     agent_write_problem,
@@ -140,6 +142,14 @@ def _valid_id(value) -> bool:
     return isinstance(value, str) and bool(_ID_RE.match(value)) and value not in (".", "..")
 
 
+# Routen, ueber die ein Agent Modelle aufruft; dafuer gelten Budget und gleichzeitige Laeufe (R11)
+MODEL_ROUTES = frozenset({
+    ("POST", "/conversations/<conversation_id>/participants/<participant_id>/invoke"),
+    ("POST", "/conversations/<conversation_id>/orchestrate"),
+    ("POST", "/conversations/<conversation_id>/orchestrate-parallel"),
+})
+
+
 def create_app(handler: CLIHandler, auth_service=None,
                agent_service=None, config=None, service=None, consultations=None, board=None) -> Flask:
     import pathlib
@@ -158,12 +168,29 @@ def create_app(handler: CLIHandler, auth_service=None,
         "source": getattr(config, "rate_limit_source", "default") if config else "default",
     }
 
+    limits = getattr(config, "limits", None) or LimitSettings()
+
+    def _request_role() -> str:
+        """Rolle laut Token, schon vor der Anmeldung (das Rate-Limit laeuft zuerst)."""
+        if auth_service is None:
+            return "human"
+        auth_header = request.headers.get("Authorization", "")
+        token = auth_header[7:] if auth_header.startswith("Bearer ") else request.headers.get("X-API-Key")
+        principal = auth_service.authenticate(token)
+        return principal.role if principal is not None else "anonymous"
+
+    def _rate_key() -> str:
+        # Nach Zugang und IP (R11): Agenten und UI teilen sich lokal keinen Topf mehr
+        return f"{_request_role()}:{get_remote_address()}"
+
     def _current_rate_limit() -> str:
+        if _request_role() in ("agent", "reviewer") and not rate_limit_disabled(limits.agent_rate_limit):
+            return limits.agent_rate_limit
         value = rate_limit_state["value"]
         return DEFAULT_RATE_LIMIT if rate_limit_disabled(value) else value
 
     if _has_limiter:
-        limiter = Limiter(get_remote_address, app=app, default_limits=[_current_rate_limit],
+        limiter = Limiter(_rate_key, app=app, default_limits=[_current_rate_limit],
                           default_limits_exempt_when=lambda: rate_limit_disabled(rate_limit_state["value"]),
                           storage_uri="memory://")
 
@@ -236,6 +263,58 @@ def create_app(handler: CLIHandler, auth_service=None,
         allowed = reviewer_may if principal.is_reviewer else agent_may
         if not allowed(request.method, request.url_rule.rule):
             return jsonify(HUMAN_ONLY_ERROR), 403
+
+    # ── Grenzen fuer Agenten (R11): Budget je Zugang und Conversation, gleichzeitige Laeufe ──
+    agent_runs = {"active": 0}
+    agent_runs_lock = threading.Lock()
+    run_repo = getattr(service, "_run_repo", None) if service is not None else None
+
+    @app.before_request
+    def _check_agent_limits():
+        principal = g.get("principal")
+        if (principal is None or not principal.is_agent or request.method == "OPTIONS"
+                or request.url_rule is None or (request.method, request.url_rule.rule) not in MODEL_ROUTES):
+            return
+        conversation_id = (request.view_args or {}).get("conversation_id")
+        since = datetime.now(timezone.utc) - timedelta(days=1)
+        if run_repo is not None:
+            if limits.agent_tokens_per_day:
+                used = run_repo.tokens_since(since, origin="agent")
+                if used >= limits.agent_tokens_per_day:
+                    return jsonify({
+                        "error": (f"Tagesbudget der Agenten erschoepft: {used} von {limits.agent_tokens_per_day} "
+                                  "Tokens in den letzten 24 Stunden ([limits] agent_tokens_per_day)."),
+                        "type": "AgentBudgetExceeded"}), 429
+            if limits.conversation_tokens_per_day and conversation_id:
+                used = run_repo.tokens_since(since, origin="agent", conversation_id=conversation_id)
+                if used >= limits.conversation_tokens_per_day:
+                    return jsonify({
+                        "error": (f"Budget dieser Conversation fuer Agenten erschoepft: {used} von "
+                                  f"{limits.conversation_tokens_per_day} Tokens in den letzten 24 Stunden "
+                                  "([limits] conversation_tokens_per_day)."),
+                        "type": "ConversationBudgetExceeded"}), 429
+        if limits.agent_concurrent_runs:
+            with agent_runs_lock:
+                if agent_runs["active"] >= limits.agent_concurrent_runs:
+                    return jsonify({
+                        "error": (f"Zu viele gleichzeitige Modelllaeufe von Agenten (hoechstens "
+                                  f"{limits.agent_concurrent_runs}, [limits] agent_concurrent_runs)."),
+                        "type": "TooManyAgentRuns"}), 429
+                agent_runs["active"] += 1
+                g.agent_run_slot = True
+        g.agent_run = (conversation_id, datetime.now(timezone.utc))
+
+    @app.teardown_request
+    def _finish_agent_run(_exc=None):
+        if g.pop("agent_run_slot", False):
+            with agent_runs_lock:
+                agent_runs["active"] -= 1
+        started = g.pop("agent_run", None)
+        if started and started[0] and run_repo is not None:
+            try:
+                run_repo.mark_origin(started[0], started[1], "agent")   # Verbrauch dem Agenten zuordnen
+            except Exception:  # noqa: BLE001 - Antwort ist schon raus
+                logger.exception("Herkunft der Laeufe nicht gespeichert")
 
     @app.before_request
     def _log_request_start():

@@ -124,3 +124,26 @@ class SQLiteRunRepository:
             error=row[7],
             usage=usage,
         )
+
+    # ── Budgets der Agenten (R11) ────────────────────────────────────────
+
+    def mark_origin(self, conversation_id: str, since: datetime, origin: str) -> None:
+        """Laeufe dieser Conversation seit ``since`` ohne Herkunft bekommen ``origin``."""
+        self._connection.execute(
+            "UPDATE runs SET origin = ? WHERE conversation_id = ? AND started_at >= ? AND origin IS NULL",
+            (origin, conversation_id, since.isoformat()))
+        self._connection.commit()
+
+    def tokens_since(self, since: datetime, *, origin: str | None = None,
+                     conversation_id: str | None = None) -> int:
+        """Summe der Tokens (Eingabe plus Ausgabe) der Laeufe seit ``since``."""
+        sql = ("SELECT COALESCE(SUM(COALESCE(u.input_tokens, 0) + COALESCE(u.output_tokens, 0)), 0) "
+               "FROM usage_records u JOIN runs r ON r.id = u.run_id WHERE r.started_at >= ?")
+        params = [since.isoformat()]
+        if origin is not None:
+            sql += " AND r.origin = ?"
+            params.append(origin)
+        if conversation_id is not None:
+            sql += " AND r.conversation_id = ?"
+            params.append(conversation_id)
+        return int(self._connection.execute(sql, tuple(params)).fetchone()[0])
