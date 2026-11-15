@@ -159,3 +159,39 @@ def test_task_dict_carries_the_review_fields(board):
     data = task_to_dict(board.get_task(ref))
     assert data["review"] == {"state": "rework", "at": data["review"]["at"], "red_count": 0,
                               "blocking": 0, "suggestions": 3, "checked": "b @ 1..2"}
+
+
+# ── Nacharbeit aus dem Review (Freigabe Laszlo, Chat #79) ───────────────────
+
+def test_rework_comes_first_across_projects(board):
+    """V1: next ohne Projekt liefert Nacharbeit aus jedem Projekt vor normalen Tickets anderer Projekte."""
+    board.create_project(HUMAN, "zzz", "Spaeteres Projekt")
+    board.create_task(HUMAN, "api", "Normal im ersten Projekt")              # api#1
+    task = board.create_task(HUMAN, "zzz", "Nacharbeit im spaeteren Projekt")
+    board.update_task(HUMAN, task.ref, status="review")
+    board.review(REVIEWER, task.ref, "rework", "gelb")
+    assert board.next_task(AGENT).ref == task.ref
+    assert board.next_task(AGENT).ref == "api#1"                           # danach Rang wie bisher
+
+
+def test_red_counter_resets_when_the_human_releases_the_ticket(board):
+    """V2: Nimmt der Mensch "nur fuer Menschen" nach drei roten weg, beginnt die Zaehlung neu."""
+    ref = _in_review(board)
+    for _ in range(3):
+        _round(board, ref, "failed")
+    assert (board.get_task(ref).human, board.get_task(ref).review_red_count) == (True, 3)
+    board.update_task(HUMAN, ref, human=False)
+    assert board.get_task(ref).review_red_count == 0
+    history = [(e.field_name, e.old_value, e.new_value, e.origin) for e in board.history(ref)]
+    assert ("review_red_count", "3", "0", "human") in history
+    board.next_task(AGENT, task=ref)
+    board.update_task(AGENT, ref, status="review")
+    board.review(REVIEWER, ref, "failed", "rot")
+    assert (board.get_task(ref).human, board.get_task(ref).review_red_count) == (False, 1)
+
+
+def test_setting_human_again_keeps_the_counter(board):
+    ref = _in_review(board)
+    _round(board, ref, "failed")
+    board.update_task(HUMAN, ref, human=True)
+    assert board.get_task(ref).review_red_count == 1

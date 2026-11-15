@@ -284,7 +284,12 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
   - `rework` (gelb) und `failed` (rot): zurück in die erste Spalte, dort vor
     allen anderen Tickets (Verlauf mit Herkunft `system`).
   - Das dritte `failed` in Folge macht das Ticket „nur für Menschen“; `rework`
-    zählt nicht mit.
+    zählt nicht mit. Nimmt der Mensch die Markierung wieder weg, beginnt die
+    Zählung neu (`review_red_count` → 0, mit Verlaufseintrag).
+  - Tickets „nur für Menschen“ bewertet der Reviewer nicht (`403`); auch der
+    Watcher startet für sie kein Review.
+  - Bei `POST /board/next` ohne Projekt kommt Nacharbeit (`rework`/`failed`)
+    aus allen Projekten zuerst, danach gilt die Board-Reihenfolge.
   - Kommt ein Ticket wieder nach `review`, steht der Status auf `none`.
 
   Tickets tragen `review` mit `state`, `at`, `red_count`, `blocking`,

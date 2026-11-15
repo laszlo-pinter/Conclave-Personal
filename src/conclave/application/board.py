@@ -335,6 +335,11 @@ class BoardService:
             human = bool(human)
             if principal.is_agent and task.human and not human:
                 raise _forbidden("Agenten duerfen die Markierung 'nur fuer Menschen' nicht entfernen.")
+            # Gibt der Mensch ein Ticket frei (z. B. nach drei roten Reviews), zaehlt Rot neu (E-R3)
+            if task.human and not human and task.review_red_count:
+                events.append(TaskEvent.create(task.id, "review_red_count", task.review_red_count, 0, origin,
+                                               actor_id=actor_id))
+                task.review_red_count = 0
         if title is not None and (not isinstance(title, str) or not title.strip()):
             raise _invalid("Titel darf nicht leer sein.")
         try:
@@ -411,7 +416,9 @@ class BoardService:
             self._raise_if_paused(ticket.project_slug)
             return self._claim(task, origin, actor_id)
         self._raise_if_paused(slug)
-        for candidate in self.list_tasks(slug, [first]):
+        # Nacharbeit aus dem Review zuerst, auch ueber Projekte hinweg; sonst Board-Reihenfolge
+        candidates = sorted(self.list_tasks(slug, [first]), key=lambda t: t.review_state not in REWORK_STATES)
+        for candidate in candidates:
             if candidate.human or candidate.kind == "control":
                 continue
             position = self._end_position(candidate.project_id, second)

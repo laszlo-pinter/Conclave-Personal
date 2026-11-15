@@ -33,7 +33,7 @@ CONTROL_SCOPES = ("project", "all")
 # Verlaufseintraege fuer diese Felder (Plan 2, "Ticket-Verlauf"); "created" ist das Anlegen,
 # "comment" Bearbeiten/Loeschen eines Kommentars (alt -> neu bzw. -> None), R9
 TRACKED_FIELDS = ("created", "status", "title", "description", "human", "rank", "tags", "position", "comment",
-                  "review_state", "control_ack")
+                  "review_state", "control_ack", "review_red_count")
 # Verlauf eines Projekts: Anlegen, Umbenennen, geloeschte Tickets (Tombstone), R9
 PROJECT_FIELDS = ("created", "name", "task_deleted")
 POSITION_STEP = 1024.0      # Abstand der Karten nach dem Neunummerieren

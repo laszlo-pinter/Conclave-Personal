@@ -150,7 +150,8 @@ Lesezugriff auf den Code und keine Shell.
    dort vor alle anderen. `conclave_board_next` liefert es als Nächstes, mit
    dem Review-Kommentar (`last_review`).
 4. Nach dem dritten roten Review in Folge wird das Ticket „nur für Menschen“;
-   dann entscheidet der Mensch.
+   dann entscheidet der Mensch. Gibt er es wieder frei, beginnt die Zählung neu.
+5. Tickets „nur für Menschen“ werden nicht automatisch reviewt.
 
 Den Review-Status setzt nur der Reviewer-Zugang. Ein Agent, der Code schreibt,
 kann sich also nicht selbst grün geben, solange er das Reviewer-Token nicht
