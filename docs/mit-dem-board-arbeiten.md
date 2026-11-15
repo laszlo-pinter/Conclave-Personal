@@ -180,7 +180,8 @@ ihre Sitzung abzubrechen. Ein Banner über den Spalten zeigt sie an.
    prüft genau die genannten Commits.
 2. Nicht auf den Menschen warten: grün ist keine Freigabe.
 3. Höchstens ein offenes Review: Steht ein eigenes Ticket noch ohne Ergebnis in
-   `review`, wartet der Agent mit dem nächsten (er arbeitet aber weiter).
+   `review`, schiebt der Agent das nächste erst nach `review`, wenn das erste
+   ein Ergebnis hat. Weiterarbeiten darf er.
 4. Gelb unterbricht nicht: erst das aktuelle Ticket fertig, dann das gelbe.
 5. Rot stoppt: am nächsten sauberen Punkt (Commit) anhalten, das am aktuellen
    Ticket vermerken und das rote Ticket nehmen.
