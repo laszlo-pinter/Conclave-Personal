@@ -37,7 +37,7 @@ class BoardTaskSource:
         return Ticket(
             key=task.ref, title=task.title, status=task.status, human=task.human, description=task.description,
             comments=tuple(TicketComment(author=_author(c), time=c.created_at.isoformat() if c.created_at else "",
-                                         body=c.body) for c in comments),
+                                         body=c.body, origin=c.origin) for c in comments),
         )
 
     def add_comment(self, task_ref: str, body: str, author: str) -> None:

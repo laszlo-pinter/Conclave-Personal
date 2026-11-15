@@ -136,6 +136,11 @@ MIGRATIONS: list[Migration] = [
         description="Steuertickets des Menschen: Pause und Hinweis (P6)",
         fn=lambda connection, is_postgres: _add_board_control(connection, is_postgres),
     ),
+    Migration(
+        id="018_consultation_lease",
+        description="Consultations: Lease je Lauf statt pauschalem Abbruch beim Start (R10)",
+        fn=lambda connection, is_postgres: _add_consultation_lease(connection, is_postgres),
+    ),
 ]
 
 
@@ -158,6 +163,21 @@ def _board_history_tables(ts: str) -> list[str]:
             value TEXT NOT NULL
         )""",
     ]
+
+
+def _add_consultation_lease(connection, is_postgres: bool) -> None:
+    ts = "TIMESTAMPTZ" if is_postgres else "TEXT"
+    statements = [f"ALTER TABLE consultations ADD COLUMN {column} {ddl}"
+                  for column, ddl in (("owner", "TEXT"), ("lease_until", ts))
+                  if not _has_column(connection, is_postgres, "consultations", column)]
+    statements.append("CREATE INDEX IF NOT EXISTS idx_consultations_limit "
+                      "ON consultations(source, source_ref, channel, created_at)")
+    for statement in statements:
+        if is_postgres:
+            with connection.cursor() as cur:
+                cur.execute(statement)
+        else:
+            connection.execute(statement)
 
 
 def _add_board_control(connection, is_postgres: bool) -> None:

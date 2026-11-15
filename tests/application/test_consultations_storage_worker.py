@@ -313,11 +313,11 @@ def test_worker_survives_errors_outside_the_processor(repo):
     original = repo.claim
     calls = []
 
-    def flaky_claim(cid):
+    def flaky_claim(cid, **lease):
         calls.append(cid)
         if len(calls) == 1:
             raise RuntimeError("database is locked")
-        return original(cid)
+        return original(cid, **lease)
 
     repo.claim = flaky_claim
     worker = ConsultationWorker(repo, rec := Recorder(repo))

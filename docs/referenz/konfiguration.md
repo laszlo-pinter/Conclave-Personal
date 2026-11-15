@@ -246,7 +246,7 @@ Abschnitt `[consultations]`:
 | Schlüssel | Default | Bedeutung |
 |---|---|---|
 | `reviewers` | leer | Agent-IDs, die als Reviewer erlaubt sind – also wer Ticket-Inhalte zu sehen bekommt. **Leer = Consultations sind aus.** |
-| `max_per_hour` | `3` | Höchstens so viele Consultations pro Ticket und Stunde (gezählt beim Anlegen). |
+| `max_per_hour` | `3` | Höchstens so viele Consultations pro Ticket und Stunde, je Zugang (Mensch, Agent) getrennt, gezählt beim Anlegen. |
 | `comment_max_chars` | `2000` | Kommentare werden auf diese Länge gekürzt (mindestens 200), die Schlusszeile kommt danach. |
 
 Bis v0.6.0 standen diese Schlüssel unter `[kanzo]`. Dort werden sie weiter

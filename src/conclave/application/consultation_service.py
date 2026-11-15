@@ -31,6 +31,7 @@ from conclave.domain.consultation import (
     DONE,
     FAILED,
     PENDING,
+    RUNNING,
     Consultation,
     ConsultationDelivery,
 )
@@ -85,7 +86,7 @@ class ConsultationService:
 
         conversation = self._flow.create_conversation(topic=f"{c.source}:{c.source_ref} · {c.id}")
         c.conversation_id = conversation.id
-        self._repo.save(c)
+        self._repo.set_conversation(c.id, conversation.id)          # Status nicht mitschreiben (R10)
         for pid in c.reviewers:
             self._flow.register_participant(conversation_id=conversation.id, participant_id=pid,
                                             participant_type=ParticipantType.MODEL, name=self._name(pid))
@@ -130,6 +131,14 @@ class ConsultationService:
     # ── Zustellung ───────────────────────────────────────────────────────
 
     def _deliver_all(self, c: Consultation, errors: list[str], *, only_pending: bool = False) -> None:
+        # Erneut pruefen (R10): Inzwischen "nur fuer Menschen" -> kein Kommentar, Abbruch
+        if c.channel != HUMAN and self._source.get_task(c.source_ref).human:
+            for d in self._repo.list_deliveries(c.id):
+                if d.status != DELIVERED:
+                    d.status, d.error = FAILED, "Ticket inzwischen nur fuer Menschen"
+                    self._repo.save_delivery(d)
+            self._finish(c, FAILED, "Ticket ist inzwischen nur fuer Menschen (human) - keine Kommentare.")
+            return
         deliveries = self._repo.list_deliveries(c.id)
         messages = {}
         if c.conversation_id:
@@ -159,7 +168,10 @@ class ConsultationService:
         d.attempts += 1
         author = f"{self._name(d.participant_id)} · Conclave"
         try:
-            if self._source.get_task(c.source_ref).has_marker(d.marker, author=author):
+            ticket = self._source.get_task(c.source_ref)
+            if ticket.human and c.channel != HUMAN:
+                raise PermissionError("Ticket inzwischen nur fuer Menschen")
+            if ticket.has_marker(d.marker, author=author):
                 logger.info("Consultation %s/%s: Kommentar existiert bereits", c.id, d.participant_id)
             else:
                 body = comment_body(answer, closing_line(self._name(d.participant_id), self._label(d.participant_id),
@@ -187,8 +199,12 @@ class ConsultationService:
         return f"{provider}, {model}" if model else provider
 
     def _finish(self, c: Consultation, status: str, error: str | None) -> None:
-        c.status, c.error, c.finished_at = status, (error or None), datetime.now(UTC)
-        self._repo.save(c)
+        """Statuswechsel nur aus dem Stand, mit dem der Lauf begonnen hat; wurde die Consultation
+        inzwischen anders gesetzt (z. B. unterbrochen), bleibt das stehen (R10)."""
+        expected = c.status if c.status != status else RUNNING
+        if not self._repo.transition(c, expected, status, error=error or None):
+            logger.warning("Consultation %s: Status nicht gesetzt (%s -> %s), inzwischen geaendert",
+                           c.id, expected, status)
 
 
 # ── Bausteine (rein, testbar) ────────────────────────────────────────────
@@ -197,8 +213,8 @@ def build_prompt(c: Consultation, ticket: Ticket) -> str:
     """Frage ausserhalb, Ticket innerhalb eines Daten-Blocks mit zufaelliger Begrenzung."""
     nonce = secrets.token_hex(6)
     start, end = f"<<<TICKET-{nonce}", f"TICKET-{nonce}>>>"
-    own = [x for x in ticket.comments if _MARKER.search(x.body)]
-    others = [x for x in ticket.comments if not _MARKER.search(x.body)]
+    own = [x for x in ticket.comments if _is_own(c, x)]
+    others = [x for x in ticket.comments if not _is_own(c, x)]
 
     lines = [f"Ticket: {ticket.key} - {ticket.title}", f"Status: {ticket.status}"]
     if ticket.description:
@@ -215,6 +231,14 @@ def build_prompt(c: Consultation, ticket: Ticket) -> str:
         parts.append(f"Zusaetzlicher Kontext des Fragenden: {c.context.strip()}")
     parts += ["", start, block, end]
     return "\n".join(parts)
+
+
+def _is_own(c: Consultation, comment) -> bool:
+    """Eigene Zweitmeinung? Im eigenen Board zaehlt die Herkunft ``system`` (nicht faelschbar),
+    bei Kanzo die Kennung im Text. Ein Agent-Kommentar mit Kennungstext bleibt so im Prompt (R10)."""
+    if c.source != "kanzo":
+        return getattr(comment, "origin", None) == "system"
+    return bool(_MARKER.search(comment.body))
 
 
 def closing_line(name: str, label: str, marker: str) -> str:

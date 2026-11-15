@@ -1,6 +1,8 @@
 """Consultations anlegen, abfragen, wiederholen - die Logik hinter API und MCP-Tools.
 
-- Die Obergrenze pro Ticket und Stunde wird beim Anlegen gezaehlt, nicht erst im Worker.
+- Die Obergrenze pro Ticket und Stunde gilt je Kanal (Mensch, Agent) und fuer die
+  normalisierte Referenz der Quelle (``ticket.key``); Zaehlen und Speichern sind ein
+  Schritt (R10).
 - Reviewer nur aus ``[consultations] reviewers``; ohne Liste ist die Funktion aus.
 - Der Kanal (``human``/``agent``) kommt aus dem Principal, also aus dem Token,
   nie aus dem Body; ``channel`` im Body ergibt 400 (Z3).
@@ -94,22 +96,20 @@ class ConsultationRequests:
                 f"Nicht erlaubte Reviewer: {', '.join(not_allowed)} (erlaubt: {', '.join(self._allowed)}).",
                 400, "ReviewerNotAllowed")
 
-        since = datetime.now(UTC) - timedelta(hours=1)
-        if self._repo.count_since(self._source_name, task, since) >= self._max_per_hour:
-            raise ConsultationRequestError(
-                f"Obergrenze erreicht: hoechstens {self._max_per_hour} Consultations pro Ticket und Stunde.",
-                429, "ConsultationLimit")
-
         ticket = self._source.get_task(task)              # TaskNotFound / TaskSourceError -> Fehlerbehandlung
         if ticket.human and channel != HUMAN:
             raise ConsultationRequestError("Ticket ist nur fuer Menschen (human) - Anfragen von Agenten "
                                            "werden abgelehnt.", 403, "HumanOnlyTicket")
 
         consultation = Consultation.create(
-            source=self._source_name, source_ref=task, question=question, reviewers=reviewers,
+            source=self._source_name, source_ref=ticket.key, question=question, reviewers=reviewers,
             channel=channel, context=context, requested_by=str(body.get("requested_by") or "")[:100],
             include_previous=include_previous)
-        self._repo.save(consultation)
+        since = datetime.now(UTC) - timedelta(hours=1)
+        if not self._repo.create_if_under_limit(consultation, since, self._max_per_hour):
+            raise ConsultationRequestError(
+                f"Obergrenze erreicht: hoechstens {self._max_per_hour} Consultations pro Ticket und Stunde "
+                f"(je Zugang).", 429, "ConsultationLimit")
         self._worker.submit(consultation.id)
         return self._to_dict(consultation)
 

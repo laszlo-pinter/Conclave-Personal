@@ -340,8 +340,12 @@ werden als Daten behandelt:
 - **Feste Adresse:** Die Kanzo-Adresse steht nur in `config.toml`
   (`[kanzo] url`); die API nimmt keine Ziel-URL an (SSRF).
 - **Grenzen:** Reviewer nur aus `[consultations] reviewers` (wer Ticket-Inhalte sieht),
-  höchstens `max_per_hour` Consultations pro Ticket und Stunde, Kommentare
-  gekürzt. Nach einem Neustart werden Modelle nie automatisch erneut aufgerufen.
+  höchstens `max_per_hour` Consultations pro Ticket und Stunde, je Zugang und
+  für die normalisierte Referenz, atomar gezählt; Kommentare gekürzt. Nach einem
+  Neustart werden Modelle nie automatisch erneut aufgerufen.
+- **Erneute Prüfung:** Vor dem Zustellen prüft Conclave noch einmal „nur für
+  Menschen“; ein inzwischen markiertes Ticket bekommt keinen Kommentar aus einem
+  Agent-Auftrag.
 - **Datenabfluss:** Der Ticket-Inhalt geht an die Provider der Reviewer; die
   Antwort von `POST /consultations` und jeder Kommentar nennen sie. Bei Kanzo
   landen die Kommentare mit `kanzo sync` im Git-Repository des Kanzo-Boards.

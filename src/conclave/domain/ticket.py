@@ -16,6 +16,7 @@ class TicketComment:
     author: str
     time: str
     body: str
+    origin: str | None = None      # nur im eigenen Board belegt (human/agent/system/None)
 
 
 @dataclass(frozen=True)

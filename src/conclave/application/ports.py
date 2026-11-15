@@ -271,13 +271,28 @@ class ConsultationRepository(Protocol):
         """Consultations mit einem Status, aelteste zuerst."""
         ...
 
-    def count_since(self, source: str, source_ref: str, since: datetime) -> int:
-        """Anzahl der Consultations zu einem Ticket seit ``since`` (Obergrenze)."""
+    def count_since(self, source: str, source_ref: str, since: datetime, channel: str | None = None) -> int:
+        """Anzahl der Consultations zu einem Ticket seit ``since`` (optional je Kanal)."""
         ...
 
-    def claim(self, consultation_id: str) -> bool:
-        """Atomar queued -> running; True nur fuer genau einen Aufrufer."""
+    def create_if_under_limit(self, consultation: Consultation, since: datetime, limit: int) -> bool:
+        """Anlegen nur unter der Obergrenze je Ticket und Kanal; Zaehlen und Einfuegen atomar (R10)."""
         ...
+
+    def set_conversation(self, consultation_id: str, conversation_id: str) -> None: ...
+
+    def transition(self, consultation: Consultation, from_status: str, to_status: str, *,
+                   error: str | None = None) -> bool:
+        """Statuswechsel nur aus ``from_status`` (sonst False, nichts geschrieben)."""
+        ...
+
+    def claim(self, consultation_id: str, owner: str | None = None, lease_until: datetime | None = None) -> bool:
+        """Atomar queued -> running mit Lease; True nur fuer genau einen Aufrufer."""
+        ...
+
+    def renew_lease(self, consultation_id: str, owner: str, lease_until: datetime) -> bool: ...
+
+    def list_expired_running(self, now: datetime) -> list[Consultation]: ...
 
     def save_delivery(self, delivery: ConsultationDelivery) -> None:
         ...

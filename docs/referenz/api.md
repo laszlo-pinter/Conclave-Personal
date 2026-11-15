@@ -195,14 +195,22 @@ Fehler: `400` (`ValidationError`, `ReviewerNotAllowed`, `ChannelNotAllowed`),
 `403` (`HumanOnlyTicket`: Ticket nur für Menschen, Anfrage mit dem
 Agent-Token), `404`
 (Ticket unbekannt), `429` (`ConsultationLimit`: `[consultations] max_per_hour` pro
-Ticket und Stunde erreicht), `502` (Kanzo nicht erreichbar oder unbekanntes
+Ticket und Stunde erreicht; gezählt je Zugang, Mensch und Agent getrennt, für die
+normalisierte Referenz der Quelle, also `api#012` wie `api#12`; Prüfen und Anlegen
+sind ein Schritt), `502` (Kanzo nicht erreichbar oder unbekanntes
 Ausgabeformat), `503` (nicht eingerichtet). Bei diesen Fehlern wird nichts
 gespeichert.
 
 Ablauf im Hintergrund: Conclave legt die Conversation
 `board:<task> · <id>` (bzw. `kanzo:<task> · <id>`) an, fragt alle Reviewer parallel und stellt jede Antwort
-als Kommentar zu. Status: `queued` → `running` → `done` | `failed`; nach einem
-Server-Neustart wird `running` zu `interrupted`. Jeder Kommentar endet mit einer
+als Kommentar zu. Status: `queued` → `running` → `done` | `failed`. Ein Lauf hält
+eine Lease, die der Worker verlängert; bleibt sie aus (Server beendet, Worker
+abgestürzt), wird `running` nach höchstens zwei Minuten zu `interrupted`, auch
+wenn mehrere Server dieselbe Datenbank nutzen. Statuswechsel überschreiben keinen
+inzwischen anders gesetzten Status. Wird das Ticket während des Laufs „nur für
+Menschen“, stellt Conclave keine Antwort eines Agent-Auftrags zu (`failed`).
+Im eigenen Board gelten als frühere Conclave-Kommentare nur solche mit Herkunft
+`system`; ein Agent-Kommentar, der eine Kennung nachahmt, bleibt im Prompt. Jeder Kommentar endet mit einer
 Schlusszeile wie
 
 `— Zweitmeinung von GPT (openai, gpt-5.6) über Conclave, nicht geprüft · consultation <id>/gpt`
