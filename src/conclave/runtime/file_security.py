@@ -108,6 +108,17 @@ def replace_private(path: Path, data: bytes) -> None:
         tmp.unlink(missing_ok=True)
 
 
+def make_private_dirs(folder: Path) -> None:
+    """Legt fehlende Ordner an, POSIX gleich mit 0o700; vorhandene bleiben unveraendert."""
+    for missing in [p for p in (*reversed(folder.parents), folder) if not p.exists()]:
+        try:
+            missing.mkdir(mode=0o700)
+        except FileExistsError:
+            continue
+        if os.name != "nt":
+            missing.chmod(0o700)            # mkdir beachtet die umask
+
+
 def create_private(path: Path) -> None:
     """Legt eine leere Datei (und fehlende Ordner) gleich nur fuer den Benutzer an; vorhandene bleiben.
 
@@ -115,14 +126,7 @@ def create_private(path: Path) -> None:
     """
     if path.exists():
         return
-    missing = [p for p in reversed(path.parents) if not p.exists()]
-    for folder in missing:
-        try:
-            folder.mkdir(mode=0o700)
-        except FileExistsError:
-            continue
-        if os.name != "nt":
-            folder.chmod(0o700)             # mkdir beachtet die umask
+    make_private_dirs(path.parent)
     try:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600)
     except FileExistsError:

@@ -120,7 +120,8 @@ def create_backup_archive(
     prefix: str = "conclave-backup",
     secret: bytes | None = None,
 ) -> Path:
-    backup_dir.mkdir(parents=True, exist_ok=True)
+    from conclave.runtime.file_security import make_private_dirs
+    make_private_dirs(backup_dir)
     workspace_root = workspace_root.resolve()
     backup_path = _new_backup_path(backup_dir, prefix)
     files: dict[str, dict] = {}

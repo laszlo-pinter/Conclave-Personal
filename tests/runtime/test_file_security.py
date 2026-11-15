@@ -233,3 +233,29 @@ def test_create_private_keeps_an_existing_file(tmp_path):
     path.write_bytes(b"daten")
     file_security.create_private(path)
     assert path.read_bytes() == b"daten"
+
+
+# ── Nacharbeit aus dem zweiten Review (V1) ─────────────────────────────────
+
+@posix
+def test_runtime_and_db_folders_are_created_private(tmp_path):
+    """V1: ensure() und build_service legen neue Ordner gleich mit 0o700 an (umask 022)."""
+    from conclave.cli.bootstrap import build_service
+    from conclave.cli.config import ConclaveConfig
+    paths = _paths(tmp_path)
+    old = os.umask(0o022)
+    try:
+        paths.ensure()
+        build_service(config=ConclaveConfig(db_path=tmp_path / "neu" / "tief" / "c.db"))
+    finally:
+        os.umask(old)
+    for folder in (paths.config_dir, paths.data_dir, paths.log_dir, tmp_path / "neu", tmp_path / "neu" / "tief"):
+        assert stat.S_IMODE(folder.stat().st_mode) == 0o700, folder
+
+
+def test_make_private_dirs_creates_missing_folders_only(tmp_path):
+    existing = tmp_path / "da"
+    existing.mkdir()
+    file_security.make_private_dirs(existing / "a" / "b")
+    assert (existing / "a" / "b").is_dir()
+    file_security.make_private_dirs(existing / "a" / "b")       # vorhanden: kein Fehler

@@ -103,7 +103,7 @@ def build_unit_of_work(config: ConclaveConfig) -> object:
         return PostgresUnitOfWork(dsn=config.db_dsn)
     else:
         from conclave.infrastructure.sqlite.unit_of_work import SQLiteUnitOfWork
-        config.db_path.parent.mkdir(parents=True, exist_ok=True)
+        _make_private_dirs(config.db_path.parent)
         connection = sqlite3.connect(str(config.db_path))
         initialize_schema(connection)
         return SQLiteUnitOfWork(connection)
@@ -119,7 +119,7 @@ def build_service(
         config = load_config()
     if connection is None:
         resolved_path = db_path or config.db_path
-        resolved_path.parent.mkdir(parents=True, exist_ok=True)
+        _make_private_dirs(Path(resolved_path).parent)
         _create_db_file(Path(resolved_path))
         connection = sqlite3.connect(str(resolved_path))
         initialize_schema(connection)
@@ -151,7 +151,7 @@ def build_agent_service(
         config = load_config()
     if connection is None:
         resolved_path = db_path or config.db_path
-        resolved_path.parent.mkdir(parents=True, exist_ok=True)
+        _make_private_dirs(Path(resolved_path).parent)
         _create_db_file(Path(resolved_path))
         connection = sqlite3.connect(str(resolved_path))
         initialize_schema(connection)
@@ -185,6 +185,11 @@ def _migrate_config_agents(svc: AgentService, config: ConclaveConfig) -> None:
             svc.upsert_agent(agent)
         except (ValueError, Exception):
             pass
+
+
+def _make_private_dirs(folder: Path) -> None:
+    from conclave.runtime.file_security import make_private_dirs
+    make_private_dirs(folder)
 
 
 def _create_db_file(db_path: Path) -> None:
