@@ -13,8 +13,8 @@ class SQLiteRunRepository:
             """
             INSERT INTO runs (
                 id, conversation_id, kind, participants, started_at,
-                finished_at, status, error
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                finished_at, status, error, origin
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 conversation_id=excluded.conversation_id,
                 kind=excluded.kind,
@@ -22,7 +22,8 @@ class SQLiteRunRepository:
                 started_at=excluded.started_at,
                 finished_at=excluded.finished_at,
                 status=excluded.status,
-                error=excluded.error
+                error=excluded.error,
+                origin=excluded.origin
             """,
             (
                 run.id,
@@ -33,6 +34,7 @@ class SQLiteRunRepository:
                 run.finished_at.isoformat() if run.finished_at else None,
                 run.status,
                 run.error,
+                run.origin,
             ),
         )
         self._connection.execute("DELETE FROM usage_records WHERE run_id = ?", (run.id,))
@@ -126,13 +128,6 @@ class SQLiteRunRepository:
         )
 
     # ── Budgets der Agenten (R11) ────────────────────────────────────────
-
-    def mark_origin(self, conversation_id: str, since: datetime, origin: str) -> None:
-        """Laeufe dieser Conversation seit ``since`` ohne Herkunft bekommen ``origin``."""
-        self._connection.execute(
-            "UPDATE runs SET origin = ? WHERE conversation_id = ? AND started_at >= ? AND origin IS NULL",
-            (origin, conversation_id, since.isoformat()))
-        self._connection.commit()
 
     def tokens_since(self, since: datetime, *, origin: str | None = None,
                      conversation_id: str | None = None) -> int:

@@ -240,8 +240,10 @@ oder PostgreSQL.
 `[limits]` begrenzt, was Agenten (Agent-Token) über Conclave an Modellen
 verbrauchen. Budgets zählen Tokens (Eingabe plus Ausgabe) der letzten 24 Stunden
 für Läufe, die ein Agent über `invoke`, `orchestrate` oder `orchestrate-parallel`
-ausgelöst hat. `0` schaltet eine Grenze ab. Für den Menschen gilt keine dieser
-Grenzen.
+ausgelöst hat. `0` schaltet ein Budget bzw. die Grenze gleichzeitiger Läufe ab.
+`agent_rate_limit = "off"` heißt: Für Agenten gilt dann das allgemeine
+`rate_limit`. Umgekehrt gilt `agent_rate_limit` auch, wenn das allgemeine
+`rate_limit` abgeschaltet ist. Für den Menschen gilt keine dieser Grenzen.
 
 ```toml
 [limits]

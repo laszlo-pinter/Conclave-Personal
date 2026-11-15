@@ -49,6 +49,7 @@ from conclave.application.board import (
 from conclave.domain.errors import TaskNotFound, TaskSourceError
 from conclave.cli.bootstrap import rate_limit_disabled, validate_rate_limit
 from conclave.cli.config import DEFAULT_RATE_LIMIT, LimitSettings
+from conclave.application.conversation_flow import RUN_ORIGIN
 from conclave.application.workspace_security import (
     agent_read_limit_bytes,
     agent_write_problem,
@@ -190,9 +191,14 @@ def create_app(handler: CLIHandler, auth_service=None,
         return DEFAULT_RATE_LIMIT if rate_limit_disabled(value) else value
 
     if _has_limiter:
+        def _rate_exempt() -> bool:
+            # Agenten haben ihr eigenes Limit; der allgemeine Schalter "off" gilt nur fuer die anderen (R11)
+            if _request_role() in ("agent", "reviewer") and not rate_limit_disabled(limits.agent_rate_limit):
+                return False
+            return rate_limit_disabled(rate_limit_state["value"])
+
         limiter = Limiter(_rate_key, app=app, default_limits=[_current_rate_limit],
-                          default_limits_exempt_when=lambda: rate_limit_disabled(rate_limit_state["value"]),
-                          storage_uri="memory://")
+                          default_limits_exempt_when=_rate_exempt, storage_uri="memory://")
 
     if app.config.get("MAX_CONTENT_LENGTH") is None:      # Flask legt den Schluessel mit None an
         app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
@@ -302,19 +308,17 @@ def create_app(handler: CLIHandler, auth_service=None,
                         "type": "TooManyAgentRuns"}), 429
                 agent_runs["active"] += 1
                 g.agent_run_slot = True
-        g.agent_run = (conversation_id, datetime.now(timezone.utc))
+        # Laeufe dieser Anfrage tragen die Herkunft "agent" schon beim Speichern
+        g.agent_origin_token = RUN_ORIGIN.set("agent")
 
     @app.teardown_request
     def _finish_agent_run(_exc=None):
         if g.pop("agent_run_slot", False):
             with agent_runs_lock:
                 agent_runs["active"] -= 1
-        started = g.pop("agent_run", None)
-        if started and started[0] and run_repo is not None:
-            try:
-                run_repo.mark_origin(started[0], started[1], "agent")   # Verbrauch dem Agenten zuordnen
-            except Exception:  # noqa: BLE001 - Antwort ist schon raus
-                logger.exception("Herkunft der Laeufe nicht gespeichert")
+        token = g.pop("agent_origin_token", None)
+        if token is not None:
+            RUN_ORIGIN.reset(token)
 
     @app.before_request
     def _log_request_start():

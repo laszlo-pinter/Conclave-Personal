@@ -56,7 +56,8 @@ def _app(limits, rate_limit="1000 per minute"):
         message_repository=SQLiteMessageRepository(conn, autocommit=True),
         participant_repository=SQLiteParticipantRepository(conn, autocommit=True),
     )
-    service.set_run_repository(SQLiteRunRepository(conn))
+    runs = SQLiteRunRepository(conn)
+    service.set_run_repository(runs)
     model = Model()
     registry = AdapterRegistry()
     registry.register("m1", model)
@@ -72,6 +73,7 @@ def _app(limits, rate_limit="1000 per minute"):
     app = create_app(CLIHandler(service), auth_service=StaticKeyAuthService(HUMAN, AGENT), config=config,
                      service=service)
     app.config["TESTING"] = True
+    app.extensions["test_runs"] = runs
     return app, convs, model
 
 
@@ -160,3 +162,46 @@ def test_invalid_limits_are_rejected(tmp_path, monkeypatch, section):
     monkeypatch.setenv("CONCLAVE_CONFIG_FILE", str(path))
     with pytest.raises(ValueError):
         ConclaveConfig.from_sources()
+
+
+# ── Nacharbeit aus dem Review (B1, V2) ──────────────────────────────────────
+
+def test_agent_rate_limit_applies_when_the_general_limit_is_off():
+    """B1: Das Limit der Agenten haengt nicht am allgemeinen Schalter."""
+    app, _, _ = _app(LimitSettings(agent_rate_limit="3 per minute"), rate_limit="off")
+    c = app.test_client()
+    codes = [c.get("/conversations", headers=_bearer(AGENT)).status_code for _ in range(4)]
+    assert codes == [200, 200, 200, 429]
+    assert all(c.get("/conversations", headers=_bearer(HUMAN)).status_code == 200 for _ in range(10))
+
+
+def test_human_run_during_an_agent_request_does_not_count_against_the_agents():
+    """V2: Herkunft beim Speichern; ein gleichzeitiger Lauf des Menschen bleibt beim Menschen."""
+    from datetime import UTC, datetime, timedelta
+
+    app, (conv, _), model = _app(LimitSettings(agent_tokens_per_day=0, conversation_tokens_per_day=0,
+                                               agent_concurrent_runs=0))
+    model.gate = threading.Event()
+    results = {}
+
+    def agent_call():
+        with app.test_client() as c:
+            results["agent"] = _invoke(c, conv, AGENT).status_code
+
+    t = threading.Thread(target=agent_call)
+    t.start()
+    assert model.started.wait(5)
+    def human_call():
+        with app.test_client() as c:
+            results["human"] = _invoke(c, conv, HUMAN).status_code
+
+    human = threading.Thread(target=human_call)
+    human.start()
+    model.gate.set()
+    human.join(5)
+    t.join(5)
+    assert results == {"agent": 200, "human": 200}
+    runs = app.extensions["test_runs"]
+    since = datetime.now(UTC) - timedelta(days=1)
+    assert runs.tokens_since(since, origin="agent") == 100                  # nur der Lauf des Agenten
+    assert runs.tokens_since(since) == 200

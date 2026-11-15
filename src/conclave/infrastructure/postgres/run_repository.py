@@ -14,8 +14,8 @@ class PostgresRunRepository:
                 """
                 INSERT INTO runs (
                     id, conversation_id, kind, participants, started_at,
-                    finished_at, status, error
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    finished_at, status, error, origin
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT(id) DO UPDATE SET
                     conversation_id=EXCLUDED.conversation_id,
                     kind=EXCLUDED.kind,
@@ -23,7 +23,8 @@ class PostgresRunRepository:
                     started_at=EXCLUDED.started_at,
                     finished_at=EXCLUDED.finished_at,
                     status=EXCLUDED.status,
-                    error=EXCLUDED.error
+                    error=EXCLUDED.error,
+                    origin=EXCLUDED.origin
                 """,
                 (
                     run.id,
@@ -34,6 +35,7 @@ class PostgresRunRepository:
                     run.finished_at,
                     run.status,
                     run.error,
+                    run.origin,
                 ),
             )
             cur.execute("DELETE FROM usage_records WHERE run_id = %s", (run.id,))
@@ -134,11 +136,6 @@ class PostgresRunRepository:
         )
 
     # ── Budgets der Agenten (R11) ────────────────────────────────────────
-
-    def mark_origin(self, conversation_id: str, since: datetime, origin: str) -> None:
-        with self._connection.cursor() as cur:
-            cur.execute("UPDATE runs SET origin = %s WHERE conversation_id = %s AND started_at >= %s "
-                        "AND origin IS NULL", (origin, conversation_id, since))
 
     def tokens_since(self, since: datetime, *, origin: str | None = None,
                      conversation_id: str | None = None) -> int:

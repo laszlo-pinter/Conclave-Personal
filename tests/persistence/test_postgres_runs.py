@@ -31,20 +31,18 @@ def pg():
     conn.close()
 
 
-def _run(conv, started, tokens):
+def _run(conv, started, tokens, origin=None):
     return Run(id=str(uuid.uuid4()), conversation_id=conv, kind="invoke", participants=["m1"], started_at=started,
-               finished_at=started, status="success", usage=UsageRecord("p", "m", tokens, 0))
+               finished_at=started, status="success", usage=UsageRecord("p", "m", tokens, 0), origin=origin)
 
 
 def test_origin_and_token_sums_on_postgres(pg):
     from conclave.infrastructure.postgres.run_repository import PostgresRunRepository
     repo = PostgresRunRepository(pg)
     now = datetime.now(UTC)
-    repo.save(_run("c1", now - timedelta(days=2), 1000))                 # aelter als 24 Stunden
-    t0 = now - timedelta(seconds=5)
-    repo.save(_run("c1", now, 100))
+    repo.save(_run("c1", now - timedelta(days=2), 1000, origin="agent"))  # aelter als 24 Stunden
+    repo.save(_run("c1", now, 100, origin="agent"))
     repo.save(_run("c2", now, 50))
-    repo.mark_origin("c1", t0, "agent")
     since = now - timedelta(days=1)
     assert repo.tokens_since(since, origin="agent") == 100
     assert repo.tokens_since(since, origin="agent", conversation_id="c2") == 0

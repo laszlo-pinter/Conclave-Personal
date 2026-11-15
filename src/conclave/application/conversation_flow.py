@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator, Iterator
 
 import asyncio
+import contextvars
 import dataclasses
 import inspect
 import re
@@ -9,6 +10,10 @@ import uuid
 from datetime import datetime, timezone
 
 from conclave.application.adapter_registry import AdapterRegistry
+
+# Herkunft der Laeufe dieser Anfrage (R11): die API setzt "agent" fuer Modellaufrufe mit dem
+# Agent-Token. asyncio-Tasks und asyncio.to_thread uebernehmen den Kontext, parallele Laeufe also auch.
+RUN_ORIGIN: contextvars.ContextVar[str | None] = contextvars.ContextVar("run_origin", default=None)
 from conclave.application.participant_service import ParticipantService
 from conclave.application.ports import AuditRepository, ContextReportRepository, ConversationRepository, MessageRepository, ModelAdapter, ParticipantRepository, RunRepository, StreamingModelAdapter, ToolEventRepository
 from conclave.application.workspace_security import (
@@ -228,6 +233,7 @@ class ConversationFlowService:
             status=status,
             error=error,
             usage=usage,
+            origin=RUN_ORIGIN.get(),
         )
         self._run_repo.save(run)
         return run.id
