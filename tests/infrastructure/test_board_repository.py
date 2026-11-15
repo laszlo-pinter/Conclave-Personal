@@ -496,3 +496,32 @@ def test_migration_017_marks_existing_tickets_as_tasks(tmp_path):
     run_migrations(conn)
     task = SQLiteBoardRepository(conn, autocommit=True).get_task("api", 1)
     assert (task.kind, task.control, task.control_scope, task.control_ack_by) == ("task", None, "", "")
+
+
+# ── P1-Review, Korrektur 1: Neunummerieren macht gelesene Staende ungueltig ─
+
+def _two_tasks(repo):
+    project = Project.create("prio", "Prio")
+    repo.create_project(project)
+    first = repo.create_task(Task.create(project, "Eins", "todo", position=1024.0, rank=1024.0))
+    repo.create_task(Task.create(project, "Zwei", "todo", position=2048.0, rank=2048.0))
+    return project, first
+
+
+def test_stale_write_after_renumber_ranks_is_rejected(repo):
+    """Ein Agent liest, der Mensch nummeriert die Raenge neu, der Agent schreibt: kein alter Rang zurueck."""
+    project, first = _two_tasks(repo)
+    stale = repo.get_task("prio", first.number)
+    repo.renumber_ranks(project.id)
+    after = repo.get_task("prio", first.number)
+    stale.description = "nur die Beschreibung"
+    assert repo.update_task(stale) is False                       # 409 im Dienst
+    assert repo.get_task("prio", first.number).rank == after.rank
+
+
+def test_stale_write_after_renumber_column_is_rejected(repo):
+    project, first = _two_tasks(repo)
+    stale = repo.get_task("prio", first.number)
+    repo.renumber_column(project.id, "todo")
+    stale.title = "anders"
+    assert repo.update_task(stale) is False

@@ -171,7 +171,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
     def renumber_column(self, project_id: str, status: str) -> None:
         """Eine Anweisung: Postgres rechnet die Rangfolge auf dem Stand vor dem UPDATE aus."""
         self._execute(
-            "UPDATE board_tasks t SET position = s.rn * ? FROM ("
+            "UPDATE board_tasks t SET position = s.rn * ?, version = t.version + 1 FROM ("
             "  SELECT id, ROW_NUMBER() OVER (ORDER BY position, number) AS rn FROM board_tasks"
             "  WHERE project_id = ? AND status = ?) s WHERE s.id = t.id",
             (POSITION_STEP, project_id, status))
@@ -180,7 +180,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
     def renumber_ranks(self, project_id: str) -> None:
         """Eine Anweisung, wie renumber_column."""
         self._execute(
-            "UPDATE board_tasks t SET rank = s.rn * ? FROM ("
+            "UPDATE board_tasks t SET rank = s.rn * ?, version = t.version + 1 FROM ("
             "  SELECT id, ROW_NUMBER() OVER (ORDER BY rank, number) AS rn FROM board_tasks"
             "  WHERE project_id = ?) s WHERE s.id = t.id",
             (POSITION_STEP, project_id))

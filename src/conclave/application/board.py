@@ -227,7 +227,8 @@ class BoardService:
                 return middle
             if attempt == 0:
                 self._repo.renumber_ranks(task.project_id)
-                task.rank = self._repo.get_task_by_id(task.id).rank
+                current = self._repo.get_task_by_id(task.id)        # Neunummerieren erhoeht die Version
+                task.rank, task.version = current.rank, current.version
         raise BoardError("Prioritaet konnte nicht bestimmt werden.", 409, "PositionConflict")
 
     def _position_at(self, task: Task, status: str, index: int) -> float:
@@ -243,6 +244,8 @@ class BoardService:
                 return middle
             if attempt == 0:
                 self._repo.renumber_column(task.project_id, status)
+                if task.status == status:                           # Neunummerieren erhoeht die Version
+                    task.version = self._repo.get_task_by_id(task.id).version
         raise BoardError("Position konnte nicht bestimmt werden.", 409, "PositionConflict")
 
     # ── Tickets schreiben ────────────────────────────────────────────────

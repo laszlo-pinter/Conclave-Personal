@@ -421,3 +421,16 @@ def test_control_tickets_on_postgres(pg, crypto):
     assert svc.control_state()["hints"] == []
     svc.update_task(HUMAN, pause.ref, status="done")
     assert svc.next_task(AGENT).ref == "api#1"
+
+
+def test_renumber_bumps_versions_on_postgres(repo):
+    """P1-Review: Neunummerieren erhoeht die Version, ein vorher gelesener Stand schreibt nicht zurueck."""
+    project = Project.create("prio", "Prio")
+    repo.create_project(project)
+    first = repo.create_task(Task.create(project, "Eins", "todo", position=1024.0, rank=1024.0))
+    repo.create_task(Task.create(project, "Zwei", "todo", position=2048.0, rank=2048.0))
+    for renumber in (lambda: repo.renumber_ranks(project.id), lambda: repo.renumber_column(project.id, "todo")):
+        stale = repo.get_task("prio", first.number)
+        renumber()
+        stale.description = "veraltet"
+        assert repo.update_task(stale) is False

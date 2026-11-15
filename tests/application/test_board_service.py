@@ -502,3 +502,35 @@ def test_moving_forward_is_work_state_not_priority(board):
     board.next_task(AGENT, task="api#1")
     doing = [t.ref for t in board.list_tasks("api", ["doing"])]
     assert doing == ["api#2", "api#1"]                                      # Reihenfolge des Ankommens
+
+
+def test_renumbering_in_another_column_does_not_block_the_human(board):
+    """P1-Review: Neunummerieren erhoeht die Version; der Mensch, der es ausloest, schreibt trotzdem."""
+    for i in range(3):
+        board.create_task(HUMAN, "api", f"t{i}", status="doing")
+    for i in range(70):
+        ref = board.create_task(HUMAN, "api", f"neu{i}", status="doing").ref
+        board.update_task(HUMAN, ref, index=1)
+    refs = [t.ref for t in board.list_tasks("api", ["doing"])]
+    assert refs[1] == "api#73" and len(set(t.position for t in board.list_tasks("api", ["doing"]))) == 73
+
+
+def test_agent_update_racing_a_rank_renumber_cannot_restore_the_old_rank(board, monkeypatch):
+    """P1-Review, Korrektur 1: Rennen zwischen Lesen des Agenten und Neunummerieren -> 409, Rang bleibt."""
+    board.create_task(HUMAN, "api", "a")
+    board.create_task(HUMAN, "api", "b")
+    real_get = board._repo.get_task
+
+    def get_then_renumber(slug, number):
+        task = real_get(slug, number)
+        board._repo.renumber_ranks(task.project_id)               # der Mensch nummeriert dazwischen neu
+        return task
+
+    expected = None
+    monkeypatch.setattr(board._repo, "get_task", get_then_renumber)
+    with pytest.raises(BoardError) as e:
+        board.update_task(AGENT, "api#1", description="nur Text")
+    monkeypatch.undo()
+    expected = board.get_task("api#1").rank
+    assert e.value.status == 409
+    assert board.get_task("api#1").rank == expected and board.get_task("api#1").description == ""

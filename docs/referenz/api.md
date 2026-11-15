@@ -256,7 +256,13 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
   das Ticket noch diesen Stand hat; sonst `409 Conflict`.
 - **Priorität:** Die erste Spalte und `POST /board/next` folgen `rank`, dann der
   Nummer; neue Tickets bekommen den nächsten Rang. In den anderen Spalten zählt
-  die Position (Reihenfolge des Ankommens).
+  die Position (Reihenfolge des Ankommens). Neunummerieren (wenn zwischen zwei
+  Karten kein Platz mehr ist) erhöht die `version` der betroffenen Tickets; ein
+  vorher gelesener Stand ergibt dann `409` statt eines alten Rangs. Bei der
+  Einführung des Rangs bekam jedes vorhandene Ticket seine damalige Position als
+  Rang. Positionen zählen je Spalte, daher stehen Tickets, die damals nicht in der
+  ersten Spalte waren, beim Zurückschieben dort weit oben, bis der Mensch sie
+  umsortiert.
 - **`POST /board/next`** (`{"project": "api"}` optional): schiebt das oberste
   Ticket der ersten Spalte ohne Markierung „nur für Menschen“ atomar in die
   zweite und liefert es (`{"task": ...}`, `null` wenn keines frei ist). Mit

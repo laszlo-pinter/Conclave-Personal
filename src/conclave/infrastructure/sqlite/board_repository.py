@@ -332,11 +332,13 @@ class SQLiteBoardRepository:
         Erst den Schreib-Lock holen (Zaehler erhoehen startet die IMMEDIATE-Transaktion),
         dann lesen, damit keine gleichzeitig eingefuegte Karte fehlt. Zeile fuer Zeile,
         weil SQLite eine korrelierte Unterabfrage mit schon geaenderten Werten auswertet.
+        Die Version steigt mit, damit ein vorher gelesener Stand nicht zurueckgeschrieben wird.
         """
         with self._tx():
             self._bump()
             for index, (task_id, _pos) in enumerate(self.column_positions(project_id, status), start=1):
-                self._execute("UPDATE board_tasks SET position = ? WHERE id = ?", (index * POSITION_STEP, task_id))
+                self._execute("UPDATE board_tasks SET position = ?, version = version + 1 WHERE id = ?",
+                              (index * POSITION_STEP, task_id))
 
     # ── Prioritaet (P1) ──────────────────────────────────────────────────
 
@@ -345,12 +347,16 @@ class SQLiteBoardRepository:
         return float(row[0]) if row and row[0] is not None else 0.0
 
     def renumber_ranks(self, project_id: str) -> None:
-        """Raenge des Projekts auf gleichmaessige Abstaende setzen, Reihenfolge bleibt (wie renumber_column)."""
+        """Raenge des Projekts auf gleichmaessige Abstaende setzen, Reihenfolge bleibt (wie renumber_column).
+
+        Die Version steigt mit: Ein Agent, der das Ticket vorher gelesen hat, kann sonst beim
+        Schreiben einen alten Rang zurueckschreiben, ohne 409 und ohne Verlauf (P1-Review)."""
         with self._tx():
             self._bump()
             rows = self._all("SELECT id FROM board_tasks WHERE project_id = ? ORDER BY rank, number", (project_id,))
             for index, (task_id,) in enumerate(rows, start=1):
-                self._execute("UPDATE board_tasks SET rank = ? WHERE id = ?", (index * POSITION_STEP, task_id))
+                self._execute("UPDATE board_tasks SET rank = ?, version = version + 1 WHERE id = ?",
+                              (index * POSITION_STEP, task_id))
 
     # ── Kommentare ───────────────────────────────────────────────────────
 
