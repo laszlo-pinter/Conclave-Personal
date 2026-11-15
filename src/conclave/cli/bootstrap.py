@@ -122,6 +122,7 @@ def build_service(
         resolved_path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(str(resolved_path))
         initialize_schema(connection)
+        _restrict_db_files(Path(resolved_path))
 
     if crypto is None:
         crypto = _load_crypto()
@@ -152,6 +153,7 @@ def build_agent_service(
         resolved_path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(str(resolved_path))
         initialize_schema(connection)
+        _restrict_db_files(Path(resolved_path))
 
     if crypto is None:
         crypto = _load_crypto()
@@ -181,6 +183,15 @@ def _migrate_config_agents(svc: AgentService, config: ConclaveConfig) -> None:
             svc.upsert_agent(agent)
         except (ValueError, Exception):
             pass
+
+
+def _restrict_db_files(db_path: Path) -> None:
+    """POSIX: DB samt WAL-Dateien nur fuer den Benutzer (R13); Windows: Rechte des Datenordners."""
+    if os.name == "nt":
+        return
+    for path in (db_path, db_path.with_name(db_path.name + "-wal"), db_path.with_name(db_path.name + "-shm")):
+        if path.is_file():
+            path.chmod(0o600)
 
 
 def _build_adapter_for_agent(agent, config: ConclaveConfig):

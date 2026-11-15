@@ -74,6 +74,25 @@ def load_backup_secret() -> bytes | None:
         return None
 
 
+def load_backup_secrets() -> list[bytes]:
+    """Aktueller und aeltere Schluessel (nach einem Wechsel), zum Pruefen eigener Backups."""
+    env_key = env_secret("CONCLAVE_SECRET_KEY")
+    if env_key:
+        return [env_key.encode()]
+    from conclave.infrastructure.crypto import key_file_paths
+    from conclave.runtime.paths import get_runtime_paths
+    path = get_runtime_paths().secret_key_path
+    pending, retired = key_file_paths(path)
+    keys = []
+    for candidate in (pending, path, *retired):
+        try:
+            if candidate.is_file():
+                keys.append(candidate.read_bytes().strip())
+        except OSError:
+            continue
+    return keys
+
+
 def instance_id(secret: bytes) -> str:
     """Oeffentliche Kennung der Instanz, abgeleitet aus dem Schluessel (nicht umkehrbar)."""
     return hmac.new(secret, b"conclave-instance-id-v1", hashlib.sha256).hexdigest()[:16]
@@ -125,6 +144,8 @@ def create_backup_archive(
         backup_path.unlink(missing_ok=True)
         raise
 
+    from conclave.runtime.file_security import restrict
+    restrict(backup_path)                       # Backup enthaelt DB und Workspace: nur der Benutzer
     return backup_path
 
 
@@ -209,9 +230,12 @@ def restore_backup_archive(
     workspace_root: Path,
     backup_dir: Path,
     replace_workspace: bool = True,
-    secret: bytes | None = None,
+    secret: bytes | list[bytes] | None = None,
     allow_foreign: bool = False,
 ) -> RestoreResult:
+    # Mehrere Schluessel: eigene Backups von vor einem Schluesselwechsel bleiben eigene
+    known = [s for s in (secret if isinstance(secret, list) else [secret]) if s]
+    secret = known[0] if known else None
     backup_path = backup_path.expanduser().resolve()
     workspace_root = workspace_root.expanduser().resolve()
     backup_dir = backup_dir.expanduser().resolve()
@@ -235,7 +259,7 @@ def restore_backup_archive(
         except (EOFError, zlib.error) as exc:
             raise ValueError("Backup archive is corrupt.") from exc
 
-        reason = _origin_problem(manifest, digests, secret)
+        reason = _origin_problem(manifest, digests, known)
         if staged_db is not None:
             _check_and_clean_db(staged_db)
         if reason is not None and not allow_foreign:
@@ -393,17 +417,18 @@ def _read_manifest(zf: zipfile.ZipFile, members: list[zipfile.ZipInfo]) -> dict 
     return data if isinstance(data, dict) else None
 
 
-def _origin_problem(manifest: dict | None, digests: dict[str, dict], secret: bytes | None) -> str | None:
+def _origin_problem(manifest: dict | None, digests: dict[str, dict], secrets_: list[bytes]) -> str | None:
     """None, wenn das Backup nachweislich von dieser Instanz stammt und unveraendert ist."""
     if manifest is None:
         return "kein Manifest"
-    if not secret:
+    if not secrets_:
         return "kein Schluessel zum Pruefen"
     mac = manifest.get("hmac")
     body = {k: v for k, v in manifest.items() if k != "hmac"}
     if not isinstance(mac, str) or not mac:
         return "nicht signiert"
-    if manifest.get("instance_id") != instance_id(secret):
+    secret = next((s for s in secrets_ if manifest.get("instance_id") == instance_id(s)), None)
+    if secret is None:
         return "andere Instanz"
     if not hmac.compare_digest(mac, _manifest_mac(secret, body)):
         return "Signatur ungueltig"

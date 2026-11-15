@@ -130,6 +130,31 @@ Oktober 2026):
   oder (Linux/macOS) `XDG_CONFIG_HOME` setzt, trägt die dort gesetzten Pfade ein.
 - `secret.key` gehört dazu: Mit ihm und der Datenbank ließen sich die
   gespeicherten Provider-Keys entschlüsseln.
+
+### Dateirechte
+
+- `secret.key` und die Token-Dateien entstehen nur einmal, auch wenn zwei
+  Prozesse gleichzeitig starten, und sind nur für den Benutzer lesbar.
+  Hat eine vorhandene Datei weitere Rechte, entfernt Conclave sie beim Start
+  und schreibt eine Warnung ins Log.
+- Windows: Datei und Konfigurationsverzeichnis (`%APPDATA%\Conclave`) haben
+  genau einen Eintrag für den Benutzer, ohne Vererbung. `icacls` zeigt nur den
+  Benutzer. Das Verzeichnis wird nur gehärtet, wenn `secret.key` darin liegt.
+- Linux/macOS: Konfigurations-, Daten- und Log-Verzeichnis `0700`;
+  Datenbank, Logs und Backups `0600`.
+
+### Schlüsselwechsel
+
+```powershell
+conclave key rotate
+```
+
+Erzeugt einen neuen `secret.key` und verschlüsselt alle Daten in einer
+Transaktion neu. Der alte Schlüssel bleibt als `secret.key.old-<Zeit>` neben
+der Datei liegen; ältere Backups brauchen ihn, und sie gelten weiterhin als
+eigene. Bricht der Wechsel ab, setzt ein erneuter Aufruf ihn fort; es geht
+nichts verloren. Ein laufender Server wird danach neu gestartet. Kommt der
+Schlüssel aus `CONCLAVE_SECRET_KEY`, wird er dort gewechselt.
 - `Read`-Deny-Regeln gelten für die Datei-Tools von Claude Code und für
   Shell-Befehle, die Claude Code als Dateizugriff erkennt (`cat`, `head`,
   `sed` …). Sie gelten **nicht** für Programme, die Dateien selbst öffnen,

@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import stat
 from pathlib import Path
 from conclave.runtime.env import env_secret
 
 try:
-    from cryptography.fernet import Fernet, InvalidToken
+    from cryptography.fernet import Fernet, InvalidToken, MultiFernet  # noqa: F401 - InvalidToken fuer Aufrufer
 except ImportError:
     raise ImportError(
         "Das 'cryptography'-Paket ist nicht installiert. "
@@ -27,10 +25,14 @@ class NullCryptoService:
 
 
 class CryptoService:
-    """Symmetrische Verschlüsselung für sensible Felder (Fernet / AES-128-CBC + HMAC-SHA256)."""
+    """Symmetrische Verschlüsselung für sensible Felder (Fernet / AES-128-CBC + HMAC-SHA256).
 
-    def __init__(self, key: bytes) -> None:
-        self._fernet = Fernet(key)
+    Verschluesselt wird mit ``key``; entschluesselt auch mit ``old_keys`` (nach
+    einem Schluesselwechsel, R13).
+    """
+
+    def __init__(self, key: bytes, old_keys: list[bytes] | None = None) -> None:
+        self._fernet = MultiFernet([Fernet(k) for k in [key, *(old_keys or [])]])
 
     def encrypt(self, plaintext: str) -> str:
         """Verschlüsselt einen Klartext-String und gibt Base64-Token zurück."""
@@ -42,40 +44,42 @@ class CryptoService:
 
     @staticmethod
     def load_or_generate(key_path: Path) -> CryptoService:
-        """Lädt einen bestehenden Key oder generiert und speichert einen neuen.
+        """Lädt die Schluessel aus ``key_path`` oder legt einen neuen an.
 
-        Die Key-Datei wird mit Berechtigungen 0o600 (nur Owner) angelegt.
         Vorrang hat die Umgebungsvariable CONCLAVE_SECRET_KEY (Base64-Fernet-Key).
+        Die Datei entsteht exklusiv und nur fuer den Benutzer lesbar; fremde Rechte
+        an einer vorhandenen Datei werden entfernt.
         """
         env_key = env_secret("CONCLAVE_SECRET_KEY")
         if env_key:
             return CryptoService(env_key.encode())
-
-        if key_path.exists():
-            return CryptoService(key_path.read_bytes())
-
-        key = Fernet.generate_key()
-        key_path.parent.mkdir(parents=True, exist_ok=True)
-        key_path.write_bytes(key)
-        key_path.chmod(0o600)
-        return CryptoService(key)
+        current, old = load_key_files(key_path)
+        return CryptoService(current, old)
 
 
-class MultiKeyCryptoService:
-    """Unterstuetzt Key-Rotation: verschluesselt mit aktuellem Key, entschluesselt mit allen."""
+class MultiKeyCryptoService(CryptoService):
+    """Frueherer Name: verschluesselt mit ``current_key``, entschluesselt mit allen."""
 
-    def __init__(self, current_key: bytes, old_keys: list[bytes] | None = None):
-        self._current = Fernet(current_key)
-        self._all = [self._current] + [Fernet(k) for k in (old_keys or [])]
+    def __init__(self, current_key: bytes, old_keys: list[bytes] | None = None) -> None:
+        super().__init__(current_key, old_keys)
 
-    def encrypt(self, plaintext: str) -> str:
-        return self._current.encrypt(plaintext.encode()).decode()
 
-    def decrypt(self, ciphertext: str) -> str:
-        data = ciphertext.encode()
-        for fernet in self._all:
-            try:
-                return fernet.decrypt(data).decode()
-            except InvalidToken:
-                continue
-        raise InvalidToken("Kein Key konnte den Ciphertext entschluesseln.")
+def key_file_paths(key_path: Path) -> tuple[Path, list[Path]]:
+    """(Pfad eines begonnenen Wechsels, abgeloeste Schluessel neueste zuerst)."""
+    retired = sorted(key_path.parent.glob(key_path.name + ".old-*"), reverse=True)
+    return key_path.with_name(key_path.name + ".new"), retired
+
+
+def load_key_files(key_path: Path) -> tuple[bytes, list[bytes]]:
+    """Aktueller Schluessel und alle aelteren (Wechsel, R13)."""
+    from conclave.runtime.file_security import create_exclusive, harden
+
+    pending, retired = key_file_paths(key_path)
+    if not key_path.exists() and not pending.exists():
+        create_exclusive(key_path, Fernet.generate_key())
+    keys = []
+    for path in [pending, key_path, *retired]:      # ein begonnener Wechsel ist der aktuelle Schluessel
+        if path.exists():
+            harden(path)
+            keys.append(path.read_bytes().strip())
+    return keys[0], keys[1:]

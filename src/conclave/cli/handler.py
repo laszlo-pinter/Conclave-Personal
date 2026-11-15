@@ -1114,7 +1114,7 @@ class CLIHandler:
             backup_dir_env = os.environ.get("CONCLAVE_BACKUP_DIR", "").strip()
             backup_dir = Path(backup_dir_env) if backup_dir_env else root.parent / "backups"
         from conclave.runtime.backup import (
-            ForeignBackupError, WorkspaceBusyError, load_backup_secret, restore_backup_archive,
+            ForeignBackupError, WorkspaceBusyError, load_backup_secrets, restore_backup_archive,
         )
         try:
             result = restore_backup_archive(
@@ -1123,7 +1123,7 @@ class CLIHandler:
                 workspace_root=root,
                 backup_dir=backup_dir,
                 replace_workspace=replace_workspace,
-                secret=load_backup_secret(),
+                secret=load_backup_secrets(),
                 allow_foreign=allow_foreign,
             )
         except ForeignBackupError as exc:

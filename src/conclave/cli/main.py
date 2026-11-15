@@ -244,6 +244,11 @@ def build_parser() -> argparse.ArgumentParser:
     token_show.add_argument("--reveal", action="store_true",
                             help="Den Token-Wert ausgeben (nur auf ausdrueckliche Anfrage)")
 
+    key_p = sub.add_parser("key", help="Schluessel fuer die verschluesselten Daten (secret.key)")
+    key_sub = key_p.add_subparsers(dest="key_command", required=True)
+    key_rotate = key_sub.add_parser("rotate", help="Neuen Schluessel erzeugen und alle Daten neu verschluesseln")
+    key_rotate.add_argument("--db", default=None, help="SQLite-DB, Default ist die aktive Conclave-DB")
+
     watch = sub.add_parser("watch", help="Conversation live beobachten (pollt auf neue Nachrichten)")
     watch.add_argument("conversation_id")
     watch.add_argument("--interval", type=int, default=5, help="Poll-Intervall in Sekunden (Default: 5)")
@@ -266,6 +271,8 @@ def run(argv: list[str] | None = None) -> int:
         return _run_migrate_personal(args)
     if args.command == "token":
         return _run_token_show(args)
+    if args.command == "key":
+        return _run_key_rotate(args)
 
     config = ConclaveConfig.from_sources()
     errors = validate_production_config(config)
@@ -648,6 +655,32 @@ def _show_reviewer_token(args, url: str) -> int:
     if args.reveal:
         print()
         print(token)
+    return 0
+
+
+def _run_key_rotate(args) -> int:
+    """Schluesselwechsel (R13): neuer secret.key, alle Daten neu verschluesselt, alter Schluessel bleibt."""
+    from conclave.runtime.key_rotation import KeyRotationError, rotate_secret_key
+    from conclave.runtime.paths import get_runtime_paths
+
+    config = ConclaveConfig.from_sources()
+    postgres = config.db_provider == "postgres"
+    if postgres:
+        import psycopg2
+        connection = psycopg2.connect(config.db_dsn)
+    else:
+        import sqlite3
+        connection = sqlite3.connect(str(args.db or config.db_path), timeout=30)
+    try:
+        count = rotate_secret_key(get_runtime_paths().secret_key_path, connection, postgres=postgres)
+    except KeyRotationError as exc:
+        print(f"FEHLER: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        connection.close()
+    print(f"Schluessel gewechselt: {count} Werte neu verschluesselt.")
+    print("Der alte Schluessel liegt als secret.key.old-* daneben; er wird fuer aeltere Backups gebraucht.")
+    print("Einen laufenden Server danach neu starten.")
     return 0
 
 

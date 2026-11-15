@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import time
 from contextlib import contextmanager
 from collections.abc import Iterator
@@ -57,6 +58,8 @@ def configure_logging(level: str = "INFO", log_file: str | Path | None = None) -
         path = Path(log_file)
         path.parent.mkdir(parents=True, exist_ok=True)
         handler = logging.FileHandler(path, encoding="utf-8")
+        if os.name != "nt":
+            path.chmod(0o600)                   # Log nur fuer den Benutzer (R13)
         handler.setFormatter(JsonFormatter())
         handler.setLevel(logger.level)
         handler._conclave_managed = True  # type: ignore[attr-defined]

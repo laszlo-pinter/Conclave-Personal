@@ -146,6 +146,17 @@ Mensch-Token, mit `--agent` das Agent-Token samt fertigem
 angelegt. Mit `--reviewer` entsprechend das Reviewer-Token und der Befehl für
 `conclave-mcp --reviewer`. Den Token-Wert gibt der Befehl nur mit `--reveal` aus.
 
+## Schlüssel
+
+```powershell
+conclave key rotate [--db <pfad>]
+```
+
+Neuer `secret.key`, alle verschlüsselten Daten (SQLite oder PostgreSQL) werden
+neu verschlüsselt. Der alte Schlüssel bleibt als `secret.key.old-<Zeit>` für
+ältere Backups erhalten. Danach den Server neu starten. Siehe
+[Sicherheit](../sicherheit.md#schlüsselwechsel).
+
 ## JSON-Ausgabe
 
 `--json` ist eine globale Option und steht **vor** dem Subkommando:

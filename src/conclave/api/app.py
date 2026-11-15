@@ -66,7 +66,8 @@ from conclave.application import workspace_security
 from conclave.infrastructure.log import active_log_file, get_logger, read_log_tail
 from conclave.runtime.toml_edit import set_toml_string
 from conclave.runtime.backup import (
-    ForeignBackupError, WorkspaceBusyError, create_backup_archive, load_backup_secret, restore_backup_archive,
+    ForeignBackupError, WorkspaceBusyError, create_backup_archive, load_backup_secret, load_backup_secrets,
+    restore_backup_archive,
 )
 from conclave.runtime.assets import get_asset_root
 from conclave.runtime.env import env_secret
@@ -1488,7 +1489,7 @@ def create_app(handler: CLIHandler, auth_service=None,
                 workspace_root=pathlib.Path(WORKSPACE),
                 backup_dir=_backup_root(),
                 replace_workspace=replace_workspace,
-                secret=load_backup_secret(),
+                secret=load_backup_secrets(),
                 allow_foreign=allow_foreign,
             )
         except ForeignBackupError as exc:

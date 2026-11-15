@@ -125,6 +125,9 @@ def _build_sqlite(config):
 
     from conclave.infrastructure.sqlite.schema import initialize_schema
     initialize_schema(conn)
+    from pathlib import Path
+    from conclave.cli.bootstrap import _restrict_db_files
+    _restrict_db_files(Path(config.db_path))
 
     from conclave.cli.bootstrap import build_service
     from conclave.infrastructure.sqlite.audit_repository import SQLiteAuditRepository
@@ -254,6 +257,10 @@ def _build_app(config: ConclaveConfig | None = None):
     }
     handler = CLIHandler(service, agent_service=agent_service,
                          provider_fallback_keys=provider_fallback_keys)
+    # Konfigurationsverzeichnis nur fuer den Benutzer (R13), bevor Tokens angelegt werden
+    from conclave.runtime.file_security import secure_runtime_dirs
+    from conclave.runtime.paths import get_runtime_paths
+    secure_runtime_dirs(get_runtime_paths())
     # Token ist immer Pflicht (B2): ohne CONCLAVE_API_KEY wird die Token-Datei verwendet.
     if not config.api_key:
         config.api_key = load_or_create_token()
