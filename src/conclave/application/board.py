@@ -227,9 +227,19 @@ class BoardService:
                 return middle
             if attempt == 0:
                 self._repo.renumber_ranks(task.project_id)
-                current = self._repo.get_task_by_id(task.id)        # Neunummerieren erhoeht die Version
+                current = self._after_renumber(task)
                 task.rank, task.version = current.rank, current.version
         raise BoardError("Prioritaet konnte nicht bestimmt werden.", 409, "PositionConflict")
+
+    def _after_renumber(self, task: Task, current: Task | None = None) -> Task:
+        """Stand nach dem eigenen Neunummerieren. Das erhoeht die Version genau um eins; ist sie
+        weiter, hat inzwischen jemand anderes das Ticket geaendert -> 409 statt still zu ueberschreiben."""
+        current = current or self._repo.get_task_by_id(task.id)
+        if current is None:
+            raise BoardError(f"Ticket '{task.ref}' nicht gefunden.", 404, "TaskNotFound")
+        if current.version != task.version + 1:
+            raise BoardError(f"Ticket '{task.ref}' wurde inzwischen geaendert; bitte neu laden.", 409, "Conflict")
+        return current
 
     def _position_at(self, task: Task, status: str, index: int) -> float:
         """Position fuer ``index`` in der Spalte (ohne das Ticket selbst); nummeriert neu,
@@ -244,8 +254,10 @@ class BoardService:
                 return middle
             if attempt == 0:
                 self._repo.renumber_column(task.project_id, status)
-                if task.status == status:                           # Neunummerieren erhoeht die Version
-                    task.version = self._repo.get_task_by_id(task.id).version
+                # Nur wenn das Ticket schon in dieser Spalte stand, hat das Neunummerieren es angefasst
+                stored = self._repo.get_task_by_id(task.id)
+                if stored is not None and stored.status == status:
+                    task.version = self._after_renumber(task, stored).version
         raise BoardError("Position konnte nicht bestimmt werden.", 409, "PositionConflict")
 
     # ── Tickets schreiben ────────────────────────────────────────────────

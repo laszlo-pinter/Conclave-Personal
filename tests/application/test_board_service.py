@@ -515,22 +515,59 @@ def test_renumbering_in_another_column_does_not_block_the_human(board):
     assert refs[1] == "api#73" and len(set(t.position for t in board.list_tasks("api", ["doing"]))) == 73
 
 
+def _store(board, ref, **fields):
+    """Felder direkt im Repository setzen (ohne Dienst), z. B. enge Raenge fuer das Neunummerieren."""
+    task = board.get_task(ref)
+    for name, value in fields.items():
+        setattr(task, name, value)
+    assert board._repo.update_task(task)
+
+
 def test_agent_update_racing_a_rank_renumber_cannot_restore_the_old_rank(board, monkeypatch):
     """P1-Review, Korrektur 1: Rennen zwischen Lesen des Agenten und Neunummerieren -> 409, Rang bleibt."""
     board.create_task(HUMAN, "api", "a")
     board.create_task(HUMAN, "api", "b")
+    _store(board, "api#1", rank=5.0)                                  # ungleichmaessig: Neunummerieren aendert ihn
+    _store(board, "api#2", rank=7.0)
     real_get = board._repo.get_task
+    after = {}
 
     def get_then_renumber(slug, number):
         task = real_get(slug, number)
         board._repo.renumber_ranks(task.project_id)               # der Mensch nummeriert dazwischen neu
+        after["rank"] = real_get(slug, number).rank
         return task
 
-    expected = None
     monkeypatch.setattr(board._repo, "get_task", get_then_renumber)
     with pytest.raises(BoardError) as e:
         board.update_task(AGENT, "api#1", description="nur Text")
     monkeypatch.undo()
-    expected = board.get_task("api#1").rank
     assert e.value.status == 409
-    assert board.get_task("api#1").rank == expected and board.get_task("api#1").description == ""
+    assert after["rank"] != 5.0                                     # der Rang hat sich wirklich geaendert
+    task = board.get_task("api#1")
+    assert task.rank == after["rank"] and task.description == ""
+
+
+@pytest.mark.parametrize("column", ["todo", "doing"])
+def test_human_move_with_renumber_does_not_overwrite_a_foreign_change(board, monkeypatch, column):
+    """P1-Folgereview V1: Aendert jemand das Ticket zwischen Lesen und Neunummerieren, gibt es 409."""
+    for title in ("a", "b", "c"):
+        board.create_task(HUMAN, "api", title, status=column)
+    field = "rank" if column == "todo" else "position"
+    _store(board, "api#1", **{field: 1.0})
+    _store(board, "api#2", **{field: 1.0 + 1e-9})                     # kein Platz dazwischen
+    _store(board, "api#3", **{field: 5.0})
+    name = "renumber_ranks" if column == "todo" else "renumber_column"
+    real = getattr(board._repo, name)
+
+    def foreign_change_then_renumber(*args):
+        _store(board, "api#3", description="vom Agenten")             # fremde Aenderung dazwischen
+        return real(*args)
+
+    monkeypatch.setattr(board._repo, name, foreign_change_then_renumber)
+    with pytest.raises(BoardError) as e:
+        board.update_task(HUMAN, "api#3", title="vom Menschen", index=1)
+    monkeypatch.undo()
+    assert (e.value.status, e.value.type) == (409, "Conflict")
+    task = board.get_task("api#3")
+    assert (task.description, task.title) == ("vom Agenten", "c")
