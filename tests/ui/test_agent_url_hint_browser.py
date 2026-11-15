@@ -12,14 +12,14 @@ def test_hint_appears_for_a_foreign_address(chromium, live_server):
         page.locator("#aPreset option[value='openai']").wait_for(state="attached", timeout=10000)
         page.select_option("#aPreset", "openai")
         hint = page.locator("#aApiUrlHint")
-        assert hint.is_hidden()                                             # Preset-Adresse
+        hint.wait_for(state="hidden", timeout=5000)   # Preset-Adresse
         page.click("[data-action='toggle-advanced']")
         page.fill("#aApiUrl", "https://gateway.invalid/v1/chat/completions")
-        assert hint.is_visible()
+        hint.wait_for(state="visible", timeout=5000)
         page.fill("#aApiUrl", "http://api.openai.com/v1/chat/completions")
-        assert hint.is_visible()                                            # gleicher Host, anderes Schema
+        hint.wait_for(state="visible", timeout=5000)   # gleicher Host, anderes Schema
         page.fill("#aApiUrl", "https://api.openai.com/v1/chat/completions")
-        assert hint.is_hidden()                                             # gleicher Host
+        hint.wait_for(state="hidden", timeout=5000)   # gleicher Host
         assert errors == []
     finally:
         page.close()

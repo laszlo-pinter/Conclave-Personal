@@ -48,8 +48,8 @@ def _bearer(token):
     return {"Authorization": f"Bearer {token}"}
 
 
-def _app(limits, rate_limit="1000 per minute"):
-    conn = sqlite3.connect(":memory:", check_same_thread=False)
+def _app(limits, rate_limit="1000 per minute", conn=None):
+    conn = conn or sqlite3.connect(":memory:", check_same_thread=False)
     initialize_schema(conn)
     service = ConversationFlowService(
         conversation_repository=SQLiteConversationRepository(conn, autocommit=True),
@@ -175,12 +175,16 @@ def test_agent_rate_limit_applies_when_the_general_limit_is_off():
     assert all(c.get("/conversations", headers=_bearer(HUMAN)).status_code == 200 for _ in range(10))
 
 
-def test_human_run_during_an_agent_request_does_not_count_against_the_agents():
+def test_human_run_during_an_agent_request_does_not_count_against_the_agents(tmp_path):
     """V2: Herkunft beim Speichern; ein gleichzeitiger Lauf des Menschen bleibt beim Menschen."""
     from datetime import UTC, datetime, timedelta
 
+    from conclave.infrastructure.sqlite.connection import ThreadLocalConnection
+
+    # Zwei Laeufe gleichzeitig: wie im Server eine Verbindung je Thread
     app, (conv, _), model = _app(LimitSettings(agent_tokens_per_day=0, conversation_tokens_per_day=0,
-                                               agent_concurrent_runs=0))
+                                               agent_concurrent_runs=0),
+                                 conn=ThreadLocalConnection(tmp_path / "limits.db"))
     model.gate = threading.Event()
     results = {}
 
