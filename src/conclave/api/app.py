@@ -40,6 +40,7 @@ from conclave.domain.errors import (
     ProviderTimeout,
 )
 from conclave.domain.participant import ParticipantType
+from conclave.domain.ids import ID_RULE_ERROR, valid_id
 from conclave.domain.principal import HUMAN_PRINCIPAL
 from conclave.api.access import HUMAN_ONLY_ERROR, agent_may, reviewer_may
 from conclave.application.consultations import ConsultationRequestError
@@ -135,13 +136,8 @@ def is_host_allowed(host_header: str, allowed: set[tuple[str, str]]) -> bool:
     return bool(host) and ((host, "") in allowed or (host, port) in allowed)
 
 
-# Frei waehlbare IDs landen in URL-Pfaden (UI, MCP); nur sichere Zeichen, kein "." oder ".." (R4)
-_ID_RE = re.compile(r"[A-Za-z0-9._-]{1,64}\Z")
-ID_RULE_ERROR = "ID: 1-64 Zeichen aus A-Z, a-z, 0-9, Punkt, Bindestrich und Unterstrich; nicht '.' oder '..'."
-
-
-def _valid_id(value) -> bool:
-    return isinstance(value, str) and bool(_ID_RE.match(value)) and value not in (".", "..")
+# Frei waehlbare IDs landen in URL-Pfaden (UI, MCP); dieselbe Regel gilt in den Diensten (R4, R15)
+_valid_id = valid_id
 
 
 # Routen, ueber die ein Agent Modelle aufruft; dafuer gelten Budget und gleichzeitige Laeufe (R11)
@@ -153,7 +149,12 @@ MODEL_ROUTES = frozenset({
 
 
 def create_app(handler: CLIHandler, auth_service=None,
-               agent_service=None, config=None, service=None, consultations=None, board=None) -> Flask:
+               agent_service=None, config=None, service=None, consultations=None, board=None,
+               allow_unauthenticated: bool = False) -> Flask:
+    """Baut die Flask-App. Ohne ``auth_service`` nur mit ``allow_unauthenticated=True`` (Tests, R15)."""
+    if auth_service is None and not allow_unauthenticated:
+        raise ValueError("create_app braucht einen auth_service; ohne Anmeldung nur mit "
+                         "allow_unauthenticated=True (Tests).")
     import pathlib
     asset_root = get_asset_root()
     app = Flask(__name__, static_folder=str(asset_root / "static"), static_url_path="/static")

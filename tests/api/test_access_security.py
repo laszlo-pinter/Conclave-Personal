@@ -68,7 +68,7 @@ def test_new_route_is_denied_for_agents_by_default(app):
 
 
 @pytest.mark.parametrize("path", ["/settings", "/logs", "/backups", "/agents/x", "/runs",
-                                  "/conversations/x/rules", "/usage/conversations"])
+                                  "/usage/conversations"])        # /rules ist seit E-S5 (a) lesbar
 def test_human_only_reads_are_denied(app, path):
     resp = app.test_client().get(path, headers=_bearer(AGENT_TOKEN))
     assert resp.status_code == 403 and resp.get_json()["type"] == "HumanOnly"

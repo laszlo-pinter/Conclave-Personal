@@ -141,7 +141,7 @@ def client(db_connection, crypto, service):
     from conclave.application.agent_service import AgentService
     from conclave.cli.handler import CLIHandler
     agents = AgentService(SQLiteAgentRepository(db_connection, crypto))
-    app = create_app(CLIHandler(service, agent_service=agents), agent_service=agents)
+    app = create_app(CLIHandler(service, agent_service=agents), agent_service=agents, allow_unauthenticated=True)
     app.config["TESTING"] = True
     c = app.test_client()
     c.agents = agents

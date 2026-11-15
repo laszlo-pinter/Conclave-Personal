@@ -85,7 +85,7 @@ def test_provider_errors_map_to_http_status(error, status):
         exc = exc_cls("anthropic", "msg")
     handler = MagicMock()
     handler.invoke_participant.side_effect = exc
-    client = create_app(handler).test_client()
+    client = create_app(handler, allow_unauthenticated=True).test_client()
     resp = client.post("/conversations/c1/participants/p1/invoke", json={})
     assert resp.status_code == status
     assert resp.get_json()["type"] == error
@@ -96,7 +96,7 @@ def test_invoke_unknown_conversation_returns_404(service):
     from conclave.api.app import create_app
     from conclave.cli.handler import CLIHandler
 
-    client = create_app(CLIHandler(service)).test_client()
+    client = create_app(CLIHandler(service), allow_unauthenticated=True).test_client()
     resp = client.post("/conversations/does-not-exist/participants/p1/invoke", json={})
     assert resp.status_code == 404
 
@@ -158,6 +158,6 @@ def test_sequential_orchestrate_unknown_conversation_returns_404(service):
     pytest.importorskip("flask")
     from conclave.api.app import create_app
     from conclave.cli.handler import CLIHandler
-    client = create_app(CLIHandler(service)).test_client()
+    client = create_app(CLIHandler(service), allow_unauthenticated=True).test_client()
     resp = client.post("/conversations/missing/orchestrate", json={"sequence": ["a"]})
     assert resp.status_code == 404

@@ -167,7 +167,7 @@ def test_board_disabled_without_service():
     from unittest.mock import MagicMock
 
     from conclave.api.app import create_app
-    resp = create_app(MagicMock()).test_client().get("/board")
+    resp = create_app(MagicMock(), allow_unauthenticated=True).test_client().get("/board")
     assert resp.status_code == 503 and resp.get_json()["type"] == "BoardDisabled"
 
 

@@ -18,6 +18,9 @@ nichts von fremden Servern geladen. Alle Dateien liegen unter
 
 ## npm-Integrität der Pakete
 
+`scripts/check_vendor.py` (CI-Job `vendor`) lädt diese Pakete, prüft die
+Integrität und vergleicht jede ausgelieferte Datei mit der Datei im Paket.
+
 | Paket | Integrität |
 |---|---|
 | `dompurify@3.4.17` | `sha512-B/pSlYVHQ58kqISD/yDjuJ1yfzI34m1gF4lAod2bwSRhiN4K5Cl3H8Af7hqB2PmTL911tdEudnnXn5FnhRoz0w==` |

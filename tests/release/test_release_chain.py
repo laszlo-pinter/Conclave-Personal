@@ -124,7 +124,8 @@ def test_ci_covers_what_the_release_needs():
     ci = _workflow("ci.yml")
     assert "workflow_call" in ci["on"]
     jobs = ci["jobs"]
-    assert {"test", "ui-browser", "security", "postgres", "build"} <= set(jobs)
+    assert {"test", "ui-browser", "security", "postgres", "vendor", "build"} <= set(jobs)
+    assert "check_vendor.py" in str(jobs["vendor"]["steps"])
     assert "windows-latest" in jobs["test"]["strategy"]["matrix"]["os"]
     assert "check_dist.py" in str(jobs["build"]["steps"])
 

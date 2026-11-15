@@ -9,8 +9,16 @@ Der Reviewer hat eine eigene, engere Liste (REVIEWER_ALLOWED): Board lesen,
 kommentieren und den Review-Status setzen, sonst nichts.
 """
 
+# Lesbar fuer Agenten, ohne dass ein MCP-Tool sie braucht (E-S5 a, R15): dieselben Daten
+# liefern GET /conversations/<id> und der Export; es sind keine Geheimnisse.
+AGENT_CONTEXT_READ = frozenset({
+    ("GET", "/conversations/<conversation_id>/rules"),
+    ("GET", "/conversations/<conversation_id>/tool-events"),
+    ("GET", "/conversations/<conversation_id>/messages/<message_id>/context"),
+})
+
 # Was die MCP-Tools (mcp_server.py) aufrufen, dazu /auth/whoami fuer den Rollen-Check (Z5).
-AGENT_ALLOWED = frozenset({
+AGENT_ALLOWED = AGENT_CONTEXT_READ | frozenset({
     ("GET", "/auth/whoami"),
     ("GET", "/conversations"),
     ("POST", "/conversations"),
@@ -73,10 +81,7 @@ HUMAN_ONLY = frozenset({
     ("POST", "/conversations/<conversation_id>/floor/invoke"),
     ("POST", "/conversations/<conversation_id>/floor/revoke"),
     ("POST", "/conversations/<conversation_id>/orchestrate-parallel-stream"),
-    ("GET", "/conversations/<conversation_id>/rules"),
     ("POST", "/conversations/<conversation_id>/rules"),
-    ("GET", "/conversations/<conversation_id>/tool-events"),
-    ("GET", "/conversations/<conversation_id>/messages/<message_id>/context"),
     ("GET", "/conversations/<conversation_id>/participants/<participant_id>/context-preview"),
     ("GET", "/conversations/<conversation_id>/participants/<participant_id>/stream"),
     # Board: UI-Uebersicht, Projekte verwalten, loeschen, Kommentare aendern, Import

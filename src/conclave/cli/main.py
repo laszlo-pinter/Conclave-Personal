@@ -783,7 +783,13 @@ def _run_migrate_personal(args) -> int:
 
 
 def main() -> None:
-    sys.exit(run())
+    from conclave.infrastructure.migrations import MigrationError
+    try:
+        sys.exit(run())
+    except MigrationError as exc:
+        # Kurze Meldung statt Traceback; die Migration ist zurueckgerollt (R1, R15)
+        print(f"FEHLER: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

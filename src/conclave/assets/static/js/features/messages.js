@@ -62,6 +62,7 @@ function downloadMsg(btn){
   const seq=btn.dataset.seq||'0';
   const blob=new Blob([content],{type:'text/markdown'});
   const url=URL.createObjectURL(blob);
+  // safe-html: Blob-URL aus URL.createObjectURL, kein Text aus der API
   const a=document.createElement('a');a.href=url;a.download=`${name}-${seq}.md`;
   document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
   toast(t('download.done', {name, seq}),'ok');

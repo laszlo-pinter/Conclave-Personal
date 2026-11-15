@@ -26,7 +26,7 @@ def handler():
 
 
 def _client(handler, config):
-    app = create_app(handler, config=config)
+    app = create_app(handler, config=config, allow_unauthenticated=True)
     app.config["TESTING"] = True
     return app.test_client()
 
@@ -192,7 +192,7 @@ def test_config_file_location_can_be_overridden(monkeypatch, tmp_path):
 
 
 def test_settings_show_actual_server_port(handler):
-    app = create_app(handler, config=ConclaveConfig(port=8000))
+    app = create_app(handler, config=ConclaveConfig(port=8000), allow_unauthenticated=True)
     app.config["TESTING"] = True
     client = app.test_client()
     resp = client.get("/settings", base_url="http://127.0.0.1:8123")
@@ -206,7 +206,7 @@ def test_settings_port_on_real_server(handler):
     import urllib.request
     from werkzeug.serving import make_server
 
-    app = create_app(handler, config=ConclaveConfig(port=8000))
+    app = create_app(handler, config=ConclaveConfig(port=8000), allow_unauthenticated=True)
     srv = make_server("127.0.0.1", 0, app, threaded=True)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:

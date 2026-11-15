@@ -286,7 +286,7 @@ def test_create_app_does_not_start_workers(repo):
     with pytest.MonkeyPatch.context() as mp:
         started = []
         mp.setattr(ConsultationWorker, "start", lambda self: started.append(self))
-        create_app(MagicMock())
+        create_app(MagicMock(), allow_unauthenticated=True)
         assert started == []
 
 

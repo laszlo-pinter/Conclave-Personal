@@ -31,7 +31,7 @@ def client(tmp_path):
     )
     agent_svc = AgentService(SQLiteAgentRepository(conn, crypto))
     handler = CLIHandler(service, agent_service=agent_svc)
-    app = create_app(handler)
+    app = create_app(handler, allow_unauthenticated=True)
     app.testing = True
     with app.test_client() as c:
         yield c

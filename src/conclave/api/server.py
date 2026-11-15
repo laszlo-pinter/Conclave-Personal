@@ -262,6 +262,10 @@ def _build_app(config: ConclaveConfig | None = None):
     from conclave.runtime.file_security import secure_runtime_dirs
     from conclave.runtime.paths import get_runtime_paths
     secure_runtime_dirs(get_runtime_paths())
+    # Ein beim letzten Lauf abgestuerzter Restore wird zurueckgerollt (R15)
+    from conclave.application.workspace_security import workspace_root
+    from conclave.runtime.backup import recover_interrupted_restores
+    recover_interrupted_restores(workspace_root())
     # Token ist immer Pflicht (B2): ohne CONCLAVE_API_KEY wird die Token-Datei verwendet.
     if not config.api_key:
         config.api_key = load_or_create_token()

@@ -15,7 +15,7 @@ from conclave.cli.config import ConclaveConfig
 
 
 def test_guard_notify_endpoint_is_removed():
-    client = create_app(MagicMock()).test_client()
+    client = create_app(MagicMock(), allow_unauthenticated=True).test_client()
     assert client.post("/guard/notify", json={"x": 1}).status_code in (404, 405)
     assert not any("guard" in rule.rule for rule in client.application.url_map.iter_rules())
 

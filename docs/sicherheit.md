@@ -79,6 +79,18 @@ Anfrage spielen dafür keine Rolle.
   bewusst freigegeben werden. Agenten dürfen nicht löschen, keine Einstellungen,
   Agents, Backups oder Logs sehen oder ändern, keine Consultations wiederholen
   und nur Participants vom Typ `model` anlegen.
+- **Für Agenten lesbar, ohne MCP-Tool:** die Regeln einer Conversation
+  (`GET /conversations/<id>/rules`), ihre Tool-Events (`…/tool-events`) und
+  der Kontext-Report einer Antwort (`…/messages/<message_id>/context`).
+  Dieselben Daten liefern `GET /conversations/<id>` und der Export; es sind
+  keine Geheimnisse. Das Setzen der Regeln bleibt dem Menschen vorbehalten.
+- **Routen-Matrix:** `tests/security/test_route_matrix.py` hält für jede Route
+  fest, wer sie aufrufen darf, und prüft das mit jedem Zugang (kein Token,
+  Mensch, Agent, Reviewer). Eine neue Route ohne Eintrag lässt die CI scheitern.
+- Die App startet nur mit Anmeldung; ohne `auth_service` bricht `create_app`
+  ab (Ausnahme nur für Tests, ausdrücklich mit `allow_unauthenticated=True`).
+- IDs von Agents und Participants folgen derselben Regel in API und Diensten
+  (1–64 Zeichen aus `A-Z a-z 0-9 . - _`, nicht `.` oder `..`).
 - **Grenzen für Agenten:** Tagesbudget in Tokens für alle Agenten und je
   Conversation, höchstens N gleichzeitige Modellläufe, eigenes Rate-Limit
   (`[limits]`, siehe [Konfiguration](referenz/konfiguration.md#grenzen-für-agenten)).
@@ -278,6 +290,10 @@ werden alle abgelösten Schlüssel gelöscht, und ältere Backups gelten als fre
 - Ein Restore ändert nichts, solange nicht das ganze Archiv geprüft und
   entpackt ist; die Datenbank kommt zuletzt. Backups enthalten keine verlinkten
   Inhalte (Symlinks, Junctions).
+- Bricht ein Restore ab (Absturz, beendeter Prozess), rollt der nächste Start
+  von Server oder Restore ihn zurück: Der alte Workspace kommt wieder an seinen
+  Platz, passend zur alten Datenbank. Das automatische Backup
+  `conclave-pre-restore-*` bleibt erhalten.
 - Backups tragen eine Signatur, abgeleitet aus `secret.key`. Ein Backup ohne
   belegte eigene Herkunft wird erst nach Bestätigung eingespielt; vorher zeigt
   Conclave die Agents und Ziel-URLs aus dem Backup. Trigger und Views aus
@@ -404,8 +420,17 @@ werden als Daten behandelt:
   Schwachstellen, `bandit` den Quellcode (ab Schweregrad „medium“). Ausnahmen
   stehen als `# nosec <ID>` mit Begründung direkt im Code.
 - Der Job `ui-browser` lädt die UI in Chromium und prüft XSS-Schutz, CSP und
-  Token-Login; `tests/ui/test_html_sinks.py` lehnt neue `innerHTML`-Stellen
-  ohne `// safe-html:`-Begründung ab.
+  Token-Login; `tests/ui/test_html_sinks.py` lehnt neue HTML-Senken ohne
+  `// safe-html:`-Begründung ab: `innerHTML`/`outerHTML` (auch `+=`),
+  `insertAdjacentHTML`, `document.write`, `srcdoc`, Zuweisungen an `.href`,
+  Event-Handler per `setAttribute('on…')`, `createContextualFragment` und
+  `DOMParser`.
+- Der Job `vendor` lädt die npm-Pakete der ausgelieferten Bibliotheken und
+  Schriften, prüft sie gegen die Integrität in `THIRD_PARTY.md` (sha512) und
+  vergleicht jede Datei Byte für Byte (`scripts/check_vendor.py`).
+- Absturztests (`tests/security/test_crash_safety.py`) brechen Migration,
+  Workspace-Write und Restore in einem eigenen Prozess mittendrin ab und prüfen
+  den Zustand danach.
 - Alle GitHub Actions sind auf Commit-SHAs gepinnt (Version als Kommentar).
   Updates erfolgen bewusst: neue SHA per `git ls-remote --tags` ermitteln und
   Kommentar mitpflegen.

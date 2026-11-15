@@ -44,7 +44,8 @@ def handler():
 
 
 def _client(handler, auth=True, config=None):
-    app = create_app(handler, auth_service=StaticKeyAuthService(TOKEN) if auth else None, config=config)
+    app = create_app(handler, auth_service=StaticKeyAuthService(TOKEN) if auth else None, config=config,
+                     allow_unauthenticated=not auth)
     app.config["TESTING"] = True
     return app.test_client()
 

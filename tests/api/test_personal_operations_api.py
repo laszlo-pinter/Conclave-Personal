@@ -27,7 +27,7 @@ def client(handler, tmp_path, monkeypatch):
     monkeypatch.setenv("CONCLAVE_WORKSPACE", str(workspace))
     config = ConclaveConfig(db_path=tmp_path / "conclave.db", openai_api_key="sk-test")
     config.db_path.write_text("sqlite bytes", encoding="utf-8")
-    app = create_app(handler, config=config)
+    app = create_app(handler, config=config, allow_unauthenticated=True)
     app.config["TESTING"] = True
     with app.test_client() as c:
         yield c
@@ -141,7 +141,7 @@ def test_restore_restores_db_and_replaces_workspace(handler, tmp_path, monkeypat
         zf.writestr("workspace/notes/restored.md", "restored workspace")
 
     config = ConclaveConfig(db_path=db_path, openai_api_key="sk-test")
-    app = create_app(handler, config=config)
+    app = create_app(handler, config=config, allow_unauthenticated=True)
     app.config["TESTING"] = True
 
     with app.test_client() as c:
@@ -172,7 +172,7 @@ def test_restore_rejects_zip_slip_path(handler, tmp_path, monkeypatch):
     with zipfile.ZipFile(backup_dir / "bad.zip", "w") as zf:
         zf.writestr("workspace/../escape.txt", "nope")
 
-    app = create_app(handler, config=ConclaveConfig(db_path=db_path))
+    app = create_app(handler, config=ConclaveConfig(db_path=db_path), allow_unauthenticated=True)
     app.config["TESTING"] = True
 
     with app.test_client() as c:
@@ -209,7 +209,7 @@ def restore_env(handler, tmp_path, monkeypatch):
     outside = tmp_path / "outside.zip"
     with zipfile.ZipFile(outside, "w") as zf:
         zf.writestr("conclave.db", _db_bytes(tmp_path, "evil db"))
-    app = create_app(handler, config=ConclaveConfig(db_path=db_path))
+    app = create_app(handler, config=ConclaveConfig(db_path=db_path), allow_unauthenticated=True)
     app.config["TESTING"] = True
     with app.test_client() as c:
         yield c, workspace, backup_dir, db_path, outside

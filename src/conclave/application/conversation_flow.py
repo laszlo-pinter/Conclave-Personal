@@ -30,6 +30,7 @@ from conclave.application.workspace_security import (
 from conclave.domain.audit import AuditEntry
 from conclave.domain.context_report import ContextReport, ContextReportRecord
 from conclave.domain.conversation import Conversation
+from conclave.domain.ids import require_valid_id
 from conclave.domain.errors import (
     AdapterNotFound,
     ConversationNotFound,
@@ -754,6 +755,7 @@ class ConversationFlowService:
         participant_type: ParticipantType,
         name: str,
     ) -> Conversation:
+        require_valid_id(participant_id)           # wie in der API (R4, R15)
         return self._participant_service.register_participant(
             conversation_id=conversation_id,
             participant_id=participant_id,

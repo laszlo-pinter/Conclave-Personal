@@ -25,6 +25,9 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
 from conclave.runtime.env import env_secret
+from conclave.infrastructure.log import get_logger
+
+logger = get_logger("runtime.backup")
 
 
 DEFAULT_RESTORE_MAX_BYTES = 512 * 1024 * 1024
@@ -250,7 +253,9 @@ def restore_backup_archive(
         raise ValueError("Refusing to restore into the filesystem root.")
     workspace_root.parent.mkdir(parents=True, exist_ok=True)
 
+    recover_interrupted_restores(workspace_root)     # Reste eines abgebrochenen Restores zuerst
     staging = Path(tempfile.mkdtemp(dir=str(workspace_root.parent), prefix=f".{workspace_root.name}-restore-"))
+    (staging / _OWNER).write_text(str(os.getpid()), encoding="utf-8")
     try:
         # 1. Alles pruefen und ins Staging entpacken, bevor irgendetwas geaendert wird
         try:
@@ -285,7 +290,13 @@ def restore_backup_archive(
             secret=secret,
         )
 
-        # 3. Workspace tauschen, 4. DB zuletzt; bei einem Fehler zurueck
+        # 3. Workspace tauschen, 4. DB zuletzt; bei einem Fehler zurueck. Das Journal erlaubt
+        # nach einem Absturz (ohne except/finally) das Zurueckrollen beim naechsten Start.
+        _write_json(staging / _JOURNAL, {
+            "mode": "replace" if replace_workspace else "merge",
+            "had_workspace": workspace_root.exists(),
+            "files": [rel.as_posix() for rel in staged_files],
+        })
         undo = None
         if staged_files:
             try:
@@ -306,6 +317,7 @@ def restore_backup_archive(
             if undo is not None:
                 undo()
             raise
+        (staging / _DONE).write_text("", encoding="utf-8")
 
         return RestoreResult(
             pre_restore_backup_path=pre_restore_backup,
@@ -316,6 +328,102 @@ def restore_backup_archive(
         )
     finally:
         shutil.rmtree(staging, ignore_errors=True)   # folgt unter Windows keinen Junctions
+
+
+# ── Abgebrochener Restore (R15) ─────────────────────────────────────────────
+
+_OWNER, _JOURNAL, _DONE = "owner", "journal.json", "done"
+
+
+def _write_json(path: Path, data: dict) -> None:
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def recover_interrupted_restores(workspace_root: Path) -> int:
+    """Rollt Restores zurueck, deren Prozess abgestuerzt ist; gibt ihre Zahl zurueck.
+
+    Ein Staging-Ordner gehoert einem laufenden Restore, solange dessen Prozess lebt; den
+    laesst die Pruefung in Ruhe. Ohne Journal wurde nichts getauscht, mit ``done`` ist der
+    Restore fertig: dann wird nur aufgeraeumt. Sonst wird der alte Workspace wiederhergestellt;
+    die DB ist dann noch die alte (sie wird zuletzt und in einer Transaktion eingespielt).
+    """
+    workspace_root = workspace_root.expanduser().resolve()
+    parent = workspace_root.parent
+    if not parent.is_dir():
+        return 0
+    recovered = 0
+    for staging in sorted(parent.glob(f".{workspace_root.name}-restore-*")):
+        owner = staging / _OWNER
+        if not staging.is_dir() or _is_link(staging) or not owner.is_file():
+            continue                                   # fremd oder von einer aelteren Version
+        try:
+            pid = int(owner.read_text(encoding="utf-8").strip() or 0)
+        except (OSError, ValueError):
+            continue
+        if _process_alive(pid):
+            continue
+        journal = staging / _JOURNAL
+        if journal.is_file() and not (staging / _DONE).exists():
+            _roll_back(staging, workspace_root, json.loads(journal.read_text(encoding="utf-8")))
+            recovered += 1
+            logger.warning("Abgebrochener Restore zurueckgerollt: alter Workspace wiederhergestellt; "
+                           "das Sicherheits-Backup conclave-pre-restore-* bleibt erhalten")
+        shutil.rmtree(staging, ignore_errors=True)
+    return recovered
+
+
+def _roll_back(staging: Path, workspace_root: Path, journal: dict) -> None:
+    if not journal.get("files"):
+        return                                         # nur die DB: der Workspace wurde nicht angefasst
+    previous, staged, discarded = staging / "previous", staging / "workspace", staging / "discarded"
+    discarded.mkdir(exist_ok=True)
+    if journal.get("mode") == "replace":
+        swapped = not staged.exists()                  # der neue Workspace liegt schon an seinem Platz
+        if swapped and workspace_root.exists():
+            os.replace(workspace_root, discarded / "workspace")
+        if previous.exists():
+            os.replace(previous, workspace_root)
+        return
+    for rel in journal.get("files", []):
+        rel_path = Path(*PurePosixPath(rel).parts)
+        target, old, new = workspace_root / rel_path, previous / rel_path, staged / rel_path
+        if not new.exists() and target.exists():       # schon eingespielt: wieder entfernen
+            (discarded / rel_path).parent.mkdir(parents=True, exist_ok=True)
+            os.replace(target, discarded / rel_path)
+        if old.exists():                               # ueberschriebene Datei zurueck
+            target.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(old, target)
+
+
+def _process_alive(pid: int) -> bool:
+    """Lebt der Prozess? Nur lesend: unter Windows wuerde os.kill(pid, 0) ihn beenden."""
+    if pid <= 0:
+        return False
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+    import ctypes
+    from ctypes import wintypes
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel32.OpenProcess(0x1000, False, pid)            # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return ctypes.get_last_error() == 5                      # Zugriff verweigert: es gibt ihn
+    try:
+        code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return True
+        return code.value == 259                                 # STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 def _restore_limit_bytes() -> int:

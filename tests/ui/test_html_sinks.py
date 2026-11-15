@@ -1,13 +1,18 @@
 """AP 1 / B1: HTML-Senken im Frontend sind inventarisiert und abgesichert.
 
-Jede Zuweisung an innerHTML/outerHTML und jeder Aufruf von insertAdjacentHTML
-braucht einen Kommentar ``// safe-html: <Begruendung>`` in derselben oder der
-direkt vorangehenden Zeile. Neue Stellen ohne Begruendung lassen den Test
+Jede Zuweisung an innerHTML/outerHTML (auch ``+=``), jeder Aufruf von
+insertAdjacentHTML und document.write, srcdoc, Zuweisungen an ``.href``,
+Event-Handler per setAttribute('on...'), createContextualFragment und DOMParser
+brauchen einen Kommentar ``// safe-html: <Begruendung>`` in derselben oder der
+direkt vorangehenden Zeile (R15). Neue Stellen ohne Begruendung lassen den Test
 scheitern.
 """
 
 import re
+import sys
 from pathlib import Path
+
+import pytest
 
 from conclave.runtime.assets import get_asset_root
 
@@ -17,7 +22,15 @@ JS_ROOT = ASSET_ROOT / "static" / "js"
 VENDOR_ROOT = ASSET_ROOT / "static" / "vendor"
 HTML = ASSET_ROOT / "conclave-ui.html"
 
-SINK = re.compile(r"\.(?:innerHTML|outerHTML)\s*=(?!=)|insertAdjacentHTML\s*\(|document\.write\s*\(")
+SINK = re.compile(
+    r"\.(?:innerHTML|outerHTML)\s*\+?=(?!=)"           # Zuweisung und Anhaengen
+    r"|insertAdjacentHTML\s*\(|document\.write(?:ln)?\s*\("
+    r"|\bsrcdoc\b"                                     # iframe-Inhalt als HTML
+    r"|\.href\s*=(?!=)"                                 # javascript:-URLs
+    r"|setAttribute\(\s*['\"`](?:on\w+|srcdoc|href|src)['\"`]"
+    r"|createContextualFragment\s*\("
+    r"|\bDOMParser\b|parseFromString\s*\("
+)
 MARKER = "// safe-html:"
 
 
@@ -57,6 +70,37 @@ def test_sink_scanner_detects_unmarked_assignment():
     assert SINK.search("el.insertAdjacentHTML('beforeend',html);")
     assert not SINK.search("if(el.innerHTML===''){}")
     assert not SINK.search("el.textContent=value;")
+
+
+# Je Muster: was erkannt werden muss und was nicht (R15)
+SINK_CASES = [
+    ("el.innerHTML += html;", "if(el.innerHTML == ''){}"),
+    ("el.outerHTML+=x;", "const n=el.outerHTML;"),
+    ("frame.srcdoc = html;", "const srcdocs=1;"),
+    ("frame.setAttribute('srcdoc', html);", "frame.setAttribute('title', t);"),
+    ("a.href = url;", "if(a.href === url){}"),
+    ("el.setAttribute('onclick', code);", "el.setAttribute('data-onclick', x);"),
+    ('el.setAttribute("onerror",x)', "el.removeAttribute('onclick')"),
+    ("range.createContextualFragment(html)", "range.createContextualFragmentation"),
+    ("new DOMParser().parseFromString(s,'text/html')", "const domParserLike=1;"),
+    ("document.writeln(x)", "documentWriter(x)"),
+]
+
+
+@pytest.mark.parametrize("unsafe, harmless", SINK_CASES)
+def test_sink_scanner_pattern(unsafe, harmless):
+    assert SINK.search(unsafe), unsafe
+    assert not SINK.search(harmless), harmless
+
+
+def test_unmarked_new_sink_fails_the_scan(tmp_path, monkeypatch):
+    """Negativtest: eine neue Stelle ohne Begruendung wird gemeldet, mit Begruendung nicht."""
+    js = tmp_path / "js"
+    js.mkdir()
+    (js / "neu.js").write_text("frame.srcdoc=html;\n// safe-html: fester Text\nel.innerHTML+='<b>x</b>';\n",
+                               encoding="utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "JS_ROOT", js)
+    assert _unmarked_sinks() == ["neu.js:1: frame.srcdoc=html;"]
 
 
 def test_render_markdown_sanitizes_with_dompurify():

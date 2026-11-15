@@ -72,7 +72,7 @@ class Env:
         self.conv_id, self.reports, self.runs = conv_id, reports, runs
 
     def client(self):
-        app = create_app(self.handler)
+        app = create_app(self.handler, allow_unauthenticated=True)
         app.config["TESTING"] = True
         return app.test_client()
 
