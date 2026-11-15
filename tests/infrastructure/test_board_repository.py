@@ -455,3 +455,24 @@ def test_migration_015_adds_origin_columns_and_history_tables(tmp_path, crypto):
     task = repo.get_task("api", 1)
     assert (task.origin, task.actor_id, task.created_by) == (None, None, "")
     assert repo.list_project_events("p") == [] and repo.get_setting("last_status") is None
+
+
+def test_migration_016_adds_review_columns(tmp_path):
+    """P3: bestehende Tickets bekommen review_state 'none' und den Zaehler 0."""
+    import sqlite3
+    from conclave.infrastructure.migrations import MIGRATIONS, run_migrations
+    conn = sqlite3.connect(tmp_path / "alt.db")
+    for table in ("conversations (id TEXT PRIMARY KEY, status TEXT)", "agents (id TEXT PRIMARY KEY)",
+                  "audit_log (id TEXT PRIMARY KEY)", "messages (id TEXT PRIMARY KEY, content TEXT)"):
+        conn.execute(f"CREATE TABLE {table}")
+    run_migrations(conn, migrations=[m for m in MIGRATIONS if m.id != "016_board_review"])
+    for column in ("review_state", "review_at", "review_red_count", "review_blocking", "review_suggestions",
+                   "review_checked"):
+        conn.execute(f"ALTER TABLE board_tasks DROP COLUMN {column}")      # Stand vor P3
+    conn.execute("INSERT INTO board_projects (id, slug, name, created_at) VALUES ('p', 'api', 'API', '2026-01-01')")
+    conn.execute("INSERT INTO board_tasks (id, project_id, number, title, status, position, human, created_at, "
+                 "updated_at) VALUES ('t1', 'p', 1, 'alt', 'review', 1024, 0, '2026-01-01', '2026-01-01')")
+    conn.commit()
+    run_migrations(conn)
+    task = SQLiteBoardRepository(conn, autocommit=True).get_task("api", 1)
+    assert (task.review_state, task.review_red_count, task.review_at) == ("none", 0, None)

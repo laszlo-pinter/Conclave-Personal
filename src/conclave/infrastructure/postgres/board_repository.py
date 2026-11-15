@@ -247,13 +247,23 @@ class PostgresBoardRepository(SQLiteBoardRepository):
              event.origin, event.actor_id, event.created_at))
 
     _EVENT_ROW = "SELECT ?, ?, ?, ?, ?, ?, ?, c.value - ?, ?::timestamptz FROM c, u"
-    _UPDATE_WITH_EVENTS = (
+    _UPDATE_TASK_CTE = (
         "WITH u AS (UPDATE board_tasks SET title = ?, description = ?, tags = ?, status = ?, position = ?, "
-        "           rank = ?, human = ?, assignee = ?, updated_at = ?, version = version + 1 "
+        "           rank = ?, human = ?, assignee = ?, updated_at = ?, review_state = ?, review_at = ?, "
+        "           review_red_count = ?, review_blocking = ?, review_suggestions = ?, review_checked = ?, "
+        "           version = version + 1 "
         "           WHERE id = ? AND version = ? RETURNING id), "
         "     c AS (UPDATE board_meta SET value = value + ? WHERE key = 'changes' "
-        "           AND EXISTS (SELECT 1 FROM u) RETURNING value) "
-        "INSERT INTO board_events (id, task_id, field, old_value, new_value, origin, actor_id, seq, created_at) ")
+        "           AND EXISTS (SELECT 1 FROM u) RETURNING value) ")
+    _UPDATE_WITH_EVENTS = (
+        _UPDATE_TASK_CTE
+        + "INSERT INTO board_events (id, task_id, field, old_value, new_value, origin, actor_id, seq, created_at) ")
+    # Mit Kommentar (Review-Ergebnis, P3): der Kommentar als eigene CTE, seq unterhalb der Eintraege
+    _UPDATE_WITH_COMMENT = (
+        _UPDATE_TASK_CTE
+        + "   , k AS (INSERT INTO board_comments (id, task_id, body, origin, actor_id, author_name, seq, "  # nosec B608 - feste Texte
+          "           created_at, updated_at) SELECT ?, ?, ?, ?, ?, ?, c.value - ?, ?, ? FROM c, u) "
+        + "INSERT INTO board_events (id, task_id, field, old_value, new_value, origin, actor_id, seq, created_at) ")
 
     def _event_rows(self, events) -> tuple[str, list]:
         """SELECT-Zeilen fuer board_events (feste Texte, Werte als Parameter);
@@ -265,13 +275,23 @@ class PostgresBoardRepository(SQLiteBoardRepository):
                        e.origin, e.actor_id, n - i, e.created_at]
         return " UNION ALL ".join([self._EVENT_ROW] * n), params
 
-    def update_task(self, task: Task, events=()) -> bool:
+    def update_task(self, task: Task, events=(), comment: TaskComment | None = None) -> bool:
         events = list(events)
         if not events:
+            if comment is not None:
+                raise ValueError("Ein Kommentar zur Aenderung braucht mindestens einen Verlaufseintrag.")
             return super().update_task(task)
         rows, params = self._event_rows(events)
-        sql = self._UPDATE_WITH_EVENTS + rows  # nosec B608 - nur feste SQL-Texte, Werte als Platzhalter
-        result = self._execute(sql, (*self._task_params(task), task.id, task.version, len(events) + 1, *params))
+        head = (*self._task_params(task), *self._review_params(task), task.id, task.version)
+        if comment is None:
+            sql = self._UPDATE_WITH_EVENTS + rows  # nosec B608 - nur feste SQL-Texte, Werte als Platzhalter
+            result = self._execute(sql, (*head, len(events) + 1, *params))
+        else:
+            n = len(events)
+            sql = self._UPDATE_WITH_COMMENT + rows  # nosec B608 - nur feste SQL-Texte, Werte als Platzhalter
+            result = self._execute(sql, (*head, n + 2, comment.id, comment.task_id, self._enc(comment.body),
+                                         comment.origin, comment.actor_id, self._enc(comment.author_name), n,
+                                         comment.created_at, comment.updated_at, *params))
         if result.rowcount == len(events):
             task.version += 1
             return True

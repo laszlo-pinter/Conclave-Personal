@@ -13,6 +13,10 @@ Rechte (Plan, Abschnitt 3). "Freigabe-Recht" ist eine eigene Pruefung
 - Kommentare: nur eigene Kommentare des Menschen sind aenderbar; Kommentare von
   Agenten und von Conclave (``system``) sind unveraenderlich.
 - Projekte anlegen/umbenennen/loeschen und Tickets loeschen: nur mit Freigabe-Recht.
+- Reviewer (P3): liest, kommentiert und setzt als einziger den Review-Status; anlegen,
+  aendern, verschieben und uebernehmen darf er nicht. Gelb (rework) und rot (failed)
+  schieben das Ticket zurueck in die erste Spalte, dort steht Nacharbeit vor dem Rang;
+  drei rote in Folge machen es "nur fuer Menschen" (E-R3).
 - Anlegen: Agenten nur in die erste Spalte. Jedes Ticket traegt seine Herkunft; Anlegen,
   Tags, Position und Kommentar-Aenderungen stehen im Verlauf, Projekt-Aenderungen und
   geloeschte Tickets im Projekt-Verlauf (R9).
@@ -31,6 +35,8 @@ from typing import Callable
 from conclave.application.ports import BoardRepository
 from conclave.domain.board import (
     POSITION_STEP,
+    RED_LIMIT,
+    REVIEW_RESULTS,
     Project,
     ProjectEvent,
     StatusFlow,
@@ -47,6 +53,8 @@ from conclave.domain.principal import Principal
 MIN_POSITION_GAP = 1e-6
 SYSTEM_ACTOR = "conclave"
 LAST_STATUS_KEY = "last_status"
+REWORK_STATES = ("rework", "failed")
+CHECKED_MAX = 200
 
 
 class BoardError(ConclaveError):
@@ -140,9 +148,13 @@ class BoardService:
         return task
 
     def _sort_key(self, task: Task):
-        """Erste Spalte nach Prioritaet (rank), die anderen nach Arbeitsstand (position, P1)."""
+        """Erste Spalte: Nacharbeit aus dem Review zuerst (P3), dann Prioritaet (rank, P1);
+        die anderen Spalten nach Arbeitsstand (position)."""
         order = {s: i for i, s in enumerate(self.flow.statuses)}
-        place = task.rank if task.status == self.flow.first else task.position
+        if task.status == self.flow.first:
+            place = (0 if task.review_state in REWORK_STATES else 1, task.rank)
+        else:
+            place = (1, task.position)
         return (task.project_slug, order.get(task.status, len(order)), place, task.number)
 
     def list_tasks(self, slug: str | None = None, statuses=None, include_done: bool = False) -> list[Task]:
@@ -229,6 +241,12 @@ class BoardService:
 
     # ── Tickets schreiben ────────────────────────────────────────────────
 
+    @staticmethod
+    def _no_reviewer(principal: Principal, what: str) -> None:
+        if principal.is_reviewer:
+            raise _forbidden(f"Der Reviewer-Zugang darf nur lesen, kommentieren und den Review-Status setzen "
+                             f"({what} nicht).")
+
     def _guard_write(self, principal: Principal, task: Task) -> None:
         if principal.is_agent and task.human:
             raise _forbidden("Ticket ist nur fuer Menschen: Agenten duerfen es nur lesen.")
@@ -241,6 +259,7 @@ class BoardService:
 
     def create_task(self, principal: Principal, slug: str, title: str, *, description: str = "", tags=(),
                     human: bool = False, status: str | None = None) -> Task:
+        self._no_reviewer(principal, "anlegen")
         project = self._project(slug)
         status = self.flow_check(status) if status is not None else self.flow.first
         if principal.is_agent and status != self.flow.first:
@@ -265,6 +284,7 @@ class BoardService:
         """Aendert die uebergebenen Felder. ``index`` setzt den Platz in der (neuen) Spalte: in der
         ersten Spalte ist das die Prioritaet (rank), sonst die Position. Prioritaet aendert nur der
         Mensch (P1). ``version``: nur aendern, wenn das Ticket noch diese Version hat (R9)."""
+        self._no_reviewer(principal, "Tickets aendern")
         if version is not None and (isinstance(version, bool) or not isinstance(version, int)):
             raise _invalid("version muss eine ganze Zahl sein.")
         task = self.get_task(ref)
@@ -326,6 +346,8 @@ class BoardService:
         if new_rank is not None and new_rank != task.rank:
             events.append(TaskEvent.create(task.id, "rank", task.rank, new_rank, origin, actor_id=actor_id))
             task.rank = new_rank
+        if moved_column and task.status == self.flow.review:
+            self._reset_review(task, events)            # neue Runde: Ergebnis der letzten gilt nicht mehr
         task.updated_at = self._now()
         # Ticket und Verlauf zusammen, nur wenn seit dem Lesen niemand geaendert hat
         if not self._repo.update_task(task, events):
@@ -352,6 +374,7 @@ class BoardService:
         Ist die zweite Spalte zugleich die letzte (zwei Spalten), waere das ein Schritt nach
         "erledigt"; der braucht das Freigabe-Recht wie jede andere Bewegung dorthin (R4).
         """
+        self._no_reviewer(principal, "Tickets uebernehmen")
         first, second = self.flow.first, self.flow.second
         if second == self.flow.last:
             self._require_approval(principal)
@@ -387,6 +410,76 @@ class BoardService:
         if current.human:
             raise _forbidden(f"Ticket '{ref}' ist nur fuer Menschen und wird nicht uebernommen.")
         raise BoardError(f"Ticket '{ref}' wurde inzwischen uebernommen.", 409, "NotClaimable")
+
+    # ── Review (P3) ──────────────────────────────────────────────────────
+
+    def _reset_review(self, task: Task, events: list[TaskEvent]) -> None:
+        if task.review_state != "none":
+            events.append(TaskEvent.create(task.id, "review_state", task.review_state, "none", "system",
+                                           actor_id=SYSTEM_ACTOR))
+        task.review_state, task.review_at = "none", None
+        task.review_blocking = task.review_suggestions = None
+        task.review_checked = ""
+
+    def review(self, principal: Principal, ref: str, state: str, comment: str | None = "", *,
+               blocking: int | None = None, suggestions: int | None = None, checked: str | None = "") -> Task:
+        """Review-Status setzen, nur mit dem Reviewer-Zugang. Ergebnis, Kommentar (Herkunft
+        ``reviewer``) und die Folgen (zurueck in die erste Spalte, Markierung nach drei roten)
+        gehen in einem Schritt."""
+        if not principal.is_reviewer:
+            raise _forbidden("Den Review-Status setzt nur der Reviewer-Zugang.")
+        if state not in REVIEW_RESULTS:
+            raise _invalid(f"state muss einer von {REVIEW_RESULTS} sein.")
+        for name, value in (("blocking", blocking), ("suggestions", suggestions)):
+            if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 0):
+                raise _invalid(f"{name} muss eine ganze Zahl ab 0 sein.")
+        checked = "" if checked is None else checked
+        comment = "" if comment is None else comment
+        if not isinstance(checked, str) or len(checked) > CHECKED_MAX:
+            raise _invalid(f"checked: Text mit hoechstens {CHECKED_MAX} Zeichen.")
+        if not isinstance(comment, str):
+            raise _invalid("comment muss Text sein.")
+        if state != "running" and not comment.strip():
+            raise _invalid("Ein Ergebnis braucht den Review-Kommentar.")
+        try:
+            check_field_limits(text=comment, what="Kommentar")
+        except ValueError as e:
+            raise _invalid(str(e)) from None
+
+        task = self.get_task(ref)
+        self._guard_write(principal, task)                   # "nur fuer Menschen": nur lesen
+        if task.status != self.flow.review:
+            raise BoardError(f"Ticket '{ref}' steht nicht in '{self.flow.review}' (sondern in '{task.status}').",
+                             409, "NotInReview")
+        origin, actor_id = self.actor(principal)
+        events = [TaskEvent.create(task.id, "review_state", task.review_state, state, origin, actor_id=actor_id)]
+        task.review_state, task.review_at = state, self._now()
+        if state != "running":
+            task.review_blocking, task.review_suggestions, task.review_checked = blocking, suggestions, checked
+        if state == "passed":
+            task.review_red_count = 0
+        elif state == "failed":
+            task.review_red_count += 1
+        if state in REWORK_STATES:
+            # Systemregel: Nacharbeit zurueck in die erste Spalte, dort vor dem Rang (siehe _sort_key)
+            events.append(TaskEvent.create(task.id, "status", task.status, self.flow.first, "system",
+                                           actor_id=SYSTEM_ACTOR))
+            task.status = self.flow.first
+            task.position = self._end_position(task.project_id, self.flow.first)
+            if state == "failed" and task.review_red_count >= RED_LIMIT and not task.human:
+                events.append(TaskEvent.create(task.id, "human", False, True, "system", actor_id=SYSTEM_ACTOR))
+                task.human = True
+        task.updated_at = self._now()
+        note = (TaskComment.create(task.id, comment, origin, actor_id=actor_id) if comment.strip() else None)
+        if not self._repo.update_task(task, events, note):
+            if self._repo.get_task_by_id(task.id) is None:
+                raise BoardError(f"Ticket '{ref}' nicht gefunden.", 404, "TaskNotFound")
+            raise BoardError(f"Ticket '{ref}' wurde inzwischen geaendert; bitte neu laden.", 409, "Conflict")
+        return task
+
+    def last_review(self, ref: str) -> TaskComment | None:
+        """Juengster Kommentar des Reviewers, z. B. fuer die Nacharbeit."""
+        return self._repo.last_comment(self.get_task(ref).id, "reviewer")
 
     # ── Kommentare ───────────────────────────────────────────────────────
 
@@ -535,6 +628,9 @@ def task_to_dict(task: Task) -> dict:
         "description": task.description, "tags": list(task.tags), "status": task.status,
         "position": task.position, "rank": task.rank, "human": task.human, "assignee": task.assignee,
         "version": task.version, "origin": task.origin, "created_by": task.created_by,
+        "review": {"state": task.review_state, "at": _iso(task.review_at), "red_count": task.review_red_count,
+                   "blocking": task.review_blocking, "suggestions": task.review_suggestions,
+                   "checked": task.review_checked},
         "created_at": _iso(task.created_at), "updated_at": _iso(task.updated_at),
     }
 

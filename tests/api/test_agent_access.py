@@ -6,7 +6,9 @@ import pytest
 pytest.importorskip("flask")
 pytest.importorskip("mcp")
 
-from conclave.api.access import AGENT_ALLOWED, HUMAN_ONLY, HUMAN_ONLY_ERROR, PUBLIC, agent_may
+from conclave.api.access import (
+    AGENT_ALLOWED, HUMAN_ONLY, HUMAN_ONLY_ERROR, PUBLIC, REVIEWER_ALLOWED, REVIEWER_ONLY, agent_may,
+)
 from conclave.cli.config import ConclaveConfig
 
 HUMAN = "cvh_mensch-token"
@@ -44,16 +46,20 @@ def _url(rule):
 
 def test_every_route_is_assigned_exactly_once(app):
     registered = _registered(app)
-    assigned = AGENT_ALLOWED | HUMAN_ONLY | PUBLIC
+    assigned = AGENT_ALLOWED | HUMAN_ONLY | PUBLIC | REVIEWER_ONLY
     assert not registered - assigned, "Route ohne Zuordnung in api/access.py"
     assert not assigned - registered, "Eintrag in api/access.py ohne Route"
     assert not AGENT_ALLOWED & HUMAN_ONLY
     assert not (AGENT_ALLOWED | HUMAN_ONLY) & PUBLIC
+    assert not REVIEWER_ONLY & (AGENT_ALLOWED | HUMAN_ONLY | PUBLIC)
+    # Der Reviewer bekommt nur einen Teil des Agent-Zugangs plus das Review (P3)
+    assert REVIEWER_ALLOWED - REVIEWER_ONLY <= AGENT_ALLOWED
+    assert not REVIEWER_ALLOWED & HUMAN_ONLY
 
 
 def test_new_unassigned_route_fails_the_completeness_check(app):
     app.add_url_rule("/neu", "neu", lambda: "x", methods=["GET"])
-    assert _registered(app) - (AGENT_ALLOWED | HUMAN_ONLY | PUBLIC) == {("GET", "/neu")}
+    assert _registered(app) - (AGENT_ALLOWED | HUMAN_ONLY | PUBLIC | REVIEWER_ONLY) == {("GET", "/neu")}
     # und Agenten kommen nicht durch (Default deny)
     assert app.test_client().get("/neu", headers=_bearer(AGENT)).status_code == 403
     assert app.test_client().get("/neu", headers=_bearer(HUMAN)).status_code == 200

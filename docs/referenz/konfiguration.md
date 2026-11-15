@@ -50,6 +50,9 @@ wenige Werte ein Fallback (siehe [TOML-Config](#toml-config)).
 | CONCLAVE_API_TOKEN_FILE | `<config_dir>/api.token` | Datei für das automatisch erzeugte Mensch-Token (nur Benutzer lesbar) |
 | CONCLAVE_AGENT_KEY | — | Agent-Token für den MCP-Server und andere Agenten (eingeschränkte Rechte). Leer: Token aus `CONCLAVE_AGENT_TOKEN_FILE`, beim ersten Serverstart erzeugt. Gleich dem Mensch-Token: kein Agent-Zugang |
 | CONCLAVE_AGENT_TOKEN_FILE | `<config_dir>/agent.token` | Datei für das automatisch erzeugte Agent-Token (nur Benutzer lesbar) |
+| CONCLAVE_REVIEWER_KEY | — | Reviewer-Token für den automatischen Reviewer (`conclave-mcp --reviewer`). Leer: Token aus `CONCLAVE_REVIEWER_TOKEN_FILE`, beim ersten Serverstart erzeugt. Gleich einem anderen Token: kein Reviewer-Zugang |
+| CONCLAVE_REVIEWER_TOKEN_FILE | `<config_dir>/reviewer.token` | Datei für das automatisch erzeugte Reviewer-Token (nur Benutzer lesbar) |
+| CONCLAVE_MCP_ROLE | `agent` | `reviewer` startet `conclave-mcp` als Reviewer-Server (wie `--reviewer`) |
 | CONCLAVE_ALLOWED_HOSTS | — | Zusätzlich erlaubte `Host`-Header (kommasepariert, optional mit Port). `localhost`, `127.0.0.1`, `[::1]` sind immer erlaubt. Pflicht bei Nicht-Loopback-`CONCLAVE_HOST` |
 | CONCLAVE_ALLOWED_ORIGINS | `http://localhost,http://localhost:8000,http://127.0.0.1,http://127.0.0.1:8000` | CORS-Allowlist (kommasepariert, exakte Origins) |
 

@@ -1,9 +1,12 @@
-"""Rechte des Agent-Zugangs (Z2): Allowlist aus (Methode, Routen-Muster).
+"""Rechte des Agent- und des Reviewer-Zugangs (Z2, P3): Allowlists aus (Methode, Routen-Muster).
 
 Fuer Agenten gilt Default deny: Erlaubt ist nur, was die MCP-Tools brauchen,
-ohne Loeschen (E2). Jede Route steht in genau einer der drei Mengen; ein Test
-prueft das gegen die registrierten Routen, eine neue Route muss also bewusst
-zugeordnet werden.
+ohne Loeschen (E2). Jede Route steht in genau einer der Mengen AGENT_ALLOWED,
+HUMAN_ONLY, REVIEWER_ONLY und PUBLIC; ein Test prueft das gegen die registrierten
+Routen, eine neue Route muss also bewusst zugeordnet werden.
+
+Der Reviewer hat eine eigene, engere Liste (REVIEWER_ALLOWED): Board lesen,
+kommentieren und den Review-Status setzen, sonst nichts.
 """
 
 # Was die MCP-Tools (mcp_server.py) aufrufen, dazu /auth/whoami fuer den Rollen-Check (Z5).
@@ -99,6 +102,21 @@ PUBLIC = frozenset({
     ("GET", "/static/<path:filename>"),
 })
 
+# Nur der Reviewer-Zugang (P3); Agent und Mensch lehnt der BoardService ab
+REVIEWER_ONLY = frozenset({
+    ("POST", "/board/projects/<slug>/tasks/<int:number>/review"),
+})
+
+# Was der Reviewer-MCP (conclave-mcp --reviewer) braucht: lesen, kommentieren, Review-Status
+REVIEWER_ALLOWED = REVIEWER_ONLY | frozenset({
+    ("GET", "/auth/whoami"),
+    ("GET", "/board/tasks"),
+    ("GET", "/board/search"),
+    ("GET", "/board/projects/<slug>/tasks/<int:number>"),
+    ("GET", "/board/projects/<slug>/tasks/<int:number>/history"),
+    ("POST", "/board/projects/<slug>/tasks/<int:number>/comments"),
+})
+
 HUMAN_ONLY_ERROR = {"type": "HumanOnly", "error": "Nur für den Menschen-Zugang."}
 
 
@@ -106,3 +124,9 @@ def agent_may(method: str, rule: str) -> bool:
     """Darf ein Agent diese Route aufrufen? HEAD zaehlt wie GET."""
     method = "GET" if method == "HEAD" else method
     return (method, rule) in AGENT_ALLOWED
+
+
+def reviewer_may(method: str, rule: str) -> bool:
+    """Darf der Reviewer diese Route aufrufen? HEAD zaehlt wie GET."""
+    method = "GET" if method == "HEAD" else method
+    return (method, rule) in REVIEWER_ALLOWED

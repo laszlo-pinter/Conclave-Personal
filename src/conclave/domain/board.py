@@ -5,7 +5,7 @@ Boards. Ein Ticket heisst nach aussen ``slug#nummer``; die Nummer ist je Projekt
 fortlaufend und wird vom Repository vergeben.
 
 Herkunft (``origin``) von Kommentaren und Verlaufseintraegen:
-``human``/``agent`` aus dem Token, ``system`` fuer Eintraege, die Conclave selbst
+``human``/``agent``/``reviewer`` aus dem Token, ``system`` fuer Eintraege, die Conclave selbst
 schreibt (z. B. Consultations), ``None`` fuer Importiertes oder Unbekanntes.
 ``actor_id`` bereitet den Mehrbenutzerbetrieb vor (Plan, Abschnitt 6).
 """
@@ -20,10 +20,16 @@ from datetime import UTC, datetime
 SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,39}\Z")
 REF = re.compile(r"([a-z0-9][a-z0-9-]{0,39})#([1-9][0-9]{0,8})\Z")
 DEFAULT_STATUSES = ("todo", "doing", "review", "done")
-ORIGINS = ("human", "agent", "system")
+ORIGINS = ("human", "agent", "reviewer", "system")
+# Review-Status (P3): none nach jedem Wechsel nach review, running waehrend des Laufs,
+# dann passed (gruen), rework (gelb) oder failed (rot)
+REVIEW_STATES = ("none", "running", "passed", "rework", "failed")
+REVIEW_RESULTS = ("running", "passed", "rework", "failed")      # was der Reviewer setzen darf
+RED_LIMIT = 3                                                   # E-R3: so viele rote in Folge -> Mensch
 # Verlaufseintraege fuer diese Felder (Plan 2, "Ticket-Verlauf"); "created" ist das Anlegen,
 # "comment" Bearbeiten/Loeschen eines Kommentars (alt -> neu bzw. -> None), R9
-TRACKED_FIELDS = ("created", "status", "title", "description", "human", "rank", "tags", "position", "comment")
+TRACKED_FIELDS = ("created", "status", "title", "description", "human", "rank", "tags", "position", "comment",
+                  "review_state")
 # Verlauf eines Projekts: Anlegen, Umbenennen, geloeschte Tickets (Tombstone), R9
 PROJECT_FIELDS = ("created", "name", "task_deleted")
 POSITION_STEP = 1024.0      # Abstand der Karten nach dem Neunummerieren
@@ -102,6 +108,11 @@ class StatusFlow:
     def last(self) -> str:
         return self.statuses[-1]
 
+    @property
+    def review(self) -> str:
+        """Spalte fuer das Review: ``review``, sonst die vor der letzten."""
+        return "review" if "review" in self.statuses else self.statuses[-2]
+
     def check(self, status: str) -> str:
         if status not in self.statuses:
             raise ValueError(f"Status muss einer von {self.statuses} sein")
@@ -146,6 +157,12 @@ class Task:
     origin: str | None = None       # wer angelegt hat (aus dem Token), None = importiert/unbekannt (R9)
     actor_id: str | None = None     # vorerst die Rolle, spaeter der Benutzer
     created_by: str = ""            # Anzeige: Rolle, "import" oder leer (aelter als R9)
+    review_state: str = "none"      # P3, siehe REVIEW_STATES
+    review_at: datetime | None = None
+    review_red_count: int = 0       # rote Reviews in Folge (E-R3)
+    review_blocking: int | None = None
+    review_suggestions: int | None = None
+    review_checked: str = ""        # gepruefter Stand, z. B. "sicherheit @ abc..def"
 
     def __post_init__(self) -> None:
         check_origin(self.origin)

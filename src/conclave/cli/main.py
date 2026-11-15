@@ -239,6 +239,8 @@ def build_parser() -> argparse.ArgumentParser:
     token_show = token_sub.add_parser("show", help="Pfad des Tokens und Einrichtungsbefehl anzeigen")
     token_show.add_argument("--agent", action="store_true",
                             help="Agent-Token fuer den MCP-Server statt des Mensch-Tokens")
+    token_show.add_argument("--reviewer", action="store_true",
+                            help="Reviewer-Token fuer den automatischen Reviewer (conclave-mcp --reviewer)")
     token_show.add_argument("--reveal", action="store_true",
                             help="Den Token-Wert ausgeben (nur auf ausdrueckliche Anfrage)")
 
@@ -625,12 +627,38 @@ def _run_server(args, should_open_browser: bool = False) -> int:
     return 0
 
 
+def _show_reviewer_token(args, url: str) -> int:
+    """Reviewer-Token (P3): nur fuer den automatischen Reviewer, nie fuer cc oder andere Agenten."""
+    from conclave.runtime import api_token
+
+    if env_secret("CONCLAVE_REVIEWER_KEY"):
+        token, source = env_secret("CONCLAVE_REVIEWER_KEY"), "CONCLAVE_REVIEWER_KEY"
+    else:
+        path = api_token.reviewer_token_path()
+        existed = path.exists()
+        token, source = api_token.load_or_create_reviewer_token(path), str(path)
+        if not existed:
+            source += " (neu angelegt)"
+    print(f"Reviewer-Token: {source}")
+    print("Nur fuer den automatischen Reviewer. Agenten, die Code schreiben, duerfen es nicht lesen "
+          "(im Agent-Host sperren wie api.token).")
+    print()
+    print("MCP-Server fuer den Reviewer (liest reviewer.token selbst):")
+    print(f"  claude mcp add ConclaveReviewer -e CONCLAVE_API_URL={url} -- conclave-mcp --reviewer")
+    if args.reveal:
+        print()
+        print(token)
+    return 0
+
+
 def _run_token_show(args) -> int:
     """Zeigt Pfad und Einrichtung eines Tokens; den Wert nur mit --reveal (Z5)."""
     from conclave.runtime import api_token
 
     config = ConclaveConfig.from_sources()
     url = _server_url(config.host, config.port)
+    if getattr(args, "reviewer", False):
+        return _show_reviewer_token(args, url)
     if not args.agent:
         source = "CONCLAVE_API_KEY" if env_secret("CONCLAVE_API_KEY") else str(api_token.token_path())
         print(f"Mensch-Token: {source}")

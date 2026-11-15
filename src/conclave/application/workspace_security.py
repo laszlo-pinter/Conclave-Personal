@@ -96,10 +96,10 @@ def _parts(relative_path: str) -> list[str]:
 
 def protected_files() -> set[Path]:
     """Token-, Schluessel- und Datenbankdateien; nie ueber den Workspace erreichbar."""
-    from conclave.runtime.api_token import agent_token_path, token_path
+    from conclave.runtime.api_token import agent_token_path, reviewer_token_path, token_path
     from conclave.runtime.paths import get_runtime_paths
     paths = get_runtime_paths()
-    files = {paths.secret_key_path, paths.db_path, token_path(), agent_token_path()}
+    files = {paths.secret_key_path, paths.db_path, token_path(), agent_token_path(), reviewer_token_path()}
     resolved = set()
     for f in files:
         try:

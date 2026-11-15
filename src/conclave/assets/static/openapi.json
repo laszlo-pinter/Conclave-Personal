@@ -2111,7 +2111,7 @@
         ]
       },
       "patch": {
-        "summary": "Ticket aendern: title, description, tags, status, human, index (Position in der Spalte).",
+        "summary": "Ticket aendern: title, description, tags, status, human, index, rank, version.",
         "tags": [
           "board"
         ],
@@ -2261,7 +2261,7 @@
     },
     "/board/projects/{slug}/tasks/{number}/history": {
       "get": {
-        "summary": "Verlauf eines Tickets (Status, Titel, Beschreibung, Markierung).",
+        "summary": "Verlauf eines Tickets: Anlegen und jede Aenderung mit Herkunft.",
         "tags": [
           "board"
         ],
@@ -2286,6 +2286,75 @@
             "required": true,
             "schema": {
               "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/board/projects/{slug}/tasks/{number}/review": {
+      "post": {
+        "summary": "Review-Status setzen (nur Reviewer-Zugang).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_review_task",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/board/projects/{slug}/history": {
+      "get": {
+        "summary": "Verlauf eines Projekts: Anlegen, Umbenennen, geloeschte Tickets (nur Mensch).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_project_history",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           }
         ]

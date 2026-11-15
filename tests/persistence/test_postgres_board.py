@@ -366,3 +366,36 @@ def test_stale_version_and_last_column_rename_on_postgres(pg, crypto):
     renamed = BoardService(PostgresBoardRepository(pg, crypto), StatusFlow(("todo", "doing", "review", "fertig")))
     assert renamed.sync_flow() == 1
     assert renamed.get_task("api#1").status == "fertig"
+
+
+# ── P3: Review-Status auf Postgres ────────────────────────────────────────
+
+def test_review_loop_on_postgres(pg, crypto):
+    from conclave.domain.principal import AGENT_PRINCIPAL as AGENT
+    from conclave.domain.principal import HUMAN_PRINCIPAL as HUMAN
+    from conclave.domain.principal import REVIEWER_PRINCIPAL as REVIEWER
+    svc = _service(pg, crypto)
+    svc.create_project(HUMAN, "api", "API")
+    svc.create_task(HUMAN, "api", "Zuerst")
+    svc.create_task(HUMAN, "api", "Nacharbeit")
+    svc.update_task(HUMAN, "api#2", status="review")
+    svc.review(REVIEWER, "api#2", "running")
+    svc.review(REVIEWER, "api#2", "rework", "Urteil: gelb", blocking=1, suggestions=2, checked="b @ 1..2")
+    task = svc.get_task("api#2")
+    assert (task.status, task.review_state, task.review_blocking, task.review_checked) == ("todo", "rework", 1,
+                                                                                            "b @ 1..2")
+    assert svc.last_review("api#2").body == "Urteil: gelb"
+    assert svc.next_task(AGENT).ref == "api#2"
+    svc.update_task(AGENT, "api#2", status="review")
+    assert svc.get_task("api#2").review_state == "none"
+    for _ in range(3):
+        svc.review(REVIEWER, "api#2", "failed", "Urteil: rot")
+        if not svc.get_task("api#2").human:
+            svc.next_task(AGENT, task="api#2")
+            svc.update_task(AGENT, "api#2", status="review")
+    task = svc.get_task("api#2")
+    assert (task.human, task.review_red_count, task.status) == (True, 3, "todo")
+    with pg.cursor() as cur:
+        cur.execute("SELECT seq FROM board_events UNION ALL SELECT seq FROM board_comments")
+        seqs = [r[0] for r in cur.fetchall()]
+    assert len(seqs) == len(set(seqs))                               # eindeutig, auch mit Kommentar in der CTE

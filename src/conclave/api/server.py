@@ -10,7 +10,7 @@ from conclave.cli.bootstrap import (
 from conclave.cli.config import ConclaveConfig
 from conclave.cli.handler import CLIHandler
 from conclave.infrastructure.auth import StaticKeyAuthService
-from conclave.runtime.api_token import load_or_create_agent_token, load_or_create_token
+from conclave.runtime.api_token import load_or_create_agent_token, load_or_create_reviewer_token, load_or_create_token
 from conclave.runtime.env import env_secret
 from conclave.infrastructure.sqlite.connection import ThreadLocalConnection
 
@@ -260,7 +260,10 @@ def _build_app(config: ConclaveConfig | None = None):
     # Agent-Token (Z1): ohne CONCLAVE_AGENT_KEY die Datei agent.token, angelegt wie api.token.
     if not config.agent_api_key:
         config.agent_api_key = load_or_create_agent_token()
-    auth_service = StaticKeyAuthService(config.api_key, config.agent_api_key)
+    # Reviewer-Token (P3): ohne CONCLAVE_REVIEWER_KEY die Datei reviewer.token
+    if not config.reviewer_api_key:
+        config.reviewer_api_key = load_or_create_reviewer_token()
+    auth_service = StaticKeyAuthService(config.api_key, config.agent_api_key, config.reviewer_api_key)
 
     board = _build_board(conn, config)
     consultations, worker = _build_consultations(service, agent_service, conn, config, board)

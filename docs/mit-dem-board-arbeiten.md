@@ -133,8 +133,28 @@ wenigen Sekunden nach.
 
 Ein automatischer Reviewer lässt sich anschließen: ein eigener Prozess, der
 das Board beobachtet und bei jedem Ticket in `review` einen Review-Agenten
-startet, der am Ticket kommentiert. Er gehört nicht zu Conclave. Gib ihm nur
-das Agent-Token, Lesezugriff auf den Code und keine Shell.
+startet. Er gehört nicht zu Conclave. Gib ihm das Reviewer-Token
+(`conclave token show --reviewer`), den MCP-Server `conclave-mcp --reviewer`,
+Lesezugriff auf den Code und keine Shell.
+
+**Review-Ablauf:**
+
+1. Kommt ein Ticket nach `review`, steht sein Review-Status auf `none`.
+2. Der Reviewer setzt beim Start `running` und am Ende das Ergebnis mit dem
+   Review als Kommentar, in einem Aufruf (`conclave_board_review`):
+   - **grün** (`passed`): nichts offen. Das Ticket bleibt in `review`, bis der
+     Mensch es nach `done` schiebt.
+   - **gelb** (`rework`): die Abnahme ist erfüllt, aber Punkte sind offen.
+   - **rot** (`failed`): Tests rot, Abnahme nicht erfüllt oder falscher Ansatz.
+3. Bei gelb und rot schiebt Conclave das Ticket zurück in die erste Spalte,
+   dort vor alle anderen. `conclave_board_next` liefert es als Nächstes, mit
+   dem Review-Kommentar (`last_review`).
+4. Nach dem dritten roten Review in Folge wird das Ticket „nur für Menschen“;
+   dann entscheidet der Mensch.
+
+Den Review-Status setzt nur der Reviewer-Zugang. Ein Agent, der Code schreibt,
+kann sich also nicht selbst grün geben, solange er das Reviewer-Token nicht
+lesen kann.
 
 ## Import aus Kanzo
 

@@ -59,11 +59,20 @@ Anfrage spielen dafür keine Rolle.
   gleiche Dateirechte), Präfix `cva_`. Der MCP-Server liest nur dieses Token,
   nie `api.token`. Ist es gleich dem Mensch-Token, gibt es keinen
   Agent-Zugang.
-- **Rolle prüfen:** `GET /auth/whoami` liefert `{"role": "human"|"agent"}`.
+- **Reviewer-Token:** `CONCLAVE_REVIEWER_KEY` bzw. `reviewer.token` (gleiche
+  Dateirechte), Präfix `cvr_`, für den automatischen Reviewer. Es darf das
+  Board lesen, kommentieren und als einziges den Review-Status setzen. Es darf
+  keine Tickets anlegen, ändern, verschieben oder übernehmen und keine anderen
+  Bereiche nutzen; für den Reviewer gelten alle Grenzen eines Agenten. Gleicht
+  es einem anderen Token, gibt es keinen Reviewer-Zugang. Agenten, die Code
+  schreiben, sollen es nicht lesen können: im Agent-Host sperren wie `api.token`.
+- **Rolle prüfen:** `GET /auth/whoami` liefert `{"role": "human"|"agent"|"reviewer"}`.
   Bekommt der MCP-Server `human`, lehnt er jedes Tool ab (seit v0.6.2; nur mit
   `CONCLAVE_MCP_ALLOW_HUMAN=1` arbeitet er trotzdem, mit Warnung, für die
   Fehlersuche). `CONCLAVE_API_KEY` liest er nicht. Pfadteile in Tool-Aufrufen
-  werden vollständig kodiert.
+  werden vollständig kodiert. `conclave-mcp --reviewer` arbeitet nur mit der
+  Rolle `reviewer` und bietet nur drei Tools; der normale MCP-Server lehnt das
+  Reviewer-Token ab und kennt das Review-Tool nicht.
 - **Rechte des Agent-Zugangs:** nur die Routen, die die MCP-Tools brauchen
   (Liste in `api/access.py`); alles andere ergibt `403`
   `{"type": "HumanOnly"}`. Neue Routen sind für Agenten gesperrt, bis sie

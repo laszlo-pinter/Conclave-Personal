@@ -126,6 +126,11 @@ MIGRATIONS: list[Migration] = [
         description="Herkunft der Tickets, geloeschte Kommentare, Projekt-Verlauf und Board-Einstellungen (R9)",
         fn=lambda connection, is_postgres: _add_board_history(connection, is_postgres),
     ),
+    Migration(
+        id="016_board_review",
+        description="Review-Status je Ticket (P3)",
+        fn=lambda connection, is_postgres: _add_board_review(connection, is_postgres),
+    ),
 ]
 
 
@@ -148,6 +153,22 @@ def _board_history_tables(ts: str) -> list[str]:
             value TEXT NOT NULL
         )""",
     ]
+
+
+def _add_board_review(connection, is_postgres: bool) -> None:
+    ts = "TIMESTAMPTZ" if is_postgres else "TEXT"
+    columns = (("review_state", "TEXT NOT NULL DEFAULT 'none'"), ("review_at", ts),
+               ("review_red_count", "INTEGER NOT NULL DEFAULT 0"), ("review_blocking", "INTEGER"),
+               ("review_suggestions", "INTEGER"), ("review_checked", "TEXT NOT NULL DEFAULT ''"))
+    for column, ddl in columns:
+        if _has_column(connection, is_postgres, "board_tasks", column):
+            continue
+        statement = f"ALTER TABLE board_tasks ADD COLUMN {column} {ddl}"
+        if is_postgres:
+            with connection.cursor() as cur:
+                cur.execute(statement)
+        else:
+            connection.execute(statement)
 
 
 def _add_board_history(connection, is_postgres: bool) -> None:
@@ -438,6 +459,12 @@ def _create_board_tables(connection, is_postgres: bool) -> None:
             origin      TEXT,
             actor_id    TEXT,
             created_by  TEXT NOT NULL DEFAULT '',
+            review_state       TEXT NOT NULL DEFAULT 'none',
+            review_at          {ts},
+            review_red_count   INTEGER NOT NULL DEFAULT 0,
+            review_blocking    INTEGER,
+            review_suggestions INTEGER,
+            review_checked     TEXT NOT NULL DEFAULT '',
             UNIQUE(project_id, number)
         )""",
         f"""CREATE TABLE IF NOT EXISTS board_comments (

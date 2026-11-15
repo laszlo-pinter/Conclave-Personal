@@ -25,6 +25,7 @@ function _boardShowDone() { return document.getElementById('boardShowDone').chec
 function originLabel(origin) {
   if (origin === 'human') return t('board.originHuman');
   if (origin === 'agent') return t('board.originAgent');
+  if (origin === 'reviewer') return t('board.originReviewer');
   if (origin === 'system') return t('board.originSystem');
   return t('board.originUnknown');
 }

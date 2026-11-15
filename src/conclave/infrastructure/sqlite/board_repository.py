@@ -31,7 +31,12 @@ MIN_SQLITE = (3, 35)       # UPDATE ... RETURNING
 
 _TASK_COLUMNS = ("t.id, t.project_id, p.slug, t.number, t.title, t.description, t.tags, t.status, t.position, "
                  "t.human, t.assignee, t.created_at, t.updated_at, t.version, t.rank, t.origin, t.actor_id, "
-                 "t.created_by")
+                 "t.created_by, t.review_state, t.review_at, t.review_red_count, t.review_blocking, "
+                 "t.review_suggestions, t.review_checked")
+_UPDATE_TASK = ("UPDATE board_tasks SET title = ?, description = ?, tags = ?, status = ?, position = ?, rank = ?, "
+                "human = ?, assignee = ?, updated_at = ?, review_state = ?, review_at = ?, review_red_count = ?, "
+                "review_blocking = ?, review_suggestions = ?, review_checked = ?, version = version + 1 "
+                "WHERE id = ? AND version = ?")
 _INSERT_TASK = ("INSERT INTO board_tasks (id, project_id, number, title, description, tags, status, position, "
                 "rank, human, assignee, updated_at, created_at, origin, actor_id, created_by) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
@@ -169,12 +174,18 @@ class SQLiteBoardRepository:
                     description=self._dec(row[5]) or "", tags=tuple(json.loads(tags)) if tags else (),
                     status=row[7], position=float(row[8]), human=bool(row[9]), assignee=row[10],
                     created_at=_ts(row[11]), updated_at=_ts(row[12]), version=int(row[13]), rank=float(row[14]),
-                    origin=row[15], actor_id=row[16], created_by=row[17] or "")
+                    origin=row[15], actor_id=row[16], created_by=row[17] or "",
+                    review_state=row[18] or "none", review_at=_ts(row[19]), review_red_count=int(row[20] or 0),
+                    review_blocking=row[21], review_suggestions=row[22], review_checked=row[23] or "")
 
     def _task_params(self, task: Task) -> tuple:
         return (self._enc(task.title), self._enc(task.description), self._enc(json.dumps(list(task.tags))),
                 task.status, task.position, task.rank, self._bool(task.human), task.assignee,
                 self._dt(task.updated_at))
+
+    def _review_params(self, task: Task) -> tuple:
+        return (task.review_state, self._dt(task.review_at), task.review_red_count, task.review_blocking,
+                task.review_suggestions, task.review_checked or "")
 
     def _origin_params(self, task: Task) -> tuple:
         return (self._dt(task.created_at), task.origin, task.actor_id, task.created_by or "")
@@ -252,23 +263,23 @@ class SQLiteBoardRepository:
         sql += " ORDER BY p.slug, t.status, t.position, t.number"
         return [self._task(r) for r in self._all(sql, tuple(params))]
 
-    def update_task(self, task: Task, events=()) -> bool:
-        """Ticket und zugehoerige Verlaufseintraege zusammen (atomar).
+    def update_task(self, task: Task, events=(), comment: TaskComment | None = None) -> bool:
+        """Ticket, zugehoerige Verlaufseintraege und optional ein Kommentar zusammen (atomar;
+        der Kommentar ist das Ergebnis eines Reviews, P3).
 
         Optimistisch: geschrieben wird nur, wenn ``task.version`` noch die gespeicherte
         Version ist; sonst ``False`` (inzwischen geaendert oder geloescht). Bei Erfolg
         steigt ``task.version``.
         """
         with self._tx():
-            changed = self._rowcount(
-                "UPDATE board_tasks SET title = ?, description = ?, tags = ?, status = ?, position = ?, rank = ?, "
-                "human = ?, "
-                "assignee = ?, updated_at = ?, version = version + 1 WHERE id = ? AND version = ?",
-                (*self._task_params(task), task.id, task.version))
+            changed = self._rowcount(_UPDATE_TASK, (*self._task_params(task), *self._review_params(task), task.id,
+                                                    task.version))
             if changed:
                 self._bump()
                 for event in events:
                     self._insert_event(event)
+                if comment is not None:
+                    self._insert_comment(comment)
         if changed == 1:
             task.version += 1
         return changed == 1
@@ -351,6 +362,21 @@ class SQLiteBoardRepository:
             if inserted != 1:
                 raise _NotInserted()
         return True
+
+    def _insert_comment(self, comment: TaskComment) -> None:
+        seq = self._bump()
+        self._execute(
+            "INSERT INTO board_comments (id, task_id, body, origin, actor_id, author_name, seq, created_at, "
+            "updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (comment.id, comment.task_id, self._enc(comment.body), comment.origin, comment.actor_id,
+             self._enc(comment.author_name), seq, self._dt(comment.created_at), self._dt(comment.updated_at)))
+
+    def last_comment(self, task_id: str, origin: str) -> TaskComment | None:
+        """Juengster sichtbarer Kommentar dieser Herkunft (z. B. das letzte Review)."""
+        row = self._one("SELECT id, task_id, body, origin, actor_id, author_name, created_at, updated_at "
+                        "FROM board_comments WHERE task_id = ? AND origin = ? AND deleted_at IS NULL "
+                        "ORDER BY seq DESC LIMIT 1", (task_id, origin))
+        return self._comment(row) if row else None
 
     def get_comment(self, comment_id: str) -> TaskComment | None:
         row = self._one("SELECT id, task_id, body, origin, actor_id, author_name, created_at, updated_at "

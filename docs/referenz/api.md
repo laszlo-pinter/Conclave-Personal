@@ -35,6 +35,11 @@ Mit dem Agent-Token sind nur die Routen erlaubt, die die MCP-Tools brauchen:
   `GET /board/projects/<slug>/tasks/<n>/history` (die feineren Regeln prüft das
   Board selbst, siehe [Board](#board))
 
+Der Reviewer-Zugang (`reviewer.token`) hat eine engere Liste: `GET /auth/whoami`,
+`GET /board/tasks`, `GET /board/search`, `GET /board/projects/<slug>/tasks/<n>`
+samt `/history`, `POST .../comments` und als einziger
+`POST /board/projects/<slug>/tasks/<n>/review`.
+
 Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 `{"type": "HumanOnly", "error": "Nur für den Menschen-Zugang."}`.
 
@@ -110,6 +115,7 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `GET` | `/board/projects/<slug>/tasks/<int:number>/comments` | Kommentare mit Herkunft (nur Mensch; Agenten lesen sie über das Ticket). |
 | `POST` | `/board/projects/<slug>/tasks/<int:number>/comments` | Kommentar schreiben; die Herkunft kommt aus dem Token. |
 | `GET` | `/board/projects/<slug>/tasks/<int:number>/history` | Verlauf mit Herkunft: Anlegen und jede Änderung. |
+| `POST` | `/board/projects/<slug>/tasks/<int:number>/review` | Review-Status setzen (nur Reviewer-Zugang). |
 | `GET` | `/board/projects/<slug>/history` | Projekt-Verlauf: Anlegen, Umbenennen, gelöschte Tickets (nur Mensch). |
 | `PUT` | `/board/comments/<comment_id>` | Eigenen Kommentar ändern (nur Mensch). |
 | `DELETE` | `/board/comments/<comment_id>` | Eigenen Kommentar löschen (nur Mensch). |
@@ -268,6 +274,22 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
   `position` (Umsortieren in einer Spalte) und `comment` (Bearbeiten: alt → neu,
   Löschen: alt → `null`). Gelöschte Kommentare verschwinden aus der Liste, ihr
   Inhalt bleibt im Verlauf.
+- **Review** `POST .../review` (nur Reviewer-Zugang, Agent und Mensch `403`):
+  `{"state": "running"|"passed"|"rework"|"failed", "comment": "...",
+  "blocking": 0, "suggestions": 3, "checked": "branch @ abc..def"}`. Nur für
+  Tickets in der Review-Spalte (sonst `409 NotInReview`); außer bei `running`
+  ist `comment` Pflicht. Ergebnis, Kommentar (Herkunft `reviewer`) und Folgen
+  werden zusammen gespeichert:
+  - `passed` (grün): bleibt in `review`, der Zähler roter Reviews wird 0.
+  - `rework` (gelb) und `failed` (rot): zurück in die erste Spalte, dort vor
+    allen anderen Tickets (Verlauf mit Herkunft `system`).
+  - Das dritte `failed` in Folge macht das Ticket „nur für Menschen“; `rework`
+    zählt nicht mit.
+  - Kommt ein Ticket wieder nach `review`, steht der Status auf `none`.
+
+  Tickets tragen `review` mit `state`, `at`, `red_count`, `blocking`,
+  `suggestions` und `checked`. `GET` auf ein Ticket und `POST /board/next`
+  liefern zusätzlich `last_review`, den jüngsten Kommentar des Reviewers.
 - **Projekt-Verlauf** `GET /board/projects/<slug>/history` (nur Mensch):
   `created`, `name` (Umbenennen) und `task_deleted` (Referenz, Titel und Spalte
   des gelöschten Tickets). Ein gelöschtes Ticket nimmt seinen eigenen Verlauf

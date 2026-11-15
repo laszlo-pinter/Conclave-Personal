@@ -137,13 +137,14 @@ angelegt.
 ## Tokens
 
 ```powershell
-conclave token show [--agent] [--reveal]
+conclave token show [--agent | --reviewer] [--reveal]
 ```
 
 Zeigt, woher ein Token kommt (Variable oder Datei). Ohne `--agent` das
 Mensch-Token, mit `--agent` das Agent-Token samt fertigem
 `claude mcp add`-Befehl für den MCP-Server; fehlt `agent.token`, wird es
-angelegt. Den Token-Wert gibt der Befehl nur mit `--reveal` aus.
+angelegt. Mit `--reviewer` entsprechend das Reviewer-Token und der Befehl für
+`conclave-mcp --reviewer`. Den Token-Wert gibt der Befehl nur mit `--reveal` aus.
 
 ## JSON-Ausgabe
 

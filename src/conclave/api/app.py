@@ -39,7 +39,7 @@ from conclave.domain.errors import (
 )
 from conclave.domain.participant import ParticipantType
 from conclave.domain.principal import HUMAN_PRINCIPAL
-from conclave.api.access import HUMAN_ONLY_ERROR, agent_may
+from conclave.api.access import HUMAN_ONLY_ERROR, agent_may, reviewer_may
 from conclave.application.consultations import ConsultationRequestError
 from conclave.application.board import (
     BoardError, comment_to_dict, event_to_dict, project_event_to_dict, project_to_dict, task_to_dict,
@@ -232,7 +232,9 @@ def create_app(handler: CLIHandler, auth_service=None,
             return
         if request.url_rule is None:
             return  # unbekannte Route: 404/405 wie bei allen anderen
-        if not agent_may(request.method, request.url_rule.rule):
+        # Der Reviewer (auch is_agent) hat eine eigene, engere Liste (P3)
+        allowed = reviewer_may if principal.is_reviewer else agent_may
+        if not allowed(request.method, request.url_rule.rule):
             return jsonify(HUMAN_ONLY_ERROR), 403
 
     @app.before_request
@@ -1026,8 +1028,16 @@ def create_app(handler: CLIHandler, auth_service=None,
         ref = body.get("task")
         if ref is not None and (not isinstance(ref, str) or not ref.strip()):
             raise BoardError("task muss eine Ticket-Referenz wie 'api#12' sein.", 400, "ValidationError")
-        task = _board().next_task(g.principal, body.get("project") or None, task=ref)
-        return jsonify({"task": task_to_dict(task) if task else None}), 200
+        b = _board()
+        task = b.next_task(g.principal, body.get("project") or None, task=ref)
+        if task is None:
+            return jsonify({"task": None}), 200
+        # Nacharbeit (P3): der letzte Review-Kommentar kommt gleich mit
+        return jsonify({"task": task_to_dict(task), "last_review": _last_review(b, task.ref)}), 200
+
+    def _last_review(b, ref: str):
+        comment = b.last_review(ref)
+        return comment_to_dict(comment) if comment else None
 
     def _ref(slug: str, number: int) -> str:
         return f"{slug}#{number}"
@@ -1037,12 +1047,15 @@ def create_app(handler: CLIHandler, auth_service=None,
         """Ein Ticket mit Kommentaren."""
         b = _board()
         task = b.get_task(_ref(slug, number))
-        return jsonify({**task_to_dict(task), "comments": [comment_to_dict(c) for c in b.comments(task.ref)]}), 200
+        return jsonify({**task_to_dict(task), "comments": [comment_to_dict(c) for c in b.comments(task.ref)],
+                        "last_review": _last_review(b, task.ref)}), 200
 
     @app.patch("/board/projects/<slug>/tasks/<int:number>")
     def board_update_task(slug: str, number: int):
-        """Ticket aendern: title, description, tags, status, human, index (Position in der Spalte);
-        mit ``version`` nur, wenn das Ticket noch diesen Stand hat (sonst 409, R9)."""
+        """Ticket aendern: title, description, tags, status, human, index, rank, version.
+
+        ``index`` ist der Platz in der Spalte; mit ``version`` wird nur geschrieben, wenn das
+        Ticket noch diesen Stand hat (sonst 409, R9)."""
         body = _json_object()
         _check_task_fields(body, {"title", "description", "tags", "status", "human", "index", "rank", "version"})
         task = _board().update_task(g.principal, _ref(slug, number), title=body.get("title"),
@@ -1075,9 +1088,24 @@ def create_app(handler: CLIHandler, auth_service=None,
         """Verlauf eines Tickets: Anlegen und jede Aenderung mit Herkunft."""
         return jsonify({"history": [event_to_dict(e) for e in _board().history(_ref(slug, number))]}), 200
 
+    @app.post("/board/projects/<slug>/tasks/<int:number>/review")
+    def board_review_task(slug: str, number: int):
+        """Review-Status setzen (nur Reviewer-Zugang).
+
+        Body: state, comment, optional blocking, suggestions, checked. Ergebnis und Kommentar
+        werden zusammen gespeichert (P3)."""
+        body = _json_object()
+        unknown = set(body) - {"state", "comment", "blocking", "suggestions", "checked"}
+        if unknown:
+            raise BoardError(f"Unbekannte Felder: {', '.join(sorted(unknown))}.", 400, "ValidationError")
+        task = _board().review(g.principal, _ref(slug, number), body.get("state"), body.get("comment"),
+                               blocking=body.get("blocking"), suggestions=body.get("suggestions"),
+                               checked=body.get("checked"))
+        return jsonify(task_to_dict(task)), 200
+
     @app.get("/board/projects/<slug>/history")
     def board_project_history(slug: str):
-        """Verlauf eines Projekts: Anlegen, Umbenennen, geloeschte Tickets (R9)."""
+        """Verlauf eines Projekts: Anlegen, Umbenennen, geloeschte Tickets (nur Mensch)."""
         return jsonify({"history": [project_event_to_dict(e) for e in _board().project_history(slug)]}), 200
 
     @app.put("/board/comments/<comment_id>")
