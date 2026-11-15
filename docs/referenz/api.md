@@ -290,6 +290,22 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
   Tickets tragen `review` mit `state`, `at`, `red_count`, `blocking`,
   `suggestions` und `checked`. `GET` auf ein Ticket und `POST /board/next`
   liefern zusätzlich `last_review`, den jüngsten Kommentar des Reviewers.
+- **Steuertickets** (Anweisungen des Menschen an die Agenten): `POST /board/tasks`
+  mit `"kind": "control"`, `"control": "pause"|"hint"` und `"scope":
+  "project"|"all"`, nur mit dem Mensch-Token (sonst `403`). Ändern und Schließen
+  (nach „erledigt“) darf nur der Mensch; `POST /board/next` vergibt sie nie.
+  - **Pause:** Solange offen, liefert `POST /board/next` kein Ticket, sondern
+    `{"task": null, "paused": true, "pause": {"task", "reason", "by", "scope", …}}`,
+    auch mit `task`. Geltung: das Projekt des Steuertickets oder alle; `next`
+    ohne Projekt hält jede offene Pause an.
+  - **Hinweis:** bleibt offen, bis ein Agent ihn kommentiert; der erste Kommentar
+    eines Agenten gilt als Quittung (`directive.ack_by`, Verlauf `control_ack`).
+  - Jede Board-Antwort (`/board`, Liste, Suche, Ticket, Anlegen, `PATCH`,
+    Kommentar, `next`) trägt `control` mit offenen Pausen (`pauses`) und
+    unquittierten Hinweisen (`hints`). Nur Steuertickets mit Herkunft `human`
+    zählen; ein normales Ticket mit ähnlichem Text löst nichts aus.
+  - Tickets tragen `kind` (`task`/`control`) und bei Steuertickets `directive`
+    (`type`, `scope`, `ack_by`, `ack_at`).
 - **Projekt-Verlauf** `GET /board/projects/<slug>/history` (nur Mensch):
   `created`, `name` (Umbenennen) und `task_deleted` (Referenz, Titel und Spalte
   des gelöschten Tickets). Ein gelöschtes Ticket nimmt seinen eigenen Verlauf

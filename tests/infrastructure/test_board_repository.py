@@ -476,3 +476,23 @@ def test_migration_016_adds_review_columns(tmp_path):
     run_migrations(conn)
     task = SQLiteBoardRepository(conn, autocommit=True).get_task("api", 1)
     assert (task.review_state, task.review_red_count, task.review_at) == ("none", 0, None)
+
+
+def test_migration_017_marks_existing_tickets_as_tasks(tmp_path):
+    """P6: bestehende Tickets sind normale Tickets (kind 'task'), ohne Steuerangaben."""
+    import sqlite3
+    from conclave.infrastructure.migrations import MIGRATIONS, run_migrations
+    conn = sqlite3.connect(tmp_path / "alt.db")
+    for table in ("conversations (id TEXT PRIMARY KEY, status TEXT)", "agents (id TEXT PRIMARY KEY)",
+                  "audit_log (id TEXT PRIMARY KEY)", "messages (id TEXT PRIMARY KEY, content TEXT)"):
+        conn.execute(f"CREATE TABLE {table}")
+    run_migrations(conn, migrations=[m for m in MIGRATIONS if m.id != "017_board_control"])
+    for column in ("kind", "control", "control_scope", "control_ack_by", "control_ack_at"):
+        conn.execute(f"ALTER TABLE board_tasks DROP COLUMN {column}")      # Stand vor P6
+    conn.execute("INSERT INTO board_projects (id, slug, name, created_at) VALUES ('p', 'api', 'API', '2026-01-01')")
+    conn.execute("INSERT INTO board_tasks (id, project_id, number, title, status, position, human, created_at, "
+                 "updated_at) VALUES ('t1', 'p', 1, 'alt', 'todo', 1024, 0, '2026-01-01', '2026-01-01')")
+    conn.commit()
+    run_migrations(conn)
+    task = SQLiteBoardRepository(conn, autocommit=True).get_task("api", 1)
+    assert (task.kind, task.control, task.control_scope, task.control_ack_by) == ("task", None, "", "")

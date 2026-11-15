@@ -26,10 +26,14 @@ ORIGINS = ("human", "agent", "reviewer", "system")
 REVIEW_STATES = ("none", "running", "passed", "rework", "failed")
 REVIEW_RESULTS = ("running", "passed", "rework", "failed")      # was der Reviewer setzen darf
 RED_LIMIT = 3                                                   # E-R3: so viele rote in Folge -> Mensch
+# Steuertickets (P6): nur der Mensch legt sie an; Pause haelt next an, Hinweis wartet auf Quittung
+KINDS = ("task", "control")
+CONTROL_TYPES = ("pause", "hint")
+CONTROL_SCOPES = ("project", "all")
 # Verlaufseintraege fuer diese Felder (Plan 2, "Ticket-Verlauf"); "created" ist das Anlegen,
 # "comment" Bearbeiten/Loeschen eines Kommentars (alt -> neu bzw. -> None), R9
 TRACKED_FIELDS = ("created", "status", "title", "description", "human", "rank", "tags", "position", "comment",
-                  "review_state")
+                  "review_state", "control_ack")
 # Verlauf eines Projekts: Anlegen, Umbenennen, geloeschte Tickets (Tombstone), R9
 PROJECT_FIELDS = ("created", "name", "task_deleted")
 POSITION_STEP = 1024.0      # Abstand der Karten nach dem Neunummerieren
@@ -163,6 +167,11 @@ class Task:
     review_blocking: int | None = None
     review_suggestions: int | None = None
     review_checked: str = ""        # gepruefter Stand, z. B. "sicherheit @ abc..def"
+    kind: str = "task"              # P6: "task" oder "control" (Steuerticket des Menschen)
+    control: str | None = None      # bei kind=control: "pause" oder "hint"
+    control_scope: str = ""         # "project" oder "all"
+    control_ack_by: str = ""        # Hinweis quittiert von (Anzeigename bzw. Rolle)
+    control_ack_at: datetime | None = None
 
     def __post_init__(self) -> None:
         check_origin(self.origin)

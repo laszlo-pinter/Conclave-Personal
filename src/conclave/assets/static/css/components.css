@@ -341,3 +341,18 @@ select.sel:focus{border-color:var(--accent)}
 .role-badge{margin-left:auto;font-family:var(--font-mono);font-size:10px;padding:2px 8px;border-radius:8px;border:1px solid var(--border-mid);color:var(--text-dim);background:var(--bg-3)}
 .role-badge[hidden]{display:none}
 .role-badge.role-agent{color:var(--floor-color);border-color:var(--floor-border);background:var(--floor-bg)}
+
+/* Steuertickets (P6): Anweisungen des Menschen ueber den Spalten; Farbe nie allein, immer mit Text */
+.board-control{border:1px solid var(--floor-border);background:var(--floor-bg);color:var(--text);border-radius:var(--r2);padding:10px 12px;margin-bottom:12px;display:flex;flex-direction:column;gap:8px}
+.board-control[hidden]{display:none}
+.board-control.paused{border-color:var(--danger);background:var(--danger-bg)}
+.board-control-head{font-family:var(--font-hd);font-size:13px;font-weight:600}
+.board-control-item{display:grid;grid-template-columns:auto auto auto 1fr auto;align-items:start;gap:8px;font-size:13px}
+.board-control-kind{font-family:var(--font-mono);font-size:10px;padding:1px 8px;border-radius:8px;border:1px solid currentColor;font-weight:600}
+.board-control-item.pause .board-control-kind{color:var(--danger)}
+.board-control-item.hint .board-control-kind{color:var(--floor-color)}
+.board-control-scope{font-size:11px;color:var(--text-dim)}
+.board-control-reason{font-weight:600;word-break:break-word}
+.board-control-text{color:var(--text-dim);white-space:pre-wrap;word-break:break-word}
+.board-control-ack{font-size:11px;color:var(--text-faint)}
+.btn-full.secondary.board-pause-btn{border-color:var(--danger);color:var(--danger)}

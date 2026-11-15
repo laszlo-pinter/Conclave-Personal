@@ -399,3 +399,25 @@ def test_review_loop_on_postgres(pg, crypto):
         cur.execute("SELECT seq FROM board_events UNION ALL SELECT seq FROM board_comments")
         seqs = [r[0] for r in cur.fetchall()]
     assert len(seqs) == len(set(seqs))                               # eindeutig, auch mit Kommentar in der CTE
+
+
+# ── P6: Steuertickets auf Postgres ────────────────────────────────────────
+
+def test_control_tickets_on_postgres(pg, crypto):
+    from conclave.application.board import BoardError
+    from conclave.domain.principal import AGENT_PRINCIPAL as AGENT
+    from conclave.domain.principal import HUMAN_PRINCIPAL as HUMAN
+    svc = _service(pg, crypto)
+    svc.create_project(HUMAN, "api", "API")
+    svc.create_task(HUMAN, "api", "Arbeit")
+    pause = svc.create_task(HUMAN, "api", "Anhalten", kind="control", control="pause", scope="all")
+    hint = svc.create_task(HUMAN, "api", "Hinweis", kind="control", control="hint")
+    assert (svc.get_task(pause.ref).kind, svc.get_task(pause.ref).control_scope) == ("control", "all")
+    with pytest.raises(BoardError) as e:
+        svc.next_task(AGENT)
+    assert e.value.type == "Paused"
+    svc.add_comment(AGENT, hint.ref, "Verstanden", author_name="cc")
+    assert svc.get_task(hint.ref).control_ack_by == "cc"
+    assert svc.control_state()["hints"] == []
+    svc.update_task(HUMAN, pause.ref, status="done")
+    assert svc.next_task(AGENT).ref == "api#1"

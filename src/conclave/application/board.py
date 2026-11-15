@@ -17,6 +17,9 @@ Rechte (Plan, Abschnitt 3). "Freigabe-Recht" ist eine eigene Pruefung
   aendern, verschieben und uebernehmen darf er nicht. Gelb (rework) und rot (failed)
   schieben das Ticket zurueck in die erste Spalte, dort steht Nacharbeit vor dem Rang;
   drei rote in Folge machen es "nur fuer Menschen" (E-R3).
+- Steuertickets (P6, kind=control): legt nur der Mensch an, aendert und schliesst sie. Eine offene
+  Pause haelt next_task an (409 Paused mit der Pause), ein Hinweis bleibt in control_state, bis ein
+  Agent ihn per Kommentar quittiert. Steuertickets werden nie per next_task vergeben.
 - Anlegen: Agenten nur in die erste Spalte. Jedes Ticket traegt seine Herkunft; Anlegen,
   Tags, Position und Kommentar-Aenderungen stehen im Verlauf, Projekt-Aenderungen und
   geloeschte Tickets im Projekt-Verlauf (R9).
@@ -34,6 +37,9 @@ from typing import Callable
 
 from conclave.application.ports import BoardRepository
 from conclave.domain.board import (
+    CONTROL_SCOPES,
+    CONTROL_TYPES,
+    KINDS,
     POSITION_STEP,
     RED_LIMIT,
     REVIEW_RESULTS,
@@ -256,10 +262,25 @@ class BoardService:
         self._guard_write(principal, task)
         if principal.is_agent and task.status == self.flow.last:
             raise _forbidden("Erledigte Tickets duerfen Agenten nur lesen und kommentieren.")
+        if principal.is_agent and task.kind == "control":
+            raise _forbidden("Steuertickets aendert und schliesst nur der Mensch; Agenten kommentieren sie.")
 
     def create_task(self, principal: Principal, slug: str, title: str, *, description: str = "", tags=(),
-                    human: bool = False, status: str | None = None) -> Task:
+                    human: bool = False, status: str | None = None, kind: str = "task",
+                    control: str | None = None, scope: str = "project") -> Task:
         self._no_reviewer(principal, "anlegen")
+        if kind not in KINDS:
+            raise _invalid(f"kind muss einer von {KINDS} sein.")
+        if kind == "control":
+            if not principal.is_human:
+                raise _forbidden("Steuertickets legt nur der Mensch an.")
+            if control not in CONTROL_TYPES:
+                raise _invalid(f"control muss einer von {CONTROL_TYPES} sein.")
+            if scope not in CONTROL_SCOPES:
+                raise _invalid(f"scope muss einer von {CONTROL_SCOPES} sein.")
+            status = None                               # offen = erste Spalte; geschlossen wird nach "erledigt"
+        elif control is not None:
+            raise _invalid("control gibt es nur bei kind=control.")
         project = self._project(slug)
         status = self.flow_check(status) if status is not None else self.flow.first
         if principal.is_agent and status != self.flow.first:
@@ -274,6 +295,8 @@ class BoardService:
         except (ValueError, TypeError) as e:
             raise _invalid(str(e)) from None
         task.origin, task.actor_id, task.created_by = origin, actor_id, actor_id
+        if kind == "control":
+            task.kind, task.control, task.control_scope = kind, control, scope
         event = TaskEvent.create(task.id, "created", None, status, origin, actor_id=actor_id)
         return self._repo.create_task(task, event)
 
@@ -383,9 +406,13 @@ class BoardService:
             ticket = self.get_task(task)                       # 400 bei ungueltiger, 404 bei fehlender Referenz
             if slug and ticket.project_slug != slug:
                 raise _invalid(f"Ticket '{task}' gehoert nicht zum Projekt '{slug}'.")
+            if ticket.kind == "control":
+                raise _forbidden(f"'{task}' ist ein Steuerticket des Menschen und wird nicht uebernommen.")
+            self._raise_if_paused(ticket.project_slug)
             return self._claim(task, origin, actor_id)
+        self._raise_if_paused(slug)
         for candidate in self.list_tasks(slug, [first]):
-            if candidate.human:
+            if candidate.human or candidate.kind == "control":
                 continue
             position = self._end_position(candidate.project_id, second)
             event = TaskEvent.create(candidate.id, "status", first, second, origin, actor_id=actor_id)
@@ -399,6 +426,8 @@ class BoardService:
         task = self.get_task(ref)
         if task.human:
             raise _forbidden(f"Ticket '{ref}' ist nur fuer Menschen und wird nicht uebernommen.")
+        if task.kind == "control":
+            raise _forbidden(f"'{ref}' ist ein Steuerticket des Menschen und wird nicht uebernommen.")
         if task.status != first:
             raise BoardError(f"Ticket '{ref}' steht nicht in '{first}' (sondern in '{task.status}'), "
                              "ist also schon uebernommen oder weiter.", 409, "NotClaimable")
@@ -487,8 +516,63 @@ class BoardService:
         task = self.get_task(ref)
         self._guard_write(principal, task)
         origin, actor_id = self.actor(principal)
+        if (principal.is_agent and task.kind == "control" and task.control == "hint" and not task.control_ack_by
+                and task.status != self.flow.last):
+            return self._acknowledge(task, body, origin, actor_id, author_name)
         # Agenten: die Markierung wird beim Schreiben erneut geprueft (sie kann inzwischen gesetzt sein)
         return self._save_comment(task, body, origin, actor_id, author_name, only_if_not_human=principal.is_agent)
+
+    def _acknowledge(self, task: Task, body, origin, actor_id, author_name: str) -> TaskComment:
+        """Kommentar eines Agenten an einem Hinweis = Quittung; Kommentar und Quittung zusammen."""
+        if not isinstance(body, str) or not body.strip():
+            raise _invalid("Kommentar darf nicht leer sein.")
+        try:
+            check_field_limits(text=body, what="Kommentar")
+        except ValueError as e:
+            raise _invalid(str(e)) from None
+        name = str(author_name or "")[:100]
+        comment = TaskComment.create(task.id, body, origin, actor_id=actor_id, author_name=name)
+        by = name or actor_id
+        task.control_ack_by, task.control_ack_at, task.updated_at = by, self._now(), self._now()
+        event = TaskEvent.create(task.id, "control_ack", None, by, origin, actor_id=actor_id)
+        if not self._repo.update_task(task, [event], comment):
+            raise BoardError(f"Ticket '{task.ref}' wurde inzwischen geaendert; bitte erneut kommentieren.",
+                             409, "Conflict")
+        return comment
+
+    # ── Steuertickets (P6) ───────────────────────────────────────────────
+
+    def _open_controls(self, slug: str | None = None) -> list[Task]:
+        """Offene Steuertickets mit Herkunft Mensch, die fuer ``slug`` gelten (ohne slug: alle)."""
+        open_statuses = [s for s in self.flow.statuses if s != self.flow.last]
+        found = []
+        for task in self._repo.list_tasks(None, open_statuses):
+            if task.kind != "control" or task.origin != "human":
+                continue
+            if slug is None or task.control_scope == "all" or task.project_slug == slug:
+                found.append(task)
+        return sorted(found, key=lambda t: (t.created_at, t.project_slug, t.number))
+
+    @staticmethod
+    def _control_entry(task: Task) -> dict:
+        return {"task": task.ref, "type": task.control,
+                "scope": "all" if task.control_scope == "all" else task.project_slug,
+                "reason": task.title, "text": task.description, "by": task.created_by or "human",
+                "at": _iso(task.created_at)}
+
+    def control_state(self, slug: str | None = None) -> dict:
+        """Offene Pausen und unquittierte Hinweise, fuer jede Board-Antwort (Feld ``control``)."""
+        controls = self._open_controls(slug)
+        return {"pauses": [self._control_entry(t) for t in controls if t.control == "pause"],
+                "hints": [self._control_entry(t) for t in controls if t.control == "hint" and not t.control_ack_by]}
+
+    def _raise_if_paused(self, slug: str | None) -> None:
+        pauses = [t for t in self._open_controls(slug) if t.control == "pause"]
+        if pauses:
+            entry = self._control_entry(pauses[0])
+            error = BoardError(f"Pausiert durch {entry['by']} ({entry['task']}): {entry['reason']}", 409, "Paused")
+            error.pause = entry
+            raise error
 
     def add_system_comment(self, ref: str, body: str, author_name: str) -> TaskComment:
         """Von Conclave selbst geschrieben (z. B. Consultations): Herkunft ``system``."""
@@ -628,6 +712,9 @@ def task_to_dict(task: Task) -> dict:
         "description": task.description, "tags": list(task.tags), "status": task.status,
         "position": task.position, "rank": task.rank, "human": task.human, "assignee": task.assignee,
         "version": task.version, "origin": task.origin, "created_by": task.created_by,
+        "kind": task.kind,
+        "directive": ({"type": task.control, "scope": task.control_scope, "ack_by": task.control_ack_by or None,
+                       "ack_at": _iso(task.control_ack_at)} if task.kind == "control" else None),
         "review": {"state": task.review_state, "at": _iso(task.review_at), "red_count": task.review_red_count,
                    "blocking": task.review_blocking, "suggestions": task.review_suggestions,
                    "checked": task.review_checked},

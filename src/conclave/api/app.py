@@ -944,7 +944,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         unknown = set(body) - allowed
         if unknown:
             raise BoardError(f"Unbekannte Felder: {sorted(unknown)}", 400, "ValidationError")
-        for name in ("project", "title", "description", "status"):
+        for name in ("project", "title", "description", "status", "kind", "control", "scope"):
             if body.get(name) is not None and not isinstance(body[name], str):
                 raise BoardError(f"{name} muss Text sein.", 400, "ValidationError")
         tags = body.get("tags")
@@ -970,7 +970,11 @@ def create_app(handler: CLIHandler, auth_service=None,
         """Spalten, Projekte und Aenderungszaehler des Boards."""
         b = _board()
         return jsonify({"statuses": list(b.flow.statuses), "projects": [project_to_dict(p) for p in b.list_projects()],
-                        "changes": b.change_token()}), 200
+                        "changes": b.change_token(), "control": b.control_state()}), 200
+
+    def _control(slug: str | None = None) -> dict:
+        """Offene Pausen und unquittierte Hinweise des Menschen (P6), in jeder Board-Antwort."""
+        return _board().control_state(slug)
 
     @app.get("/board/changes")
     def board_changes():
@@ -1000,26 +1004,30 @@ def create_app(handler: CLIHandler, auth_service=None,
     def board_list_tasks():
         """Tickets in Board-Reihenfolge; Filter project, status (mehrfach), include_done."""
         statuses = request.args.getlist("status") or None
-        tasks = _board().list_tasks(request.args.get("project") or None, statuses,
-                                    include_done=_flag("include_done"))
-        return jsonify({"tasks": [task_to_dict(t) for t in tasks]}), 200
+        slug = request.args.get("project") or None
+        tasks = _board().list_tasks(slug, statuses, include_done=_flag("include_done"))
+        return jsonify({"tasks": [task_to_dict(t) for t in tasks], "control": _control(slug)}), 200
 
     @app.post("/board/tasks")
     def board_create_task():
-        """Ticket anlegen; neue Tickets landen in der ersten Spalte."""
+        """Ticket anlegen; neue Tickets landen in der ersten Spalte. Steuertickets (nur Mensch):
+        kind=control, control=pause|hint, scope=project|all."""
         body = _json_object()
-        _check_task_fields(body, {"project", "title", "description", "tags", "status", "human"})
+        _check_task_fields(body, {"project", "title", "description", "tags", "status", "human", "kind", "control",
+                                  "scope"})
         task = _board().create_task(g.principal, body.get("project"), body.get("title"),
                                     description=body.get("description") or "", tags=body.get("tags") or [],
-                                    human=body.get("human", False), status=body.get("status"))
-        return jsonify(task_to_dict(task)), 201
+                                    human=body.get("human", False), status=body.get("status"),
+                                    kind=body.get("kind") or "task", control=body.get("control"),
+                                    scope=body.get("scope") or "project")
+        return jsonify({**task_to_dict(task), "control": _control(task.project_slug)}), 201
 
     @app.get("/board/search")
     def board_search():
         """Suche in Titel, Tags, Beschreibung und Kommentaren."""
-        tasks = _board().search(request.args.get("q", ""), request.args.get("project") or None,
-                                include_done=_flag("include_done", True))
-        return jsonify({"tasks": [task_to_dict(t) for t in tasks]}), 200
+        slug = request.args.get("project") or None
+        tasks = _board().search(request.args.get("q", ""), slug, include_done=_flag("include_done", True))
+        return jsonify({"tasks": [task_to_dict(t) for t in tasks], "control": _control(slug)}), 200
 
     @app.post("/board/next")
     def board_next_task():
@@ -1029,11 +1037,19 @@ def create_app(handler: CLIHandler, auth_service=None,
         if ref is not None and (not isinstance(ref, str) or not ref.strip()):
             raise BoardError("task muss eine Ticket-Referenz wie 'api#12' sein.", 400, "ValidationError")
         b = _board()
-        task = b.next_task(g.principal, body.get("project") or None, task=ref)
+        slug = body.get("project") or None
+        try:
+            task = b.next_task(g.principal, slug, task=ref)
+        except BoardError as e:
+            if e.type != "Paused":
+                raise
+            # Pause des Menschen (P6): kein Ticket, sondern die Pause
+            return jsonify({"task": None, "paused": True, "pause": e.pause, "control": _control(slug)}), 200
         if task is None:
-            return jsonify({"task": None}), 200
+            return jsonify({"task": None, "control": _control(slug)}), 200
         # Nacharbeit (P3): der letzte Review-Kommentar kommt gleich mit
-        return jsonify({"task": task_to_dict(task), "last_review": _last_review(b, task.ref)}), 200
+        return jsonify({"task": task_to_dict(task), "last_review": _last_review(b, task.ref),
+                        "control": _control(task.project_slug)}), 200
 
     def _last_review(b, ref: str):
         comment = b.last_review(ref)
@@ -1048,7 +1064,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         b = _board()
         task = b.get_task(_ref(slug, number))
         return jsonify({**task_to_dict(task), "comments": [comment_to_dict(c) for c in b.comments(task.ref)],
-                        "last_review": _last_review(b, task.ref)}), 200
+                        "last_review": _last_review(b, task.ref), "control": _control(slug)}), 200
 
     @app.patch("/board/projects/<slug>/tasks/<int:number>")
     def board_update_task(slug: str, number: int):
@@ -1062,7 +1078,7 @@ def create_app(handler: CLIHandler, auth_service=None,
                                     description=body.get("description"), tags=body.get("tags"),
                                     status=body.get("status"), human=body.get("human"), index=body.get("index"),
                                     rank=body.get("rank"), version=body.get("version"))
-        return jsonify(task_to_dict(task)), 200
+        return jsonify({**task_to_dict(task), "control": _control(slug)}), 200
 
     @app.delete("/board/projects/<slug>/tasks/<int:number>")
     def board_delete_task(slug: str, number: int):
@@ -1081,7 +1097,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         body = _json_object()
         comment = _board().add_comment(g.principal, _ref(slug, number), body.get("body"),
                                        author_name=body.get("author_name") or "")
-        return jsonify(comment_to_dict(comment)), 201
+        return jsonify({**comment_to_dict(comment), "control": _control(slug)}), 201
 
     @app.get("/board/projects/<slug>/tasks/<int:number>/history")
     def board_history(slug: str, number: int):

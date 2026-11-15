@@ -31,7 +31,7 @@ from conclave.domain.board import POSITION_STEP
 from conclave.infrastructure.sqlite.board_repository import SQLiteBoardRepository
 
 _TASK_INSERT_COLUMNS = ("id, project_id, number, title, description, tags, status, position, rank, human, "
-                        "assignee, updated_at, created_at, origin, actor_id, created_by")
+                        "assignee, updated_at, created_at, origin, actor_id, created_by, kind, control, control_scope")
 _EVENT_COLUMNS = "id, task_id, field, old_value, new_value, origin, actor_id, seq, created_at"
 _PROJECT_EVENT_COLUMNS = "id, project_id, field, old_value, new_value, origin, actor_id, seq, created_at"
 
@@ -102,14 +102,13 @@ class PostgresBoardRepository(SQLiteBoardRepository):
         return result.rowcount == 1
 
     def create_task(self, task: Task, event: TaskEvent | None = None) -> Task:
-        values = (task.id, task.project_id, *self._task_params(task), task.created_at, task.origin,
-                  task.actor_id, task.created_by or "")
+        values = (task.id, task.project_id, *self._task_params(task), *self._origin_params(task))
         if event is None:
             row = self._one(
                 "WITH n AS (UPDATE board_counters SET next_number = next_number + 1 WHERE project_id = ? "
                 "           RETURNING next_number - 1 AS number) "
                 f"INSERT INTO board_tasks ({_TASK_INSERT_COLUMNS}) "  # nosec B608 - feste Texte
-                "SELECT ?, ?, n.number, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM n RETURNING number",
+                "SELECT ?, ?, n.number, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM n RETURNING number",
                 (task.project_id, *values))
             if row is None:
                 raise ValueError("Unbekanntes Projekt")
@@ -119,7 +118,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
                 "WITH n AS (UPDATE board_counters SET next_number = next_number + 1 WHERE project_id = ? "
                 "           RETURNING next_number - 1 AS number), "
                 f"     t AS (INSERT INTO board_tasks ({_TASK_INSERT_COLUMNS}) "  # nosec B608 - feste Texte
-                "           SELECT ?, ?, n.number, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM n "
+                "           SELECT ?, ?, n.number, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM n "
                 "           RETURNING id, number), "
                 "     c AS (UPDATE board_meta SET value = value + 2 WHERE key = 'changes' "
                 "           AND EXISTS (SELECT 1 FROM t) RETURNING value), "
@@ -135,7 +134,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
 
     _IMPORT_TASK = (
         f"WITH u AS (INSERT INTO board_tasks ({_TASK_INSERT_COLUMNS}) "  # nosec B608 - feste Texte
-        "           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "           ON CONFLICT (project_id, number) DO NOTHING RETURNING id, project_id, number), "
         "     n AS (UPDATE board_counters SET next_number = GREATEST(next_number, (SELECT number FROM u) + 1) "
         "           WHERE project_id = (SELECT project_id FROM u) RETURNING project_id), "
@@ -150,8 +149,8 @@ class PostgresBoardRepository(SQLiteBoardRepository):
         einer Anweisung; ``False``, wenn die Nummer inzwischen vergeben ist (dann wird nichts geschrieben)."""
         comments = list(comments)
         n = len(comments)
-        params = [task.id, task.project_id, task.number, *self._task_params(task), task.created_at,
-                  task.origin, task.actor_id, task.created_by or "", n + 2]
+        params = [task.id, task.project_id, task.number, *self._task_params(task), *self._origin_params(task),
+                  n + 2]
         if event is not None:
             params += [event.id, event.field_name, self._enc(event.old_value), self._enc(event.new_value),
                        event.origin, event.actor_id, n + 1, event.created_at, True]
@@ -251,7 +250,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
         "WITH u AS (UPDATE board_tasks SET title = ?, description = ?, tags = ?, status = ?, position = ?, "
         "           rank = ?, human = ?, assignee = ?, updated_at = ?, review_state = ?, review_at = ?, "
         "           review_red_count = ?, review_blocking = ?, review_suggestions = ?, review_checked = ?, "
-        "           version = version + 1 "
+        "           control_ack_by = ?, control_ack_at = ?, version = version + 1 "
         "           WHERE id = ? AND version = ? RETURNING id), "
         "     c AS (UPDATE board_meta SET value = value + ? WHERE key = 'changes' "
         "           AND EXISTS (SELECT 1 FROM u) RETURNING value) ")

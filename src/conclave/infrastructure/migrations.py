@@ -131,6 +131,11 @@ MIGRATIONS: list[Migration] = [
         description="Review-Status je Ticket (P3)",
         fn=lambda connection, is_postgres: _add_board_review(connection, is_postgres),
     ),
+    Migration(
+        id="017_board_control",
+        description="Steuertickets des Menschen: Pause und Hinweis (P6)",
+        fn=lambda connection, is_postgres: _add_board_control(connection, is_postgres),
+    ),
 ]
 
 
@@ -153,6 +158,22 @@ def _board_history_tables(ts: str) -> list[str]:
             value TEXT NOT NULL
         )""",
     ]
+
+
+def _add_board_control(connection, is_postgres: bool) -> None:
+    ts = "TIMESTAMPTZ" if is_postgres else "TEXT"
+    columns = (("kind", "TEXT NOT NULL DEFAULT 'task'"), ("control", "TEXT"),
+               ("control_scope", "TEXT NOT NULL DEFAULT ''"), ("control_ack_by", "TEXT NOT NULL DEFAULT ''"),
+               ("control_ack_at", ts))
+    for column, ddl in columns:
+        if _has_column(connection, is_postgres, "board_tasks", column):
+            continue
+        statement = f"ALTER TABLE board_tasks ADD COLUMN {column} {ddl}"
+        if is_postgres:
+            with connection.cursor() as cur:
+                cur.execute(statement)
+        else:
+            connection.execute(statement)
 
 
 def _add_board_review(connection, is_postgres: bool) -> None:
@@ -465,6 +486,11 @@ def _create_board_tables(connection, is_postgres: bool) -> None:
             review_blocking    INTEGER,
             review_suggestions INTEGER,
             review_checked     TEXT NOT NULL DEFAULT '',
+            kind               TEXT NOT NULL DEFAULT 'task',
+            control            TEXT,
+            control_scope      TEXT NOT NULL DEFAULT '',
+            control_ack_by     TEXT NOT NULL DEFAULT '',
+            control_ack_at     {ts},
             UNIQUE(project_id, number)
         )""",
         f"""CREATE TABLE IF NOT EXISTS board_comments (

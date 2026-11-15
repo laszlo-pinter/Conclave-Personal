@@ -32,14 +32,16 @@ MIN_SQLITE = (3, 35)       # UPDATE ... RETURNING
 _TASK_COLUMNS = ("t.id, t.project_id, p.slug, t.number, t.title, t.description, t.tags, t.status, t.position, "
                  "t.human, t.assignee, t.created_at, t.updated_at, t.version, t.rank, t.origin, t.actor_id, "
                  "t.created_by, t.review_state, t.review_at, t.review_red_count, t.review_blocking, "
-                 "t.review_suggestions, t.review_checked")
+                 "t.review_suggestions, t.review_checked, t.kind, t.control, t.control_scope, t.control_ack_by, "
+                 "t.control_ack_at")
 _UPDATE_TASK = ("UPDATE board_tasks SET title = ?, description = ?, tags = ?, status = ?, position = ?, rank = ?, "
                 "human = ?, assignee = ?, updated_at = ?, review_state = ?, review_at = ?, review_red_count = ?, "
-                "review_blocking = ?, review_suggestions = ?, review_checked = ?, version = version + 1 "
+                "review_blocking = ?, review_suggestions = ?, review_checked = ?, control_ack_by = ?, "
+                "control_ack_at = ?, version = version + 1 "
                 "WHERE id = ? AND version = ?")
 _INSERT_TASK = ("INSERT INTO board_tasks (id, project_id, number, title, description, tags, status, position, "
-                "rank, human, assignee, updated_at, created_at, origin, actor_id, created_by) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                "rank, human, assignee, updated_at, created_at, origin, actor_id, created_by, kind, control, "
+                "control_scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 
 
 class _NotInserted(Exception):
@@ -176,7 +178,9 @@ class SQLiteBoardRepository:
                     created_at=_ts(row[11]), updated_at=_ts(row[12]), version=int(row[13]), rank=float(row[14]),
                     origin=row[15], actor_id=row[16], created_by=row[17] or "",
                     review_state=row[18] or "none", review_at=_ts(row[19]), review_red_count=int(row[20] or 0),
-                    review_blocking=row[21], review_suggestions=row[22], review_checked=row[23] or "")
+                    review_blocking=row[21], review_suggestions=row[22], review_checked=row[23] or "",
+                    kind=row[24] or "task", control=row[25], control_scope=row[26] or "",
+                    control_ack_by=row[27] or "", control_ack_at=_ts(row[28]))
 
     def _task_params(self, task: Task) -> tuple:
         return (self._enc(task.title), self._enc(task.description), self._enc(json.dumps(list(task.tags))),
@@ -185,10 +189,12 @@ class SQLiteBoardRepository:
 
     def _review_params(self, task: Task) -> tuple:
         return (task.review_state, self._dt(task.review_at), task.review_red_count, task.review_blocking,
-                task.review_suggestions, task.review_checked or "")
+                task.review_suggestions, task.review_checked or "", task.control_ack_by or "",
+                self._dt(task.control_ack_at))
 
     def _origin_params(self, task: Task) -> tuple:
-        return (self._dt(task.created_at), task.origin, task.actor_id, task.created_by or "")
+        return (self._dt(task.created_at), task.origin, task.actor_id, task.created_by or "", task.kind or "task",
+                task.control, task.control_scope or "")
 
     def create_task(self, task: Task, event: TaskEvent | None = None) -> Task:
         """Legt das Ticket an und vergibt die naechste Nummer des Projekts; mit dem Ereignis

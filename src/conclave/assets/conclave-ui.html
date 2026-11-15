@@ -240,8 +240,10 @@
           <select id="boardProject" class="board-input" data-i18n-title="board.project"></select>
           <input type="search" id="boardSearch" class="board-input" data-i18n-placeholder="board.search" placeholder="Suchen..."/>
           <button class="btn-full page-action" data-action="board-new" data-i18n="board.new">Neues Ticket</button>
+          <button class="btn-full secondary page-action board-pause-btn" data-action="board-pause" data-i18n="board.pauseAgents">Agenten pausieren</button>
         </div>
       </div>
+      <div class="board-control" id="boardControl" role="status" aria-live="polite" hidden></div>
       <div class="board-columns" id="boardColumns"><div class="surface-empty" data-i18n="common.loading">Lade...</div></div>
     </div>
   </div>

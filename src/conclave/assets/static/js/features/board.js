@@ -3,7 +3,8 @@
 // Werte aus der API kommen nur per textContent ins DOM; Beschreibung und Kommentare
 // laufen ueber renderMarkdown() (DOMPurify).
 
-let _board = {statuses: [], projects: [], tasks: [], changes: null, open: null, query: ''};
+let _board = {statuses: [], projects: [], tasks: [], changes: null, open: null, query: '',
+              control: {pauses: [], hints: []}};
 let _boardTimer = null;
 const BOARD_POLL_MS = 5000;
 
@@ -53,6 +54,7 @@ async function _reloadBoard() {
   _board.statuses = data.statuses || [];
   _board.projects = data.projects || [];
   _board.changes = data.changes;
+  _board.control = data.control || {pauses: [], hints: []};
   _renderBoardProjects();
   await _loadBoardTasks();
   // Per Klick auf den Hintergrund geschlossen: nicht weiter nachladen
@@ -74,6 +76,7 @@ async function _loadBoardTasks() {
   }
   _board.tasks = data.tasks || [];
   renderBoard();
+  renderBoardControl();
 }
 
 function _boardMessage(text, isError) {
@@ -110,7 +113,8 @@ function renderBoard() {
   cols.replaceChildren(..._board.statuses.map(status => {
     const col = _boardEl('div', 'board-col');
     col.dataset.status = status;
-    const tasks = _board.tasks.filter(task => task.status === status);
+    // Steuertickets stehen im Banner ueber den Spalten, nicht als Karte (P6)
+    const tasks = _board.tasks.filter(task => task.status === status && task.kind !== 'control');
     const head = _boardEl('div', 'board-col-head');
     head.append(_boardEl('span', 'board-col-name', status), _boardEl('span', 'board-col-count', String(tasks.length)));
     const list = _boardEl('div', 'board-col-list');
@@ -337,6 +341,73 @@ async function createBoardTask() {
     return;
   }
   closeOverlay('overlayBoardNew');
+  await _refreshBoard();
+}
+
+// ── Steuertickets: Banner und Pause (P6) ─────────────────────────────────
+
+// Offene Pausen und Hinweise aus /board (gilt unabhaengig von Filter und Suche), dazu
+// quittierte Hinweise aus der Ticketliste, bis der Mensch sie schliesst.
+function _boardControlEntries() {
+  const done = _board.statuses[_board.statuses.length - 1];
+  const entries = [..._board.control.pauses, ..._board.control.hints].map(c => ({...c, ack_by: null}));
+  _board.tasks.filter(task => task.kind === 'control' && task.status !== done && task.directive?.ack_by)
+    .forEach(task => {
+      if (!entries.some(e => e.task === task.ref)) {
+        entries.push({task: task.ref, type: task.directive.type, reason: task.title, text: task.description,
+                      scope: task.directive.scope === 'all' ? 'all' : task.project, ack_by: task.directive.ack_by});
+      }
+    });
+  return entries;
+}
+
+function renderBoardControl() {
+  const box = document.getElementById('boardControl');
+  const entries = _boardControlEntries();
+  box.hidden = !entries.length;
+  box.classList.toggle('paused', entries.some(e => e.type === 'pause'));
+  if (!entries.length) { box.replaceChildren(); return; }
+  box.replaceChildren(_boardEl('div', 'board-control-head', t('board.controlTitle')), ...entries.map(e => {
+    const item = _boardEl('div', 'board-control-item ' + (e.type === 'pause' ? 'pause' : 'hint'));
+    item.dataset.ref = e.task;
+    const kind = _boardEl('span', 'board-control-kind', t(e.type === 'pause' ? 'board.controlPause' : 'board.controlHint'));
+    const scope = _boardEl('span', 'board-control-scope',
+      e.scope === 'all' ? t('board.controlAll') : `${t('board.project')}: ${e.scope}`);
+    const body = _boardEl('div', 'board-control-body');
+    body.appendChild(_boardEl('div', 'board-control-reason', e.reason));
+    if (e.text) body.appendChild(_boardEl('div', 'board-control-text', e.text));
+    if (e.type === 'hint') {
+      body.appendChild(_boardEl('div', 'board-control-ack',
+        e.ack_by ? t('board.controlAcked').replace('{name}', e.ack_by) : t('board.controlOpen')));
+    }
+    const close = _boardEl('button', 'btn-sm board-control-close', t('board.controlClose'));
+    close.dataset.action = 'board-close-control';
+    close.dataset.ref = e.task;
+    item.append(kind, _boardEl('span', 'board-ref', e.task), scope, body, close);
+    return item;
+  }));
+}
+
+async function pauseBoardAgents() {
+  const slug = _boardProject() || _board.projects[0]?.slug;
+  if (!slug) { toast(t('board.noProjects'), 'err'); return; }
+  try {
+    await req('POST', '/board/tasks', {project: slug, title: t('board.pauseTitle'), kind: 'control',
+                                       control: 'pause', scope: 'all'});
+    toast(t('board.paused'), 'ok');
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+  await _refreshBoard();
+}
+
+async function closeBoardControl(ref) {
+  const done = _board.statuses[_board.statuses.length - 1];
+  try {
+    await req('PATCH', _taskPath(ref), {status: done});
+  } catch (e) {
+    toast(e.message, 'err');
+  }
   await _refreshBoard();
 }
 
