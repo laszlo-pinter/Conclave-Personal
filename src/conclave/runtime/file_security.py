@@ -3,9 +3,9 @@
 - ``create_exclusive``: legt eine Datei nur an, wenn es sie noch nicht gibt, und
   zwar vollstaendig und nur fuer den Benutzer lesbar (auch bei gleichzeitigem Start).
 - ``restrict``: nur der Benutzer hat Zugriff. POSIX: 0o600 bzw. 0o700. Windows:
-  geschuetzte DACL mit genau einem Eintrag fuer den Benutzer (keine Vererbung,
-  keine weiteren ausdruecklichen Rechte).
-- ``foreign_access``: wer ausser dem Benutzer Zugriff hat.
+  geschuetzte DACL fuer den Benutzer, SYSTEM und Administratoren (keine Vererbung,
+  keine weiteren Rechte).
+- ``foreign_access``: wer sonst noch Zugriff hat.
 """
 
 from __future__ import annotations
@@ -19,19 +19,22 @@ from pathlib import Path
 
 logger = logging.getLogger("conclave.runtime.file_security")
 
+# Windows: neben dem Benutzer behalten SYSTEM und Administratoren Zugriff (Entscheidung Laszlo, R13)
+_TRUSTED = ("SY", "BA", "S-1-5-18", "S-1-5-32-544")
+
 
 def restrict(path: Path, *, directory: bool = False) -> None:
-    """Nur der aktuelle Benutzer hat Zugriff auf ``path``."""
+    """Nur der Benutzer (Windows: dazu SYSTEM und Administratoren) hat Zugriff auf ``path``."""
     if os.name != "nt":
         path.chmod(0o700 if directory else 0o600)
         return
     sid = _user_sid()
     inherit = "OICI" if directory else ""
-    _set_dacl(path, f"D:PAI(A;{inherit};FA;;;{sid})")
+    _set_dacl(path, "D:PAI" + "".join(f"(A;{inherit};FA;;;{t})" for t in (sid, "SY", "BA")))
 
 
 def foreign_access(path: Path) -> list[str]:
-    """Wer ausser dem Benutzer Zugriff hat (SIDs bzw. "group"/"other"); leer = nur der Benutzer."""
+    """Wer sonst Zugriff hat (SIDs bzw. "group"/"other"); leer = nur Benutzer, SYSTEM, Administratoren."""
     if os.name != "nt":
         mode = stat.S_IMODE(path.stat().st_mode)
         return [name for name, bits in (("group", 0o070), ("other", 0o007)) if mode & bits]
@@ -42,7 +45,8 @@ def foreign_access(path: Path) -> list[str]:
     foreign = []
     for ace in re.findall(r"\(([^)]*)\)", sddl):
         fields = ace.split(";")
-        if len(fields) >= 6 and fields[0] in ("A", "OA") and fields[5] != sid and fields[5] not in foreign:
+        if len(fields) >= 6 and fields[0] in ("A", "OA") and fields[5] not in (sid, *_TRUSTED) \
+                and fields[5] not in foreign:
             foreign.append(fields[5])
     return foreign
 
@@ -86,6 +90,46 @@ def create_exclusive(path: Path, data: bytes) -> bool:
         return True
     finally:
         tmp.unlink(missing_ok=True)
+
+
+def replace_private(path: Path, data: bytes) -> None:
+    """Ersetzt ``path`` atomar durch ``data`` (nur fuer den Benutzer lesbar)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{secrets.token_hex(6)}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        restrict(tmp)
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def create_private(path: Path) -> None:
+    """Legt eine leere Datei (und fehlende Ordner) gleich nur fuer den Benutzer an; vorhandene bleiben.
+
+    POSIX: Datei 0o600 und neue Ordner 0o700 schon beim Anlegen, kein Zeitfenster mit der umask.
+    """
+    if path.exists():
+        return
+    missing = [p for p in reversed(path.parents) if not p.exists()]
+    for folder in missing:
+        try:
+            folder.mkdir(mode=0o700)
+        except FileExistsError:
+            continue
+        if os.name != "nt":
+            folder.chmod(0o700)             # mkdir beachtet die umask
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600)
+    except FileExistsError:
+        return
+    os.close(fd)
+    if os.name != "nt":
+        path.chmod(0o600)
 
 
 def _create_in_place(path: Path, data: bytes) -> bool:

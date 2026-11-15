@@ -87,18 +87,24 @@ def load_or_create_agent_token(path: Path | None = None) -> str:
 
 def load_or_create_token(path: Path | None = None, prefix: str = HUMAN_PREFIX) -> str:
     """Token fuer den Server: vorhandene Datei lesen oder neues Token anlegen."""
-    from conclave.runtime.file_security import create_exclusive, harden
+    from conclave.runtime.file_security import create_exclusive, harden, replace_private
 
     path = path or token_path()
     try:
         existing = path.read_text(encoding="utf-8").strip()
     except FileNotFoundError:
-        existing = ""
+        existing = None
     if existing:
         harden(path)                            # vorhandene Datei: fremde Rechte entfernen (R13)
         return existing
 
-    # Exklusiv anlegen: bei gleichzeitigem Start gewinnt genau ein Token
-    if create_exclusive(path, (prefix + secrets.token_urlsafe(32) + "\n").encode("utf-8")):
-        logger.info("Token erzeugt: %s", path)
+    data = (prefix + secrets.token_urlsafe(32) + "\n").encode("utf-8")
+    if existing is None:
+        # Exklusiv anlegen: bei gleichzeitigem Start gewinnt genau ein Token
+        if create_exclusive(path, data):
+            logger.info("Token erzeugt: %s", path)
+    else:
+        # Leere Datei (z. B. Absturz beim Schreiben): ersetzen statt mit leerem Token starten
+        logger.warning("Token-Datei %s ist leer; neues Token erzeugt", path)
+        replace_private(path, data)
     return path.read_text(encoding="utf-8").strip()

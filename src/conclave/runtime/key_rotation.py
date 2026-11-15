@@ -29,9 +29,13 @@ class KeyRotationError(RuntimeError):
     """Der Schluessel kann so nicht gewechselt werden."""
 
 
-def rotate_secret_key(key_path: Path, connection, *, postgres: bool = False,
+def rotate_secret_key(key_path: Path, connection, *, postgres: bool = False, drop_old: bool = False,
                       _stop_before_swap: bool = False) -> int:
-    """Wechselt den Schluessel; gibt die Zahl der neu verschluesselten Werte zurueck."""
+    """Wechselt den Schluessel; gibt die Zahl der neu verschluesselten Werte zurueck.
+
+    ``drop_old``: alle abgeloesten Schluessel danach loeschen (Wechsel wegen
+    Kompromittierung). Aeltere Backups gelten dann als fremd.
+    """
     if env_secret("CONCLAVE_SECRET_KEY"):
         raise KeyRotationError("Der Schluessel kommt aus CONCLAVE_SECRET_KEY; dort wechseln.")
     if not key_path.exists() and not key_file_paths(key_path)[0].exists():
@@ -50,6 +54,9 @@ def rotate_secret_key(key_path: Path, connection, *, postgres: bool = False,
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         os.replace(key_path, key_path.with_name(f"{key_path.name}.old-{stamp}"))
     os.replace(pending, key_path)
+    if drop_old:
+        for path in key_file_paths(key_path)[1]:
+            path.unlink(missing_ok=True)
     return count
 
 
@@ -65,6 +72,8 @@ def _reencrypt(connection, known: MultiFernet, target: Fernet, *, postgres: bool
             cursor.execute(f'SELECT DISTINCT "{column}" FROM "{table}" WHERE "{column}" LIKE {mark}',  # nosec B608 - Namen aus dem Schema
                            (_FERNET_PREFIX + "%",))
             for (value,) in cursor.fetchall():
+                if not isinstance(value, str):
+                    continue                                    # BLOB o. ae.: nie ein Chiffrat von Conclave
                 try:
                     plain = known.decrypt(value.encode())
                 except InvalidToken:

@@ -63,22 +63,27 @@ def load_backup_secret() -> bytes | None:
 
     Legt keinen Schluessel an; ohne Schluessel sind Backups nicht signiert.
     """
-    env_key = env_secret("CONCLAVE_SECRET_KEY")
-    if env_key:
-        return env_key.encode()
-    from conclave.runtime.paths import get_runtime_paths
-    path = get_runtime_paths().secret_key_path
-    try:
-        return path.read_bytes() if path.is_file() else None
-    except OSError:
-        return None
+    keys = _known_keys()
+    return keys[0][0] if keys else None
 
 
 def load_backup_secrets() -> list[bytes]:
-    """Aktueller und aeltere Schluessel (nach einem Wechsel), zum Pruefen eigener Backups."""
+    """Aktueller und aeltere Schluessel (nach einem Wechsel), zum Pruefen eigener Backups.
+
+    Je Schluessel die normalisierte Form (so wird signiert) und, falls abweichend, die
+    Rohform der Datei: aeltere Versionen haben mit einem Zeilenumbruch am Ende signiert.
+    """
+    secrets_: list[bytes] = []
+    for normalized, raw in _known_keys():
+        secrets_ += [k for k in (normalized, raw) if k not in secrets_]
+    return secrets_
+
+
+def _known_keys() -> list[tuple[bytes, bytes]]:
+    """(normalisiert, roh) fuer alle bekannten Schluessel, der aktuelle zuerst."""
     env_key = env_secret("CONCLAVE_SECRET_KEY")
     if env_key:
-        return [env_key.encode()]
+        return [(env_key.strip().encode(), env_key.encode())]
     from conclave.infrastructure.crypto import key_file_paths
     from conclave.runtime.paths import get_runtime_paths
     path = get_runtime_paths().secret_key_path
@@ -87,7 +92,8 @@ def load_backup_secrets() -> list[bytes]:
     for candidate in (pending, path, *retired):
         try:
             if candidate.is_file():
-                keys.append(candidate.read_bytes().strip())
+                raw = candidate.read_bytes()
+                keys.append((raw.strip(), raw))
         except OSError:
             continue
     return keys

@@ -120,6 +120,7 @@ def build_service(
     if connection is None:
         resolved_path = db_path or config.db_path
         resolved_path.parent.mkdir(parents=True, exist_ok=True)
+        _create_db_file(Path(resolved_path))
         connection = sqlite3.connect(str(resolved_path))
         initialize_schema(connection)
         _restrict_db_files(Path(resolved_path))
@@ -151,6 +152,7 @@ def build_agent_service(
     if connection is None:
         resolved_path = db_path or config.db_path
         resolved_path.parent.mkdir(parents=True, exist_ok=True)
+        _create_db_file(Path(resolved_path))
         connection = sqlite3.connect(str(resolved_path))
         initialize_schema(connection)
         _restrict_db_files(Path(resolved_path))
@@ -183,6 +185,13 @@ def _migrate_config_agents(svc: AgentService, config: ConclaveConfig) -> None:
             svc.upsert_agent(agent)
         except (ValueError, Exception):
             pass
+
+
+def _create_db_file(db_path: Path) -> None:
+    """Neue DB-Datei gleich nur fuer den Benutzer anlegen (nicht ``:memory:``)."""
+    if str(db_path) != ":memory:":
+        from conclave.runtime.file_security import create_private
+        create_private(db_path)
 
 
 def _restrict_db_files(db_path: Path) -> None:

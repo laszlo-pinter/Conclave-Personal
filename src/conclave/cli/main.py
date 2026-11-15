@@ -248,6 +248,9 @@ def build_parser() -> argparse.ArgumentParser:
     key_sub = key_p.add_subparsers(dest="key_command", required=True)
     key_rotate = key_sub.add_parser("rotate", help="Neuen Schluessel erzeugen und alle Daten neu verschluesseln")
     key_rotate.add_argument("--db", default=None, help="SQLite-DB, Default ist die aktive Conclave-DB")
+    key_rotate.add_argument("--drop-old", action="store_true",
+                            help="Abgeloeste Schluessel loeschen (nach Kompromittierung; aeltere Backups gelten "
+                                 "dann als fremd)")
 
     watch = sub.add_parser("watch", help="Conversation live beobachten (pollt auf neue Nachrichten)")
     watch.add_argument("conversation_id")
@@ -665,6 +668,10 @@ def _run_key_rotate(args) -> int:
 
     config = ConclaveConfig.from_sources()
     postgres = config.db_provider == "postgres"
+    if postgres and args.db:
+        print("FEHLER: --db gilt nur fuer SQLite; mit PostgreSQL wird die konfigurierte DSN verwendet.",
+              file=sys.stderr)
+        return 1
     if postgres:
         import psycopg2
         connection = psycopg2.connect(config.db_dsn)
@@ -672,14 +679,18 @@ def _run_key_rotate(args) -> int:
         import sqlite3
         connection = sqlite3.connect(str(args.db or config.db_path), timeout=30)
     try:
-        count = rotate_secret_key(get_runtime_paths().secret_key_path, connection, postgres=postgres)
+        count = rotate_secret_key(get_runtime_paths().secret_key_path, connection, postgres=postgres,
+                                  drop_old=args.drop_old)
     except KeyRotationError as exc:
         print(f"FEHLER: {exc}", file=sys.stderr)
         return 1
     finally:
         connection.close()
     print(f"Schluessel gewechselt: {count} Werte neu verschluesselt.")
-    print("Der alte Schluessel liegt als secret.key.old-* daneben; er wird fuer aeltere Backups gebraucht.")
+    if args.drop_old:
+        print("Abgeloeste Schluessel geloescht; aeltere Backups gelten jetzt als fremd.")
+    else:
+        print("Der alte Schluessel liegt als secret.key.old-* daneben; er wird fuer aeltere Backups gebraucht.")
     print("Einen laufenden Server danach neu starten.")
     return 0
 

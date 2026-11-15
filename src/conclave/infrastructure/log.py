@@ -56,10 +56,11 @@ def configure_logging(level: str = "INFO", log_file: str | Path | None = None) -
 
     if log_file is not None:
         path = Path(log_file)
-        path.parent.mkdir(parents=True, exist_ok=True)
+        from conclave.runtime.file_security import create_private
+        create_private(path)                    # Log nur fuer den Benutzer, schon beim Anlegen (R13)
         handler = logging.FileHandler(path, encoding="utf-8")
         if os.name != "nt":
-            path.chmod(0o600)                   # Log nur fuer den Benutzer (R13)
+            path.chmod(0o600)                   # auch eine vorhandene Datei
         handler.setFormatter(JsonFormatter())
         handler.setLevel(logger.level)
         handler._conclave_managed = True  # type: ignore[attr-defined]

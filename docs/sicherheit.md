@@ -136,10 +136,12 @@ Oktober 2026):
 - `secret.key` und die Token-Dateien entstehen nur einmal, auch wenn zwei
   Prozesse gleichzeitig starten, und sind nur für den Benutzer lesbar.
   Hat eine vorhandene Datei weitere Rechte, entfernt Conclave sie beim Start
-  und schreibt eine Warnung ins Log.
+  und schreibt eine Warnung ins Log. Eine leere Token-Datei wird mit Warnung
+  durch ein neues Token ersetzt.
 - Windows: Datei und Konfigurationsverzeichnis (`%APPDATA%\Conclave`) haben
-  genau einen Eintrag für den Benutzer, ohne Vererbung. `icacls` zeigt nur den
-  Benutzer. Das Verzeichnis wird nur gehärtet, wenn `secret.key` darin liegt.
+  ohne Vererbung nur Einträge für den Benutzer, SYSTEM und die Administratoren;
+  andere Gruppen verlieren den Zugriff. Das Verzeichnis wird nur gehärtet, wenn
+  `secret.key` darin liegt.
 - Linux/macOS: Konfigurations-, Daten- und Log-Verzeichnis `0700`;
   Datenbank, Logs und Backups `0600`.
 
@@ -155,6 +157,11 @@ der Datei liegen; ältere Backups brauchen ihn, und sie gelten weiterhin als
 eigene. Bricht der Wechsel ab, setzt ein erneuter Aufruf ihn fort; es geht
 nichts verloren. Ein laufender Server wird danach neu gestartet. Kommt der
 Schlüssel aus `CONCLAVE_SECRET_KEY`, wird er dort gewechselt.
+
+Abgelöste Schlüssel gelten weiter: zum Entschlüsseln und für die Prüfung, ob
+ein Backup ein eigenes ist. Wer wechselt, weil der alte Schlüssel in fremde
+Hände gelangt sein könnte, nimmt `conclave key rotate --drop-old`. Danach
+werden alle abgelösten Schlüssel gelöscht, und ältere Backups gelten als fremd.
 - `Read`-Deny-Regeln gelten für die Datei-Tools von Claude Code und für
   Shell-Befehle, die Claude Code als Dateizugriff erkennt (`cat`, `head`,
   `sed` …). Sie gelten **nicht** für Programme, die Dateien selbst öffnen,

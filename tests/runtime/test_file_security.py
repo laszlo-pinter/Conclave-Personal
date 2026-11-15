@@ -2,7 +2,7 @@
 
 - secret.key und Tokens entstehen exklusiv (ein Wert auch bei gleichzeitigem Start)
   und nur fuer den Benutzer lesbar; vorhandene Dateien werden nachgehaertet.
-- Unter Windows zeigt icacls danach nur den Benutzer (Datei und Verzeichnis).
+- Unter Windows: nur Benutzer, SYSTEM und Administratoren (Datei und Verzeichnis).
 - Linux: Verzeichnisse 0o700, DB, Logs und Backups 0o600.
 """
 
@@ -29,6 +29,17 @@ def _acl_lines(path):
     return [line for line in out.splitlines() if ":(" in line]
 
 
+def _trustees(path):
+    """Trustees der Allow-Eintraege, sprachunabhaengig aus der SDDL."""
+    import re
+    return {ace.split(";")[5] for ace in re.findall(r"\(([^)]*)\)", file_security._dacl_sddl(path))
+            if ace.split(";")[0] in ("A", "OA")}
+
+
+def _only_user_system_admins(path):
+    return _trustees(path) == {file_security._user_sid(), "SY", "BA"} and len(_acl_lines(path)) == 3
+
+
 def _grant_users_read(path):
     # Fremdes, ausdrueckliches Recht wie im Befund (Gruppe "Benutzer" per SID)
     subprocess.run(["icacls", str(path), "/grant", "*S-1-5-32-545:(R)"], capture_output=True, check=True)
@@ -43,8 +54,8 @@ def test_restricted_file_shows_only_the_user(tmp_path):
     _grant_users_read(path)
     assert file_security.foreign_access(path)
     file_security.restrict(path)
-    lines = _acl_lines(path)
-    assert len(lines) == 1 and os.environ["USERNAME"].lower() in lines[0].lower()
+    assert _only_user_system_admins(path)
+    assert any(os.environ["USERNAME"].lower() in line.lower() for line in _acl_lines(path))
     assert file_security.foreign_access(path) == []
 
 
@@ -54,7 +65,7 @@ def test_restricted_directory_shows_only_the_user_and_children_follow(tmp_path):
     folder.mkdir()
     _grant_users_read(folder)
     file_security.restrict(folder, directory=True)
-    assert len(_acl_lines(folder)) == 1
+    assert _only_user_system_admins(folder)
     child = folder / "neu.txt"
     child.write_text("x")
     assert file_security.foreign_access(child) == []
@@ -131,7 +142,7 @@ def test_startup_protects_the_config_directory(tmp_path):
     paths.config_dir.mkdir()
     _grant_users_read(paths.config_dir)
     file_security.secure_runtime_dirs(paths)
-    assert len(_acl_lines(paths.config_dir)) == 1
+    assert _only_user_system_admins(paths.config_dir)
 
 
 @windows
@@ -141,7 +152,7 @@ def test_startup_leaves_foreign_directories_alone(tmp_path):
     paths.config_dir.mkdir()
     _grant_users_read(paths.config_dir)
     file_security.secure_runtime_dirs(paths)
-    assert len(_acl_lines(paths.config_dir)) > 1
+    assert file_security.foreign_access(paths.config_dir)
 
 
 @posix
@@ -189,3 +200,36 @@ def test_log_file_is_private(tmp_path):
             if getattr(handler, "baseFilename", None):
                 logger.removeHandler(handler)
                 handler.close()
+
+
+# ── Nacharbeit aus dem Review (B1, V3) ──────────────────────────────────────
+
+def test_empty_token_file_is_replaced_with_a_warning(tmp_path, caplog):
+    """B1: Eine leere Datei (Absturz beim Schreiben) ergibt kein leeres Token."""
+    path = tmp_path / "api.token"
+    path.write_text("")
+    caplog.set_level(logging.WARNING)
+    token = load_or_create_token(path)
+    assert token.startswith("cvh_") and path.read_text().strip() == token
+    assert any("leer" in r.getMessage() for r in caplog.records)
+    assert file_security.foreign_access(path) == []
+
+
+@posix
+def test_private_files_are_created_private(tmp_path):
+    """V3: Datei und neuer Ordner entstehen gleich mit 0o600/0o700, nicht erst per chmod."""
+    path = tmp_path / "neu" / "conclave.db"
+    old = os.umask(0o022)
+    try:
+        file_security.create_private(path)
+    finally:
+        os.umask(old)
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+
+
+def test_create_private_keeps_an_existing_file(tmp_path):
+    path = tmp_path / "conclave.db"
+    path.write_bytes(b"daten")
+    file_security.create_private(path)
+    assert path.read_bytes() == b"daten"

@@ -149,12 +149,14 @@ angelegt. Mit `--reviewer` entsprechend das Reviewer-Token und der Befehl für
 ## Schlüssel
 
 ```powershell
-conclave key rotate [--db <pfad>]
+conclave key rotate [--db <pfad>] [--drop-old]
 ```
 
 Neuer `secret.key`, alle verschlüsselten Daten (SQLite oder PostgreSQL) werden
 neu verschlüsselt. Der alte Schlüssel bleibt als `secret.key.old-<Zeit>` für
-ältere Backups erhalten. Danach den Server neu starten. Siehe
+ältere Backups erhalten; mit `--drop-old` werden alle abgelösten Schlüssel
+gelöscht (nach einer Kompromittierung, ältere Backups gelten dann als fremd).
+`--db` gilt nur für SQLite. Danach den Server neu starten. Siehe
 [Sicherheit](../sicherheit.md#schlüsselwechsel).
 
 ## JSON-Ausgabe

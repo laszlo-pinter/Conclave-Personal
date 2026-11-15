@@ -121,12 +121,13 @@ def _build_postgres(config):
 def _build_sqlite(config):
     """Baut alle Services mit SQLite."""
     # Eine Verbindung je Thread statt einer geteilten Verbindung (B6)
+    from pathlib import Path
+    from conclave.cli.bootstrap import _create_db_file, _restrict_db_files
+    _create_db_file(Path(config.db_path))
     conn = ThreadLocalConnection(config.db_path)
 
     from conclave.infrastructure.sqlite.schema import initialize_schema
     initialize_schema(conn)
-    from pathlib import Path
-    from conclave.cli.bootstrap import _restrict_db_files
     _restrict_db_files(Path(config.db_path))
 
     from conclave.cli.bootstrap import build_service

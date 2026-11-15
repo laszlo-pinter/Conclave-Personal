@@ -110,3 +110,71 @@ def test_cli_rotate(setup, capsys):
     assert run(["key", "rotate", "--db", str(db)]) == 0
     assert "neu verschluesselt" in capsys.readouterr().out
     assert _read_all(key_path, config, conv_id) == (["Vertrauliche Frage"], "sk-geheim-123")
+
+
+# ── Nacharbeit aus dem Review (B2, V1, V2) ─────────────────────────────────
+
+def test_key_file_with_newline_signs_and_checks_backups_alike(setup, tmp_path):
+    """B2: Signieren und Pruefen normalisieren den Schluessel gleich."""
+    from conclave.runtime.backup import (
+        create_backup_archive, load_backup_secret, load_backup_secrets, restore_backup_archive)
+    key_path, db, config, conv_id = setup
+    key_path.write_bytes(key_path.read_bytes().strip() + b"\n")
+    ws = tmp_path / "ws2"
+    ws.mkdir()
+    archive = create_backup_archive(db_path=db, workspace_root=ws, backup_dir=tmp_path / "b2",
+                                    secret=load_backup_secret())
+    restore_backup_archive(backup_path=archive, db_path=db, workspace_root=ws, backup_dir=tmp_path / "b2",
+                           secret=load_backup_secrets())
+
+
+def test_backup_signed_with_an_unstripped_key_still_counts_as_own(setup, tmp_path):
+    """B2: Backups, die der alte Code mit dem Zeilenumbruch signiert hat, bleiben eigene."""
+    from conclave.runtime.backup import create_backup_archive, load_backup_secrets, restore_backup_archive
+    key_path, db, config, conv_id = setup
+    raw = key_path.read_bytes().strip() + b"\n"
+    key_path.write_bytes(raw)
+    ws = tmp_path / "ws3"
+    ws.mkdir()
+    archive = create_backup_archive(db_path=db, workspace_root=ws, backup_dir=tmp_path / "b3", secret=raw)
+    restore_backup_archive(backup_path=archive, db_path=db, workspace_root=ws, backup_dir=tmp_path / "b3",
+                           secret=load_backup_secrets())
+
+
+def test_rotation_can_drop_old_keys(setup, tmp_path):
+    """V1: Nach einem Wechsel wegen Kompromittierung gelten alte Schluessel nicht mehr."""
+    from conclave.runtime.backup import (
+        ForeignBackupError, create_backup_archive, load_backup_secret, load_backup_secrets, restore_backup_archive)
+    key_path, db, config, conv_id = setup
+    ws = tmp_path / "ws4"
+    ws.mkdir()
+    archive = create_backup_archive(db_path=db, workspace_root=ws, backup_dir=tmp_path / "b4",
+                                    secret=load_backup_secret())
+    rotate_secret_key(key_path, sqlite3.connect(db))
+    rotate_secret_key(key_path, sqlite3.connect(db), drop_old=True)
+    assert list(key_path.parent.glob("secret.key.old-*")) == []
+    assert _read_all(key_path, config, conv_id) == (["Vertrauliche Frage"], "sk-geheim-123")
+    with pytest.raises(ForeignBackupError):
+        restore_backup_archive(backup_path=archive, db_path=db, workspace_root=ws, backup_dir=tmp_path / "b4",
+                               secret=load_backup_secrets())
+
+
+def test_cli_rejects_db_option_with_postgres(setup, monkeypatch, capsys):
+    """V2: --db gilt nur fuer SQLite; mit Postgres klarer Fehler statt stillem Ignorieren."""
+    from conclave.cli.main import run
+    _, db, _, _ = setup
+    monkeypatch.setenv("CONCLAVE_DB_PROVIDER", "postgres")
+    monkeypatch.setenv("CONCLAVE_DB_DSN", "postgresql://nicht/genutzt")
+    assert run(["key", "rotate", "--db", str(db)]) == 1
+    assert "--db" in capsys.readouterr().err
+
+
+def test_blob_values_do_not_break_the_rotation(setup):
+    """V2: Ein BLOB, der wie ein Chiffrat beginnt, wird uebersprungen."""
+    key_path, db, config, conv_id = setup
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE extra (data BLOB)")
+    conn.execute("INSERT INTO extra VALUES (?)", (b"gAAAAA-kein-text",))
+    conn.commit()
+    rotate_secret_key(key_path, conn)
+    assert _read_all(key_path, config, conv_id) == (["Vertrauliche Frage"], "sk-geheim-123")
