@@ -409,18 +409,44 @@ werden als Daten behandelt:
 - Alle GitHub Actions sind auf Commit-SHAs gepinnt (Version als Kommentar).
   Updates erfolgen bewusst: neue SHA per `git ls-remote --tags` ermitteln und
   Kommentar mitpflegen.
+- Checkouts speichern keine Git-Zugangsdaten (`persist-credentials: false`).
 
 ## Release-Artefakte
 
 Der CI-Job `build` (`.github/workflows/ci.yml`) baut Wheel und Source
-Distribution bei jedem Push auf `main` und jedem Pull Request und prüft sie auf
-verbotene Inhalte:
+Distribution bei jedem Push auf `main` und jedem Pull Request.
+`scripts/release/check_dist.py` prüft sie auf Name und Version, Pflichtdateien
+und verbotene Inhalte:
 
 - keine Workspace-Daten
 - keine Datenbanken
-- keine Secret-Key-Dateien
-- keine Logs
+- keine Secret-Key- und Token-Dateien
+- keine Logs und `.env`-Dateien
 - keine Python-Caches
 - keine alten DSGVO-/Legal-Pfade
+
+Build-Werkzeuge (`pip`, `build`, `setuptools`, `wheel` und ihre
+Abhängigkeiten) stehen mit Hashes in `requirements/release-tools.txt`. Gebaut
+wird ohne Isolation mit genau diesen Werkzeugen.
+
+## Veröffentlichen
+
+`.github/workflows/publish.yml` veröffentlicht nur unter diesen Bedingungen:
+
+1. Der Lauf gehört zu einem Tag `v<Version>`, und die Version passt zu
+   `pyproject.toml` (`scripts/release/check_version.py`). Ohne Tag oder bei
+   Abweichung bricht der Lauf ab.
+2. Die volle CI ist grün: Tests unter Linux und Windows, UI-Tests, `pip-audit`
+   und `bandit`, PostgreSQL, Paketprüfung. Im Release-Lauf ohne pip-Cache.
+3. Die Pakete werden mit den gepinnten Werkzeugen neu gebaut und geprüft.
+4. Der Job `publish` läuft im GitHub-Environment `pypi`. Dort ist eine Freigabe
+   durch den Maintainer Pflicht (Einstellung in GitHub, siehe unten).
+
+Einrichtung des Environments in GitHub: Repository → Settings → Environments
+→ `pypi` → „Required reviewers“ aktivieren und den Maintainer eintragen;
+„Prevent self-review“ nicht setzen, wenn nur eine Person freigibt. Unter
+„Deployment branches and tags“ „Selected branches and tags“ wählen und die
+Regel `v*` (Typ Tag) anlegen. Bei PyPI ist das Projekt per Trusted Publishing
+an diesen Workflow und dieses Environment gebunden.
 
 Siehe auch: [Release Notes v0.2.0](release-notes-v0.2.0.md) (Sicherheits-Release) und die folgenden Versionen im [Dokumentationsindex](index.md).

@@ -7,6 +7,13 @@ on:
       - personal-multiplatform
   pull_request:
   workflow_dispatch:
+  # Voraussetzung fuer das Release (publish.yml, R14)
+  workflow_call:
+    inputs:
+      release:
+        description: "Aufruf aus dem Release: ohne pip-Cache"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -35,12 +42,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
+          cache: ${{ !inputs.release && 'pip' || '' }}
 
       - name: Install package and test dependencies
         run: |
@@ -62,12 +71,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-          cache: pip
+          cache: ${{ !inputs.release && 'pip' || '' }}
 
       - name: Install package and UI test dependencies
         run: |
@@ -86,12 +97,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-          cache: pip
+          cache: ${{ !inputs.release && 'pip' || '' }}
 
       - name: Install package and security tools
         run: |
@@ -129,12 +142,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-          cache: pip
+          cache: ${{ !inputs.release && 'pip' || '' }}
 
       - name: Install package and test dependencies
         run: |
@@ -153,77 +168,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-          cache: pip
+          cache: ${{ !inputs.release && 'pip' || '' }}
 
-      - name: Install build dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install build
+      - name: Install pinned build tools
+        run: "python -m pip install --require-hashes --only-binary :all: -r requirements/release-tools.txt"
 
       - name: Build sdist and wheel
-        run: python -m build --sdist --wheel
+        run: python -m build --sdist --wheel --no-isolation
 
       - name: Inspect artifacts
-        run: |
-          python - <<'PY'
-          import pathlib
-          import tarfile
-          import zipfile
-
-          dist = pathlib.Path("dist")
-          wheel = next(dist.glob("*.whl"))
-          sdist = next(dist.glob("*.tar.gz"))
-
-          wheel_names = set(zipfile.ZipFile(wheel).namelist())
-          entry_points = [
-              name for name in wheel_names
-              if name.endswith(".dist-info/entry_points.txt")
-          ]
-          if len(entry_points) != 1:
-              raise SystemExit(f"Unexpected entry_points files: {entry_points}")
-          required_wheel = {
-              "conclave/assets/conclave-ui.html",
-              "conclave/assets/static/openapi.json",
-              "conclave/assets/static/vendor/purify.min.js",
-              "conclave/assets/static/vendor/marked.min.js",
-              "conclave/assets/static/vendor/highlight/highlight.min.js",
-              "conclave/assets/static/vendor/swagger-ui/swagger-ui-bundle.js",
-              "conclave/assets/static/vendor/fonts/fonts.css",
-              entry_points[0],
-          }
-          missing = sorted(required_wheel - wheel_names)
-          if missing:
-              raise SystemExit(f"Wheel missing required files: {missing}")
-
-          banned = (
-              "workspace/",
-              ".db",
-              ".db-wal",
-              ".db-shm",
-              ".key",
-              ".pem",
-              ".log",
-              "__pycache__",
-              "dsgvo",
-              "docs/legal",
-              "docs/betrieb",
-          )
-
-          wheel_bad = [name for name in wheel_names if any(part in name.lower() for part in banned)]
-          if wheel_bad:
-              raise SystemExit(f"Wheel contains banned files: {wheel_bad[:20]}")
-
-          with tarfile.open(sdist) as archive:
-              sdist_names = archive.getnames()
-          sdist_bad = [name for name in sdist_names if any(part in name.lower() for part in banned)]
-          if sdist_bad:
-              raise SystemExit(f"Sdist contains banned files: {sdist_bad[:20]}")
-          PY
+        run: python scripts/release/check_dist.py dist
 
       - name: Upload artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
