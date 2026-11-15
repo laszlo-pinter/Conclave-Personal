@@ -50,7 +50,7 @@ def test_tag_and_version_must_match(tmp_path):
 
 # ── Paketpruefung ───────────────────────────────────────────────────────────
 
-def _dist(tmp_path, version="1.2.3", extra=()):
+def _dist(tmp_path, version="1.2.3", extra=(), sdist_extra=()):
     dist = tmp_path / "dist"
     dist.mkdir()
     with zipfile.ZipFile(dist / f"conclave_personal-{version}-py3-none-any.whl", "w") as zf:
@@ -58,7 +58,8 @@ def _dist(tmp_path, version="1.2.3", extra=()):
                      "conclave/__init__.py", *extra):
             zf.writestr(name, "x")
     with tarfile.open(dist / f"conclave_personal-{version}.tar.gz", "w:gz") as tf:
-        for name in (f"conclave_personal-{version}/pyproject.toml", f"conclave_personal-{version}/src/conclave/__init__.py"):
+        for name in (f"conclave_personal-{version}/pyproject.toml", f"conclave_personal-{version}/src/conclave/__init__.py",
+                     *(f"conclave_personal-{version}/{n}" for n in sdist_extra)):
             info = tarfile.TarInfo(name)
             info.size = 1
             tf.addfile(info, io.BytesIO(b"x"))
@@ -69,10 +70,20 @@ def test_clean_package_passes(tmp_path):
     assert check_dist.main([str(_dist(tmp_path)), str(_pyproject(tmp_path))]) == 0
 
 
-@pytest.mark.parametrize("bad", ["conclave/secret.key", "conclave/api.token", "workspace/notiz.md",
-                                 "conclave/conclave.db", "conclave/__pycache__/x.pyc", "docs/betrieb/x.md"])
+BANNED_EXAMPLES = ["conclave/secret.key", "conclave/api.token", "workspace/notiz.md", "conclave/conclave.db",
+                   "conclave/__pycache__/x.pyc", "docs/betrieb/x.md", ".env", "conclave/.env",
+                   "sicherheit/analyse.md"]
+
+
+@pytest.mark.parametrize("bad", BANNED_EXAMPLES)
 def test_package_with_a_banned_file_fails(tmp_path, bad):
     assert check_dist.main([str(_dist(tmp_path, extra=[bad])), str(_pyproject(tmp_path))]) == 1
+
+
+@pytest.mark.parametrize("bad", BANNED_EXAMPLES)
+def test_sdist_with_a_banned_file_fails(tmp_path, bad):
+    """R14-Review V1: Das Sdist ist der Weg, auf dem Repo-Dateien durchrutschen koennten."""
+    assert check_dist.main([str(_dist(tmp_path, sdist_extra=[bad])), str(_pyproject(tmp_path))]) == 1
 
 
 def test_package_with_another_version_fails(tmp_path):
