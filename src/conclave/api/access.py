@@ -48,6 +48,9 @@ AGENT_ALLOWED = AGENT_CONTEXT_READ | frozenset({
     ("PATCH", "/board/projects/<slug>/tasks/<int:number>"),
     ("POST", "/board/projects/<slug>/tasks/<int:number>/comments"),
     ("GET", "/board/projects/<slug>/tasks/<int:number>/history"),
+    # Vorhaben (P2): lesen und Tickets ueber projekt/vorhaben-n aufrufen
+    ("GET", "/board/projects/<slug>/initiatives"),
+    ("GET", "/board/projects/<slug>/initiatives/<initiative>/tasks/<int:number>"),
 })
 
 # Nur mit dem Mensch-Token: Einstellungen, Agents verwalten, Backup/Restore, Logs,
@@ -96,6 +99,8 @@ HUMAN_ONLY = frozenset({
     ("PUT", "/board/comments/<comment_id>"),
     ("DELETE", "/board/comments/<comment_id>"),
     ("POST", "/board/import"),
+    ("POST", "/board/projects/<slug>/initiatives"),
+    ("PUT", "/board/projects/<slug>/initiatives/<initiative>"),
 })
 
 # Ohne Token erreichbar (PUBLIC_GET_PATHS und statische Dateien in app.py).
@@ -120,6 +125,7 @@ REVIEWER_ALLOWED = REVIEWER_ONLY | frozenset({
     ("GET", "/board/projects/<slug>/tasks/<int:number>"),
     ("GET", "/board/projects/<slug>/tasks/<int:number>/history"),
     ("POST", "/board/projects/<slug>/tasks/<int:number>/comments"),
+    ("GET", "/board/projects/<slug>/initiatives/<initiative>/tasks/<int:number>"),
 })
 
 HUMAN_ONLY_ERROR = {"type": "HumanOnly", "error": "Nur für den Menschen-Zugang."}

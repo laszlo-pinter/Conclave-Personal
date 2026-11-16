@@ -136,6 +136,9 @@ function _boardCard(task) {
   card.dataset.project = task.project;
   const top = _boardEl('div', 'board-card-top');
   top.appendChild(_boardEl('span', 'board-ref', task.ref));
+  if (task.initiative_ref) {                    // Vorhaben-Nummer (P2), z. B. conclave/sich-3
+    top.appendChild(_boardEl('span', 'board-initiative', task.initiative_ref));
+  }
   if (task.human) {
     const mark = _boardEl('span', 'board-human', t('board.humanShort'));
     mark.title = t('board.humanOnly');

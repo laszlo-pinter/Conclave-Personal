@@ -25,7 +25,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 
-from conclave.domain.board import POSITION_STEP, Project, ProjectEvent, Task, TaskComment, TaskEvent
+from conclave.domain.board import POSITION_STEP, Initiative, Project, ProjectEvent, Task, TaskComment, TaskEvent
 
 MIN_SQLITE = (3, 35)       # UPDATE ... RETURNING
 
@@ -33,7 +33,10 @@ _TASK_COLUMNS = ("t.id, t.project_id, p.slug, t.number, t.title, t.description, 
                  "t.human, t.assignee, t.created_at, t.updated_at, t.version, t.rank, t.origin, t.actor_id, "
                  "t.created_by, t.review_state, t.review_at, t.review_red_count, t.review_blocking, "
                  "t.review_suggestions, t.review_checked, t.kind, t.control, t.control_scope, t.control_ack_by, "
-                 "t.control_ack_at")
+                 "t.control_ack_at, t.initiative_id, i.slug, t.initiative_number, i.rank")
+# Vorhaben (P2) gehoert zu jeder Ticket-Abfrage dazu, als LEFT JOIN (Tickets ohne Vorhaben)
+_TASK_FROM = ("board_tasks t JOIN board_projects p ON p.id = t.project_id "
+              "LEFT JOIN board_initiatives i ON i.id = t.initiative_id")
 _UPDATE_TASK = ("UPDATE board_tasks SET title = ?, description = ?, tags = ?, status = ?, position = ?, rank = ?, "
                 "human = ?, assignee = ?, updated_at = ?, review_state = ?, review_at = ?, review_red_count = ?, "
                 "review_blocking = ?, review_suggestions = ?, review_checked = ?, control_ack_by = ?, "
@@ -41,7 +44,9 @@ _UPDATE_TASK = ("UPDATE board_tasks SET title = ?, description = ?, tags = ?, st
                 "WHERE id = ? AND version = ?")
 _INSERT_TASK = ("INSERT INTO board_tasks (id, project_id, number, title, description, tags, status, position, "
                 "rank, human, assignee, updated_at, created_at, origin, actor_id, created_by, kind, control, "
-                "control_scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                "control_scope, initiative_id, initiative_number) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+_INITIATIVE_COLUMNS = "i.id, i.project_id, p.slug, i.slug, i.title, i.rank, i.created_at"
 
 
 class _NotInserted(Exception):
@@ -180,7 +185,9 @@ class SQLiteBoardRepository:
                     review_state=row[18] or "none", review_at=_ts(row[19]), review_red_count=int(row[20] or 0),
                     review_blocking=row[21], review_suggestions=row[22], review_checked=row[23] or "",
                     kind=row[24] or "task", control=row[25], control_scope=row[26] or "",
-                    control_ack_by=row[27] or "", control_ack_at=_ts(row[28]))
+                    control_ack_by=row[27] or "", control_ack_at=_ts(row[28]),
+                    initiative_id=row[29], initiative_slug=row[30], initiative_number=row[31],
+                    initiative_rank=float(row[32]) if row[32] is not None else None)
 
     def _task_params(self, task: Task) -> tuple:
         return (self._enc(task.title), self._enc(task.description), self._enc(json.dumps(list(task.tags))),
@@ -196,6 +203,14 @@ class SQLiteBoardRepository:
         return (self._dt(task.created_at), task.origin, task.actor_id, task.created_by or "", task.kind or "task",
                 task.control, task.control_scope or "")
 
+    def _next_initiative_number(self, initiative_id: str) -> int:
+        """Naechste Nummer im Vorhaben (Zaehler im Vorhaben, in der laufenden Transaktion)."""
+        row = self._one("UPDATE board_initiatives SET next_number = next_number + 1 WHERE id = ? "
+                        "RETURNING next_number - 1", (initiative_id,))
+        if row is None:
+            raise ValueError("Unbekanntes Vorhaben")
+        return int(row[0])
+
     def create_task(self, task: Task, event: TaskEvent | None = None) -> Task:
         """Legt das Ticket an und vergibt die naechste Nummer des Projekts; mit dem Ereignis
         ``created`` in derselben Transaktion."""
@@ -205,12 +220,15 @@ class SQLiteBoardRepository:
             if row is None:
                 raise ValueError("Unbekanntes Projekt")
             number = int(row[0])
+            initiative_number = (self._next_initiative_number(task.initiative_id)
+                                 if task.initiative_id else None)
             self._execute(_INSERT_TASK, (task.id, task.project_id, number, *self._task_params(task),
-                                         *self._origin_params(task)))
+                                         *self._origin_params(task), task.initiative_id, initiative_number))
             self._bump()
             if event is not None:
                 self._insert_event(event)
         task.number = number
+        task.initiative_number = initiative_number
         return task
 
     def import_task(self, task: Task, comments=(), event: TaskEvent | None = None) -> bool:
@@ -220,7 +238,8 @@ class SQLiteBoardRepository:
             with self._tx():
                 inserted = self._rowcount(
                     _INSERT_TASK + " ON CONFLICT (project_id, number) DO NOTHING",
-                    (task.id, task.project_id, task.number, *self._task_params(task), *self._origin_params(task)))
+                    (task.id, task.project_id, task.number, *self._task_params(task), *self._origin_params(task),
+                     None, None))
                 if inserted != 1:
                     raise _NotInserted()
                 self._execute("UPDATE board_counters SET next_number = MAX(next_number, ?) WHERE project_id = ?",
@@ -241,12 +260,75 @@ class SQLiteBoardRepository:
         return True
 
     def get_task(self, slug: str, number: int) -> Task | None:
-        row = self._one(f"SELECT {_TASK_COLUMNS} FROM board_tasks t JOIN board_projects p ON p.id = t.project_id "  # nosec B608
+        row = self._one(f"SELECT {_TASK_COLUMNS} FROM {_TASK_FROM} "  # nosec B608
                         "WHERE p.slug = ? AND t.number = ?", (slug, number))
         return self._task(row) if row else None
 
+    def get_task_by_initiative(self, slug: str, initiative: str, number: int) -> Task | None:
+        row = self._one(f"SELECT {_TASK_COLUMNS} FROM {_TASK_FROM} "  # nosec B608
+                        "WHERE p.slug = ? AND i.slug = ? AND t.initiative_number = ?", (slug, initiative, number))
+        return self._task(row) if row else None
+
+    # ── Vorhaben (P2) ────────────────────────────────────────────────────
+
+    def _initiative(self, row) -> Initiative:
+        return Initiative(id=row[0], project_id=row[1], project_slug=row[2], slug=row[3], title=self._dec(row[4]),
+                          rank=float(row[5]), created_at=_ts(row[6]))
+
+    def create_initiative(self, initiative: Initiative, event: ProjectEvent | None = None) -> None:
+        with self._tx():
+            self._execute("INSERT INTO board_initiatives (id, project_id, slug, title, rank, next_number, created_at) "
+                          "VALUES (?, ?, ?, ?, ?, 1, ?)",
+                          (initiative.id, initiative.project_id, initiative.slug, self._enc(initiative.title),
+                           initiative.rank, self._dt(initiative.created_at)))
+            self._bump()
+            if event is not None:
+                self._insert_project_event(event)
+
+    def get_initiative(self, project_slug: str, slug: str) -> Initiative | None:
+        row = self._one(f"SELECT {_INITIATIVE_COLUMNS} FROM board_initiatives i "  # nosec B608
+                        "JOIN board_projects p ON p.id = i.project_id WHERE p.slug = ? AND i.slug = ?",
+                        (project_slug, slug))
+        return self._initiative(row) if row else None
+
+    def list_initiatives(self, project_slug: str) -> list[Initiative]:
+        return [self._initiative(r) for r in self._all(
+            f"SELECT {_INITIATIVE_COLUMNS} FROM board_initiatives i "  # nosec B608
+            "JOIN board_projects p ON p.id = i.project_id WHERE p.slug = ? ORDER BY i.rank, i.slug",
+            (project_slug,))]
+
+    def update_initiative(self, initiative: Initiative, events=()) -> None:
+        with self._tx():
+            self._execute("UPDATE board_initiatives SET title = ?, rank = ? WHERE id = ?",
+                          (self._enc(initiative.title), initiative.rank, initiative.id))
+            self._bump()
+            for event in events:
+                self._insert_project_event(event)
+
+    def assign_initiative(self, task: Task, initiative: Initiative | None, event: TaskEvent) -> bool:
+        """Ordnet das Ticket einem Vorhaben zu (naechste Nummer dort) oder keinem; mit Verlauf,
+        dessen neuer Wert die vergebene Referenz ist. ``False``, wenn das Ticket inzwischen eine
+        andere Version hat (nichts geaendert)."""
+        initiative_id = initiative.id if initiative else None
+        try:
+            with self._tx():                       # Zaehler und Zuordnung zusammen; sonst Rollback
+                number = self._next_initiative_number(initiative_id) if initiative_id else None
+                if initiative is not None:
+                    event.new_value = f"{task.project_slug}/{initiative.slug}-{number}"
+                changed = self._rowcount(
+                    "UPDATE board_tasks SET initiative_id = ?, initiative_number = ?, updated_at = ?, "
+                    "version = version + 1 WHERE id = ? AND version = ?",
+                    (initiative_id, number, self._dt(task.updated_at), task.id, task.version))
+                if changed != 1:
+                    raise _NotInserted()
+                self._bump()
+                self._insert_event(event)
+        except _NotInserted:
+            return False
+        return True
+
     def get_task_by_id(self, task_id: str) -> Task | None:
-        row = self._one(f"SELECT {_TASK_COLUMNS} FROM board_tasks t JOIN board_projects p ON p.id = t.project_id "  # nosec B608
+        row = self._one(f"SELECT {_TASK_COLUMNS} FROM {_TASK_FROM} "  # nosec B608
                         "WHERE t.id = ?", (task_id,))
         return self._task(row) if row else None
 
@@ -254,7 +336,7 @@ class SQLiteBoardRepository:
         """Sortiert nach Projekt, Status (alphabetisch) und Position; die Reihenfolge der
         Spalten legt der Dienst fest, nicht das Repository. ``kind`` filtert z. B. die
         Steuertickets (P6) in SQL statt im Dienst."""
-        sql = f"SELECT {_TASK_COLUMNS} FROM board_tasks t JOIN board_projects p ON p.id = t.project_id"  # nosec B608
+        sql = f"SELECT {_TASK_COLUMNS} FROM {_TASK_FROM}"  # nosec B608
         where, params = [], []
         if slug is not None:
             where.append("p.slug = ?")

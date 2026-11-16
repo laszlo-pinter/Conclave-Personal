@@ -185,6 +185,11 @@ def test_every_mcp_tool_route_works_with_agent_token(app, mcp_via_app):
     call(server.conclave_board_comment, "api#1", "Branch board")
     call(server.conclave_board_update, "api#1", status="review")
     call(server.conclave_board_get, "api#1")
+    assert app.test_client().post("/board/projects/api/initiatives", json={"slug": "sich", "title": "S"},
+                                  headers=_bearer(HUMAN)).status_code == 201
+    call(server.conclave_board_create, "api", "P2", initiative="sich")
+    call(server.conclave_board_list, project="api")             # mit den Vorhaben (P2)
+    call(server.conclave_board_get, "api/sich-1")
 
     blocked = [(m, r, s) for m, r, s in hits if s in (401, 403)]
     assert not blocked, blocked

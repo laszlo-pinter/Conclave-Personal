@@ -244,6 +244,26 @@ def build_parser() -> argparse.ArgumentParser:
     token_show.add_argument("--reveal", action="store_true",
                             help="Den Token-Wert ausgeben (nur auf ausdrueckliche Anfrage)")
 
+    board_p = sub.add_parser("board", help="Board verwalten (als Mensch, direkt auf der Datenbank)")
+    board_sub = board_p.add_subparsers(dest="board_command", required=True)
+    ini_p = board_sub.add_parser("initiative", help="Vorhaben eines Projekts (P2)")
+    ini_sub = ini_p.add_subparsers(dest="initiative_command", required=True)
+    ini_list = ini_sub.add_parser("list", help="Vorhaben nach Rang anzeigen")
+    ini_list.add_argument("project")
+    ini_add = ini_sub.add_parser("add", help="Vorhaben anlegen")
+    ini_add.add_argument("project")
+    ini_add.add_argument("slug", help="Kurzname, z. B. sich")
+    ini_add.add_argument("title")
+    ini_add.add_argument("--rank", type=float, default=None, help="Rang (kleiner = frueher); Default: hinten")
+    ini_rank = ini_sub.add_parser("rank", help="Rang eines Vorhabens setzen")
+    ini_rank.add_argument("project")
+    ini_rank.add_argument("slug")
+    ini_rank.add_argument("rank", type=float)
+    ini_assign = ini_sub.add_parser("assign", help="Tickets in dieser Reihenfolge zuordnen (naechste Nummern)")
+    ini_assign.add_argument("project")
+    ini_assign.add_argument("slug", help="Vorhaben; '-' = Zuordnung entfernen")
+    ini_assign.add_argument("tasks", nargs="+", help="Referenzen wie conclave#31 oder nur Nummern")
+
     key_p = sub.add_parser("key", help="Schluessel fuer die verschluesselten Daten (secret.key)")
     key_sub = key_p.add_subparsers(dest="key_command", required=True)
     key_rotate = key_sub.add_parser("rotate", help="Neuen Schluessel erzeugen und alle Daten neu verschluesseln")
@@ -276,6 +296,8 @@ def run(argv: list[str] | None = None) -> int:
         return _run_token_show(args)
     if args.command == "key":
         return _run_key_rotate(args)
+    if args.command == "board":
+        return _run_board(args)
 
     config = ConclaveConfig.from_sources()
     errors = validate_production_config(config)
@@ -659,6 +681,53 @@ def _show_reviewer_token(args, url: str) -> int:
         print()
         print(token)
     return 0
+
+
+def _run_board(args) -> int:
+    """Vorhaben verwalten (P2). Die CLI handelt als Mensch, wie alle lokalen Befehle."""
+    from conclave.application.board import BoardError
+    from conclave.domain.principal import HUMAN_PRINCIPAL
+
+    config = ConclaveConfig.from_sources()
+    board, close = _open_board(config)
+    try:
+        if args.initiative_command == "add":
+            ini = board.create_initiative(HUMAN_PRINCIPAL, args.project, args.slug, args.title, rank=args.rank)
+            print(f"Vorhaben {args.project}/{ini.slug} angelegt (Rang {ini.rank:g}).")
+        elif args.initiative_command == "rank":
+            ini = board.update_initiative(HUMAN_PRINCIPAL, args.project, args.slug, rank=args.rank)
+            print(f"Vorhaben {args.project}/{ini.slug}: Rang {ini.rank:g}.")
+        elif args.initiative_command == "assign":
+            slug = None if args.slug == "-" else args.slug
+            for task in args.tasks:
+                ref = task if ("#" in task or "/" in task) else f"{args.project}#{task}"
+                moved = board.assign_initiative(HUMAN_PRINCIPAL, ref, slug)
+                print(f"{moved.ref} -> {moved.initiative_ref or 'ohne Vorhaben'}  {moved.title}")
+        else:
+            for ini in board.list_initiatives(args.project):
+                print(f"  {args.project}/{ini.slug:<20} Rang {ini.rank:<8g} {ini.title}")
+    except BoardError as exc:
+        print(f"FEHLER: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        close()
+    return 0
+
+
+def _open_board(config):
+    """Board-Dienst auf der konfigurierten Datenbank, wie im Server (api/server.py)."""
+    from conclave.api.server import _build_board
+    if config.db_provider == "postgres":
+        import psycopg2
+        conn = psycopg2.connect(config.db_dsn)
+        conn.autocommit = True
+        from conclave.infrastructure.postgres.schema import initialize_schema
+    else:
+        from conclave.infrastructure.sqlite.connection import ThreadLocalConnection
+        from conclave.infrastructure.sqlite.schema import initialize_schema
+        conn = ThreadLocalConnection(config.db_path)
+    initialize_schema(conn)
+    return _build_board(conn, config), conn.close
 
 
 def _run_key_rotate(args) -> int:

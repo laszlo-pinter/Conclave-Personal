@@ -146,7 +146,46 @@ MIGRATIONS: list[Migration] = [
         description="Herkunft je Lauf (human/agent) fuer die Budgets der Agenten (R11)",
         fn=lambda connection, is_postgres: _add_run_origin(connection, is_postgres),
     ),
+    Migration(
+        id="020_board_initiatives",
+        description="Vorhaben im Projekt mit eigener fortlaufender Nummer (P2)",
+        fn=lambda connection, is_postgres: _add_board_initiatives(connection, is_postgres),
+    ),
 ]
+
+
+def _initiatives_table(ts: str, real: str) -> str:
+    return f"""CREATE TABLE IF NOT EXISTS board_initiatives (
+            id          TEXT PRIMARY KEY,
+            project_id  TEXT NOT NULL REFERENCES board_projects(id) ON DELETE CASCADE,
+            slug        TEXT NOT NULL,
+            title       TEXT NOT NULL,
+            rank        {real} NOT NULL DEFAULT 0,
+            next_number INTEGER NOT NULL DEFAULT 1,
+            created_at  {ts} NOT NULL,
+            UNIQUE(project_id, slug)
+        )"""
+
+
+def _add_board_initiatives(connection, is_postgres: bool) -> None:
+    ts = "TIMESTAMPTZ" if is_postgres else "TEXT"
+    real = "DOUBLE PRECISION" if is_postgres else "REAL"
+    statements = [_initiatives_table(ts, real)]
+    if not _has_column(connection, is_postgres, "board_tasks", "initiative_id"):
+        # Ohne Fremdschluessel wie im Basisschema: Vorhaben werden nicht einzeln geloescht,
+        # beim Loeschen des Projekts entfernt CASCADE Vorhaben und Tickets zusammen
+        statements.append("ALTER TABLE board_tasks ADD COLUMN initiative_id TEXT")
+    if not _has_column(connection, is_postgres, "board_tasks", "initiative_number"):
+        statements.append("ALTER TABLE board_tasks ADD COLUMN initiative_number INTEGER")
+    # Eine Nummer je Vorhaben nur einmal (lueckenlos wie die Projektnummer)
+    statements.append("CREATE UNIQUE INDEX IF NOT EXISTS idx_board_tasks_initiative "
+                      "ON board_tasks(initiative_id, initiative_number)")
+    for statement in statements:
+        if is_postgres:
+            with connection.cursor() as cur:
+                cur.execute(statement)
+        else:
+            connection.execute(statement)
 
 
 def _board_history_tables(ts: str) -> list[str]:
@@ -531,6 +570,8 @@ def _create_board_tables(connection, is_postgres: bool) -> None:
             control_scope      TEXT NOT NULL DEFAULT '',
             control_ack_by     TEXT NOT NULL DEFAULT '',
             control_ack_at     {ts},
+            initiative_id      TEXT,
+            initiative_number  INTEGER,
             UNIQUE(project_id, number)
         )""",
         f"""CREATE TABLE IF NOT EXISTS board_comments (
@@ -561,6 +602,7 @@ def _create_board_tables(connection, is_postgres: bool) -> None:
             value INTEGER NOT NULL
         )""",
         *_board_history_tables(ts),
+        _initiatives_table(ts, real),
         "INSERT INTO board_meta (key, value) VALUES ('changes', 0) ON CONFLICT (key) DO NOTHING",
         "CREATE INDEX IF NOT EXISTS idx_board_tasks_column ON board_tasks(project_id, status, position)",
         "CREATE INDEX IF NOT EXISTS idx_board_comments_task ON board_comments(task_id, seq)",

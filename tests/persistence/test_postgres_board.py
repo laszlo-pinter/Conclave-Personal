@@ -156,7 +156,7 @@ def test_project_creation_is_atomic_and_deletes_cascade(repo, pg):
         rules = cur.fetchall()
     assert rules and all(rule == "CASCADE" for _, rule in rules)
     assert {t for t, _ in rules} == {"board_comments", "board_counters", "board_events", "board_tasks",
-                                     "board_project_events"}
+                                     "board_project_events", "board_initiatives"}
 
 
 # ── B2: Dienst gegen Postgres ─────────────────────────────────────────────

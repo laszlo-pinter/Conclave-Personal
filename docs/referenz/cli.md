@@ -146,6 +146,21 @@ Mensch-Token, mit `--agent` das Agent-Token samt fertigem
 angelegt. Mit `--reviewer` entsprechend das Reviewer-Token und der Befehl für
 `conclave-mcp --reviewer`. Den Token-Wert gibt der Befehl nur mit `--reveal` aus.
 
+## Board
+
+```powershell
+conclave board initiative list <projekt>
+conclave board initiative add <projekt> <kurzname> <titel> [--rank <zahl>]
+conclave board initiative rank <projekt> <kurzname> <zahl>
+conclave board initiative assign <projekt> <kurzname|-> <ticket>...
+```
+
+Vorhaben eines Projekts verwalten (siehe
+[Mit dem Board arbeiten](../mit-dem-board-arbeiten.md#vorhaben)). Die CLI
+handelt als Mensch und arbeitet direkt auf der konfigurierten Datenbank.
+`assign` vergibt die Nummern in der Reihenfolge der Tickets (`projekt#n` oder
+nur die Nummer); `-` entfernt die Zuordnung.
+
 ## Schlüssel
 
 ```powershell

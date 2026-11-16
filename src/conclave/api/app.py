@@ -45,7 +45,8 @@ from conclave.domain.principal import HUMAN_PRINCIPAL
 from conclave.api.access import HUMAN_ONLY_ERROR, agent_may, reviewer_may
 from conclave.application.consultations import ConsultationRequestError
 from conclave.application.board import (
-    BoardError, comment_to_dict, event_to_dict, project_event_to_dict, project_to_dict, task_to_dict,
+    BoardError, comment_to_dict, event_to_dict, initiative_to_dict, project_event_to_dict, project_to_dict,
+    task_to_dict,
 )
 from conclave.domain.errors import TaskNotFound, TaskSourceError, public_message, redact_secrets
 from conclave.cli.bootstrap import rate_limit_disabled, validate_rate_limit
@@ -1031,7 +1032,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         unknown = set(body) - allowed
         if unknown:
             raise BoardError(f"Unbekannte Felder: {sorted(unknown)}", 400, "ValidationError")
-        for name in ("project", "title", "description", "status", "kind", "control", "scope"):
+        for name in ("project", "title", "description", "status", "kind", "control", "scope", "initiative"):
             if body.get(name) is not None and not isinstance(body[name], str):
                 raise BoardError(f"{name} muss Text sein.", 400, "ValidationError")
         tags = body.get("tags")
@@ -1102,12 +1103,12 @@ def create_app(handler: CLIHandler, auth_service=None,
         Steuertickets (nur Mensch): kind=control, control=pause|hint, scope=project|all (P6)."""
         body = _json_object()
         _check_task_fields(body, {"project", "title", "description", "tags", "status", "human", "kind", "control",
-                                  "scope"})
+                                  "scope", "initiative"})
         task = _board().create_task(g.principal, body.get("project"), body.get("title"),
                                     description=body.get("description") or "", tags=body.get("tags") or [],
                                     human=body.get("human", False), status=body.get("status"),
                                     kind=body.get("kind") or "task", control=body.get("control"),
-                                    scope=body.get("scope") or "project")
+                                    scope=body.get("scope") or "project", initiative=body.get("initiative") or None)
         return jsonify({**task_to_dict(task), "control": _control(task.project_slug)}), 201
 
     @app.get("/board/search")
@@ -1154,18 +1155,73 @@ def create_app(handler: CLIHandler, auth_service=None,
         return jsonify({**task_to_dict(task), "comments": [comment_to_dict(c) for c in b.comments(task.ref)],
                         "last_review": _last_review(b, task.ref), "control": _control(slug)}), 200
 
+    @app.get("/board/projects/<slug>/initiatives/<initiative>/tasks/<int:number>")
+    def board_get_task_in_initiative(slug: str, initiative: str, number: int):
+        """Ein Ticket ueber seine Vorhaben-Nummer (``projekt/vorhaben-n``, P2); wie das Ticket selbst."""
+        task = _board().get_task(f"{slug}/{initiative}-{number}")
+        return board_get_task(slug, task.number)
+
+    @app.get("/board/projects/<slug>/initiatives")
+    def board_list_initiatives(slug: str):
+        """Vorhaben des Projekts nach Rang (P2)."""
+        return jsonify({"initiatives": [initiative_to_dict(i) for i in _board().list_initiatives(slug)]}), 200
+
+    @app.post("/board/projects/<slug>/initiatives")
+    def board_create_initiative(slug: str):
+        """Vorhaben anlegen: slug, title, optional rank (Freigabe-Recht)."""
+        body = _json_object()
+        _check_initiative_fields(body, {"slug", "title", "rank"})
+        initiative = _board().create_initiative(g.principal, slug, body.get("slug"), body.get("title"),
+                                                rank=body.get("rank"))
+        return jsonify(initiative_to_dict(initiative)), 201
+
+    @app.put("/board/projects/<slug>/initiatives/<initiative>")
+    def board_update_initiative(slug: str, initiative: str):
+        """Vorhaben umbenennen oder ranken: title, rank (Freigabe-Recht)."""
+        body = _json_object()
+        _check_initiative_fields(body, {"title", "rank"})
+        changed = _board().update_initiative(g.principal, slug, initiative, title=body.get("title"),
+                                             rank=body.get("rank"))
+        return jsonify(initiative_to_dict(changed)), 200
+
+    def _check_initiative_fields(body: dict, allowed: set) -> None:
+        unknown = set(body) - allowed
+        if unknown:
+            raise BoardError(f"Unbekannte Felder: {sorted(unknown)}", 400, "ValidationError")
+        for name in ("slug", "title"):
+            if body.get(name) is not None and not isinstance(body[name], str):
+                raise BoardError(f"{name} muss Text sein.", 400, "ValidationError")
+        rank = body.get("rank")
+        if rank is not None and (isinstance(rank, bool) or not isinstance(rank, (int, float))):
+            raise BoardError("rank muss eine Zahl sein.", 400, "ValidationError")
+
     @app.patch("/board/projects/<slug>/tasks/<int:number>")
     def board_update_task(slug: str, number: int):
-        """Ticket aendern: title, description, tags, status, human, index, rank, version.
+        """Ticket aendern: title, description, tags, status, human, index, rank, version, initiative.
 
         ``index`` ist der Platz in der Spalte; mit ``version`` wird nur geschrieben, wenn das
-        Ticket noch diesen Stand hat (sonst 409, R9)."""
+        Ticket noch diesen Stand hat (sonst 409, R9). ``initiative`` ordnet das Ticket einem
+        Vorhaben zu (``null`` = keinem); das darf nur der Mensch (P2)."""
         body = _json_object()
-        _check_task_fields(body, {"title", "description", "tags", "status", "human", "index", "rank", "version"})
-        task = _board().update_task(g.principal, _ref(slug, number), title=body.get("title"),
-                                    description=body.get("description"), tags=body.get("tags"),
-                                    status=body.get("status"), human=body.get("human"), index=body.get("index"),
-                                    rank=body.get("rank"), version=body.get("version"))
+        _check_task_fields(body, {"title", "description", "tags", "status", "human", "index", "rank", "version",
+                                  "initiative"})
+        b = _board()
+        if "initiative" in body and not b.can_approve(g.principal):
+            raise BoardError("Vorhaben ordnet nur der Mensch zu.", 403, "HumanOnly")
+        ref = _ref(slug, number)
+        fields = {k: v for k, v in body.items() if k != "initiative"}
+        task = None
+        if fields or "initiative" not in body:
+            task = b.update_task(g.principal, ref, title=body.get("title"), description=body.get("description"),
+                                 tags=body.get("tags"), status=body.get("status"), human=body.get("human"),
+                                 index=body.get("index"), rank=body.get("rank"), version=body.get("version"))
+        if "initiative" in body:
+            if task is None and body.get("version") is not None:
+                current = b.get_task(ref)
+                if current.version != body["version"]:
+                    raise BoardError(f"Ticket '{ref}' hat inzwischen Version {current.version} "
+                                     f"(erwartet {body['version']}); bitte neu laden.", 409, "Conflict")
+            task = b.assign_initiative(g.principal, ref, body.get("initiative") or None)
         return jsonify({**task_to_dict(task), "control": _control(slug)}), 200
 
     @app.delete("/board/projects/<slug>/tasks/<int:number>")

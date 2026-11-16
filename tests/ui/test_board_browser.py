@@ -243,3 +243,21 @@ def test_live_refresh_after_api_changes(chromium, board_server):
         assert errors == [] and _csp_problems(page) == []
     finally:
         page.close()
+
+
+def test_card_shows_the_initiative_number(chromium, board_server):
+    """P2: Die Karte zeigt die Vorhaben-Nummer neben der Projektnummer; Tickets ohne Vorhaben nicht."""
+    assert board_server.human.post("/board/projects/api/initiatives",
+                                   json={"slug": "sich", "title": "Sicherheit"}).status_code == 201
+    _task(board_server.agent, title="ohne Vorhaben")
+    assert board_server.agent.post("/board/tasks", json={"project": "api", "title": "mit",
+                                                          "initiative": "sich"}).status_code == 201
+    page, errors = _open_board(chromium, board_server)
+    try:
+        _card(page, "api#2").wait_for(timeout=10000)
+        badge = _card(page, "api#2").locator(".board-initiative")
+        assert badge.inner_text() == "api/sich-1" and badge.is_visible()
+        assert _card(page, "api#1").locator(".board-initiative").count() == 0
+        assert errors == [] and _csp_problems(page) == []
+    finally:
+        page.close()

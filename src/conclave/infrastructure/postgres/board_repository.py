@@ -20,18 +20,23 @@ eigene Anweisung; dort ist er nur ein Signal fuer die UI.
 R9: Anlegen samt Ereignis ``created``, Kommentar aendern/loeschen samt Verlauf, Ticket
 loeschen samt Eintrag im Projekt-Verlauf und Projekt anlegen/umbenennen samt Verlauf
 sind ebenfalls je eine Anweisung.
+
+P2: Ein Ticket mit Vorhaben bekommt Projekt- und Vorhaben-Nummer in derselben Anweisung
+(zwei Zaehler-Zeilen, beide gesperrt). Vorhaben anlegen/aendern und Tickets zuordnen
+samt Verlauf sind je eine Anweisung.
 """
 
 from __future__ import annotations
 
 from contextlib import contextmanager
 
-from conclave.domain.board import Project, ProjectEvent, Task, TaskComment, TaskEvent
+from conclave.domain.board import Initiative, Project, ProjectEvent, Task, TaskComment, TaskEvent
 from conclave.domain.board import POSITION_STEP
 from conclave.infrastructure.sqlite.board_repository import SQLiteBoardRepository
 
 _TASK_INSERT_COLUMNS = ("id, project_id, number, title, description, tags, status, position, rank, human, "
                         "assignee, updated_at, created_at, origin, actor_id, created_by, kind, control, control_scope")
+_TASK_INSERT_INITIATIVE = _TASK_INSERT_COLUMNS + ", initiative_id, initiative_number"
 _EVENT_COLUMNS = "id, task_id, field, old_value, new_value, origin, actor_id, seq, created_at"
 _PROJECT_EVENT_COLUMNS = "id, project_id, field, old_value, new_value, origin, actor_id, seq, created_at"
 
@@ -103,6 +108,8 @@ class PostgresBoardRepository(SQLiteBoardRepository):
 
     def create_task(self, task: Task, event: TaskEvent | None = None) -> Task:
         values = (task.id, task.project_id, *self._task_params(task), *self._origin_params(task))
+        if task.initiative_id:
+            return self._create_task_in_initiative(task, values, event)
         if event is None:
             row = self._one(
                 "WITH n AS (UPDATE board_counters SET next_number = next_number + 1 WHERE project_id = ? "
@@ -131,6 +138,89 @@ class PostgresBoardRepository(SQLiteBoardRepository):
                 raise ValueError("Unbekanntes Projekt")
         task.number = int(row[0])
         return task
+
+    def _create_task_in_initiative(self, task: Task, values: tuple, event: TaskEvent | None) -> Task:
+        """Projekt- und Vorhaben-Nummer in einer Anweisung; ohne Vorhaben-Zeile kein Ticket."""
+        event_cte, event_params, bump = "", (), 1
+        if event is not None:
+            bump = 2
+            event_cte = (f", e AS (INSERT INTO board_events ({_EVENT_COLUMNS}) "  # nosec B608 - feste Texte
+                         "SELECT ?, t.id, ?, ?, ?, ?, ?, c.value, ? FROM t, c) ")
+            event_params = (event.id, event.field_name, self._enc(event.old_value), self._enc(event.new_value),
+                            event.origin, event.actor_id, event.created_at)
+        row = self._one(
+            "WITH n AS (UPDATE board_counters SET next_number = next_number + 1 WHERE project_id = ? "
+            "           RETURNING next_number - 1 AS number), "
+            "     m AS (UPDATE board_initiatives SET next_number = next_number + 1 WHERE id = ? "
+            "           RETURNING next_number - 1 AS number), "
+            f"     t AS (INSERT INTO board_tasks ({_TASK_INSERT_INITIATIVE}) "  # nosec B608 - feste Texte
+            "           SELECT ?, ?, n.number, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, m.number FROM n, m "
+            "           RETURNING id, number, initiative_number), "
+            "     c AS (UPDATE board_meta SET value = value + ? WHERE key = 'changes' "
+            "           AND EXISTS (SELECT 1 FROM t) RETURNING value)"
+            + event_cte +
+            " SELECT number, initiative_number FROM t",
+            (task.project_id, task.initiative_id, *values, task.initiative_id, bump, *event_params))
+        if row is None:
+            raise ValueError("Unbekanntes Projekt oder Vorhaben")
+        task.number, task.initiative_number = int(row[0]), int(row[1])
+        return task
+
+    def create_initiative(self, initiative: Initiative, event: ProjectEvent | None = None) -> None:
+        if event is None:
+            super().create_initiative(initiative)
+            return
+        self._execute(
+            "WITH i AS (INSERT INTO board_initiatives (id, project_id, slug, title, rank, next_number, created_at) "
+            "           VALUES (?, ?, ?, ?, ?, 1, ?) RETURNING project_id), "
+            "     c AS (UPDATE board_meta SET value = value + 1 WHERE key = 'changes' RETURNING value) "
+            f"INSERT INTO board_project_events ({_PROJECT_EVENT_COLUMNS}) "  # nosec B608 - feste Texte
+            "SELECT ?, i.project_id, ?, ?, ?, ?, ?, c.value, ? FROM i, c",
+            (initiative.id, initiative.project_id, initiative.slug, self._enc(initiative.title), initiative.rank,
+             initiative.created_at, event.id, event.field_name, self._enc(event.old_value),
+             self._enc(event.new_value), event.origin, event.actor_id, event.created_at))
+
+    def update_initiative(self, initiative: Initiative, events=()) -> None:
+        events = list(events)
+        if len(events) != 1:
+            raise ValueError("Ein Vorhaben aendert sich mit genau einem Verlaufseintrag.")
+        event = events[0]
+        self._execute(
+            "WITH u AS (UPDATE board_initiatives SET title = ?, rank = ? WHERE id = ? RETURNING project_id), "
+            "     c AS (UPDATE board_meta SET value = value + 1 WHERE key = 'changes' "
+            "           AND EXISTS (SELECT 1 FROM u) RETURNING value) "
+            f"INSERT INTO board_project_events ({_PROJECT_EVENT_COLUMNS}) "  # nosec B608 - feste Texte
+            "SELECT ?, u.project_id, ?, ?, ?, ?, ?, c.value, ? FROM u, c",
+            (self._enc(initiative.title), initiative.rank, initiative.id, event.id, event.field_name,
+             self._enc(event.old_value), self._enc(event.new_value), event.origin, event.actor_id,
+             event.created_at))
+
+    def assign_initiative(self, task: Task, initiative: Initiative | None, event: TaskEvent) -> bool:
+        """Zwei Anweisungen: Die Nummer wird nur vergeben, wenn das Ticket noch diese Version hat;
+        dann Ticket, Zaehler und Verlauf in einer. Aendert jemand das Ticket genau dazwischen,
+        bleibt im Vorhaben eine Luecke (wie bei einem geloeschten Ticket); doppelte Nummern gibt
+        es nie (UNIQUE). Den Verlaufswert verschluesselt die App, deshalb steht die Nummer vorher fest."""
+        number = None
+        if initiative is not None:
+            row = self._one(
+                "UPDATE board_initiatives SET next_number = next_number + 1 WHERE id = ? "
+                "AND EXISTS (SELECT 1 FROM board_tasks WHERE id = ? AND version = ?) "
+                "RETURNING next_number - 1", (initiative.id, task.id, task.version))
+            if row is None:
+                return False
+            number = int(row[0])
+            event.new_value = f"{task.project_slug}/{initiative.slug}-{number}"
+        result = self._execute(
+            "WITH u AS (UPDATE board_tasks SET initiative_id = ?, initiative_number = ?, updated_at = ?, "
+            "           version = version + 1 WHERE id = ? AND version = ? RETURNING id), "
+            "     c AS (UPDATE board_meta SET value = value + 2 WHERE key = 'changes' "
+            "           AND EXISTS (SELECT 1 FROM u) RETURNING value) "
+            f"INSERT INTO board_events ({_EVENT_COLUMNS}) "  # nosec B608 - feste Texte
+            "SELECT ?, u.id, ?, ?, ?, ?, ?, c.value, ? FROM u, c",
+            (initiative.id if initiative else None, number, task.updated_at, task.id, task.version,
+             event.id, event.field_name, self._enc(event.old_value), self._enc(event.new_value), event.origin,
+             event.actor_id, event.created_at))
+        return result.rowcount == 1
 
     _IMPORT_TASK = (
         f"WITH u AS (INSERT INTO board_tasks ({_TASK_INSERT_COLUMNS}) "  # nosec B608 - feste Texte

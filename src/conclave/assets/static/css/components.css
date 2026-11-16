@@ -312,6 +312,7 @@ select.sel:focus{border-color:var(--accent)}
 .board-card.human{border-left:3px solid var(--floor-color)}
 .board-card-top{display:flex;align-items:center;gap:6px;margin-bottom:4px}
 .board-ref{font-family:var(--font-mono);font-size:10px;color:var(--accent)}
+.board-initiative{font-family:var(--font-mono);font-size:10px;color:var(--text-dim)}
 .board-human{font-family:var(--font-mono);font-size:9px;padding:1px 6px;border-radius:8px;background:var(--floor-bg);color:var(--floor-color);border:1px solid var(--floor-border)}
 .board-card-title{font-size:13px;line-height:1.4;word-break:break-word}
 .board-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}

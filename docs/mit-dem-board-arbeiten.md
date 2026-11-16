@@ -101,10 +101,38 @@ Agenten bekommen sechs Tools: `conclave_board_list`, `conclave_board_get`,
 `conclave_board_comment`. Ihre Antworten kennzeichnen Ticket-Texte als Daten,
 nicht als Anweisungen.
 
+## Vorhaben
+
+Ein Projekt kann Vorhaben haben, z. B. `sich` für die Sicherheitsarbeit oder
+`board` für das Board selbst. Jedes Vorhaben zählt seine Tickets eigens:
+`conclave/sich-3` ist das dritte Ticket im Vorhaben `sich`. Die Projektnummer
+bleibt, `conclave#33` zeigt weiter auf dasselbe Ticket. API, MCP und `next`
+nehmen beide Formen an; Antworten nennen beide (`ref`, `initiative_ref`).
+
+- Vorhaben anlegen, umbenennen, ranken und Tickets zuordnen darf nur der Mensch.
+  Agenten sehen die Vorhaben (`conclave_board_list` mit Projekt) und können
+  beim Anlegen ein vorhandenes angeben.
+- Die Nummern eines Vorhabens sind fortlaufend, auch wenn mehrere gleichzeitig
+  anlegen. Wird ein Ticket einem anderen Vorhaben zugeordnet, bekommt es dort
+  die nächste Nummer; seine alte bleibt frei.
+- `next` nimmt in der ersten Spalte zuerst Nacharbeit aus dem Review, dann die
+  Vorhaben nach Rang, darin die Tickets nach Rang. Tickets ohne Vorhaben kommen
+  danach.
+
+Vorhandene Tickets ordnest du per CLI zu; die Reihenfolge der Referenzen
+ergibt die Nummern:
+
+```powershell
+conclave board initiative add conclave sich "Sicherheit"
+conclave board initiative assign conclave sich conclave#31 conclave#32 conclave#33
+conclave board initiative rank conclave sich 1
+conclave board initiative list conclave
+```
+
 ## In der UI
 
 Der Bereich „Board“ zeigt die Spalten aus `config.toml` mit Karten (Referenz,
-Titel, Tags, Markierung „nur für Menschen“). Karten lassen sich per Drag & Drop
+Vorhaben-Nummer, Titel, Tags, Markierung „nur für Menschen“). Karten lassen sich per Drag & Drop
 in eine andere Spalte und innerhalb der Spalte verschieben. Ein Klick öffnet
 das Ticket: Beschreibung (Markdown, gefiltert wie Modellantworten),
 Kommentare mit Herkunft, Verlauf, Status, Markierung und ein Feld für neue

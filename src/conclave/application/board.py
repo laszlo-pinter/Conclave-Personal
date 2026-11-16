@@ -39,17 +39,19 @@ from conclave.application.ports import BoardRepository
 from conclave.domain.board import (
     CONTROL_SCOPES,
     CONTROL_TYPES,
+    Initiative,
     KINDS,
     POSITION_STEP,
-    RED_LIMIT,
-    REVIEW_RESULTS,
     Project,
     ProjectEvent,
+    RED_LIMIT,
+    REVIEW_RESULTS,
     StatusFlow,
     Task,
     TaskComment,
     TaskEvent,
     check_field_limits,
+    parse_any_ref,
     parse_ref,
 )
 from conclave.domain.errors import ConclaveError
@@ -141,26 +143,111 @@ class BoardService:
         self._require_approval(principal, project)
         self._repo.delete_project(slug)
 
+    # ── Vorhaben (P2) ────────────────────────────────────────────────────
+
+    def list_initiatives(self, slug: str) -> list[Initiative]:
+        self._project(slug)
+        return self._repo.list_initiatives(slug)
+
+    def _initiative(self, project_slug: str, slug: str) -> Initiative:
+        initiative = self._repo.get_initiative(project_slug, slug)
+        if initiative is None:
+            raise BoardError(f"Vorhaben '{project_slug}/{slug}' nicht gefunden.", 404, "InitiativeNotFound")
+        return initiative
+
+    @staticmethod
+    def _check_rank(rank) -> float:
+        if isinstance(rank, bool) or not isinstance(rank, (int, float)) or rank != rank \
+                or rank in (float("inf"), float("-inf")):
+            raise _invalid("rank muss eine Zahl sein.")
+        return float(rank)
+
+    def create_initiative(self, principal: Principal, project_slug: str, slug: str, title: str,
+                          rank: float | None = None) -> Initiative:
+        """Nur der Mensch legt Vorhaben an (Agenten lesen sie)."""
+        self._require_approval(principal)
+        project = self._project(project_slug)
+        if rank is not None:
+            rank = self._check_rank(rank)
+        else:
+            existing = self._repo.list_initiatives(project_slug)
+            rank = max((i.rank for i in existing), default=0.0) + POSITION_STEP if existing else 0.0
+        try:
+            initiative = Initiative.create(project, slug, title, rank)
+        except (ValueError, TypeError) as e:
+            raise _invalid(str(e)) from None
+        if self._repo.get_initiative(project_slug, slug) is not None:
+            raise BoardError(f"Vorhaben '{project_slug}/{slug}' gibt es schon.", 409, "InitiativeExists")
+        origin, actor_id = self.actor(principal)
+        self._repo.create_initiative(initiative, ProjectEvent.create(
+            project.id, "initiative", None, f"{slug}: {title}", origin, actor_id=actor_id))
+        return initiative
+
+    def update_initiative(self, principal: Principal, project_slug: str, slug: str, *, title: str | None = None,
+                          rank: float | None = None) -> Initiative:
+        """Titel und Rang aendert nur der Mensch; der Rang ordnet next_task (P2)."""
+        self._require_approval(principal)
+        initiative = self._initiative(project_slug, slug)
+        old = f"{initiative.slug}: {initiative.title} (rank {initiative.rank:g})"
+        if title is not None:
+            if not isinstance(title, str) or not title.strip():
+                raise _invalid("Titel des Vorhabens darf nicht leer sein.")
+            try:
+                check_field_limits(title=title)
+            except ValueError as e:
+                raise _invalid(str(e)) from None
+            initiative.title = title
+        if rank is not None:
+            initiative.rank = self._check_rank(rank)
+        new = f"{initiative.slug}: {initiative.title} (rank {initiative.rank:g})"
+        if new != old:
+            origin, actor_id = self.actor(principal)
+            self._repo.update_initiative(initiative, [ProjectEvent.create(
+                initiative.project_id, "initiative", old, new, origin, actor_id=actor_id)])
+        return initiative
+
+    def assign_initiative(self, principal: Principal, ref: str, slug: str | None) -> Task:
+        """Ordnet ein Ticket einem Vorhaben zu (naechste Nummer dort) oder mit None keinem.
+        Nur der Mensch: Das bestimmt die Reihenfolge mit (P1, P2)."""
+        self._require_approval(principal)
+        task = self.get_task(ref)
+        initiative = self._initiative(task.project_slug, slug) if slug else None
+        if (initiative.id if initiative else None) == task.initiative_id:
+            return task
+        origin, actor_id = self.actor(principal)
+        task.updated_at = self._now()
+        # Die neue Referenz traegt das Repository ein, sobald die Nummer vergeben ist
+        event = TaskEvent.create(task.id, "initiative", task.initiative_ref, None, origin, actor_id=actor_id)
+        if not self._repo.assign_initiative(task, initiative, event):
+            raise BoardError(f"Ticket '{ref}' wurde inzwischen geaendert; bitte neu laden.", 409, "Conflict")
+        return self._repo.get_task_by_id(task.id)
+
     # ── Tickets lesen ────────────────────────────────────────────────────
 
     def get_task(self, ref: str) -> Task:
+        """``projekt#n`` oder ``projekt/vorhaben-n`` (P2); beide zeigen auf dasselbe Ticket."""
         try:
-            slug, number = parse_ref(ref)
+            slug, initiative, number = parse_any_ref(ref)
         except ValueError as e:
             raise _invalid(str(e)) from None
-        task = self._repo.get_task(slug, number)
+        if initiative is None:
+            task = self._repo.get_task(slug, number)
+        else:
+            task = self._repo.get_task_by_initiative(slug, initiative, number)
         if task is None:
             raise BoardError(f"Ticket '{ref}' nicht gefunden.", 404, "TaskNotFound")
         return task
 
     def _sort_key(self, task: Task):
-        """Erste Spalte: Nacharbeit aus dem Review zuerst (P3), dann Prioritaet (rank, P1);
-        die anderen Spalten nach Arbeitsstand (position)."""
+        """Erste Spalte: Nacharbeit aus dem Review zuerst (P3), dann Vorhaben nach Rang (P2;
+        Tickets ohne Vorhaben danach), dann Prioritaet (rank, P1); die anderen Spalten nach
+        Arbeitsstand (position)."""
         order = {s: i for i, s in enumerate(self.flow.statuses)}
         if task.status == self.flow.first:
-            place = (0 if task.review_state in REWORK_STATES else 1, task.rank)
+            initiative = (0, task.initiative_rank) if task.initiative_id else (1, 0.0)
+            place = (0 if task.review_state in REWORK_STATES else 1, initiative, task.rank)
         else:
-            place = (1, task.position)
+            place = (1, (0, 0.0), task.position)
         return (task.project_slug, order.get(task.status, len(order)), place, task.number)
 
     def list_tasks(self, slug: str | None = None, statuses=None, include_done: bool = False) -> list[Task]:
@@ -282,7 +369,7 @@ class BoardService:
 
     def create_task(self, principal: Principal, slug: str, title: str, *, description: str = "", tags=(),
                     human: bool = False, status: str | None = None, kind: str = "task",
-                    control: str | None = None, scope: str = "project") -> Task:
+                    control: str | None = None, scope: str = "project", initiative: str | None = None) -> Task:
         self._no_reviewer(principal, "anlegen")
         if kind not in KINDS:
             raise _invalid(f"kind muss einer von {KINDS} sein.")
@@ -297,6 +384,8 @@ class BoardService:
         elif control is not None:
             raise _invalid("control gibt es nur bei kind=control.")
         project = self._project(slug)
+        # Vorhaben: Agenten duerfen ein vorhandenes angeben (anlegen nur der Mensch)
+        chosen = self._initiative(slug, initiative) if initiative else None
         status = self.flow_check(status) if status is not None else self.flow.first
         if principal.is_agent and status != self.flow.first:
             raise _forbidden(f"Agenten legen Tickets nur in '{self.flow.first}' an; "
@@ -312,6 +401,8 @@ class BoardService:
         task.origin, task.actor_id, task.created_by = origin, actor_id, actor_id
         if kind == "control":
             task.kind, task.control, task.control_scope = kind, control, scope
+        if chosen is not None:
+            task.initiative_id, task.initiative_slug, task.initiative_rank = chosen.id, chosen.slug, chosen.rank
         event = TaskEvent.create(task.id, "created", None, status, origin, actor_id=actor_id)
         return self._repo.create_task(task, event)
 
@@ -729,9 +820,15 @@ def project_to_dict(project: Project) -> dict:
     return {"slug": project.slug, "name": project.name, "created_at": _iso(project.created_at)}
 
 
+def initiative_to_dict(initiative: Initiative) -> dict:
+    return {"project": initiative.project_slug, "slug": initiative.slug, "title": initiative.title,
+            "rank": initiative.rank, "created_at": _iso(initiative.created_at)}
+
+
 def task_to_dict(task: Task) -> dict:
     return {
         "ref": task.ref, "project": task.project_slug, "number": task.number, "title": task.title,
+        "initiative": task.initiative_slug, "initiative_ref": task.initiative_ref,
         "description": task.description, "tags": list(task.tags), "status": task.status,
         "position": task.position, "rank": task.rank, "human": task.human, "assignee": task.assignee,
         "version": task.version, "origin": task.origin, "created_by": task.created_by,

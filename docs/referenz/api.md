@@ -32,8 +32,10 @@ Mit dem Agent-Token sind nur die Routen erlaubt, die die MCP-Tools brauchen:
 - Board: `GET`/`POST /board/tasks`, `GET /board/search`, `POST /board/next`,
   `GET`/`PATCH /board/projects/<slug>/tasks/<n>`,
   `POST /board/projects/<slug>/tasks/<n>/comments`,
-  `GET /board/projects/<slug>/tasks/<n>/history` (die feineren Regeln prüft das
-  Board selbst, siehe [Board](#board))
+  `GET /board/projects/<slug>/tasks/<n>/history`,
+  `GET /board/projects/<slug>/initiatives`,
+  `GET /board/projects/<slug>/initiatives/<vorhaben>/tasks/<n>` (die feineren
+  Regeln prüft das Board selbst, siehe [Board](#board))
 
 Der Reviewer-Zugang (`reviewer.token`) hat eine engere Liste: `GET /auth/whoami`,
 `GET /board/tasks`, `GET /board/search`, `GET /board/projects/<slug>/tasks/<n>`
@@ -106,11 +108,15 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `PUT` | `/board/projects/<slug>` | Projekt umbenennen (nur Mensch). |
 | `DELETE` | `/board/projects/<slug>` | Projekt samt Tickets löschen (nur Mensch). |
 | `GET` | `/board/tasks` | Tickets in Board-Reihenfolge; Filter `project`, `status` (mehrfach), `include_done`. |
-| `POST` | `/board/tasks` | Ticket anlegen; neue Tickets landen in der ersten Spalte. |
+| `POST` | `/board/tasks` | Ticket anlegen; neue Tickets landen in der ersten Spalte. Optional `initiative`: Kurzname eines vorhandenen Vorhabens. |
 | `GET` | `/board/search` | Suche in Titel, Tags, Beschreibung und Kommentaren (`q`, `project`, `include_done`). |
-| `POST` | `/board/next` | Oberstes freies Ticket der ersten Spalte übernehmen (atomar). |
+| `POST` | `/board/next` | Oberstes freies Ticket der ersten Spalte übernehmen (atomar); `task` als `projekt#n` oder `projekt/vorhaben-n`. |
 | `GET` | `/board/projects/<slug>/tasks/<int:number>` | Ein Ticket mit Kommentaren. |
-| `PATCH` | `/board/projects/<slug>/tasks/<int:number>` | Ticket ändern: `title`, `description`, `tags`, `status`, `human`, `index`, `rank`, optional `version`. |
+| `PATCH` | `/board/projects/<slug>/tasks/<int:number>` | Ticket ändern: `title`, `description`, `tags`, `status`, `human`, `index`, `rank`, optional `version`; `initiative` (Kurzname oder `null`) ordnet einem Vorhaben zu (nur Mensch). |
+| `GET` | `/board/projects/<slug>/initiatives` | Vorhaben des Projekts nach Rang. |
+| `POST` | `/board/projects/<slug>/initiatives` | Vorhaben anlegen: `slug`, `title`, optional `rank` (nur Mensch). |
+| `PUT` | `/board/projects/<slug>/initiatives/<initiative>` | Vorhaben umbenennen oder ranken: `title`, `rank` (nur Mensch). |
+| `GET` | `/board/projects/<slug>/initiatives/<initiative>/tasks/<int:number>` | Ein Ticket über seine Vorhaben-Nummer, Antwort wie oben. |
 | `DELETE` | `/board/projects/<slug>/tasks/<int:number>` | Ticket löschen (nur Mensch). |
 | `GET` | `/board/projects/<slug>/tasks/<int:number>/comments` | Kommentare mit Herkunft (nur Mensch; Agenten lesen sie über das Ticket). |
 | `POST` | `/board/projects/<slug>/tasks/<int:number>/comments` | Kommentar schreiben; die Herkunft kommt aus dem Token. |

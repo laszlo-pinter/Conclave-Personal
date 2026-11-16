@@ -4,6 +4,9 @@ Eigene Umsetzung nach der Funktionsbeschreibung im Plan, kein Code aus anderen
 Boards. Ein Ticket heisst nach aussen ``slug#nummer``; die Nummer ist je Projekt
 fortlaufend und wird vom Repository vergeben.
 
+Vorhaben (P2, ``Initiative``): eine Ebene im Projekt mit eigener fortlaufender
+Nummer, z. B. ``conclave/sich-3``. Die Projektnummer bleibt, ``conclave#33`` gilt weiter.
+
 Herkunft (``origin``) von Kommentaren und Verlaufseintraegen:
 ``human``/``agent``/``reviewer`` aus dem Token, ``system`` fuer Eintraege, die Conclave selbst
 schreibt (z. B. Consultations), ``None`` fuer Importiertes oder Unbekanntes.
@@ -19,6 +22,9 @@ from datetime import UTC, datetime
 
 SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,39}\Z")
 REF = re.compile(r"([a-z0-9][a-z0-9-]{0,39})#([1-9][0-9]{0,8})\Z")
+INITIATIVE_SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,19}\Z")
+# projekt/vorhaben-n; das Vorhaben darf selbst '-' enthalten, die Nummer steht hinter dem letzten
+INITIATIVE_REF = re.compile(r"([a-z0-9][a-z0-9-]{0,39})/([a-z0-9][a-z0-9-]{0,19})-([1-9][0-9]{0,8})\Z")
 DEFAULT_STATUSES = ("todo", "doing", "review", "done")
 ORIGINS = ("human", "agent", "reviewer", "system")
 # Review-Status (P3): none nach jedem Wechsel nach review, running waehrend des Laufs,
@@ -33,9 +39,9 @@ CONTROL_SCOPES = ("project", "all")
 # Verlaufseintraege fuer diese Felder (Plan 2, "Ticket-Verlauf"); "created" ist das Anlegen,
 # "comment" Bearbeiten/Loeschen eines Kommentars (alt -> neu bzw. -> None), R9
 TRACKED_FIELDS = ("created", "status", "title", "description", "human", "rank", "tags", "position", "comment",
-                  "review_state", "control_ack", "review_red_count")
+                  "review_state", "control_ack", "review_red_count", "initiative")
 # Verlauf eines Projekts: Anlegen, Umbenennen, geloeschte Tickets (Tombstone), R9
-PROJECT_FIELDS = ("created", "name", "task_deleted")
+PROJECT_FIELDS = ("created", "name", "task_deleted", "initiative")
 POSITION_STEP = 1024.0      # Abstand der Karten nach dem Neunummerieren
 # Laengengrenzen (R6): Titel, Beschreibung bzw. Kommentar, Anzahl und Laenge der Tags
 TITLE_MAX = 300
@@ -72,6 +78,19 @@ def parse_ref(ref: str) -> tuple[str, int]:
     if not m:
         raise ValueError(f"Ticket-Referenz muss wie 'projekt#12' aussehen: {ref!r}")
     return m.group(1), int(m.group(2))
+
+
+def parse_any_ref(ref: str) -> tuple[str, str | None, int]:
+    """``api#12`` -> (``api``, None, 12); ``api/sich-3`` -> (``api``, ``sich``, 3)."""
+    if isinstance(ref, str):
+        m = INITIATIVE_REF.match(ref)
+        if m:
+            return m.group(1), m.group(2), int(m.group(3))
+    try:
+        slug, number = parse_ref(ref)
+    except ValueError:
+        raise ValueError(f"Ticket-Referenz muss wie 'projekt#12' oder 'projekt/vorhaben-3' aussehen: {ref!r}") from None
+    return slug, None, number
 
 
 def check_origin(origin: str | None) -> str | None:
@@ -142,6 +161,31 @@ class Project:
 
 
 @dataclass
+class Initiative:
+    """Vorhaben im Projekt (P2): Kurzname, Titel, Rang (nur der Mensch), eigene Nummern."""
+    id: str
+    project_id: str
+    project_slug: str
+    slug: str
+    title: str
+    rank: float = 0.0
+    created_at: datetime = field(default_factory=_now)
+
+    def __post_init__(self) -> None:
+        if not INITIATIVE_SLUG.match(self.slug or ""):
+            raise ValueError("Vorhaben-Kurzname: Kleinbuchstaben, Ziffern und '-', hoechstens 20 Zeichen")
+        if not isinstance(self.title, str) or not self.title.strip():
+            raise ValueError("Titel des Vorhabens darf nicht leer sein")
+        if len(self.title) > TITLE_MAX:
+            raise ValueError(f"Titel hoechstens {TITLE_MAX} Zeichen.")
+
+    @staticmethod
+    def create(project: "Project", slug: str, title: str, rank: float = 0.0) -> "Initiative":
+        return Initiative(id=_id(), project_id=project.id, project_slug=project.slug, slug=slug, title=title,
+                          rank=rank)
+
+
+@dataclass
 class Task:
     id: str
     project_id: str
@@ -172,6 +216,10 @@ class Task:
     control_scope: str = ""         # "project" oder "all"
     control_ack_by: str = ""        # Hinweis quittiert von (Anzeigename bzw. Rolle)
     control_ack_at: datetime | None = None
+    initiative_id: str | None = None        # P2: Vorhaben, None = keins
+    initiative_slug: str | None = None      # aus dem Vorhaben gelesen (nicht gespeichert)
+    initiative_number: int | None = None    # Nummer im Vorhaben, vom Repository vergeben
+    initiative_rank: float | None = None    # Rang des Vorhabens fuer die Reihenfolge (nicht gespeichert)
 
     def __post_init__(self) -> None:
         check_origin(self.origin)
@@ -184,6 +232,13 @@ class Task:
         if self.number is None:
             raise ValueError("Ticket hat noch keine Nummer (erst nach dem Speichern)")
         return f"{self.project_slug}#{self.number}"
+
+    @property
+    def initiative_ref(self) -> str | None:
+        """``projekt/vorhaben-n`` oder None ohne Vorhaben."""
+        if not self.initiative_slug or self.initiative_number is None:
+            return None
+        return f"{self.project_slug}/{self.initiative_slug}-{self.initiative_number}"
 
     @staticmethod
     def create(project: Project, title: str, status: str, *, description: str = "", tags=(),
