@@ -1,8 +1,11 @@
 """P4 (conclave#59): Review-Status an der Karte, Hinweis auf Freigaben, Drag & Drop nur fuer den Menschen.
 
 Ohne das Ticket zu oeffnen soll sichtbar sein: Review laeuft, gruen, gelb, rot und haengt.
-Farbe nie allein: Text und Symbol neben der Farbe, ``aria-label``; geprueft mit hell und
-dunkel eingestelltem Browser, Kontrast mindestens 4,5:1.
+Farbe nie allein: Text und Symbol neben der Farbe, ``aria-label``; Kontrast mindestens 4,5:1.
+
+Die UI hat nur ein dunkles Theme (kein ``prefers-color-scheme``). Der Lauf mit hell
+eingestelltem Browser prueft also kein helles Design, sondern nur, dass die Anzeige dann
+dieselben Farben behaelt und lesbar bleibt.
 """
 
 import threading
@@ -148,6 +151,35 @@ def test_every_review_state_is_visible_on_the_card_with_text(chromium, board_ser
         assert "aus Review vom" in _card(page, numbers["gelb"]).locator(".board-review").inner_text()
         assert "rot 1/3" in _card(page, numbers["rot"]).locator(".board-review").inner_text()
         assert _card(page, numbers["laeuft"]).locator(".board-review-symbol.pulse").count() == 1
+        assert errors == []
+    finally:
+        context.close()
+
+
+def test_running_review_turns_stuck_on_an_open_board_without_any_change(chromium, board_server):
+    """Review-B1: ein haengendes Review aendert nichts am Board; das Badge muss trotzdem
+    nach 30 Minuten von "laeuft" auf "haengt" wechseln, ohne Neuladen der Seite."""
+    number = _ticket_in_review(board_server, "laeuft lange")
+    _review(board_server, number, "running")
+    context = chromium.new_context()
+    page = context.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    try:
+        page.clock.install()
+        page.goto(f"{board_server.url}/#token={HUMAN}")
+        page.click("[data-action='switch-tab'][data-tab='board']")
+        badge = _card(page, number).locator(".board-review")
+        badge.wait_for(timeout=10000)
+        assert badge.get_attribute("data-state") == "running"
+        _card(page, number).click()                                    # offene Ticketansicht ebenso
+        page.locator("#boardTaskReview .board-review[data-state='running']").wait_for(timeout=10000)
+        changes = board_server.human.get("/board/changes").json()["changes"]
+        page.clock.fast_forward("31:00")                               # 31 Minuten, Poll-Takt laeuft mit
+        page.locator(f"#boardColumns .board-card[data-ref='api#{number}'] .board-review[data-state='stuck']") \
+            .wait_for(timeout=10000)
+        page.locator("#boardTaskReview .board-review[data-state='stuck']").wait_for(timeout=10000)
+        assert board_server.human.get("/board/changes").json()["changes"] == changes   # wirklich keine Aenderung
         assert errors == []
     finally:
         context.close()

@@ -4,7 +4,7 @@
 // laufen ueber renderMarkdown() (DOMPurify).
 
 let _board = {statuses: [], projects: [], tasks: [], changes: null, open: null, query: '',
-              control: {pauses: [], hints: []}, role: '', approvalsOnly: false};
+              control: {pauses: [], hints: []}, role: '', approvalsOnly: false, stuck: ''};
 let _boardTimer = null;
 const BOARD_POLL_MS = 5000;
 const REVIEW_STUCK_MS = 30 * 60 * 1000;     // "laeuft" laenger als 30 Minuten: haengt (P4)
@@ -111,7 +111,13 @@ function _renderBoardProjects() {
 
 // ── Spalten und Karten ───────────────────────────────────────────────────
 
+// Welche Tickets gerade als "haengt" gelten: aendert sich mit der Uhr, nicht mit dem Board (P4, Review-B1)
+function _stuckKey() {
+  return _board.tasks.filter(task => _reviewState(task) === 'stuck').map(task => task.ref).join(' ');
+}
+
 function renderBoard() {
+  _board.stuck = _stuckKey();
   const cols = document.getElementById('boardColumns');
   if (!_board.projects.length) { _boardMessage(t('board.noProjects')); return; }
   const done = _board.statuses[_board.statuses.length - 1];
@@ -506,6 +512,12 @@ function _startBoardPolling() {
     try {
       const {changes} = await req('GET', '/board/changes');
       if (changes !== _board.changes) await _reloadBoard();
+      else if (_stuckKey() !== _board.stuck) {
+        // Ein Review ueberschreitet die 30 Minuten, ohne dass sich etwas aendert: neu zeichnen
+        renderBoard();
+        renderBoardApprovals();
+        if (_board.open) await _renderOpenTask();
+      }
     } catch { /* naechster Versuch */ }
   }, BOARD_POLL_MS);
 }
