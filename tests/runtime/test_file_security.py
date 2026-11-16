@@ -37,7 +37,9 @@ def _trustees(path):
 
 
 def _only_user_system_admins(path):
-    return _trustees(path) == {file_security._user_sid(), "SY", "BA"} and len(_acl_lines(path)) == 3
+    own = set(file_security.user_trustees())                 # SID oder Kuerzel wie "LA" (CI-Runner)
+    trustees = _trustees(path)
+    return trustees - own == {"SY", "BA"} and len(trustees & own) == 1 and len(_acl_lines(path)) == 3
 
 
 def _grant_users_read(path):
@@ -57,6 +59,24 @@ def test_restricted_file_shows_only_the_user(tmp_path):
     assert _only_user_system_admins(path)
     assert any(os.environ["USERNAME"].lower() in line.lower() for line in _acl_lines(path))
     assert file_security.foreign_access(path) == []
+
+
+@windows
+def test_builtin_administrator_as_user_is_not_foreign(tmp_path, monkeypatch):
+    """CI-Runner: runneradmin ist der eingebaute Administrator (RID 500), die SDDL nennt ihn "LA"."""
+    admin = file_security._user_sid().rsplit("-", 1)[0] + "-500"
+    path = tmp_path / "secret.key"
+    path.write_bytes(b"x")
+    monkeypatch.setattr(file_security, "_user_sid", lambda: admin)
+    try:
+        file_security.restrict(path)
+        assert "LA" in _trustees(path)                      # Windows kuerzt die SID wirklich
+        assert file_security.foreign_access(path) == []
+        assert not file_security.harden(path)
+        assert _only_user_system_admins(path)
+    finally:
+        monkeypatch.undo()
+        file_security.restrict(path)                        # wieder fuer den echten Benutzer
 
 
 @windows

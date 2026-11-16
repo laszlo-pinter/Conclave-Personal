@@ -41,11 +41,11 @@ def foreign_access(path: Path) -> list[str]:
     sddl = _dacl_sddl(path)
     if "NO_ACCESS_CONTROL" in sddl:
         return ["WD"]
-    sid = _user_sid()
+    own = user_trustees()
     foreign = []
     for ace in re.findall(r"\(([^)]*)\)", sddl):
         fields = ace.split(";")
-        if len(fields) >= 6 and fields[0] in ("A", "OA") and fields[5] not in (sid, *_TRUSTED) \
+        if len(fields) >= 6 and fields[0] in ("A", "OA") and fields[5] not in (*own, *_TRUSTED) \
                 and fields[5] not in foreign:
             foreign.append(fields[5])
     return foreign
@@ -221,6 +221,32 @@ def _user_sid() -> str:
             kernel32.LocalFree(ctypes.cast(text, ctypes.c_void_p))
     finally:
         kernel32.CloseHandle(token)
+
+
+def user_trustees() -> tuple[str, ...]:
+    """Wie die SDDL den Benutzer nennt: seine SID und, bei bekannten Konten, das Kuerzel.
+
+    Windows kuerzt etwa den eingebauten Administrator (RID 500, z. B. ``runneradmin`` auf
+    CI-Runnern) zu ``LA``; ohne das Kuerzel gaelte der Benutzer selbst als fremd.
+    """
+    sid = _user_sid()
+    ctypes, wintypes, advapi32, kernel32 = _api()
+    descriptor = ctypes.c_void_p()
+    if not advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            f"D:(A;;FA;;;{sid})", _SDDL_REVISION, ctypes.byref(descriptor), None):
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        text = wintypes.LPWSTR()
+        if not advapi32.ConvertSecurityDescriptorToStringSecurityDescriptorW(
+                descriptor, _SDDL_REVISION, _DACL_INFORMATION, ctypes.byref(text), None):
+            raise ctypes.WinError(ctypes.get_last_error())
+        try:
+            alias = text.value.rsplit(";", 1)[-1].rstrip(")")
+        finally:
+            kernel32.LocalFree(ctypes.cast(text, ctypes.c_void_p))
+    finally:
+        kernel32.LocalFree(descriptor)
+    return (sid,) if alias == sid else (sid, alias)
 
 
 def _set_dacl(path: Path, sddl: str) -> None:
