@@ -62,6 +62,7 @@ function downloadMsg(btn){
   const seq=btn.dataset.seq||'0';
   const blob=new Blob([content],{type:'text/markdown'});
   const url=URL.createObjectURL(blob);
+  // safe-html: Blob-URL aus URL.createObjectURL, kein Text aus der API
   const a=document.createElement('a');a.href=url;a.download=`${name}-${seq}.md`;
   document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
   toast(t('download.done', {name, seq}),'ok');
@@ -72,7 +73,7 @@ async function sendMsg(){
   const input=document.getElementById('msgInput'),content=input.value.trim();
   if(!content||!currentConvId)return;
   input.value='';autoResize(input);
-  try{await req('POST',`/conversations/${currentConvId}/messages`,{content});const d=await req('GET',`/conversations/${currentConvId}`);renderMessages(d.messages||[]);}
+  try{await req('POST',`/conversations/${pathSeg(currentConvId)}/messages`,{content});const d=await req('GET',`/conversations/${pathSeg(currentConvId)}`);renderMessages(d.messages||[]);}
   catch(e){toast(e.message,'err');}
 }
 
@@ -82,7 +83,7 @@ async function invokeP(){
   const btn=document.getElementById('btnInvoke');btn.disabled=true;
   // safe-html: statisches Markup
   btn.innerHTML='<span class="spinner"></span>';
-  try{await req('POST',`/conversations/${currentConvId}/participants/${pid}/invoke`);const d=await req('GET',`/conversations/${currentConvId}`);renderMessages(d.messages||[]);toast(t('input.answerReceived'),'ok');}
+  try{await req('POST',`/conversations/${pathSeg(currentConvId)}/participants/${pathSeg(pid)}/invoke`);const d=await req('GET',`/conversations/${pathSeg(currentConvId)}`);renderMessages(d.messages||[]);toast(t('input.answerReceived'),'ok');}
   catch(e){toast(e.message,'err');}
   finally{btn.disabled=false;btn.textContent=t('input.invoke');}
 }
@@ -103,13 +104,14 @@ async function streamP(){
   let buf='';
   try{
     const hdrs={};if(apiKey) hdrs['Authorization']='Bearer '+apiKey;
-    const res=await fetch(`${API}/conversations/${currentConvId}/participants/${pid}/stream`,{headers:hdrs});
+    const res=await fetch(`${API}/conversations/${pathSeg(currentConvId)}/participants/${pathSeg(pid)}/stream`,{headers:hdrs});
     const reader=res.body.getReader(),dec=new TextDecoder();let done=false;
     while(!done){
       const{value,done:d}=await reader.read();done=d;
       for(const line of dec.decode(value||new Uint8Array(),{stream:!done}).split('\n')){
         if(!line.startsWith('data: '))continue;
-        const p=line.slice(6);if(p==='[DONE]'||p.startsWith('[ERROR]')){done=true;break;}
+        const p=line.slice(6);if(p==='[DONE]'){done=true;break;}
+        if(p.startsWith('[ERROR]')){let m='';try{m=JSON.parse(p.slice(7)).error||'';}catch(_){}if(m)toast(m,'err');done=true;break;}
         buf+=p;sc.textContent=buf;sc.appendChild(cursor);scrollBottom();
       }
     }
@@ -118,7 +120,7 @@ async function streamP(){
     const sc2=div.querySelector('.msg-content');
     // safe-html: renderMarkdown() (DOMPurify)
     if(sc2&&buf) {sc2.innerHTML=renderMarkdown(buf);sc2.querySelectorAll('pre code').forEach(el=>hljs.highlightElement(el));}
-    const data=await req('GET',`/conversations/${currentConvId}`);
+    const data=await req('GET',`/conversations/${pathSeg(currentConvId)}`);
     const last=data.messages.at(-1);
     div.querySelector('.msg-seq').textContent=last?'#'+last.sequence:'';
     if(last){div.dataset.seq=last.sequence;attachContextChip(div,last.context,last.id);}
@@ -149,8 +151,8 @@ async function runOrch(){
     return;
   }
   try{
-    await req('POST',`/conversations/${currentConvId}/orchestrate`,{sequence:seq});
-    const d=await req('GET',`/conversations/${currentConvId}`);renderMessages(d.messages||[]);
+    await req('POST',`/conversations/${pathSeg(currentConvId)}/orchestrate`,{sequence:seq});
+    const d=await req('GET',`/conversations/${pathSeg(currentConvId)}`);renderMessages(d.messages||[]);
     toast(t('input.answers', {count: seq.length, parallel: ''}),`ok`);
   }catch(e){toast(e.message,'err');}
   finally{btn.disabled=false;btn.textContent=`↻ ${t('input.orchestrate')}`;}
@@ -177,7 +179,7 @@ async function runParallelOrchStream(seq,btn){
 
   try{
     const hdrs={'Content-Type':'application/json'};if(apiKey)hdrs['Authorization']='Bearer '+apiKey;
-    const res=await fetch(`${API}/conversations/${currentConvId}/orchestrate-parallel-stream`,{
+    const res=await fetch(`${API}/conversations/${pathSeg(currentConvId)}/orchestrate-parallel-stream`,{
       method:'POST',headers:hdrs,body:JSON.stringify({groups:[seq]}),
     });
     if(!res.ok){const txt=await res.text();throw new Error(`HTTP ${res.status}: ${txt.slice(0,200)}`);}
@@ -194,7 +196,7 @@ async function runParallelOrchStream(seq,btn){
         handleParallelOrchEvent(ev,{pending,status});
       }
     }
-    const data=await req('GET',`/conversations/${currentConvId}`);
+    const data=await req('GET',`/conversations/${pathSeg(currentConvId)}`);
     renderMessages(data.messages||[]);
     toast(t('input.answers', {count: seq.length, parallel: ' (parallel)'}),'ok');
   }catch(e){

@@ -77,7 +77,7 @@ async function createConv(){
   const topic=document.getElementById('newConvTopic').value.trim();
   try{
     const d=await req('POST','/conversations');
-    if(topic) await req('POST',`/conversations/${d.conversation_id}/topic`,{topic});
+    if(topic) await req('POST',`/conversations/${pathSeg(d.conversation_id)}/topic`,{topic});
     toast(t('conv.created'),'ok');
     closeOverlay('overlayNewConv');
     await loadConversations();
@@ -86,7 +86,7 @@ async function createConv(){
 }
 
 async function delConv(id){
-  try{await req('DELETE',`/conversations/${id}`);if(currentConvId===id){currentConvId=null;showEmpty();}await loadConversations();toast(t('conv.deleted'),'ok');}
+  try{await req('DELETE',`/conversations/${pathSeg(id)}`);if(currentConvId===id){currentConvId=null;showEmpty();}await loadConversations();toast(t('conv.deleted'),'ok');}
   catch(e){toast(e.message,'err');}
 }
 
@@ -101,7 +101,7 @@ async function selectConv(id){
   tb.dataset.action='copy-topbar-id';
   document.getElementById('btnExport').disabled=false;
   try{
-    const d=await req('GET',`/conversations/${id}`);
+    const d=await req('GET',`/conversations/${pathSeg(id)}`);
     participants=d.participants||[];
     currentFloor=d.floor||null;
     currentTopic=d.topic||'';
@@ -131,7 +131,7 @@ function openTopicModal(){
 async function saveTopic(){
   const topic=document.getElementById('topicInput').value.trim();
   try{
-    await req('POST',`/conversations/${currentConvId}/topic`,{topic});
+    await req('POST',`/conversations/${pathSeg(currentConvId)}/topic`,{topic});
     currentTopic=topic;renderTopicUI();
     await loadConversations();
     closeOverlay('overlayTopic');

@@ -37,12 +37,29 @@ Wer schreibt, ergibt sich aus dem Token, nicht aus einem Feld der Anfrage:
 - **Tickets „nur für Menschen“** gibt `next_task` nie an Agenten; Agenten
   können sie nur lesen. Agenten dürfen die Markierung setzen, aber nicht
   entfernen.
+- **Priorität setzt der Mensch:** Die Reihenfolge der ersten Spalte ist die
+  Priorität (`rank`). Neue Tickets kommen ans Ende, so bleibt die Reihenfolge
+  des Plans erhalten. Umsortieren (Drag & Drop in der ersten Spalte, `index`
+  oder `rank`) darf nur der Mensch; Agenten bekommen `403`. Kommt ein Ticket
+  zurück in die erste Spalte, steht es wieder an seiner Prioritätsstelle. In den
+  anderen Spalten zählt der Arbeitsstand: wer ankommt, steht hinten.
+- **Übernehmen statt Überspringen:** Aus der ersten Spalte kommt ein Agent nur
+  über `next_task` heraus (oberstes oder bestimmtes Ticket); jede andere
+  Statusänderung aus der ersten Spalte ergibt `403`, auch `todo → doing`. Der
+  Rückweg `review → doing` geht.
 - **Kommentare von Agenten und von Conclave sind unveränderlich**, auch für den
   Menschen, ebenso importierte. Der Mensch kann eigene Kommentare ändern und
   löschen.
-- **Verlauf:** Jede Änderung von Status, Titel, Beschreibung und Markierung
-  wird mit altem und neuem Wert gespeichert, so lässt sich etwa erkennen, ob
-  jemand die Abnahmekriterien abgeschwächt hat.
+- **Verlauf:** Das Anlegen und jede Änderung von Status, Titel, Beschreibung,
+  Markierung, Priorität, Tags und Position wird mit altem und neuem Wert und
+  Herkunft gespeichert, so lässt sich etwa erkennen, ob jemand die
+  Abnahmekriterien abgeschwächt hat. Bearbeitete und gelöschte Kommentare
+  stehen ebenfalls im Verlauf. Jedes Ticket zeigt, wer es angelegt hat
+  (`created_by`); Agenten legen Tickets nur in der ersten Spalte an.
+- **Projekt-Verlauf:** Anlegen, Umbenennen und gelöschte Tickets eines Projekts
+  (`GET /board/projects/<slug>/history`).
+- **Gleichzeitig ändern:** Wer beim Ändern die gelesene `version` mitgibt,
+  überschreibt keine Änderung, die inzwischen ein anderer gemacht hat (`409`).
 - Löschen, Projekte verwalten und der Import sind dem Menschen vorbehalten.
 
 Die Grenze aus [Sicherheit](sicherheit.md#grenze-gleicher-betriebssystem-benutzer)
@@ -84,10 +101,38 @@ Agenten bekommen sechs Tools: `conclave_board_list`, `conclave_board_get`,
 `conclave_board_comment`. Ihre Antworten kennzeichnen Ticket-Texte als Daten,
 nicht als Anweisungen.
 
+## Vorhaben
+
+Ein Projekt kann Vorhaben haben, z. B. `sich` für die Sicherheitsarbeit oder
+`board` für das Board selbst. Jedes Vorhaben zählt seine Tickets eigens:
+`conclave/sich-3` ist das dritte Ticket im Vorhaben `sich`. Die Projektnummer
+bleibt, `conclave#33` zeigt weiter auf dasselbe Ticket. API, MCP und `next`
+nehmen beide Formen an; Antworten nennen beide (`ref`, `initiative_ref`).
+
+- Vorhaben anlegen, umbenennen, ranken und Tickets zuordnen darf nur der Mensch.
+  Agenten sehen die Vorhaben (`conclave_board_list` mit Projekt) und können
+  beim Anlegen ein vorhandenes angeben.
+- Die Nummern eines Vorhabens sind fortlaufend, auch wenn mehrere gleichzeitig
+  anlegen. Wird ein Ticket einem anderen Vorhaben zugeordnet, bekommt es dort
+  die nächste Nummer; seine alte bleibt frei.
+- `next` nimmt in der ersten Spalte zuerst Nacharbeit aus dem Review, dann die
+  Vorhaben nach Rang, darin die Tickets nach Rang. Tickets ohne Vorhaben kommen
+  danach.
+
+Vorhandene Tickets ordnest du per CLI zu; die Reihenfolge der Referenzen
+ergibt die Nummern:
+
+```powershell
+conclave board initiative add conclave sich "Sicherheit"
+conclave board initiative assign conclave sich conclave#31 conclave#32 conclave#33
+conclave board initiative rank conclave sich 1
+conclave board initiative list conclave
+```
+
 ## In der UI
 
 Der Bereich „Board“ zeigt die Spalten aus `config.toml` mit Karten (Referenz,
-Titel, Tags, Markierung „nur für Menschen“). Karten lassen sich per Drag & Drop
+Vorhaben-Nummer, Titel, Tags, Markierung „nur für Menschen“, Review-Status). Karten lassen sich per Drag & Drop
 in eine andere Spalte und innerhalb der Spalte verschieben. Ein Klick öffnet
 das Ticket: Beschreibung (Markdown, gefiltert wie Modellantworten),
 Kommentare mit Herkunft, Verlauf, Status, Markierung und ein Feld für neue
@@ -95,14 +140,33 @@ Kommentare. Dazu kommen ein neues Ticket, die Suche, die Projektauswahl und
 der Schalter „Erledigte zeigen“. Ändert ein Agent etwas, zieht die UI nach
 wenigen Sekunden nach.
 
+Der Review-Status steht an der Karte und in der Ticket-Ansicht, immer mit
+Symbol und Text neben der Farbe:
+
+| Status | Anzeige |
+|---|---|
+| läuft | ● „Review läuft“ (neutral, pulsierend) |
+| grün | ✓ „in Ordnung“ |
+| gelb | ↻ „Nacharbeit“; zurück in der ersten Spalte mit „aus Review vom …“ |
+| rot | ✕ „nicht bestanden“ mit den roten Runden, z. B. „rot 2/3“ |
+| hängt | ⚠ „Review hängt“ (läuft seit mehr als 30 Minuten) |
+
+Die Ticket-Ansicht nennt dazu die Zahl der blockierenden Punkte und Vorschläge.
+Über den Spalten steht „N Tickets warten auf deine Freigabe“ (grün in
+`review`); ein Klick zeigt nur diese, ein zweiter wieder alle. Karten
+verschieben lässt sich nur mit dem Mensch-Zugang, weil das Spalte und
+Priorität ändert.
+
 ## Ein Ablauf als Beispiel
 
 1. **Plan:** Mensch und Agent schreiben einen Plan. Jedes Arbeitspaket wird ein
    Ticket mit Ziel, Ausgangslage, Inhalt und Abnahme. Offene Entscheidungen
    werden eigene Tickets „nur für Menschen“.
-2. **Holen:** Der umsetzende Agent nimmt per `conclave_board_next` das oberste
-   freie Ticket der ersten Spalte; Conclave schiebt es atomar in die zweite,
-   zwei Agenten erwischen nie dasselbe Ticket.
+2. **Übernehmen:** Vor der Arbeit übernimmt der Agent das Ticket, mit
+   `conclave_board_next` das oberste freie der ersten Spalte oder mit
+   `conclave_board_next(task="api#12")` genau dieses. Conclave schiebt es atomar
+   in die zweite Spalte; zwei Agenten erwischen nie dasselbe Ticket, und das
+   Board zeigt, woran gearbeitet wird.
 3. **Umsetzen:** Der Agent arbeitet, testet und schreibt Branch, Commits und
    Testergebnis als Kommentar ans Ticket. Dann schiebt er es nach `review`.
 4. **Zweitmeinung:** Mit `conclave_consult` holt er Meinungen mehrerer Modelle
@@ -114,8 +178,61 @@ wenigen Sekunden nach.
 
 Ein automatischer Reviewer lässt sich anschließen: ein eigener Prozess, der
 das Board beobachtet und bei jedem Ticket in `review` einen Review-Agenten
-startet, der am Ticket kommentiert. Er gehört nicht zu Conclave. Gib ihm nur
-das Agent-Token, Lesezugriff auf den Code und keine Shell.
+startet. Er gehört nicht zu Conclave. Gib ihm das Reviewer-Token
+(`conclave token show --reviewer`), den MCP-Server `conclave-mcp --reviewer`,
+Lesezugriff auf den Code und keine Shell.
+
+**Review-Ablauf:**
+
+1. Kommt ein Ticket nach `review`, steht sein Review-Status auf `none`.
+2. Der Reviewer setzt beim Start `running` und am Ende das Ergebnis mit dem
+   Review als Kommentar, in einem Aufruf (`conclave_board_review`):
+   - **grün** (`passed`): nichts offen. Das Ticket bleibt in `review`, bis der
+     Mensch es nach `done` schiebt.
+   - **gelb** (`rework`): die Abnahme ist erfüllt, aber Punkte sind offen.
+   - **rot** (`failed`): Tests rot, Abnahme nicht erfüllt oder falscher Ansatz.
+3. Bei gelb und rot schiebt Conclave das Ticket zurück in die erste Spalte,
+   dort vor alle anderen. `conclave_board_next` liefert es als Nächstes, mit
+   dem Review-Kommentar (`last_review`).
+4. Nach dem dritten roten Review in Folge wird das Ticket „nur für Menschen“;
+   dann entscheidet der Mensch. Gibt er es wieder frei, beginnt die Zählung neu.
+5. Tickets „nur für Menschen“ werden nicht automatisch reviewt.
+
+Den Review-Status setzt nur der Reviewer-Zugang. Ein Agent, der Code schreibt,
+kann sich also nicht selbst grün geben, solange er das Reviewer-Token nicht
+lesen kann.
+
+**Steuertickets:** Mit „Agenten pausieren“ (oben im Board) oder einem
+Steuerticket (`kind=control`) gibt der Mensch den Agenten eine Anweisung, ohne
+ihre Sitzung abzubrechen. Ein Banner über den Spalten zeigt sie an.
+
+- **Pause:** `conclave_board_next` liefert kein Ticket mehr, sondern die Pause.
+  Jede Antwort der Board-Tools trägt sie im Feld `control`, ein Agent sieht sie
+  also auch mitten in einem Paket. Er hält am nächsten sauberen Punkt an (Commit,
+  Zwischenstand als Kommentar) und wartet. Schließt der Mensch die Pause, geht
+  es weiter.
+- **Hinweis:** kommt beim nächsten Kontakt mit dem Board; der Agent quittiert
+  mit einem Kommentar am Hinweis, das Banner zeigt „quittiert von …“. Der Mensch
+  schließt ihn.
+- Nur Steuertickets vom Menschen gelten als Anweisung. Ticket-Texte bleiben für
+  Agenten Daten.
+- Grenze: Ein Steuerticket unterbricht keinen laufenden Tool-Aufruf. Für einen
+  sofortigen Halt bleibt der Stopp im Agent-Host.
+
+**Arbeitsweise des umsetzenden Agenten**, die sich mit dem Review bewährt hat:
+
+1. Tickets nur über `conclave_board_next` holen; nach `review` schiebt er
+   selbst, mit Branch, Commits und Testergebnis als Kommentar. Der Reviewer
+   prüft genau die genannten Commits.
+2. Nicht auf den Menschen warten: grün ist keine Freigabe.
+3. Höchstens ein offenes Review: Steht ein eigenes Ticket noch ohne Ergebnis in
+   `review`, schiebt der Agent das nächste erst nach `review`, wenn das erste
+   ein Ergebnis hat. Weiterarbeiten darf er.
+4. Gelb unterbricht nicht: erst das aktuelle Ticket fertig, dann das gelbe.
+5. Rot stoppt: am nächsten sauberen Punkt (Commit) anhalten, das am aktuellen
+   Ticket vermerken und das rote Ticket nehmen.
+6. Punkt für Punkt antworten: „B1 behoben (`abc1234`), V1 umgesetzt,
+   V2 abgelehnt: …“.
 
 ## Import aus Kanzo
 
@@ -145,7 +262,8 @@ Invoke-RestMethod -Method Post http://localhost:8000/board/import `
   `skipped_refs`). Neue Kommentare zu einem schon importierten Ticket werden
   **nicht** nachgetragen.
 - Importierte Kommentare haben keine belegte Herkunft („unbekannt“), auch wenn
-  der Export einen Autor nennt. Importierte Tickets haben keinen Verlauf.
+  der Export einen Autor nennt. Importierte Tickets haben als Verlauf nur den
+  Eintrag „Angelegt“ (Herkunft: wer importiert hat, Wert `import`).
 - Status, die in `[board] statuses` fehlen, lehnt der Import ab; die Spalten
   vorher passend einstellen.
 
@@ -160,6 +278,8 @@ source = "kanzo"
 
 [kanzo]
 url = "http://localhost:4242/mcp"
+
+[consultations]
 reviewers = ["gpt", "claude"]
 ```
 
@@ -185,7 +305,7 @@ ist kein Herkunftsnachweis. Im eigenen Board kommt die Herkunft aus dem Token.
   eine harte Grenze, siehe
   [Sicherheit](sicherheit.md#grenze-gleicher-betriebssystem-benutzer).
 - Der Ticket-Inhalt geht bei einer Consultation an die Provider der Reviewer;
-  `[kanzo] reviewers` legt fest, an welche.
+  `[consultations] reviewers` legt fest, an welche.
 - Bilder an Tickets und Repository-Verknüpfungen aus Kanzo übernimmt der
   Import nicht.
 

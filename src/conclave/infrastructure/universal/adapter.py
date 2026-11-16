@@ -17,19 +17,19 @@ Architektur:
           ├── profile.build_headers() → Auth-Headers
           ├── _format_messages() → Provider-Messages
           ├── profile.build_body() → Request-JSON
-          ├── httpx.post(url, json=body, headers=headers)
+          ├── _http_post(...) ueber GuardedTransport (Ziel je Anfrage geprueft)
           ├── profile.extract_response() → Antworttext
           └── _extract_usage() → TokenUsage
 """
 
 from __future__ import annotations
 
+import ipaddress
 import os
-import re
-import socket
 from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -40,6 +40,7 @@ from conclave.domain.context_report import (
     select_messages,
 )
 from conclave.domain.conversation import Conversation
+from conclave.domain.errors import redact_secrets
 from conclave.domain.message import MessageAuthorType
 from conclave.domain.model_response import Completion, TokenUsage
 from conclave.domain.participant import Participant
@@ -51,6 +52,7 @@ from conclave.infrastructure.system_prompt import (  # noqa: F401 - alte Namen f
     collect_context_files as _collect_context_files,
     load_context_files as _load_context_files,
 )
+from conclave.infrastructure.universal.egress import LOCAL_HOSTS, GuardedTransport, address_blocked
 from conclave.infrastructure.universal.profiles import (
     ProviderProfile,
     get_profile,
@@ -144,58 +146,60 @@ def _format_messages(
     return result
 
 
-def _is_private_target(host: str) -> bool:
-    """Prueft Host/IP auf SSRF-gefaehrdete interne Zielbereiche."""
-    import ipaddress
-
-    def _blocked(value: str) -> bool:
-        ip = ipaddress.ip_address(value.split("%", 1)[0])
-        return ip.is_private or ip.is_reserved or ip.is_loopback or ip.is_link_local
-
-    try:
-        return _blocked(host)
-    except ValueError:
-        pass
-
-    try:
-        infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
-    except OSError:
-        return False
-    for info in infos:
-        address = info[4][0]
-        try:
-            if _blocked(address):
-                return True
-        except ValueError:
-            continue
-    return False
+DEFAULT_OLLAMA_PORT = 11434
 
 
-def _validate_url(url: str, *, allow_localhost: bool = False) -> None:
-    """Blockt SSRF-gefaehrdete URLs.
+def ollama_port() -> int:
+    """Port des lokalen Providers (Ollama); nur dieser ist auf localhost erlaubt."""
+    return int(os.environ.get("CONCLAVE_OLLAMA_PORT", DEFAULT_OLLAMA_PORT))
 
-    Lokale Ziele sind nur fuer explizite lokale Provider wie Ollama erlaubt.
+
+def _validate_url(url: str, *, local_port: int | None = None) -> None:
+    """Prueft die Provider-URL beim Anlegen des Adapters.
+
+    Entfernte Provider nur ueber https; localhost nur fuer den lokalen Provider
+    auf ``local_port``. Namen prueft der Transport bei jeder Anfrage.
     """
     if not url:
         return
-    from urllib.parse import urlparse
     parsed = urlparse(url)
     scheme = parsed.scheme.lower()
     if scheme not in ("http", "https"):
         raise ValueError(f"URL-Schema '{scheme}' nicht erlaubt (nur http/https)")
-    host = parsed.hostname or ""
-    # Bekannte Provider immer erlauben
-    allowed_hosts = {
-        "api.openai.com", "api.anthropic.com",
-        "generativelanguage.googleapis.com", "api.mistral.ai",
-        "api.deepseek.com", "dashscope-intl.aliyuncs.com",
-    }
-    if host in allowed_hosts:
+    host = (parsed.hostname or "").lower()
+    if host in LOCAL_HOSTS:
+        port = parsed.port or (443 if scheme == "https" else 80)
+        if local_port is None:
+            raise ValueError("localhost ist nur fuer den lokalen Provider (Ollama) erlaubt")
+        if port != local_port:
+            raise ValueError(f"Lokaler Provider nur auf Port {local_port} erlaubt")
         return
-    if allow_localhost and host in ("localhost", "127.0.0.1", "::1"):
+    if scheme != "https":
+        raise ValueError("Entfernte Provider nur ueber https")
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
         return
-    if _is_private_target(host):
-        raise ValueError(f"Private/reservierte IP oder Host '{host}' nicht erlaubt")
+    if address_blocked(host):
+        raise ValueError("Private oder reservierte Adresse nicht erlaubt")
+
+
+def _transport(provider: str, local_port: int | None) -> GuardedTransport:
+    return GuardedTransport(provider, local_port=local_port)
+
+
+def _http_post(url: str, *, transport: httpx.BaseTransport, timeout: float, **kwargs) -> httpx.Response:
+    """POST ueber den geprueften Transport (Nahtstelle fuer Tests)."""
+    with httpx.Client(transport=transport, timeout=timeout) as client:
+        return client.post(url, **kwargs)
+
+
+@contextmanager
+def _http_stream(method: str, url: str, *, transport: httpx.BaseTransport, timeout: float, **kwargs):
+    """Stream ueber den geprueften Transport (Nahtstelle fuer Tests)."""
+    with httpx.Client(transport=transport, timeout=timeout) as client:
+        with client.stream(method, url, **kwargs) as response:
+            yield response
 
 
 def _provider_error_text(response) -> str:
@@ -285,7 +289,8 @@ class UniversalAdapter:
         self._profile: ProviderProfile = get_profile(profile_key)
 
         self._api_url = api_url
-        _validate_url(api_url, allow_localhost=(provider_name == "ollama"))
+        self._local_port = ollama_port() if provider_name == "ollama" else None
+        _validate_url(api_url, local_port=self._local_port)
         self._api_key = api_key
         self._model = model
         self._response_path = response_path
@@ -372,29 +377,30 @@ class UniversalAdapter:
         logger.info("universal.complete request",
                     extra={"model": self._model, "provider": self._provider_name})
 
-        response = httpx.post(
-            url, json=body, headers=headers, params=params, timeout=self._timeout,
-        )
-        if response.status_code >= 400:
-            detail = _provider_error_text(response)
-            logger.error("API-Fehler %s %s: %s",
-                         response.status_code, url,
-                         detail,
-                         extra={"provider": self._provider_name, "model": self._model})
-            if response.status_code < 500 and response.status_code != 429:
-                raise ValueError(
-                    f"Provider '{self._provider_name}' HTTP {response.status_code}: {detail}"
-                )
-        response.raise_for_status()
+        with self._safe_errors():
+            response = _http_post(
+                url, json=body, headers=headers, params=params, timeout=self._timeout,
+                transport=_transport(self._provider_name, self._local_port),
+            )
+            if response.status_code >= 400:
+                detail = self._clean(_provider_error_text(response))
+                logger.error("API-Fehler %s: %s", response.status_code, detail,
+                             extra={"provider": self._provider_name, "model": self._model})
+                if response.status_code < 500 and response.status_code != 429:
+                    raise ValueError(
+                        f"Provider '{self._provider_name}' HTTP {response.status_code}: {detail}"
+                    )
+            response.raise_for_status()
         data = response.json()
 
         text = self._profile.extract_response(data, self._response_path)
         if text is None:
-            logger.error("Response extraction failed. Full response: %s", str(data)[:1000],
+            # Nur die Feldnamen: die Antwort selbst kann vertrauliche Inhalte enthalten
+            fields = sorted(data)[:10] if isinstance(data, dict) else type(data).__name__
+            logger.error("Antwort ohne Text unter '%s' (Felder: %s)", self._response_path, fields,
                          extra={"provider": self._provider_name})
             raise ValueError(
-                f"Response-Path '{self._response_path}' lieferte None. "
-                f"Response: {str(data)[:500]}"
+                f"Response-Path '{self._response_path}' lieferte None (Felder: {fields})."
             )
 
         usage = self._extract_usage(data)
@@ -420,8 +426,9 @@ class UniversalAdapter:
         url, params, headers, body = request.url, request.params, request.headers, request.body
         # Usage ist lokal pro Stream - nie die eines frueheren Aufrufs (A7).
         tokens: dict[str, int | None] = {"input": None, "output": None}
-        with httpx.stream(
-            "POST", url, json=body, headers=headers, params=params, timeout=self._timeout
+        with self._safe_errors(), _http_stream(
+            "POST", url, json=body, headers=headers, params=params, timeout=self._timeout,
+            transport=_transport(self._provider_name, self._local_port),
         ) as response:
             response.raise_for_status()
             for line in response.iter_lines():
@@ -439,6 +446,24 @@ class UniversalAdapter:
             usage = TokenUsage(input_tokens=tokens["input"] or 0,
                                output_tokens=tokens["output"] or 0)
         yield Completion(usage=usage, report=request.report)
+
+    def _clean(self, text: str) -> str:
+        """Provider-Text ohne den eigenen Key und ohne URLs."""
+        if self._api_key:
+            text = text.replace(self._api_key, "***")
+        return redact_secrets(text)
+
+    @contextmanager
+    def _safe_errors(self):
+        """httpx-Fehler ohne URL und Key weitergeben (Typ bleibt fuer Retry/Mapping)."""
+        name = self._provider_name
+        try:
+            yield
+        except httpx.HTTPStatusError as exc:
+            raise httpx.HTTPStatusError(f"Provider '{name}' HTTP {exc.response.status_code}",
+                                        request=exc.request, response=exc.response) from None
+        except httpx.TransportError as exc:
+            raise type(exc)(f"Provider '{name}': {type(exc).__name__}") from None
 
     def _merge_stream_usage(self, tokens: dict, source: dict | None) -> None:
         """Uebernimmt Usage-Angaben eines Stream-Ereignisses (spaetere Werte gewinnen)."""

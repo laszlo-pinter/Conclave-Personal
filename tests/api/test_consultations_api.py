@@ -179,7 +179,7 @@ def test_disabled_without_reviewer_list(env):
 
 
 def test_disabled_without_consultations_object():
-    client = create_app(CLIHandler(None)).test_client()
+    client = create_app(CLIHandler(None), allow_unauthenticated=True).test_client()
     assert client.post("/consultations", json={"task": "api#1", "question": "?"}).status_code == 503
 
 

@@ -12,6 +12,7 @@
 <script src="static/vendor/marked.min.js"></script>
 <script src="static/vendor/highlight/highlight.min.js"></script>
 <script src="static/vendor/purify.min.js"></script>
+<script src="static/js/theme.js"></script>
 <script src="static/js/state.js"></script>
 <script src="static/js/api.js"></script>
 <script src="static/js/i18n.js"></script>
@@ -24,9 +25,10 @@
 <aside class="sb">
   <div class="sb-logo">
     <div class="logo-mark">
-      <svg viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="#000" stroke-width="1.5"/><circle cx="4.5" cy="7" r="1.5" fill="#000"/><circle cx="9.5" cy="7" r="1.5" fill="#000"/></svg>
+      <svg viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.5"/><circle cx="4.5" cy="7" r="1.5" fill="currentColor"/><circle cx="9.5" cy="7" r="1.5" fill="currentColor"/></svg>
     </div>
     <div class="logo-text">Conclave</div>
+    <span class="role-badge" id="roleBadge" hidden data-i18n-title="auth.roleTitle" title="Rolle dieses Zugangs"></span>
   </div>
   <div class="sb-tabs">
     <button class="sb-tab active" data-action="switch-tab" data-tab="conv" data-i18n="nav.studio">Studio</button>
@@ -112,6 +114,14 @@
         <option value="en" data-i18n="lang.en">English</option>
       </select>
     </div>
+    <div class="language-row">
+      <span data-i18n="theme.label">Darstellung</span>
+      <select id="themeSelect" aria-label="Theme">
+        <option value="system" data-i18n="theme.system">System</option>
+        <option value="light" data-i18n="theme.light">Hell</option>
+        <option value="dark" data-i18n="theme.dark">Dunkel</option>
+      </select>
+    </div>
     <div class="api-status"><div class="api-dot" id="apiDot"></div><span id="apiLabel">Verbinde…</span></div>
     <button class="btn-key" data-action="open-key-modal">
       <span class="key-dot" id="keyDot"></span>
@@ -162,7 +172,7 @@
   <!-- Messages -->
   <div class="messages" id="messages">
     <div class="empty" id="emptyMsg">
-      <div class="empty-icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="9" stroke="#6b7280" stroke-width="1.5"/><circle cx="7.5" cy="11" r="2" fill="#6b7280"/><circle cx="14.5" cy="11" r="2" fill="#6b7280"/></svg></div>
+      <div class="empty-icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="9" stroke="currentColor" stroke-width="1.5"/><circle cx="7.5" cy="11" r="2" fill="currentColor"/><circle cx="14.5" cy="11" r="2" fill="currentColor"/></svg></div>
       <div class="empty-title" data-i18n="conv.noneSelected">Kein Gespraech gewaehlt</div>
       <div class="empty-sub" data-i18n="conv.selectOrCreate">Waehle eine Conversation oder erstelle eine neue.</div>
     </div>
@@ -239,8 +249,11 @@
           <select id="boardProject" class="board-input" data-i18n-title="board.project"></select>
           <input type="search" id="boardSearch" class="board-input" data-i18n-placeholder="board.search" placeholder="Suchen..."/>
           <button class="btn-full page-action" data-action="board-new" data-i18n="board.new">Neues Ticket</button>
+          <button class="btn-full secondary page-action board-approvals" id="boardApprovals" data-action="board-approvals" aria-pressed="false" hidden></button>
+          <button class="btn-full secondary page-action board-pause-btn" data-action="board-pause" data-i18n="board.pauseAgents">Agenten pausieren</button>
         </div>
       </div>
+      <div class="board-control" id="boardControl" role="status" aria-live="polite" hidden></div>
       <div class="board-columns" id="boardColumns"><div class="surface-empty" data-i18n="common.loading">Lade...</div></div>
     </div>
   </div>
@@ -398,6 +411,7 @@
 <div class="overlay" id="overlayBoardTask">
   <div class="modal board-task-modal">
     <div class="modal-title"><span class="board-ref" id="boardTaskRef"></span> <span id="boardTaskTitle"></span></div>
+    <div class="board-task-review" id="boardTaskReview"></div>
     <div class="board-task-meta">
       <select id="boardTaskStatus" class="board-input" data-i18n-title="board.status"></select>
       <label class="board-check"><input type="checkbox" id="boardTaskHuman"/> <span data-i18n="board.humanOnly">Nur fuer Menschen</span></label>
@@ -478,7 +492,7 @@
       <button class="btn-sm" data-action="toggle-advanced" id="btnAdvanced" style="font-size:11px" data-i18n="agents.advancedShow">Erweitert anzeigen</button>
     </div>
     <div id="advancedFields" style="display:none">
-      <div class="field"><label data-i18n="agents.apiUrl">API-URL</label><input type="text" id="aApiUrl" placeholder="Wird vom Preset gesetzt" data-i18n-placeholder="agents.urlFromPreset"/></div>
+      <div class="field"><label data-i18n="agents.apiUrl">API-URL</label><input type="text" id="aApiUrl" placeholder="Wird vom Preset gesetzt" data-i18n-placeholder="agents.urlFromPreset"/><div class="field-hint" id="aApiUrlHint" hidden data-i18n="agents.apiUrlForeign">Eigene Adresse: Keys aus der Umgebung werden dafür nicht verwendet. Key oben eintragen.</div></div>
       <div class="field"><label data-i18n="agents.responsePath">Response-Path</label><input type="text" id="aResponsePath" placeholder="z.B. choices[0].message.content"/></div>
       <div class="field"><label data-i18n="agents.maxMessages">Max. Nachrichten</label><input type="number" id="aMaxMessages" min="0" step="1" placeholder="Standard" data-i18n-placeholder="agents.maxMessagesPlaceholder"/><div class="field-hint" data-i18n="agents.maxMessagesHint">Wie viele Nachrichten der Agent pro Aufruf sieht. Leer = Standard, 0 = keine Kuerzung.</div></div>
       <div class="field"><label data-i18n="agents.messageFormat">Message-Format</label>
@@ -620,6 +634,8 @@
       <textarea id="rulesInput" rows="8" placeholder="z.B.&#10;- Antworte knapp und fokussiert&#10;- Nutze Aufzaehlungen&#10;- Maximal 3 Saetze pro Punkt&#10;- Sprich Deutsch"></textarea>
       <div class="field-hint" data-i18n="rules.hint">Werden als System-Instruktion an alle Agenten gesendet, bevor sie antworten.</div>
     </div>
+    <label class="board-check"><input type="checkbox" id="rulesModelRead"/> <span data-i18n="rules.modelRead">Modelle dürfen Dateien selbst lesen (@read)</span></label>
+    <div class="field-hint" data-i18n="rules.modelReadHint">Aus: Modelle sehen nur Dateien, die du mit @workspace/… einfügst.</div>
     <div class="modal-acts">
       <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayRules" data-i18n="common.cancel">Abbrechen</button>
       <button class="btn-confirm" data-action="save-rules" data-i18n="common.save">Speichern</button>

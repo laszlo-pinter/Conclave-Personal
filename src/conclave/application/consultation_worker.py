@@ -17,7 +17,8 @@ from __future__ import annotations
 
 import queue
 import threading
-from datetime import UTC, datetime
+import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 from conclave.application.ports import ConsultationRepository
@@ -39,15 +40,23 @@ class ConsultationProcessor(Protocol):
         ...
 
 
+LEASE_SECONDS = 120.0                  # ohne Lebenszeichen gilt ein Lauf danach als abgebrochen
+
+
 class ConsultationWorker:
     def __init__(self, repository: ConsultationRepository, processor: ConsultationProcessor, *,
-                 threads: int = 1) -> None:
+                 threads: int = 1, lease_seconds: float = LEASE_SECONDS,
+                 heartbeat_seconds: float | None = None) -> None:
         self._repo = repository
         self._processor = processor
         self._threads = max(1, threads)
         self._queue: queue.Queue = queue.Queue()
         self._workers: list[threading.Thread] = []
         self._stop = threading.Event()
+        # Lease je Lauf (R10): verlaengert, solange der Lauf dauert; abgelaufen = Worker weg
+        self.owner = f"worker-{uuid.uuid4()}"
+        self._lease = timedelta(seconds=lease_seconds)
+        self._heartbeat = heartbeat_seconds if heartbeat_seconds is not None else lease_seconds / 4
 
     # ── Steuerung ────────────────────────────────────────────────────────
 
@@ -91,25 +100,48 @@ class ConsultationWorker:
     # ── Neustart ─────────────────────────────────────────────────────────
 
     def recover(self) -> None:
-        """Stand nach einem Neustart aufraeumen und offene Arbeit einreihen."""
-        for consultation in self._repo.list_by_status(RUNNING):
-            consultation.status = INTERRUPTED
-            consultation.error = "Server wurde waehrend der Bearbeitung beendet."
-            consultation.finished_at = datetime.now(UTC)
-            self._repo.save(consultation)
-            logger.warning("Consultation %s unterbrochen (Neustart)", consultation.id)
+        """Stand nach einem Neustart aufraeumen und offene Arbeit einreihen.
+
+        Unterbrochen werden nur Laeufe ohne gueltige Lease; ein anderer Worker, der seine Lease
+        noch verlaengert, behaelt seinen Lauf (R10).
+        """
+        delivering = self.reap()
         for consultation in self._repo.list_by_status(QUEUED):
             self.submit(consultation.id)
         for consultation in self._repo.list_by_status(INTERRUPTED):
+            if consultation.id in delivering:
+                continue                            # schon von reap() eingereiht
             deliveries = self._repo.list_deliveries(consultation.id)
             if any(d.status == PENDING and d.message_id for d in deliveries):
                 self.submit_delivery(consultation.id)
+
+    def reap(self) -> set[str]:
+        """Laeufe mit abgelaufener Lease als unterbrochen markieren; vorhandene Antworten zustellen.
+        Liefert die IDs, deren Zustellung eingereiht wurde."""
+        delivering: set[str] = set()
+        for consultation in self._repo.list_expired_running(datetime.now(UTC)):
+            if not self._repo.transition(consultation, RUNNING, INTERRUPTED,
+                                         error="Bearbeitung abgebrochen (Server beendet oder Worker ohne Lebenszeichen)."):
+                continue
+            logger.warning("Consultation %s unterbrochen (Lease abgelaufen)", consultation.id)
+            deliveries = self._repo.list_deliveries(consultation.id)
+            if any(d.status == PENDING and d.message_id for d in deliveries):
+                self.submit_delivery(consultation.id)
+                delivering.add(consultation.id)
+        return delivering
 
     # ── Bearbeitung ──────────────────────────────────────────────────────
 
     def _loop(self) -> None:
         while not self._stop.is_set():
-            item = self._queue.get()
+            try:
+                item = self._queue.get(timeout=max(self._lease.total_seconds(), 1.0))
+            except queue.Empty:
+                try:
+                    self.reap()                         # gelegentlich: Laeufe anderer, abgestuerzter Worker
+                except Exception:  # noqa: BLE001 - Worker darf nie sterben
+                    logger.exception("Consultation-Worker: Aufraeumen fehlgeschlagen")
+                continue
             try:
                 if item is None:
                     return
@@ -124,14 +156,29 @@ class ConsultationWorker:
                 self._queue.task_done()
 
     def _run(self, consultation_id: str) -> None:
-        if not self._repo.claim(consultation_id):
+        if not self._repo.claim(consultation_id, owner=self.owner, lease_until=datetime.now(UTC) + self._lease):
             return                                  # schon von einem anderen Worker uebernommen
         consultation = self._repo.get(consultation_id)
+        done = threading.Event()
+        beat = threading.Thread(target=self._keep_lease, args=(consultation_id, done), daemon=True,
+                                name=f"lease-{consultation_id[:8]}")
+        beat.start()
         try:
             self._processor.run(consultation)
         except Exception as exc:  # noqa: BLE001 - Worker darf nie sterben
             logger.exception("Consultation %s fehlgeschlagen", consultation_id)
             self._fail(consultation_id, exc)
+        finally:
+            done.set()
+            beat.join(self._heartbeat * 2 + 1)
+
+    def _keep_lease(self, consultation_id: str, done: threading.Event) -> None:
+        while not done.wait(self._heartbeat):
+            try:
+                if not self._repo.renew_lease(consultation_id, self.owner, datetime.now(UTC) + self._lease):
+                    return                          # nicht mehr unser Lauf (fertig oder unterbrochen)
+            except Exception:  # noqa: BLE001
+                logger.exception("Lease fuer Consultation %s nicht verlaengert", consultation_id)
 
     def _deliver(self, consultation_id: str) -> None:
         consultation = self._repo.get(consultation_id)
@@ -146,10 +193,7 @@ class ConsultationWorker:
         consultation = self._repo.get(consultation_id)
         if consultation is None:
             return
-        consultation.status = FAILED
-        consultation.error = f"{type(exc).__name__}: {exc}"[:500]
-        consultation.finished_at = datetime.now(UTC)
-        self._repo.save(consultation)
+        self._repo.transition(consultation, RUNNING, FAILED, error=f"{type(exc).__name__}: {exc}"[:500])
 
 
 def should_start_workers(debug: bool, environ) -> bool:

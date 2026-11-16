@@ -1,0 +1,281 @@
+"""R13 (conclave#48): Secrets und Dateirechte.
+
+- secret.key und Tokens entstehen exklusiv (ein Wert auch bei gleichzeitigem Start)
+  und nur fuer den Benutzer lesbar; vorhandene Dateien werden nachgehaertet.
+- Unter Windows: nur Benutzer, SYSTEM und Administratoren (Datei und Verzeichnis).
+- Linux: Verzeichnisse 0o700, DB, Logs und Backups 0o600.
+"""
+
+import logging
+import os
+import stat
+import subprocess
+import threading
+
+import pytest
+from cryptography.fernet import Fernet
+
+from conclave.infrastructure.crypto import CryptoService
+from conclave.runtime import file_security
+from conclave.runtime.api_token import load_or_create_token
+
+windows = pytest.mark.skipif(os.name != "nt", reason="Windows-ACL")
+posix = pytest.mark.skipif(os.name == "nt", reason="POSIX-Rechte")
+
+
+def _acl_lines(path):
+    """ACE-Zeilen aus icacls (ohne Kopf- und Summenzeile)."""
+    out = subprocess.run(["icacls", str(path)], capture_output=True, text=True, errors="replace").stdout
+    return [line for line in out.splitlines() if ":(" in line]
+
+
+def _trustees(path):
+    """Trustees der Allow-Eintraege, sprachunabhaengig aus der SDDL."""
+    import re
+    return {ace.split(";")[5] for ace in re.findall(r"\(([^)]*)\)", file_security._dacl_sddl(path))
+            if ace.split(";")[0] in ("A", "OA")}
+
+
+def _only_user_system_admins(path):
+    own = set(file_security.user_trustees())                 # SID oder Kuerzel wie "LA" (CI-Runner)
+    trustees = _trustees(path)
+    return trustees - own == {"SY", "BA"} and len(trustees & own) == 1 and len(_acl_lines(path)) == 3
+
+
+def _grant_users_read(path):
+    # Fremdes, ausdrueckliches Recht wie im Befund (Gruppe "Benutzer" per SID)
+    subprocess.run(["icacls", str(path), "/grant", "*S-1-5-32-545:(R)"], capture_output=True, check=True)
+
+
+# ── Windows-ACL ────────────────────────────────────────────────────────────
+
+@windows
+def test_restricted_file_shows_only_the_user(tmp_path):
+    path = tmp_path / "secret.key"
+    path.write_bytes(b"x")
+    _grant_users_read(path)
+    assert file_security.foreign_access(path)
+    file_security.restrict(path)
+    assert _only_user_system_admins(path)
+    assert any(os.environ["USERNAME"].lower() in line.lower() for line in _acl_lines(path))
+    assert file_security.foreign_access(path) == []
+
+
+@windows
+def test_builtin_administrator_as_user_is_not_foreign(tmp_path, monkeypatch):
+    """CI-Runner: runneradmin ist der eingebaute Administrator (RID 500), die SDDL nennt ihn "LA"."""
+    admin = file_security._user_sid().rsplit("-", 1)[0] + "-500"
+    path = tmp_path / "secret.key"
+    path.write_bytes(b"x")
+    monkeypatch.setattr(file_security, "_user_sid", lambda: admin)
+    try:
+        file_security.restrict(path)
+        assert "LA" in _trustees(path)                      # Windows kuerzt die SID wirklich
+        assert file_security.foreign_access(path) == []
+        assert not file_security.harden(path)
+        assert _only_user_system_admins(path)
+    finally:
+        monkeypatch.undo()
+        file_security.restrict(path)                        # wieder fuer den echten Benutzer
+
+
+@windows
+def test_restricted_directory_shows_only_the_user_and_children_follow(tmp_path):
+    folder = tmp_path / "config"
+    folder.mkdir()
+    _grant_users_read(folder)
+    file_security.restrict(folder, directory=True)
+    assert _only_user_system_admins(folder)
+    child = folder / "neu.txt"
+    child.write_text("x")
+    assert file_security.foreign_access(child) == []
+
+
+# ── Exklusives Anlegen ─────────────────────────────────────────────────────
+
+def test_concurrent_starts_create_a_single_key(tmp_path):
+    path = tmp_path / "secret.key"
+    services, barrier = [], threading.Barrier(8)
+
+    def start():
+        barrier.wait()
+        services.append(CryptoService.load_or_generate(path))
+
+    threads = [threading.Thread(target=start) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    token = services[0].encrypt("hallo")
+    assert all(s.decrypt(token) == "hallo" for s in services)
+    assert path.read_bytes().strip() and not list(tmp_path.glob(".*tmp"))
+    assert file_security.foreign_access(path) == []
+
+
+def test_concurrent_starts_create_a_single_token(tmp_path):
+    path = tmp_path / "api.token"
+    tokens, barrier = [], threading.Barrier(8)
+
+    def start():
+        barrier.wait()
+        tokens.append(load_or_create_token(path))
+
+    threads = [threading.Thread(target=start) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(set(tokens)) == 1 and path.read_text().strip() == tokens[0]
+    assert file_security.foreign_access(path) == []
+
+
+@pytest.mark.parametrize("kind", ["key", "token"])
+def test_existing_files_are_hardened_with_a_warning(tmp_path, caplog, kind):
+    path = tmp_path / ("secret.key" if kind == "key" else "api.token")
+    path.write_bytes(Fernet.generate_key() if kind == "key" else b"cvh_vorhanden\n")
+    if os.name == "nt":
+        _grant_users_read(path)
+    else:
+        path.chmod(0o644)
+    caplog.set_level(logging.WARNING)
+    if kind == "key":
+        CryptoService.load_or_generate(path)
+    else:
+        assert load_or_create_token(path) == "cvh_vorhanden"
+    assert file_security.foreign_access(path) == []
+    assert any("Rechte" in r.getMessage() and str(path) in r.getMessage() for r in caplog.records)
+
+
+# ── Verzeichnisse beim Start ───────────────────────────────────────────────
+
+def _paths(tmp_path, key_in_config=True):
+    from conclave.runtime.paths import RuntimePaths
+    config = tmp_path / "config"
+    return RuntimePaths(config_dir=config, data_dir=tmp_path / "data", log_dir=tmp_path / "data" / "logs",
+                        workspace_dir=tmp_path / "workspace", db_path=tmp_path / "data" / "conclave.db",
+                        secret_key_path=(config if key_in_config else tmp_path / "anderswo") / "secret.key")
+
+
+@windows
+def test_startup_protects_the_config_directory(tmp_path):
+    paths = _paths(tmp_path)
+    paths.config_dir.mkdir()
+    _grant_users_read(paths.config_dir)
+    file_security.secure_runtime_dirs(paths)
+    assert _only_user_system_admins(paths.config_dir)
+
+
+@windows
+def test_startup_leaves_foreign_directories_alone(tmp_path):
+    """Liegt der Schluessel nicht im Konfigurationsverzeichnis, wird dieses nicht angefasst."""
+    paths = _paths(tmp_path, key_in_config=False)
+    paths.config_dir.mkdir()
+    _grant_users_read(paths.config_dir)
+    file_security.secure_runtime_dirs(paths)
+    assert file_security.foreign_access(paths.config_dir)
+
+
+@posix
+def test_posix_directories_and_files_are_private(tmp_path):
+    paths = _paths(tmp_path)
+    for d in (paths.config_dir, paths.data_dir, paths.log_dir):
+        d.mkdir(parents=True, exist_ok=True)
+        d.chmod(0o755)
+    file_security.secure_runtime_dirs(paths)
+    for d in (paths.config_dir, paths.data_dir, paths.log_dir):
+        assert stat.S_IMODE(d.stat().st_mode) == 0o700
+    db = paths.db_path
+    db.write_bytes(b"")
+    db.chmod(0o644)
+    file_security.restrict(db)
+    assert stat.S_IMODE(db.stat().st_mode) == 0o600
+
+
+@posix
+def test_backup_archive_is_private(tmp_path):
+    from conclave.runtime.backup import create_backup_archive
+    (tmp_path / "ws").mkdir()
+    archive = create_backup_archive(db_path=None, workspace_root=tmp_path / "ws", backup_dir=tmp_path / "b")
+    assert stat.S_IMODE(archive.stat().st_mode) == 0o600
+
+
+@posix
+def test_sqlite_database_is_private(tmp_path):
+    from conclave.cli.bootstrap import build_service
+    from conclave.cli.config import ConclaveConfig
+    build_service(config=ConclaveConfig(db_path=tmp_path / "c.db"))
+    assert stat.S_IMODE((tmp_path / "c.db").stat().st_mode) == 0o600
+
+
+@posix
+def test_log_file_is_private(tmp_path):
+    from conclave.infrastructure.log import configure_logging
+    path = tmp_path / "logs" / "conclave.log"
+    logger = configure_logging("INFO", log_file=path)
+    try:
+        logger.info("x")
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    finally:
+        for handler in list(logger.handlers):
+            if getattr(handler, "baseFilename", None):
+                logger.removeHandler(handler)
+                handler.close()
+
+
+# ── Nacharbeit aus dem Review (B1, V3) ──────────────────────────────────────
+
+def test_empty_token_file_is_replaced_with_a_warning(tmp_path, caplog):
+    """B1: Eine leere Datei (Absturz beim Schreiben) ergibt kein leeres Token."""
+    path = tmp_path / "api.token"
+    path.write_text("")
+    caplog.set_level(logging.WARNING)
+    token = load_or_create_token(path)
+    assert token.startswith("cvh_") and path.read_text().strip() == token
+    assert any("leer" in r.getMessage() for r in caplog.records)
+    assert file_security.foreign_access(path) == []
+
+
+@posix
+def test_private_files_are_created_private(tmp_path):
+    """V3: Datei und neuer Ordner entstehen gleich mit 0o600/0o700, nicht erst per chmod."""
+    path = tmp_path / "neu" / "conclave.db"
+    old = os.umask(0o022)
+    try:
+        file_security.create_private(path)
+    finally:
+        os.umask(old)
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+
+
+def test_create_private_keeps_an_existing_file(tmp_path):
+    path = tmp_path / "conclave.db"
+    path.write_bytes(b"daten")
+    file_security.create_private(path)
+    assert path.read_bytes() == b"daten"
+
+
+# ── Nacharbeit aus dem zweiten Review (V1) ─────────────────────────────────
+
+@posix
+def test_runtime_and_db_folders_are_created_private(tmp_path):
+    """V1: ensure() und build_service legen neue Ordner gleich mit 0o700 an (umask 022)."""
+    from conclave.cli.bootstrap import build_service
+    from conclave.cli.config import ConclaveConfig
+    paths = _paths(tmp_path)
+    old = os.umask(0o022)
+    try:
+        paths.ensure()
+        build_service(config=ConclaveConfig(db_path=tmp_path / "neu" / "tief" / "c.db"))
+    finally:
+        os.umask(old)
+    for folder in (paths.config_dir, paths.data_dir, paths.log_dir, tmp_path / "neu", tmp_path / "neu" / "tief"):
+        assert stat.S_IMODE(folder.stat().st_mode) == 0o700, folder
+
+
+def test_make_private_dirs_creates_missing_folders_only(tmp_path):
+    existing = tmp_path / "da"
+    existing.mkdir()
+    file_security.make_private_dirs(existing / "a" / "b")
+    assert (existing / "a" / "b").is_dir()
+    file_security.make_private_dirs(existing / "a" / "b")       # vorhanden: kein Fehler

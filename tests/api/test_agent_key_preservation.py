@@ -24,7 +24,7 @@ BASE = {"name": "Claude", "provider": "anthropic", "model": "claude-sonnet-5", "
 def setup(db_connection, crypto, service):
     agents = AgentService(SQLiteAgentRepository(db_connection, crypto))
     handler = CLIHandler(service, agent_service=agents)
-    app = create_app(handler, agent_service=agents)
+    app = create_app(handler, agent_service=agents, allow_unauthenticated=True)
     app.config["TESTING"] = True
     client = app.test_client()
     assert client.post("/agents", json={"id": "claude", **BASE, "api_key": "sk-original"}).status_code == 201

@@ -38,7 +38,7 @@ def handler():
 @pytest.fixture
 def client(handler, workspace, monkeypatch):
     monkeypatch.setenv("CONCLAVE_WORKSPACE", str(workspace))
-    app = create_app(handler)
+    app = create_app(handler, allow_unauthenticated=True)
     app.config["TESTING"] = True
     with app.test_client() as c:
         yield c

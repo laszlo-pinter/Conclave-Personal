@@ -15,10 +15,12 @@ class RuntimePaths:
     secret_key_path: Path
 
     def ensure(self) -> "RuntimePaths":
-        for path in (self.config_dir, self.data_dir, self.log_dir, self.workspace_dir):
-            path.mkdir(parents=True, exist_ok=True)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.secret_key_path.parent.mkdir(parents=True, exist_ok=True)
+        from conclave.runtime.file_security import make_private_dirs
+        # Konfiguration, Daten und Logs nur fuer den Benutzer (POSIX 0o700 schon beim Anlegen, R13)
+        for path in (self.config_dir, self.data_dir, self.log_dir, self.db_path.parent,
+                     self.secret_key_path.parent):
+            make_private_dirs(path)
+        self.workspace_dir.mkdir(parents=True, exist_ok=True)
         return self
 
 

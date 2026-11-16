@@ -56,7 +56,7 @@ def test_agent_token_reaches_allowed_routes(client):
 
 
 def test_whoami_without_auth_service_is_human():
-    app = create_app(MagicMock())
+    app = create_app(MagicMock(), allow_unauthenticated=True)
     assert app.test_client().get("/auth/whoami").get_json() == {"role": "human"}
 
 

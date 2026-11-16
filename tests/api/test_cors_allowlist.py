@@ -22,7 +22,7 @@ def handler():
 def client_default(handler, monkeypatch):
     """Client ohne CONCLAVE_ALLOWED_ORIGINS → nur localhost."""
     monkeypatch.delenv("CONCLAVE_ALLOWED_ORIGINS", raising=False)
-    app = create_app(handler)
+    app = create_app(handler, allow_unauthenticated=True)
     app.config["TESTING"] = True
     with app.test_client() as c:
         yield c
@@ -32,7 +32,7 @@ def client_default(handler, monkeypatch):
 def client_with_origin(handler, monkeypatch):
     """Client mit explizit konfigurierter Origin."""
     monkeypatch.setenv("CONCLAVE_ALLOWED_ORIGINS", "https://myapp.example.com,http://localhost:3000")
-    app = create_app(handler)
+    app = create_app(handler, allow_unauthenticated=True)
     app.config["TESTING"] = True
     with app.test_client() as c:
         yield c
@@ -104,7 +104,7 @@ class TestCorsAllowedOrigins:
 
     def test_null_origin_can_be_allowed_explicitly(self, handler, monkeypatch):
         monkeypatch.setenv("CONCLAVE_ALLOWED_ORIGINS", "null")
-        app = create_app(handler)
+        app = create_app(handler, allow_unauthenticated=True)
         app.config["TESTING"] = True
         with app.test_client() as client:
             resp = client.get("/conversations", headers={"Origin": "null"})

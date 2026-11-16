@@ -84,16 +84,16 @@ conclave invoke $conv reviewer
 conclave runs --conversation-id $conv
 ```
 
-## 5. Zweitmeinung Zu Einem Kanzo-Ticket
+## 5. Zweitmeinung Zu Einem Ticket
 
-Ziel: Ein Coding-Agent oder du selbst holt zu einem Ticket aus
-[Kanzo](https://github.com/emanuele-em/kanzo) unabhängige Meinungen mehrerer
-Modelle ein; sie landen als gekennzeichnete Kommentare im Ticket.
+Ziel: Ein Coding-Agent oder du selbst holt zu einem Ticket aus dem Board
+(siehe [Mit dem Board arbeiten](mit-dem-board-arbeiten.md)) unabhängige
+Meinungen mehrerer Modelle ein; sie landen als Kommentare im Ticket.
 
 Einmalig in `config.toml` (Agent-IDs aus `conclave agents`):
 
 ```toml
-[kanzo]
+[consultations]
 reviewers = ["gpt", "claude"]
 ```
 
@@ -107,10 +107,10 @@ Invoke-RestMethod -Uri "http://localhost:8000/consultations/$($c.id)" -Headers $
 ```
 
 Ein Coding-Agent mit dem Conclave-MCP-Server nutzt `conclave_consult` und
-`conclave_get_consultation`. Die Antworten stehen danach im Kanzo-Board unter
-dem Ticket, jeweils mit „Zweitmeinung von … über Conclave, nicht geprüft“.
-Die vollständigen Antworten und ihre Kosten zeigt Conclave in der
-Conversation `kanzo:api#12 · <id>`.
+`conclave_get_consultation`. Die Antworten stehen danach im Board unter dem
+Ticket, mit Herkunft „Zweitmeinung (Modell)“ und der Schlusszeile
+„Zweitmeinung von … über Conclave, nicht geprüft“. Die vollständigen Antworten
+und ihre Kosten zeigt Conclave in der Conversation `board:api#12 · <id>`.
 
 ## Hinweise
 

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from conclave.application.conversation_flow import ConversationFlowService
 from conclave.domain.conversation import Conversation
-from conclave.domain.errors import AdapterNotFound, ConversationNotFound, EmptyConversation
+from conclave.domain.errors import AdapterNotFound, ConversationNotFound, EmptyConversation, public_message
 from conclave.infrastructure.log import get_logger
 
 logger = get_logger("application.orchestrator")
@@ -140,7 +140,7 @@ class ParallelOrchestrator:
                         error_type = "EmptyConversation"
                         status = 400
                     else:
-                        error_msg = f"Fehler bei Participant '{pid}': {result}"
+                        error_msg = f"Fehler bei Participant '{pid}': {public_message(result)}"
                         error_type = type(result).__name__
                         status = 502
                     logger.error(error_msg, extra={"conversation_id": conversation_id})

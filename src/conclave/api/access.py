@@ -1,13 +1,24 @@
-"""Rechte des Agent-Zugangs (Z2): Allowlist aus (Methode, Routen-Muster).
+"""Rechte des Agent- und des Reviewer-Zugangs (Z2, P3): Allowlists aus (Methode, Routen-Muster).
 
 Fuer Agenten gilt Default deny: Erlaubt ist nur, was die MCP-Tools brauchen,
-ohne Loeschen (E2). Jede Route steht in genau einer der drei Mengen; ein Test
-prueft das gegen die registrierten Routen, eine neue Route muss also bewusst
-zugeordnet werden.
+ohne Loeschen (E2). Jede Route steht in genau einer der Mengen AGENT_ALLOWED,
+HUMAN_ONLY, REVIEWER_ONLY und PUBLIC; ein Test prueft das gegen die registrierten
+Routen, eine neue Route muss also bewusst zugeordnet werden.
+
+Der Reviewer hat eine eigene, engere Liste (REVIEWER_ALLOWED): Board lesen,
+kommentieren und den Review-Status setzen, sonst nichts.
 """
 
+# Lesbar fuer Agenten, ohne dass ein MCP-Tool sie braucht (E-S5 a, R15): dieselben Daten
+# liefern GET /conversations/<id> und der Export; es sind keine Geheimnisse.
+AGENT_CONTEXT_READ = frozenset({
+    ("GET", "/conversations/<conversation_id>/rules"),
+    ("GET", "/conversations/<conversation_id>/tool-events"),
+    ("GET", "/conversations/<conversation_id>/messages/<message_id>/context"),
+})
+
 # Was die MCP-Tools (mcp_server.py) aufrufen, dazu /auth/whoami fuer den Rollen-Check (Z5).
-AGENT_ALLOWED = frozenset({
+AGENT_ALLOWED = AGENT_CONTEXT_READ | frozenset({
     ("GET", "/auth/whoami"),
     ("GET", "/conversations"),
     ("POST", "/conversations"),
@@ -37,6 +48,9 @@ AGENT_ALLOWED = frozenset({
     ("PATCH", "/board/projects/<slug>/tasks/<int:number>"),
     ("POST", "/board/projects/<slug>/tasks/<int:number>/comments"),
     ("GET", "/board/projects/<slug>/tasks/<int:number>/history"),
+    # Vorhaben (P2): lesen und Tickets ueber projekt/vorhaben-n aufrufen
+    ("GET", "/board/projects/<slug>/initiatives"),
+    ("GET", "/board/projects/<slug>/initiatives/<initiative>/tasks/<int:number>"),
 })
 
 # Nur mit dem Mensch-Token: Einstellungen, Agents verwalten, Backup/Restore, Logs,
@@ -70,16 +84,14 @@ HUMAN_ONLY = frozenset({
     ("POST", "/conversations/<conversation_id>/floor/invoke"),
     ("POST", "/conversations/<conversation_id>/floor/revoke"),
     ("POST", "/conversations/<conversation_id>/orchestrate-parallel-stream"),
-    ("GET", "/conversations/<conversation_id>/rules"),
     ("POST", "/conversations/<conversation_id>/rules"),
-    ("GET", "/conversations/<conversation_id>/tool-events"),
-    ("GET", "/conversations/<conversation_id>/messages/<message_id>/context"),
     ("GET", "/conversations/<conversation_id>/participants/<participant_id>/context-preview"),
     ("GET", "/conversations/<conversation_id>/participants/<participant_id>/stream"),
     # Board: UI-Uebersicht, Projekte verwalten, loeschen, Kommentare aendern, Import
     ("GET", "/board"),
     ("GET", "/board/changes"),
     ("GET", "/board/projects/<slug>/tasks/<int:number>/comments"),
+    ("GET", "/board/projects/<slug>/history"),
     ("POST", "/board/projects"),
     ("PUT", "/board/projects/<slug>"),
     ("DELETE", "/board/projects/<slug>"),
@@ -87,6 +99,8 @@ HUMAN_ONLY = frozenset({
     ("PUT", "/board/comments/<comment_id>"),
     ("DELETE", "/board/comments/<comment_id>"),
     ("POST", "/board/import"),
+    ("POST", "/board/projects/<slug>/initiatives"),
+    ("PUT", "/board/projects/<slug>/initiatives/<initiative>"),
 })
 
 # Ohne Token erreichbar (PUBLIC_GET_PATHS und statische Dateien in app.py).
@@ -98,6 +112,22 @@ PUBLIC = frozenset({
     ("GET", "/static/<path:filename>"),
 })
 
+# Nur der Reviewer-Zugang (P3); Agent und Mensch lehnt der BoardService ab
+REVIEWER_ONLY = frozenset({
+    ("POST", "/board/projects/<slug>/tasks/<int:number>/review"),
+})
+
+# Was der Reviewer-MCP (conclave-mcp --reviewer) braucht: lesen, kommentieren, Review-Status
+REVIEWER_ALLOWED = REVIEWER_ONLY | frozenset({
+    ("GET", "/auth/whoami"),
+    ("GET", "/board/tasks"),
+    ("GET", "/board/search"),
+    ("GET", "/board/projects/<slug>/tasks/<int:number>"),
+    ("GET", "/board/projects/<slug>/tasks/<int:number>/history"),
+    ("POST", "/board/projects/<slug>/tasks/<int:number>/comments"),
+    ("GET", "/board/projects/<slug>/initiatives/<initiative>/tasks/<int:number>"),
+})
+
 HUMAN_ONLY_ERROR = {"type": "HumanOnly", "error": "Nur für den Menschen-Zugang."}
 
 
@@ -105,3 +135,9 @@ def agent_may(method: str, rule: str) -> bool:
     """Darf ein Agent diese Route aufrufen? HEAD zaehlt wie GET."""
     method = "GET" if method == "HEAD" else method
     return (method, rule) in AGENT_ALLOWED
+
+
+def reviewer_may(method: str, rule: str) -> bool:
+    """Darf der Reviewer diese Route aufrufen? HEAD zaehlt wie GET."""
+    method = "GET" if method == "HEAD" else method
+    return (method, rule) in REVIEWER_ALLOWED

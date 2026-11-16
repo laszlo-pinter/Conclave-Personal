@@ -69,6 +69,9 @@ const _actions = {
   'ws-viewer-insert':    () => insertViewerRef(),
   'ws-viewer-close':     () => closeWorkspaceViewer(),
   'board-new':           () => openBoardNew(),
+  'board-pause':         () => pauseBoardAgents(),
+  'board-approvals':     () => toggleBoardApprovals(),
+  'board-close-control': (el) => closeBoardControl(el.dataset.ref),
   'board-create':        () => createBoardTask(),
   'board-open-task':     (el) => openBoardTask(el.dataset.ref),
   'board-close-task':    () => closeBoardTask(),
@@ -100,6 +103,7 @@ function _bindStaticUiEvents() {
     if (el) el.addEventListener(event, handler)
   }
   on('languageSelect', 'change', (e) => setLanguage(e.target.value))
+  on('themeSelect', 'change', (e) => setTheme(e.target.value))
   on('logLevel', 'change', () => loadLogs())
   on('wsUpload', 'change', (e) => uploadWsFile(e.target))
   on('fileInput', 'change', (e) => handleFile(e.target))
@@ -111,6 +115,7 @@ function _bindStaticUiEvents() {
   on('msgInput', 'input', (e) => autoResize(e.target))
   ;['aId','aName','aTopic'].forEach(id => on(id, 'input', updatePrompt))
   on('aPreset', 'change', onPresetChange)
+  on('aApiUrl', 'input', updateApiUrlHint)
   on('boardProject', 'change', onBoardFilter)
   on('boardShowDone', 'change', onBoardFilter)
   on('boardSearch', 'input', onBoardSearch)
@@ -128,11 +133,15 @@ if(typeof marked!=='undefined'){
 }
 initI18n();
 _bindStaticUiEvents();
-updateKeyUI();
-checkApi();
-loadConversations();
-loadAgents();
-loadPresets();
+// Erst ein Token aus dem Fragment klaeren, dann mit dem gueltigen Token laden (R5)
+tokenReady = confirmPendingToken().catch(() => {})
+tokenReady.finally(() => {
+  updateKeyUI();
+  checkApi();
+  loadConversations();
+  loadAgents();
+  loadPresets();
+});
 
 // Polling nur im aktiven Tab, mit laengeren Intervallen
 let _pollTimer = null;

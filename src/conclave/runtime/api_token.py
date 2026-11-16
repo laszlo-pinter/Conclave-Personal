@@ -6,14 +6,15 @@ erzeugt der Server beim ersten Start ein zufaelliges Token und legt es in
 CLI-Werkzeuge (web, desktop, watch) lesen es von dort, wenn die Variable fehlt.
 
 Daneben gibt es ein Agent-Token (``CONCLAVE_AGENT_KEY`` bzw. ``agent.token``),
-das genauso angelegt wird. Der MCP-Server nutzt nur dieses, nie ``api.token``. Neue Tokens tragen ein Praefix (``cvh_`` Mensch,
-``cva_`` Agent); vorhandene Tokens ohne Praefix bleiben gueltig. Tokens werden
-nie geloggt, nur Pfade.
+das genauso angelegt wird. Der MCP-Server nutzt nur dieses, nie ``api.token``.
+Der automatische Reviewer hat ein eigenes Token (``CONCLAVE_REVIEWER_KEY`` bzw.
+``reviewer.token``, P3). Neue Tokens tragen ein Praefix (``cvh_`` Mensch,
+``cva_`` Agent, ``cvr_`` Reviewer); vorhandene Tokens ohne Praefix bleiben gueltig.
+Tokens werden nie geloggt, nur Pfade.
 """
 
 import os
 import secrets
-import subprocess
 from pathlib import Path
 
 from conclave.infrastructure.log import get_logger
@@ -24,8 +25,10 @@ logger = get_logger("runtime.api_token")
 
 TOKEN_FILE_NAME = "api.token"
 AGENT_TOKEN_FILE_NAME = "agent.token"
+REVIEWER_TOKEN_FILE_NAME = "reviewer.token"
 HUMAN_PREFIX = "cvh_"
 AGENT_PREFIX = "cva_"
+REVIEWER_PREFIX = "cvr_"
 
 
 def _path(override_env: str, file_name: str) -> Path:
@@ -41,6 +44,10 @@ def token_path() -> Path:
 
 def agent_token_path() -> Path:
     return _path("CONCLAVE_AGENT_TOKEN_FILE", AGENT_TOKEN_FILE_NAME)
+
+
+def reviewer_token_path() -> Path:
+    return _path("CONCLAVE_REVIEWER_TOKEN_FILE", REVIEWER_TOKEN_FILE_NAME)
 
 
 def _read(env_name: str, path: Path) -> str:
@@ -63,6 +70,16 @@ def read_agent_token() -> str:
     return _read("CONCLAVE_AGENT_KEY", agent_token_path())
 
 
+def read_reviewer_token() -> str:
+    """Reviewer-Token fuer den Reviewer-MCP: ``CONCLAVE_REVIEWER_KEY``, sonst ``reviewer.token``."""
+    return _read("CONCLAVE_REVIEWER_KEY", reviewer_token_path())
+
+
+def load_or_create_reviewer_token(path: Path | None = None) -> str:
+    """Reviewer-Token fuer den Server: vorhandene Datei lesen oder neues Token anlegen."""
+    return load_or_create_token(path or reviewer_token_path(), prefix=REVIEWER_PREFIX)
+
+
 def load_or_create_agent_token(path: Path | None = None) -> str:
     """Agent-Token fuer den Server: vorhandene Datei lesen oder neues Token anlegen."""
     return load_or_create_token(path or agent_token_path(), prefix=AGENT_PREFIX)
@@ -70,38 +87,24 @@ def load_or_create_agent_token(path: Path | None = None) -> str:
 
 def load_or_create_token(path: Path | None = None, prefix: str = HUMAN_PREFIX) -> str:
     """Token fuer den Server: vorhandene Datei lesen oder neues Token anlegen."""
+    from conclave.runtime.file_security import create_exclusive, harden, replace_private
+
     path = path or token_path()
     try:
         existing = path.read_text(encoding="utf-8").strip()
     except FileNotFoundError:
-        existing = ""
+        existing = None
     if existing:
+        harden(path)                            # vorhandene Datei: fremde Rechte entfernen (R13)
         return existing
 
-    token = prefix + secrets.token_urlsafe(32)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        handle.write(token + "\n")
-    _restrict_permissions(path)
-    logger.info("Token erzeugt: %s", path)
-    return token
-
-
-def _restrict_permissions(path: Path) -> None:
-    if os.name != "nt":
-        path.chmod(0o600)
-        return
-    # Windows: geerbte Rechte entfernen, nur der aktuelle Benutzer behaelt Vollzugriff.
-    user = os.environ.get("USERNAME", "")
-    domain = os.environ.get("USERDOMAIN", "")
-    if not user:
-        logger.warning("ACL fuer %s nicht gesetzt: USERNAME unbekannt", path)
-        return
-    principal = f"{domain}\\{user}" if domain else user
-    result = subprocess.run(
-        ["icacls", str(path), "/inheritance:r", "/grant:r", f"{principal}:F"],
-        capture_output=True, text=True, check=False,
-    )
-    if result.returncode != 0:
-        logger.warning("ACL fuer %s nicht gesetzt: %s", path, (result.stderr or result.stdout).strip())
+    data = (prefix + secrets.token_urlsafe(32) + "\n").encode("utf-8")
+    if existing is None:
+        # Exklusiv anlegen: bei gleichzeitigem Start gewinnt genau ein Token
+        if create_exclusive(path, data):
+            logger.info("Token erzeugt: %s", path)
+    else:
+        # Leere Datei (z. B. Absturz beim Schreiben): ersetzen statt mit leerem Token starten
+        logger.warning("Token-Datei %s ist leer; neues Token erzeugt", path)
+        replace_private(path, data)
+    return path.read_text(encoding="utf-8").strip()

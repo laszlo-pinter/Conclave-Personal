@@ -54,7 +54,7 @@ Nachrichten übernimmt `select_messages()` mit dem Agent-Limit `max_messages`.
 | OpenAI Responses | openai-responses | OpenAIResponsesProfile | Bearer | openai-responses |
 | Anthropic | anthropic | AnthropicProfile (gewählt über `auth_format: x-api-key`) | `X-API-Key` + `anthropic-version` (nur wenn ein Key gesetzt ist) | standard |
 | Ollama | ollama | StandardProfile | none | standard |
-| Gemini | gemini | GeminiProfile | Query-Parameter | gemini |
+| Gemini | gemini | GeminiProfile | `x-goog-api-key` | gemini |
 | Mistral | mistral | StandardProfile | Bearer | standard |
 | Qwen / DashScope | qwen-dashscope, qwen-dashscope-thinking | StandardProfile | Bearer | standard |
 | DeepSeek | deepseek | StandardProfile | Bearer | standard |

@@ -23,6 +23,11 @@ def board(crypto):
     return svc
 
 
+def _changes(board, ref):
+    """Verlauf ohne das Anlegen (R9 schreibt dafuer immer einen Eintrag)."""
+    return [e for e in board.history(ref) if e.field_name != "created"]
+
+
 def _forbidden(fn, *args, **kwargs):
     with pytest.raises(BoardError) as e:
         fn(*args, **kwargs)
@@ -34,6 +39,7 @@ def _forbidden(fn, *args, **kwargs):
 
 def test_agent_cannot_move_to_or_from_the_last_column(board):
     board.create_task(AGENT, "api", "Ticket")
+    board.next_task(AGENT, task="api#1")                                    # erst uebernehmen (#51)
     board.update_task(AGENT, "api#1", status="review")                      # bis vor die letzte Spalte: ja
     _forbidden(board.update_task, AGENT, "api#1", status="done")
     board.update_task(HUMAN, "api#1", status="done")
@@ -68,7 +74,7 @@ def test_agent_may_set_the_human_flag_but_not_remove_it(board):
 def test_human_only_tickets_are_read_only_for_agents(board):
     board.create_task(HUMAN, "api", "Privat", human=True)
     assert board.get_task("api#1").title == "Privat"                         # lesen: ja
-    assert board.comments("api#1") == [] and board.history("api#1") == []
+    assert board.comments("api#1") == [] and _changes(board, "api#1") == []
     _forbidden(board.update_task, AGENT, "api#1", title="geaendert")
     _forbidden(board.update_task, AGENT, "api#1", status="doing")
     _forbidden(board.add_comment, AGENT, "api#1", "darf ich?")
@@ -83,7 +89,7 @@ def test_next_task_takes_the_top_ticket_skips_human_and_records_history(board):
     board.create_task(HUMAN, "api", "zweites fuer Agenten")
     task = board.next_task(AGENT, "api")
     assert (task.ref, task.status) == ("api#2", "doing")
-    [event] = board.history("api#2")
+    [event] = _changes(board, "api#2")
     assert (event.field_name, event.old_value, event.new_value, event.origin) == ("status", "todo", "doing", "agent")
     assert board.next_task(AGENT).ref == "api#3"
     assert board.next_task(AGENT) is None                                     # api#1 bleibt fuer Menschen
@@ -126,18 +132,21 @@ def test_parallel_next_task_never_hands_out_a_ticket_twice(tmp_path, crypto):
 def test_history_shows_a_weakened_acceptance(board):
     board.create_task(HUMAN, "api", "T", description="## Abnahme\n- alle Tests gruen\n- Postgres geprueft")
     board.update_task(AGENT, "api#1", description="## Abnahme\n- Tests gruen")
-    board.update_task(AGENT, "api#1", title="T2", status="doing")
-    events = board.history("api#1")
+    board.next_task(AGENT, task="api#1")                                    # uebernehmen statt PATCH (#51)
+    board.update_task(AGENT, "api#1", title="T2")
+    events = _changes(board, "api#1")
     assert [(e.field_name, e.origin, e.actor_id) for e in events] == [
-        ("description", "agent", "agent"), ("title", "agent", "agent"), ("status", "agent", "agent")]
+        ("description", "agent", "agent"), ("status", "agent", "agent"), ("title", "agent", "agent")]
     assert "Postgres geprueft" in events[0].old_value and "Postgres" not in events[0].new_value
 
 
 def test_no_event_without_change(board):
     board.create_task(HUMAN, "api", "T")
     board.update_task(HUMAN, "api#1", title="T", tags=["x"])
-    assert board.history("api#1") == []
+    assert [e.field_name for e in _changes(board, "api#1")] == ["tags"]     # Titel unveraendert: kein Eintrag
     assert board.get_task("api#1").tags == ("x",)
+    board.update_task(HUMAN, "api#1", tags=["x"])
+    assert [e.field_name for e in _changes(board, "api#1")] == ["tags"]
 
 
 # ── Kommentare ────────────────────────────────────────────────────────────
@@ -244,7 +253,7 @@ def test_update_and_history_are_atomic(board, monkeypatch):
     with pytest.raises(sqlite3.OperationalError):
         board.update_task(AGENT, "api#1", title="nachher")
     monkeypatch.setattr(repo, "_execute", real)
-    assert board.get_task("api#1").title == "vorher" and board.history("api#1") == []
+    assert board.get_task("api#1").title == "vorher" and _changes(board, "api#1") == []
 
 
 def test_comments_keep_their_order_within_the_same_moment(board):
@@ -273,7 +282,7 @@ def test_agent_update_cannot_undo_a_flag_set_meanwhile(board, monkeypatch):
     monkeypatch.undo()
     fresh = board.get_task("api#1")
     assert fresh.human is True and fresh.title == "T"
-    assert [ev.field_name for ev in board.history("api#1")] == []             # kein Eintrag des Agenten
+    assert [ev.field_name for ev in _changes(board, "api#1")] == []             # kein Eintrag des Agenten
 
 
 def test_agent_update_cannot_pull_a_ticket_back_from_done(board, monkeypatch):
@@ -304,7 +313,7 @@ def test_next_task_does_not_hand_out_a_ticket_flagged_meanwhile(board, monkeypat
     monkeypatch.setattr(board, "list_tasks", lambda *a, **k: stale)
     assert board.next_task(AGENT, "api") is None
     monkeypatch.undo()
-    assert board.get_task("api#1").status == "todo" and board.history("api#1") == []
+    assert board.get_task("api#1").status == "todo" and _changes(board, "api#1") == []
 
 
 def test_version_grows_with_every_write(board):
@@ -330,7 +339,7 @@ def test_history_keeps_a_long_description_in_full(board):
     head = "## Ziel\n" + "Ausfuehrliche Beschreibung. " * 40
     board.create_task(HUMAN, "api", "T", description=head + "\n## Abnahme\n- alle Tests gruen\n- Postgres geprueft")
     board.update_task(AGENT, "api#1", description=head + "\n## Abnahme\n- alle Tests gruen")
-    [event] = board.history("api#1")
+    [event] = _changes(board, "api#1")
     assert event.old_value.endswith("- Postgres geprueft") and not event.new_value.endswith("geprueft")
     assert len(event.old_value) > 1000
 
@@ -354,3 +363,211 @@ def test_agent_comment_respects_a_flag_set_meanwhile(board, monkeypatch):
     monkeypatch.undo()
     assert board.comments("api#1") == [] and board.change_token() == token     # nichts geschrieben
     assert board.add_comment(HUMAN, "api#1", "der Mensch darf").origin == "human"
+
+
+# ── R4 (conclave#34): zwei Spalten, next_task schiebt nicht nach done ─────
+
+def test_next_task_does_not_move_into_the_last_column_for_agents(crypto):
+    conn = sqlite3.connect(":memory:")
+    initialize_schema(conn)
+    svc = BoardService(SQLiteBoardRepository(conn, crypto, autocommit=True), StatusFlow(("offen", "erledigt")))
+    svc.create_project(HUMAN, "api", "API")
+    svc.create_task(HUMAN, "api", "T")
+    with pytest.raises(BoardError) as err:
+        svc.next_task(AGENT, "api")
+    assert err.value.status == 403
+    assert svc.get_task("api#1").status == "offen"                          # nichts verschoben
+    assert svc.next_task(HUMAN, "api").status == "erledigt"                 # Freigabe-Recht: erlaubt
+
+
+# ── conclave#51: gezielt uebernehmen, doing nicht ueberspringen ───────────
+
+def test_next_with_task_claims_exactly_that_ticket(board):
+    board.create_task(HUMAN, "api", "eins")
+    board.create_task(HUMAN, "api", "zwei")
+    taken = board.next_task(AGENT, task="api#2")
+    assert (taken.ref, taken.status) == ("api#2", "doing")
+    assert board.get_task("api#1").status == "todo"
+    [event] = _changes(board, "api#2")
+    assert (event.old_value, event.new_value, event.origin) == ("todo", "doing", "agent")
+
+
+@pytest.mark.parametrize("prepare, status", [
+    (lambda b: b.update_task(HUMAN, "api#1", status="doing"), 409),        # schon uebernommen
+    (lambda b: b.update_task(HUMAN, "api#1", human=True), 403),            # nur fuer Menschen
+])
+def test_next_with_task_refuses_and_changes_nothing(board, prepare, status):
+    board.create_task(HUMAN, "api", "eins")
+    prepare(board)
+    before = board.get_task("api#1")
+    with pytest.raises(BoardError) as err:
+        board.next_task(AGENT, task="api#1")
+    assert err.value.status == status
+    after = board.get_task("api#1")
+    assert (after.status, after.version) == (before.status, before.version)
+
+
+def test_next_with_unknown_task_is_404(board):
+    with pytest.raises(BoardError) as err:
+        board.next_task(AGENT, task="api#99")
+    assert err.value.status == 404
+
+
+def test_parallel_targeted_claims_have_one_winner(crypto, tmp_path):
+    conn = ThreadLocalConnection(tmp_path / "b.db")
+    initialize_schema(conn)
+    svc = BoardService(SQLiteBoardRepository(conn, crypto, autocommit=True), StatusFlow())
+    svc.create_project(HUMAN, "api", "API")
+    svc.create_task(HUMAN, "api", "eins")
+    results = []
+
+    def take():
+        try:
+            results.append(svc.next_task(AGENT, task="api#1").ref)
+        except BoardError as e:
+            results.append(e.status)
+
+    threads = [threading.Thread(target=take) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert results.count("api#1") == 1 and set(results) - {"api#1"} <= {409}
+
+
+def test_agent_cannot_skip_doing(board):
+    board.create_task(HUMAN, "api", "eins")
+    with pytest.raises(BoardError) as err:
+        board.update_task(AGENT, "api#1", status="review")
+    assert err.value.status == 403 and "uebernehmen" in str(err.value)
+    with pytest.raises(BoardError):
+        board.update_task(AGENT, "api#1", status="doing")                     # nur ueber next(task=...)
+    board.next_task(AGENT, task="api#1")
+    assert board.update_task(AGENT, "api#1", status="review").status == "review"
+    assert board.update_task(AGENT, "api#1", status="doing").status == "doing"   # Rueckweg erlaubt
+    board.update_task(HUMAN, "api#1", status="todo")
+    assert board.update_task(HUMAN, "api#1", status="review").status == "review"  # der Mensch darf alles
+
+
+# ── P1 (conclave#56): Prioritaet nur durch Plan oder Mensch ───────────────
+
+def _todo(board):
+    return [t.ref for t in board.list_tasks("api", ["todo"])]
+
+
+def test_new_tickets_keep_plan_order_by_rank(board):
+    for title in ("eins", "zwei", "drei"):
+        board.create_task(HUMAN, "api", title)
+    ranks = [board.get_task(f"api#{n}").rank for n in (1, 2, 3)]
+    assert ranks == sorted(ranks) and len(set(ranks)) == 3
+    assert _todo(board) == ["api#1", "api#2", "api#3"]
+
+
+@pytest.mark.parametrize("field", [{"index": 0}, {"rank": 1.0}])
+def test_agent_cannot_change_priority(board, field):
+    board.create_task(HUMAN, "api", "eins")
+    board.create_task(HUMAN, "api", "zwei")
+    before = _changes(board, "api#2")
+    with pytest.raises(BoardError) as err:
+        board.update_task(AGENT, "api#2", **field)
+    assert err.value.status == 403 and err.value.type == "HumanOnly"
+    assert _changes(board, "api#2") == before and _todo(board) == ["api#1", "api#2"]
+
+
+def test_ticket_back_in_todo_returns_to_its_rank(board):
+    for title in ("eins", "zwei", "drei"):
+        board.create_task(HUMAN, "api", title)
+    board.next_task(AGENT, task="api#1")
+    board.update_task(AGENT, "api#1", status="review")
+    board.update_task(AGENT, "api#1", status="todo")                       # zurueck (z. B. Nacharbeit)
+    assert _todo(board) == ["api#1", "api#2", "api#3"]                      # nicht ans Ende
+
+
+def test_human_reorders_and_next_task_follows(board):
+    for title in ("eins", "zwei", "drei"):
+        board.create_task(HUMAN, "api", title)
+    board.update_task(HUMAN, "api#3", index=0)                              # Drag & Drop nach oben
+    assert _todo(board) == ["api#3", "api#1", "api#2"]
+    [event] = [e for e in _changes(board, "api#3") if e.field_name == "rank"]
+    assert event.origin == "human"
+    assert board.next_task(AGENT, "api").ref == "api#3"
+    board.update_task(HUMAN, "api#2", rank=-5.0)                            # Feld "Prioritaet"
+    assert board.next_task(AGENT, "api").ref == "api#2"
+
+
+def test_moving_forward_is_work_state_not_priority(board):
+    for title in ("eins", "zwei"):
+        board.create_task(HUMAN, "api", title)
+    board.next_task(AGENT, task="api#2")
+    board.next_task(AGENT, task="api#1")
+    doing = [t.ref for t in board.list_tasks("api", ["doing"])]
+    assert doing == ["api#2", "api#1"]                                      # Reihenfolge des Ankommens
+
+
+def test_renumbering_in_another_column_does_not_block_the_human(board):
+    """P1-Review: Neunummerieren erhoeht die Version; der Mensch, der es ausloest, schreibt trotzdem."""
+    for i in range(3):
+        board.create_task(HUMAN, "api", f"t{i}", status="doing")
+    for i in range(70):
+        ref = board.create_task(HUMAN, "api", f"neu{i}", status="doing").ref
+        board.update_task(HUMAN, ref, index=1)
+    refs = [t.ref for t in board.list_tasks("api", ["doing"])]
+    assert refs[1] == "api#73" and len(set(t.position for t in board.list_tasks("api", ["doing"]))) == 73
+
+
+def _store(board, ref, **fields):
+    """Felder direkt im Repository setzen (ohne Dienst), z. B. enge Raenge fuer das Neunummerieren."""
+    task = board.get_task(ref)
+    for name, value in fields.items():
+        setattr(task, name, value)
+    assert board._repo.update_task(task)
+
+
+def test_agent_update_racing_a_rank_renumber_cannot_restore_the_old_rank(board, monkeypatch):
+    """P1-Review, Korrektur 1: Rennen zwischen Lesen des Agenten und Neunummerieren -> 409, Rang bleibt."""
+    board.create_task(HUMAN, "api", "a")
+    board.create_task(HUMAN, "api", "b")
+    _store(board, "api#1", rank=5.0)                                  # ungleichmaessig: Neunummerieren aendert ihn
+    _store(board, "api#2", rank=7.0)
+    real_get = board._repo.get_task
+    after = {}
+
+    def get_then_renumber(slug, number):
+        task = real_get(slug, number)
+        board._repo.renumber_ranks(task.project_id)               # der Mensch nummeriert dazwischen neu
+        after["rank"] = real_get(slug, number).rank
+        return task
+
+    monkeypatch.setattr(board._repo, "get_task", get_then_renumber)
+    with pytest.raises(BoardError) as e:
+        board.update_task(AGENT, "api#1", description="nur Text")
+    monkeypatch.undo()
+    assert e.value.status == 409
+    assert after["rank"] != 5.0                                     # der Rang hat sich wirklich geaendert
+    task = board.get_task("api#1")
+    assert task.rank == after["rank"] and task.description == ""
+
+
+@pytest.mark.parametrize("column", ["todo", "doing"])
+def test_human_move_with_renumber_does_not_overwrite_a_foreign_change(board, monkeypatch, column):
+    """P1-Folgereview V1: Aendert jemand das Ticket zwischen Lesen und Neunummerieren, gibt es 409."""
+    for title in ("a", "b", "c"):
+        board.create_task(HUMAN, "api", title, status=column)
+    field = "rank" if column == "todo" else "position"
+    _store(board, "api#1", **{field: 1.0})
+    _store(board, "api#2", **{field: 1.0 + 1e-9})                     # kein Platz dazwischen
+    _store(board, "api#3", **{field: 5.0})
+    name = "renumber_ranks" if column == "todo" else "renumber_column"
+    real = getattr(board._repo, name)
+
+    def foreign_change_then_renumber(*args):
+        _store(board, "api#3", description="vom Agenten")             # fremde Aenderung dazwischen
+        return real(*args)
+
+    monkeypatch.setattr(board._repo, name, foreign_change_then_renumber)
+    with pytest.raises(BoardError) as e:
+        board.update_task(HUMAN, "api#3", title="vom Menschen", index=1)
+    monkeypatch.undo()
+    assert (e.value.status, e.value.type) == (409, "Conflict")
+    task = board.get_task("api#3")
+    assert (task.description, task.title) == ("vom Agenten", "c")

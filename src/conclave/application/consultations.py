@@ -1,7 +1,9 @@
 """Consultations anlegen, abfragen, wiederholen - die Logik hinter API und MCP-Tools.
 
-- Die Obergrenze pro Ticket und Stunde wird beim Anlegen gezaehlt, nicht erst im Worker.
-- Reviewer nur aus ``[kanzo] reviewers``; ohne Liste ist die Funktion aus.
+- Die Obergrenze pro Ticket und Stunde gilt je Kanal (Mensch, Agent) und fuer die
+  normalisierte Referenz der Quelle (``ticket.key``); Zaehlen und Speichern sind ein
+  Schritt (R10).
+- Reviewer nur aus ``[consultations] reviewers``; ohne Liste ist die Funktion aus.
 - Der Kanal (``human``/``agent``) kommt aus dem Principal, also aus dem Token,
   nie aus dem Body; ``channel`` im Body ergibt 400 (Z3).
 - Das Ticket wird schon beim Anlegen geprueft: unbekannt -> 404, nur fuer
@@ -28,7 +30,7 @@ from conclave.domain.consultation import (
 )
 from conclave.domain.errors import ConclaveError
 from conclave.domain.principal import HUMAN, Principal
-from conclave.domain.ticket import TASK_REF
+from conclave.domain.ticket import TASK_REF, normalize_ref
 
 MAX_QUESTION = 4000
 MAX_CONTEXT = 8000
@@ -59,7 +61,7 @@ class ConsultationRequests:
     def create(self, body: dict, principal: Principal) -> dict:
         if not self._allowed:
             raise ConsultationRequestError(
-                "Consultations sind nicht eingerichtet: [kanzo] reviewers in config.toml fehlt.",
+                "Consultations sind nicht eingerichtet: [consultations] reviewers in config.toml fehlt.",
                 503, "ConsultationsDisabled")
         task = body.get("task")
         question = body.get("question")
@@ -94,22 +96,20 @@ class ConsultationRequests:
                 f"Nicht erlaubte Reviewer: {', '.join(not_allowed)} (erlaubt: {', '.join(self._allowed)}).",
                 400, "ReviewerNotAllowed")
 
-        since = datetime.now(UTC) - timedelta(hours=1)
-        if self._repo.count_since(self._source_name, task, since) >= self._max_per_hour:
-            raise ConsultationRequestError(
-                f"Obergrenze erreicht: hoechstens {self._max_per_hour} Consultations pro Ticket und Stunde.",
-                429, "ConsultationLimit")
-
         ticket = self._source.get_task(task)              # TaskNotFound / TaskSourceError -> Fehlerbehandlung
         if ticket.human and channel != HUMAN:
             raise ConsultationRequestError("Ticket ist nur fuer Menschen (human) - Anfragen von Agenten "
                                            "werden abgelehnt.", 403, "HumanOnlyTicket")
 
         consultation = Consultation.create(
-            source=self._source_name, source_ref=task, question=question, reviewers=reviewers,
+            source=self._source_name, source_ref=ticket.key, question=question, reviewers=reviewers,
             channel=channel, context=context, requested_by=str(body.get("requested_by") or "")[:100],
             include_previous=include_previous)
-        self._repo.save(consultation)
+        since = datetime.now(UTC) - timedelta(hours=1)
+        if not self._repo.create_if_under_limit(consultation, since, self._max_per_hour):
+            raise ConsultationRequestError(
+                f"Obergrenze erreicht: hoechstens {self._max_per_hour} Consultations pro Ticket und Stunde "
+                f"(je Zugang).", 429, "ConsultationLimit")
         self._worker.submit(consultation.id)
         return self._to_dict(consultation)
 
@@ -122,8 +122,11 @@ class ConsultationRequests:
         if not isinstance(source_ref, str) or not TASK_REF.match(source_ref):
             raise ConsultationRequestError("source_ref muss eine Ticket-Referenz wie 'api#12' sein.",
                                            400, "ValidationError")
-        return {"consultations": [self._to_dict(c) for c in self._repo.list_by_source_ref(self._source_name,
-                                                                                          source_ref)]}
+        # Gespeichert ist die normalisierte Referenz; api#012 findet so auch api#12
+        refs = dict.fromkeys((normalize_ref(source_ref), source_ref))
+        found = {c.id: c for ref in refs for c in self._repo.list_by_source_ref(self._source_name, ref)}
+        ordered = sorted(found.values(), key=lambda c: (c.created_at, c.id), reverse=True)
+        return {"consultations": [self._to_dict(c) for c in ordered]}
 
     # ── Wiederholen ──────────────────────────────────────────────────────
 

@@ -171,7 +171,7 @@ SCHEMAS = {
             "question": {"type": "string", "maxLength": 4000},
             "context": {"type": "string", "maxLength": 8000},
             "reviewers": {"type": "array", "items": {"type": "string"},
-                          "description": "Teilmenge von [kanzo] reviewers; Standard: alle erlaubten"},
+                          "description": "Teilmenge von [consultations] reviewers; Standard: alle erlaubten"},
             "include_previous": {"type": "boolean", "default": False},
             "requested_by": {"type": "string"},
         }},

@@ -51,14 +51,17 @@ def live_server(tmp_path_factory):
         mp.setenv("CONCLAVE_BACKUP_DIR", str(root / "backups"))
         mp.setenv("CONCLAVE_API_TOKEN_FILE", str(root / "api.token"))
         mp.setenv("CONCLAVE_AGENT_TOKEN_FILE", str(root / "agent.token"))
+        mp.setenv("CONCLAVE_REVIEWER_TOKEN_FILE", str(root / "reviewer.token"))
         mp.delenv("CONCLAVE_AGENT_KEY", raising=False)
+        mp.delenv("CONCLAVE_REVIEWER_KEY", raising=False)
         mp.delenv("CONCLAVE_API_KEY", raising=False)
         app, config = _build_app(ConclaveConfig(db_path=root / "conclave.db", api_key="", mode="development"))
         server = make_server("127.0.0.1", 0, app, threaded=True)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            yield SimpleNamespace(url=f"http://127.0.0.1:{server.server_port}", token=config.api_key)
+            yield SimpleNamespace(url=f"http://127.0.0.1:{server.server_port}", token=config.api_key,
+                                  agent_token=config.agent_api_key)
         finally:
             server.shutdown()
             thread.join(timeout=5)

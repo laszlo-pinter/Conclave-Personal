@@ -13,6 +13,7 @@ def initialize_schema(connection) -> None:
                 topic      TEXT NOT NULL DEFAULT '',
                 floor      TEXT,
                 rules      TEXT NOT NULL DEFAULT '',
+                model_read BOOLEAN NOT NULL DEFAULT FALSE,
                 created_at TIMESTAMPTZ NOT NULL
             )
         """)

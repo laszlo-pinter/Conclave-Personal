@@ -10,7 +10,7 @@ from conclave.cli.bootstrap import (
 from conclave.cli.config import ConclaveConfig
 from conclave.cli.handler import CLIHandler
 from conclave.infrastructure.auth import StaticKeyAuthService
-from conclave.runtime.api_token import load_or_create_agent_token, load_or_create_token
+from conclave.runtime.api_token import load_or_create_agent_token, load_or_create_reviewer_token, load_or_create_token
 from conclave.runtime.env import env_secret
 from conclave.infrastructure.sqlite.connection import ThreadLocalConnection
 
@@ -121,10 +121,14 @@ def _build_postgres(config):
 def _build_sqlite(config):
     """Baut alle Services mit SQLite."""
     # Eine Verbindung je Thread statt einer geteilten Verbindung (B6)
+    from pathlib import Path
+    from conclave.cli.bootstrap import _create_db_file, _restrict_db_files
+    _create_db_file(Path(config.db_path))
     conn = ThreadLocalConnection(config.db_path)
 
     from conclave.infrastructure.sqlite.schema import initialize_schema
     initialize_schema(conn)
+    _restrict_db_files(Path(config.db_path))
 
     from conclave.cli.bootstrap import build_service
     from conclave.infrastructure.sqlite.audit_repository import SQLiteAuditRepository
@@ -162,6 +166,15 @@ def _build_consultations(service, agent_service, conn, config, board):
         except Exception:  # noqa: BLE001 - Anzeige-Name, Fallback auf die ID
             return agent_id
 
+    from conclave.infrastructure.log import get_logger
+    if config.kanzo.legacy_keys:
+        get_logger("api.server").warning(
+            "config.toml: %s unter [kanzo] ist veraltet; bitte nach [consultations] verschieben "
+            "([kanzo] url bleibt fuer ein externes Kanzo).", ", ".join(config.kanzo.legacy_keys))
+    if config.kanzo.ignored_keys:
+        get_logger("api.server").warning(
+            "config.toml: %s steht in [kanzo] und [consultations]; es gilt [consultations], "
+            "der Wert unter [kanzo] wird ignoriert.", ", ".join(config.kanzo.ignored_keys))
     if config.board.source == "kanzo":
         source, source_name = KanzoMcpAdapter(config.kanzo.url), "kanzo"
     else:
@@ -190,7 +203,28 @@ def _build_board(conn, config):
     else:
         from conclave.infrastructure.sqlite.board_repository import SQLiteBoardRepository
         repo = SQLiteBoardRepository(conn, crypto, autocommit=True)
-    return BoardService(repo, StatusFlow(config.board.statuses))
+    board = BoardService(repo, StatusFlow(config.board.statuses))
+    moved = board.sync_flow()          # umbenannte letzte Spalte: erledigte Tickets ziehen mit (R9)
+    if moved:
+        from conclave.infrastructure.log import get_logger
+        get_logger("api.server").info("Board: %s erledigte Tickets in die umbenannte letzte Spalte verschoben",
+                                      moved)
+    return board
+
+
+def _check_workspace_location(config) -> None:
+    """Der Workspace darf Home-, Konfigurations-, Daten-, Log- und Backup-Verzeichnis nicht enthalten (R8)."""
+    from pathlib import Path
+
+    from conclave.application.workspace_security import workspace_location_problem, workspace_root
+    sqlite = getattr(config, "db_provider", "sqlite") == "sqlite"
+    db_file = Path(config.db_path) if sqlite else None
+    backup_env = os.environ.get("CONCLAVE_BACKUP_DIR", "").strip()
+    backup_dir = Path(backup_env) if backup_env else (db_file.parent / "backups" if db_file else None)
+    problem = workspace_location_problem(workspace_root(), backup_dir=backup_dir,
+                                         extra_files=(db_file,) if db_file else ())
+    if problem:
+        raise RuntimeError(f"Workspace ungueltig (CONCLAVE_WORKSPACE): {problem}")
 
 
 def _build_app(config: ConclaveConfig | None = None):
@@ -201,6 +235,7 @@ def _build_app(config: ConclaveConfig | None = None):
     errors = validate_production_config(config)
     if errors:
         raise RuntimeError(f"Production-Config ungueltig: {'; '.join(errors)}")
+    _check_workspace_location(config)
 
     # DB-Provider waehlen
     if config.db_provider == "postgres":
@@ -223,13 +258,24 @@ def _build_app(config: ConclaveConfig | None = None):
     }
     handler = CLIHandler(service, agent_service=agent_service,
                          provider_fallback_keys=provider_fallback_keys)
+    # Konfigurationsverzeichnis nur fuer den Benutzer (R13), bevor Tokens angelegt werden
+    from conclave.runtime.file_security import secure_runtime_dirs
+    from conclave.runtime.paths import get_runtime_paths
+    secure_runtime_dirs(get_runtime_paths())
+    # Ein beim letzten Lauf abgestuerzter Restore wird zurueckgerollt (R15)
+    from conclave.application.workspace_security import workspace_root
+    from conclave.runtime.backup import recover_interrupted_restores
+    recover_interrupted_restores(workspace_root())
     # Token ist immer Pflicht (B2): ohne CONCLAVE_API_KEY wird die Token-Datei verwendet.
     if not config.api_key:
         config.api_key = load_or_create_token()
     # Agent-Token (Z1): ohne CONCLAVE_AGENT_KEY die Datei agent.token, angelegt wie api.token.
     if not config.agent_api_key:
         config.agent_api_key = load_or_create_agent_token()
-    auth_service = StaticKeyAuthService(config.api_key, config.agent_api_key)
+    # Reviewer-Token (P3): ohne CONCLAVE_REVIEWER_KEY die Datei reviewer.token
+    if not config.reviewer_api_key:
+        config.reviewer_api_key = load_or_create_reviewer_token()
+    auth_service = StaticKeyAuthService(config.api_key, config.agent_api_key, config.reviewer_api_key)
 
     board = _build_board(conn, config)
     consultations, worker = _build_consultations(service, agent_service, conn, config, board)

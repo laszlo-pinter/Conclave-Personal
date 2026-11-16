@@ -25,33 +25,51 @@ DEFAULT_RATE_LIMIT = "120 per minute"
 DEFAULT_KANZO_URL = "http://localhost:4242/mcp"
 
 
+CONSULTATION_KEYS = ("reviewers", "max_per_hour", "comment_max_chars")
+
+
 @dataclass
 class KanzoSettings:
-    """Abschnitt [kanzo] in config.toml (Consultations).
+    """Consultations: ``[consultations]`` in config.toml, dazu ``[kanzo] url`` fuer ein externes Kanzo.
 
     Die Adresse steht nur hier - die API nimmt keine Ziel-URL an (SSRF).
     ``reviewers`` legt fest, welche Agenten Ticket-Inhalte zu sehen bekommen.
+    Bis v0.6.0 standen ``reviewers``, ``max_per_hour`` und ``comment_max_chars``
+    unter ``[kanzo]``; dort werden sie weiter gelesen, wenn ``[consultations]``
+    sie nicht setzt (siehe ``legacy_keys``).
     """
     url: str = DEFAULT_KANZO_URL
     reviewers: tuple[str, ...] = ()
     max_per_hour: int = 3              # Consultations pro Ticket und Stunde
     comment_max_chars: int = 2000      # Kuerzung der Kommentare (ohne Schlusszeile)
+    legacy_keys: tuple[str, ...] = ()  # aus [kanzo] statt [consultations] gelesen
+    ignored_keys: tuple[str, ...] = ()  # in [kanzo] und [consultations]; [kanzo] wird ignoriert
 
     @classmethod
-    def from_section(cls, section: dict) -> "KanzoSettings":
+    def from_section(cls, section: dict, consultations: dict | None = None) -> "KanzoSettings":
+        consultations = consultations or {}
         url = os.environ.get("CONCLAVE_KANZO_URL", str(section.get("url", DEFAULT_KANZO_URL))).strip()
         if not url.lower().startswith(("http://", "https://")):
             raise ValueError("[kanzo] url muss mit http:// oder https:// beginnen")
-        reviewers = section.get("reviewers", [])
+        legacy = tuple(k for k in CONSULTATION_KEYS if k in section and k not in consultations)
+        ignored = tuple(k for k in CONSULTATION_KEYS if k in section and k in consultations)
+        values = {**{k: section[k] for k in legacy}, **{k: consultations[k] for k in CONSULTATION_KEYS
+                                                         if k in consultations}}
+
+        def label(key: str) -> str:
+            return f"[{'kanzo' if key in legacy else 'consultations'}] {key}"
+
+        reviewers = values.get("reviewers", [])
         if not isinstance(reviewers, list) or not all(isinstance(r, str) and r.strip() for r in reviewers):
-            raise ValueError("[kanzo] reviewers muss eine Liste von Agent-IDs sein")
-        max_per_hour = section.get("max_per_hour", 3)
-        comment_max_chars = section.get("comment_max_chars", 2000)
+            raise ValueError(f"{label('reviewers')} muss eine Liste von Agent-IDs sein")
+        max_per_hour = values.get("max_per_hour", 3)
+        comment_max_chars = values.get("comment_max_chars", 2000)
         for name, value, minimum in (("max_per_hour", max_per_hour, 1), ("comment_max_chars", comment_max_chars, 200)):
             if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
-                raise ValueError(f"[kanzo] {name} muss eine ganze Zahl >= {minimum} sein")
+                raise ValueError(f"{label(name)} muss eine ganze Zahl >= {minimum} sein")
         return cls(url=url, reviewers=tuple(r.strip() for r in reviewers),
-                   max_per_hour=max_per_hour, comment_max_chars=comment_max_chars)
+                   max_per_hour=max_per_hour, comment_max_chars=comment_max_chars, legacy_keys=legacy,
+                   ignored_keys=ignored)
 
 
 from conclave.domain.board import DEFAULT_STATUSES  # noqa: E402
@@ -86,6 +104,52 @@ class BoardSettings:
         return cls(statuses=flow.statuses, source=source)
 
 
+DEFAULT_AGENT_RATE_LIMIT = "60 per minute"
+
+
+def _rate_limit_problem(value: str) -> str | None:
+    if value.strip().lower() in ("off", "none", "0", ""):
+        return None
+    try:
+        from limits import parse_many
+    except ImportError:  # flask-limiter nicht installiert: Begrenzung ist ohnehin aus
+        return None
+    try:
+        parse_many(value)
+    except ValueError:
+        return f"ungueltiges Rate-Limit {value!r} (Beispiel: '60 per minute')"
+    return None
+
+
+@dataclass(frozen=True)
+class LimitSettings:
+    """Abschnitt [limits] in config.toml: Grenzen fuer Agenten (R11). 0 schaltet ein Budget ab.
+
+    Budgets gelten fuer die letzten 24 Stunden und zaehlen Tokens (Eingabe plus Ausgabe) der
+    Modelllaeufe, die ein Agent ausgeloest hat - je Agent-Zugang und je Conversation.
+    """
+    agent_tokens_per_day: int = 2_000_000
+    conversation_tokens_per_day: int = 500_000
+    agent_concurrent_runs: int = 2
+    agent_rate_limit: str = DEFAULT_AGENT_RATE_LIMIT
+
+    @classmethod
+    def from_section(cls, section: dict) -> "LimitSettings":
+        values = {}
+        for name in ("agent_tokens_per_day", "conversation_tokens_per_day", "agent_concurrent_runs"):
+            if name in section:
+                value = section[name]
+                if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                    raise ValueError(f"[limits] {name} muss eine ganze Zahl ab 0 sein")
+                values[name] = value
+        if "agent_rate_limit" in section:
+            value = section["agent_rate_limit"]
+            if not isinstance(value, str) or _rate_limit_problem(value):
+                raise ValueError(f"[limits] agent_rate_limit: {_rate_limit_problem(str(value)) or 'Text erwartet'}")
+            values["agent_rate_limit"] = value.strip()
+        return cls(**values)
+
+
 @dataclass
 class ConclaveConfig:
     db_provider: str = "sqlite"                                  # "sqlite" | "postgres"
@@ -109,12 +173,14 @@ class ConclaveConfig:
     # API-Authentifizierung
     api_key: str = ""
     agent_api_key: str = ""
+    reviewer_api_key: str = ""
     allowed_hosts: str = ""
     # Betriebsmodus
     mode: str = "development"  # "development" | "production"
     # Consultations (Kanzo)
     kanzo: KanzoSettings = field(default_factory=KanzoSettings)
     board: BoardSettings = field(default_factory=BoardSettings)
+    limits: LimitSettings = field(default_factory=LimitSettings)
 
     @classmethod
     def from_sources(
@@ -166,11 +232,13 @@ class ConclaveConfig:
         gemini_api_key = env_secret("GEMINI_API_KEY")
         api_key = env_secret("CONCLAVE_API_KEY")
         agent_api_key = env_secret("CONCLAVE_AGENT_KEY")
+        reviewer_api_key = env_secret("CONCLAVE_REVIEWER_KEY")
         allowed_hosts = os.environ.get("CONCLAVE_ALLOWED_HOSTS", "")
         mode = os.environ.get("CONCLAVE_MODE", "development")
-        kanzo = KanzoSettings.from_section(data.get("kanzo", {}))
+        kanzo = KanzoSettings.from_section(data.get("kanzo", {}), data.get("consultations", {}))
         kanzo_url_set = "url" in data.get("kanzo", {}) or bool(os.environ.get("CONCLAVE_KANZO_URL", "").strip())
         board = BoardSettings.from_section(data.get("board", {}), kanzo_url_set=kanzo_url_set)
+        limits = LimitSettings.from_section(data.get("limits", {}))
         return cls(
             db_provider=provider,
             db_path=db_path,
@@ -188,10 +256,12 @@ class ConclaveConfig:
             gemini_api_key=gemini_api_key,
             api_key=api_key,
             agent_api_key=agent_api_key,
+            reviewer_api_key=reviewer_api_key,
             allowed_hosts=allowed_hosts,
             mode=mode,
             kanzo=kanzo,
             board=board,
+            limits=limits,
         )
 
 

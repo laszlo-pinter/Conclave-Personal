@@ -155,7 +155,8 @@ def test_project_creation_is_atomic_and_deletes_cascade(repo, pg):
             WHERE tc.table_name LIKE 'board_%' ORDER BY 1""")
         rules = cur.fetchall()
     assert rules and all(rule == "CASCADE" for _, rule in rules)
-    assert {t for t, _ in rules} == {"board_comments", "board_counters", "board_events", "board_tasks"}
+    assert {t for t, _ in rules} == {"board_comments", "board_counters", "board_events", "board_tasks",
+                                     "board_project_events", "board_initiatives"}
 
 
 # ── B2: Dienst gegen Postgres ─────────────────────────────────────────────
@@ -173,15 +174,15 @@ def test_service_history_and_comment_order_on_postgres(pg, crypto):
     svc = _service(pg, crypto)
     svc.create_project(HUMAN, "api", "API")
     svc.create_task(HUMAN, "api", "T", description="alt")
-    svc.update_task(AGENT, "api#1", title="T2", description="neu", status="doing", human=True)
-    assert [e.field_name for e in svc.history("api#1")] == ["title", "description", "status", "human"]
+    svc.update_task(HUMAN, "api#1", title="T2", description="neu", status="doing", human=True)   # #51: Mensch verschiebt direkt
+    assert [e.field_name for e in svc.history("api#1")] == ["created", "title", "description", "status", "human"]
     for i in range(10):
         svc.add_comment(HUMAN, "api#1", f"k{i}")
     assert [c.body for c in svc.comments("api#1")] == [f"k{i}" for i in range(10)]
     with pg.cursor() as cur:
         cur.execute("SELECT seq FROM board_events ORDER BY seq")
         seqs = [r[0] for r in cur.fetchall()]
-    assert len(set(seqs)) == 4                                    # eindeutig, in einer Anweisung vergeben
+    assert len(set(seqs)) == 5                                    # eindeutig, in einer Anweisung vergeben
 
 
 def test_service_update_of_a_vanished_task_writes_no_history(pg, crypto):
@@ -256,8 +257,8 @@ def test_optimistic_update_and_flag_guard_on_postgres(pg, crypto):
     assert repo.claim_task(now.id, "todo", "doing", 1.0, now.updated_at, claim_event) is False   # markiert
     assert repo.claim_task(now.id, "todo", "doing", 1.0, now.updated_at) is False
     with pg.cursor() as cur:
-        cur.execute("SELECT count(*) FROM board_events")
-        assert cur.fetchone() == (0,)
+        cur.execute("SELECT count(*) FROM board_events WHERE field <> 'created'")
+        assert cur.fetchone() == (0,)                                   # nur das Anlegen (R9)
 
 
 def test_agent_comment_guard_on_postgres(pg, crypto):
@@ -301,3 +302,135 @@ def test_import_conflict_on_postgres_writes_nothing(pg, crypto, board_sample_exp
     with pg.cursor() as cur:
         cur.execute("SELECT count(*) FROM board_comments")
         assert cur.fetchone() == (3,)
+
+
+
+def test_rank_orders_todo_and_renumbers_on_postgres(pg, crypto):
+    """P1: Prioritaet ordnet die erste Spalte; bei engem Abstand werden die Raenge neu verteilt."""
+    from conclave.domain.principal import AGENT_PRINCIPAL as AGENT
+    from conclave.domain.principal import HUMAN_PRINCIPAL as HUMAN
+
+    svc = _service(pg, crypto)
+    svc.create_project(HUMAN, "api", "API")
+    for title in ("eins", "zwei", "drei"):
+        svc.create_task(HUMAN, "api", title)
+    for _ in range(60):                                           # zwingt irgendwann renumber_ranks
+        svc.update_task(HUMAN, "api#3", index=1)
+        svc.update_task(HUMAN, "api#2", index=1)
+    order = [t.ref for t in svc.list_tasks("api", ["todo"])]
+    assert order[0] == "api#1" and sorted(order) == ["api#1", "api#2", "api#3"]
+    svc.update_task(HUMAN, "api#3", index=0)
+    assert svc.next_task(AGENT, "api").ref == "api#3"
+
+
+# ── R9: Herkunft und vollstaendiger Verlauf auf Postgres ──────────────────
+
+def test_history_with_origin_on_postgres(pg, crypto, board_sample_export):
+    from conclave.domain.principal import AGENT_PRINCIPAL as AGENT
+    from conclave.domain.principal import HUMAN_PRINCIPAL as HUMAN
+    svc = _service(pg, crypto)
+    svc.create_project(HUMAN, "api", "API")
+    svc.rename_project(HUMAN, "api", "API-Server")
+    svc.create_task(AGENT, "api", "Vom Agenten", tags=["a"])
+    task = svc.get_task("api#1")
+    assert (task.origin, task.created_by) == ("agent", "agent")
+    svc.update_task(HUMAN, "api#1", tags=["a", "b"], version=task.version)
+    comment = svc.add_comment(HUMAN, "api#1", "Erst")
+    svc.edit_comment(HUMAN, comment.id, "Dann")
+    svc.delete_comment(HUMAN, comment.id)
+    assert svc.comments("api#1") == []
+    fields = [(e.field_name, e.origin) for e in svc.history("api#1")]
+    assert fields == [("created", "agent"), ("tags", "human"), ("comment", "human"), ("comment", "human")]
+    svc.delete_task(HUMAN, "api#1")
+    project = [(e.field_name, e.origin) for e in svc.project_history("api")]
+    assert project == [("created", "human"), ("name", "human"), ("task_deleted", "human")]
+
+    svc.import_export(HUMAN, board_sample_export)
+    assert [(e.field_name, e.new_value) for e in svc.history("conclave#7")][0] == ("created", "import")
+    assert svc.get_task("conclave#7").created_by == "import"
+
+
+def test_stale_version_and_last_column_rename_on_postgres(pg, crypto):
+    from conclave.application.board import BoardError, BoardService
+    from conclave.domain.board import StatusFlow
+    from conclave.domain.principal import HUMAN_PRINCIPAL as HUMAN
+    from conclave.infrastructure.postgres.board_repository import PostgresBoardRepository
+    svc = _service(pg, crypto)
+    svc.sync_flow()
+    svc.create_project(HUMAN, "api", "API")
+    task = svc.create_task(HUMAN, "api", "T")
+    svc.update_task(HUMAN, "api#1", status="done", version=task.version)
+    with pytest.raises(BoardError) as e:
+        svc.update_task(HUMAN, "api#1", title="X", version=task.version)
+    assert e.value.status == 409
+    renamed = BoardService(PostgresBoardRepository(pg, crypto), StatusFlow(("todo", "doing", "review", "fertig")))
+    assert renamed.sync_flow() == 1
+    assert renamed.get_task("api#1").status == "fertig"
+
+
+# ── P3: Review-Status auf Postgres ────────────────────────────────────────
+
+def test_review_loop_on_postgres(pg, crypto):
+    from conclave.domain.principal import AGENT_PRINCIPAL as AGENT
+    from conclave.domain.principal import HUMAN_PRINCIPAL as HUMAN
+    from conclave.domain.principal import REVIEWER_PRINCIPAL as REVIEWER
+    svc = _service(pg, crypto)
+    svc.create_project(HUMAN, "api", "API")
+    svc.create_task(HUMAN, "api", "Zuerst")
+    svc.create_task(HUMAN, "api", "Nacharbeit")
+    svc.update_task(HUMAN, "api#2", status="review")
+    svc.review(REVIEWER, "api#2", "running")
+    svc.review(REVIEWER, "api#2", "rework", "Urteil: gelb", blocking=1, suggestions=2, checked="b @ 1..2")
+    task = svc.get_task("api#2")
+    assert (task.status, task.review_state, task.review_blocking, task.review_checked) == ("todo", "rework", 1,
+                                                                                            "b @ 1..2")
+    assert svc.last_review("api#2").body == "Urteil: gelb"
+    assert svc.next_task(AGENT).ref == "api#2"
+    svc.update_task(AGENT, "api#2", status="review")
+    assert svc.get_task("api#2").review_state == "none"
+    for _ in range(3):
+        svc.review(REVIEWER, "api#2", "failed", "Urteil: rot")
+        if not svc.get_task("api#2").human:
+            svc.next_task(AGENT, task="api#2")
+            svc.update_task(AGENT, "api#2", status="review")
+    task = svc.get_task("api#2")
+    assert (task.human, task.review_red_count, task.status) == (True, 3, "todo")
+    with pg.cursor() as cur:
+        cur.execute("SELECT seq FROM board_events UNION ALL SELECT seq FROM board_comments")
+        seqs = [r[0] for r in cur.fetchall()]
+    assert len(seqs) == len(set(seqs))                               # eindeutig, auch mit Kommentar in der CTE
+
+
+# ── P6: Steuertickets auf Postgres ────────────────────────────────────────
+
+def test_control_tickets_on_postgres(pg, crypto):
+    from conclave.application.board import BoardError
+    from conclave.domain.principal import AGENT_PRINCIPAL as AGENT
+    from conclave.domain.principal import HUMAN_PRINCIPAL as HUMAN
+    svc = _service(pg, crypto)
+    svc.create_project(HUMAN, "api", "API")
+    svc.create_task(HUMAN, "api", "Arbeit")
+    pause = svc.create_task(HUMAN, "api", "Anhalten", kind="control", control="pause", scope="all")
+    hint = svc.create_task(HUMAN, "api", "Hinweis", kind="control", control="hint")
+    assert (svc.get_task(pause.ref).kind, svc.get_task(pause.ref).control_scope) == ("control", "all")
+    with pytest.raises(BoardError) as e:
+        svc.next_task(AGENT)
+    assert e.value.type == "Paused"
+    svc.add_comment(AGENT, hint.ref, "Verstanden", author_name="cc")
+    assert svc.get_task(hint.ref).control_ack_by == "cc (agent)"
+    assert svc.control_state()["hints"] == []
+    svc.update_task(HUMAN, pause.ref, status="done")
+    assert svc.next_task(AGENT).ref == "api#1"
+
+
+def test_renumber_bumps_versions_on_postgres(repo):
+    """P1-Review: Neunummerieren erhoeht die Version, ein vorher gelesener Stand schreibt nicht zurueck."""
+    project = Project.create("prio", "Prio")
+    repo.create_project(project)
+    first = repo.create_task(Task.create(project, "Eins", "todo", position=1024.0, rank=1024.0))
+    repo.create_task(Task.create(project, "Zwei", "todo", position=2048.0, rank=2048.0))
+    for renumber in (lambda: repo.renumber_ranks(project.id), lambda: repo.renumber_column(project.id, "todo")):
+        stale = repo.get_task("prio", first.number)
+        renumber()
+        stale.description = "veraltet"
+        assert repo.update_task(stale) is False

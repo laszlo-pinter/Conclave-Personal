@@ -29,3 +29,4 @@ class Run:
     status: str
     error: str | None = None
     usage: UsageRecord | None = None
+    origin: str | None = None       # "agent", wenn ein Agent den Lauf ausgeloest hat (R11), sonst None

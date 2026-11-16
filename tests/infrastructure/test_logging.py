@@ -3,6 +3,7 @@
 import json
 import logging
 import time
+from contextlib import contextmanager
 
 import pytest
 
@@ -27,8 +28,29 @@ class TestGetLogger:
         assert logger.name == "conclave.already"
 
 
+@contextmanager
+def _restored_conclave_logger():
+    """configure_logging aendert den Logger "conclave" global; danach wieder wie vorher (R15)."""
+    logger = logging.getLogger("conclave")
+    level, handlers = logger.level, list(logger.handlers)
+    try:
+        yield
+    finally:
+        for handler in list(logger.handlers):
+            if handler not in handlers:
+                logger.removeHandler(handler)
+                handler.close()
+        logger.setLevel(level)
+
+
+@pytest.fixture
+def restore_conclave_logger():
+    with _restored_conclave_logger():
+        yield
+
+
 class TestConfigureLogging:
-    def test_writes_conclave_records_to_file(self, tmp_path):
+    def test_writes_conclave_records_to_file(self, tmp_path, restore_conclave_logger):
         log_file = tmp_path / "conclave-server.log"
         configure_logging("INFO", log_file)
 
@@ -166,3 +188,13 @@ class TestRequestLogger:
         error_records = [r for r in caplog.records if r.levelno >= logging.ERROR]
         assert len(error_records) >= 1
         assert "ValueError" in error_records[0].message
+
+
+def test_configure_logging_leaves_no_handler_behind(tmp_path):
+    """Gegenprobe: nach dem Test ist der Datei-Handler wieder weg (keine Reihenfolgeabhaengigkeit)."""
+    logger = logging.getLogger("conclave")
+    before = list(logger.handlers), logger.level
+    with _restored_conclave_logger():
+        configure_logging("DEBUG", tmp_path / "x.log")
+        assert any(getattr(h, "baseFilename", None) for h in logger.handlers)
+    assert (list(logger.handlers), logger.level) == before

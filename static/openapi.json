@@ -3,7 +3,7 @@
   "info": {
     "title": "Conclave API",
     "description": "Host-gesteuertes Multi-Model-Konversationssystem",
-    "version": "0.6.0"
+    "version": "0.6.1"
   },
   "servers": [
     {
@@ -705,12 +705,8 @@
         "responses": {
           "200": {
             "description": "Erfolg"
-          },
-          "403": {
-            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
-        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "conversation_id",
@@ -985,12 +981,8 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
-        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "conversation_id",
@@ -1132,12 +1124,8 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
-        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "conversation_id",
@@ -1727,7 +1715,7 @@
                     "items": {
                       "type": "string"
                     },
-                    "description": "Teilmenge von [kanzo] reviewers; Standard: alle erlaubten"
+                    "description": "Teilmenge von [consultations] reviewers; Standard: alle erlaubten"
                   },
                   "include_previous": {
                     "type": "boolean",
@@ -2058,7 +2046,7 @@
     },
     "/board/next": {
       "post": {
-        "summary": "Oberstes freies Ticket der ersten Spalte uebernehmen (atomar).",
+        "summary": "Oberstes freies Ticket der ersten Spalte uebernehmen (atomar); mit ``task`` genau dieses.",
         "tags": [
           "board"
         ],
@@ -2111,7 +2099,7 @@
         ]
       },
       "patch": {
-        "summary": "Ticket aendern: title, description, tags, status, human, index (Position in der Spalte).",
+        "summary": "Ticket aendern: title, description, tags, status, human, index, rank, version, initiative.",
         "tags": [
           "board"
         ],
@@ -2182,6 +2170,150 @@
             }
           }
         ]
+      }
+    },
+    "/board/projects/{slug}/initiatives/{initiative}/tasks/{number}": {
+      "get": {
+        "summary": "Ein Ticket ueber seine Vorhaben-Nummer (``projekt/vorhaben-n``, P2); wie das Ticket selbst.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_get_task_in_initiative",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "initiative",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/board/projects/{slug}/initiatives": {
+      "get": {
+        "summary": "Vorhaben des Projekts nach Rang (P2).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_list_initiatives",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "summary": "Vorhaben anlegen: slug, title, optional rank (Freigabe-Recht).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_create_initiative",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/board/projects/{slug}/initiatives/{initiative}": {
+      "put": {
+        "summary": "Vorhaben umbenennen oder ranken: title, rank (Freigabe-Recht).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_update_initiative",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "initiative",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
       }
     },
     "/board/projects/{slug}/tasks/{number}/comments": {
@@ -2261,7 +2393,7 @@
     },
     "/board/projects/{slug}/tasks/{number}/history": {
       "get": {
-        "summary": "Verlauf eines Tickets (Status, Titel, Beschreibung, Markierung).",
+        "summary": "Verlauf eines Tickets: Anlegen und jede Aenderung mit Herkunft.",
         "tags": [
           "board"
         ],
@@ -2286,6 +2418,75 @@
             "required": true,
             "schema": {
               "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/board/projects/{slug}/tasks/{number}/review": {
+      "post": {
+        "summary": "Review-Status setzen (nur Reviewer-Zugang).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_review_task",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/board/projects/{slug}/history": {
+      "get": {
+        "summary": "Verlauf eines Projekts: Anlegen, Umbenennen, geloeschte Tickets (nur Mensch).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_project_history",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           }
         ]

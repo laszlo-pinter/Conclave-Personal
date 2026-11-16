@@ -13,7 +13,7 @@ answer is correct. It gives users a structured workspace for comparing model
 outputs, tracking runs, and deliberately choosing the next step. The human
 decides. Always.
 
-> Status: v0.6.0 Alpha. The primary path is local, desktop-first, and designed
+> Status: v0.7.0 Alpha. The primary path is local, desktop-first, and designed
 > for individual users on Windows and Linux.
 
 ![Conclave Studio](https://raw.githubusercontent.com/laszlo-pinter/Conclave-Personal/main/docs/assets/screenshots/conclave-studio-desktop.png)
@@ -276,8 +276,8 @@ The MCP server uses only the agent token: it reads `CONCLAVE_AGENT_KEY` or
 client) and never reads `api.token`. `conclave token show --agent` prints the
 path and a ready-made `claude mcp add` command. If the server runs with an
 explicit `CONCLAVE_AGENT_KEY`, set the same value in the MCP `env` block. Never
-put the human token there: with it, agents get full access, and the MCP server
-prints a warning.
+put the human token there: the MCP server refuses to work with it (since
+v0.7.0).
 
 With the agent token, agents can do what the MCP tools need and nothing else:
 no settings, agent management, backups, logs or deleting (`403 HumanOnly`).
@@ -289,14 +289,11 @@ Since v0.6.0 Conclave has its own board for work packages. Agents use six
 tools (`conclave_board_list`, `_get`, `_next`, `_create`, `_update`,
 `_comment`): take a ticket with `next_task`, comment, move it to `review`. Only
 the human moves tickets to `done`, and tickets for humans only stay read-only
-for agents; the origin of every comment comes from the token. A Kanzo board can
-be imported. See
+for agents; the origin of every comment comes from the token. See
 [Working with the board](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/mit-dem-board-arbeiten.md).
 
-`conclave_consult` asks the reviewers configured in `[kanzo] reviewers` for a
-second opinion on a ticket of the board (or of an external
-[Kanzo](https://github.com/emanuele-em/kanzo) with `[board] source = "kanzo"`);
-the answers are posted as labelled comments on the ticket
+`conclave_consult` asks the configured reviewer models for a second opinion on
+a ticket of the board; the answers are posted as comments on the ticket
 (`conclave_get_consultation` shows the status). See the
 [API reference](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/referenz/api.md#consultations).
 
@@ -323,8 +320,8 @@ An agent inside a specific conversation.
 A local folder for files, notes, context, and outputs: `CONCLAVE_WORKSPACE`,
 otherwise `~/Conclave/workspace`. Files are not listed or loaded as context
 automatically: users reference them with `@workspace/...` (for example
-`@workspace/notes.md`), agents can request specific files with `@read(...)`,
-and a `context_files:` line in the conversation rules adds workspace files to
+`@workspace/notes.md`), agents can request specific files with `@read(...)`
+once the human allows it for the conversation, and a `context_files:` line in the conversation rules adds workspace files to
 the system prompt.
 
 ### Run
@@ -334,7 +331,7 @@ Runs expose status, errors, duration, and usage.
 
 ### Consultation
 
-A second opinion on a ticket from the board (or an external Kanzo): Conclave reads the ticket,
+A second opinion on a ticket from the board: Conclave reads the ticket,
 asks the configured reviewer models in parallel, and posts each answer as a
 labelled comment ("not verified"). The ticket content is treated as data;
 Conclave only reads tickets and writes comments.
@@ -429,6 +426,8 @@ Important documents:
 - [Release Notes v0.5.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.5.0.md)
 - [Release Notes v0.5.1](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.5.1.md)
 - [Release Notes v0.6.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.6.0.md)
+- [Release Notes v0.6.1](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.6.1.md)
+- [Release Notes v0.7.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.7.0.md)
 - [Release Notes v0.3.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.3.0.md)
 - [Release Notes v0.2.3](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.2.3.md)
 - [Release Notes v0.2.2](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.2.2.md)
@@ -449,16 +448,13 @@ Important documents:
 
 ## Known Limitations
 
-v0.6.0 remains alpha. Known limitations:
+v0.7.0 remains alpha. Known limitations:
 
 - Provider compatibility varies by API, model, account, and region.
 - Remote providers receive the data required for the model call.
 - Desktop mode starts the local web application in a browser.
 - Advanced multi-agent orchestration is partly experimental.
 - There is no native Windows installer, AppImage, or `.deb` package yet.
-- Consultation comments in an external Kanzo are labelled, but the label is not
-  proof of origin (Kanzo has no login). In the own board, origin comes from the
-  token.
 - Human and agent access are separated by token. Agents run as the same
   operating-system user, so an agent with a shell can read `api.token` unless
   the agent host blocks it; on native Windows, Claude Code has no sandbox for
@@ -471,7 +467,7 @@ CI runs the jobs `test` (Ubuntu and Windows, Python 3.11 and 3.12),
 `bandit`), `postgres` (PostgreSQL 16 tests) and `build` (sdist and wheel,
 artifact inspection).
 
-The v0.6.0 surface was verified with these checks:
+The v0.7.0 surface was verified with these checks:
 
 - `python -m pytest` (the Playwright browser tests for XSS protection, CSP,
   token login, the settings page, the context chip, the preview, the file viewer and the board only run
@@ -495,11 +491,11 @@ The v0.6.0 surface was verified with these checks:
 - Human and agent access end-to-end with the installed wheel and a scratch
   Kanzo: `conclave-mcp` over stdio with the agent token, human-only ticket
   rejected via MCP and via direct REST with the agent token, accepted with the
-  human token, warning for the human token in `conclave-mcp` (manual)
+  human token, warning for the human token in `conclave-mcp` (manual, v0.5.0)
 - Upgrade of a v0.5.1 database with the installed wheel (migration
   `012_board`, existing data kept)
 - Board end-to-end with the installed wheel: `conclave-mcp` over stdio with the
-  agent token (`next_task`, comment, move to `review`, `done` rejected), Kanzo
+  agent token (`next_task`, comment, move to `review`, `done` rejected), board
   export imported with the human token (manual)
 - `conclave desktop` end-to-end with real providers (manual, v0.2.0)
 - `pip-audit` and `bandit` (run manually for this release, also in CI)

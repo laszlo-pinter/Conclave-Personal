@@ -13,8 +13,8 @@ class SQLiteRunRepository:
             """
             INSERT INTO runs (
                 id, conversation_id, kind, participants, started_at,
-                finished_at, status, error
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                finished_at, status, error, origin
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 conversation_id=excluded.conversation_id,
                 kind=excluded.kind,
@@ -22,7 +22,8 @@ class SQLiteRunRepository:
                 started_at=excluded.started_at,
                 finished_at=excluded.finished_at,
                 status=excluded.status,
-                error=excluded.error
+                error=excluded.error,
+                origin=excluded.origin
             """,
             (
                 run.id,
@@ -33,6 +34,7 @@ class SQLiteRunRepository:
                 run.finished_at.isoformat() if run.finished_at else None,
                 run.status,
                 run.error,
+                run.origin,
             ),
         )
         self._connection.execute("DELETE FROM usage_records WHERE run_id = ?", (run.id,))
@@ -124,3 +126,19 @@ class SQLiteRunRepository:
             error=row[7],
             usage=usage,
         )
+
+    # ── Budgets der Agenten (R11) ────────────────────────────────────────
+
+    def tokens_since(self, since: datetime, *, origin: str | None = None,
+                     conversation_id: str | None = None) -> int:
+        """Summe der Tokens (Eingabe plus Ausgabe) der Laeufe seit ``since``."""
+        sql = ("SELECT COALESCE(SUM(COALESCE(u.input_tokens, 0) + COALESCE(u.output_tokens, 0)), 0) "
+               "FROM usage_records u JOIN runs r ON r.id = u.run_id WHERE r.started_at >= ?")
+        params = [since.isoformat()]
+        if origin is not None:
+            sql += " AND r.origin = ?"
+            params.append(origin)
+        if conversation_id is not None:
+            sql += " AND r.conversation_id = ?"
+            params.append(conversation_id)
+        return int(self._connection.execute(sql, tuple(params)).fetchone()[0])

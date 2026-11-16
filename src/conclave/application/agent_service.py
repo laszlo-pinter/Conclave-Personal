@@ -3,6 +3,7 @@
 from conclave.application.ports import AgentRepository
 from conclave.domain.agent import Agent
 from conclave.domain.errors import AgentAlreadyExists, AgentNotFound
+from conclave.domain.ids import require_valid_id
 
 
 class AgentService:
@@ -10,6 +11,7 @@ class AgentService:
         self._repo = agent_repository
 
     def create_agent(self, agent: Agent) -> Agent:
+        require_valid_id(agent.id)                 # wie in der API (R4, R15)
         if self._repo.get(agent.id) is not None:
             raise AgentAlreadyExists(agent.id)
         self._repo.save(agent)

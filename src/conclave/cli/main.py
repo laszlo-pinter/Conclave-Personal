@@ -225,6 +225,8 @@ def build_parser() -> argparse.ArgumentParser:
     restore_p.add_argument("--dir", default=None, dest="backup_dir")
     restore_p.add_argument("--keep-workspace", action="store_true",
                            help="Workspace-Dateien zusammenfuehren statt vorhandenen Workspace zu ersetzen")
+    restore_p.add_argument("--allow-foreign", action="store_true",
+                           help="Backup ohne belegte Herkunft (andere Instanz) nach Pruefung trotzdem einspielen")
 
     migrate_p = sub.add_parser("migrate-personal", help="Alte lokale SQLite-Daten nach Conclave Personal migrieren")
     migrate_p.add_argument("--from", required=True, dest="source_path", help="Pfad zur alten SQLite-DB")
@@ -237,8 +239,38 @@ def build_parser() -> argparse.ArgumentParser:
     token_show = token_sub.add_parser("show", help="Pfad des Tokens und Einrichtungsbefehl anzeigen")
     token_show.add_argument("--agent", action="store_true",
                             help="Agent-Token fuer den MCP-Server statt des Mensch-Tokens")
+    token_show.add_argument("--reviewer", action="store_true",
+                            help="Reviewer-Token fuer den automatischen Reviewer (conclave-mcp --reviewer)")
     token_show.add_argument("--reveal", action="store_true",
                             help="Den Token-Wert ausgeben (nur auf ausdrueckliche Anfrage)")
+
+    board_p = sub.add_parser("board", help="Board verwalten (als Mensch, direkt auf der Datenbank)")
+    board_sub = board_p.add_subparsers(dest="board_command", required=True)
+    ini_p = board_sub.add_parser("initiative", help="Vorhaben eines Projekts (P2)")
+    ini_sub = ini_p.add_subparsers(dest="initiative_command", required=True)
+    ini_list = ini_sub.add_parser("list", help="Vorhaben nach Rang anzeigen")
+    ini_list.add_argument("project")
+    ini_add = ini_sub.add_parser("add", help="Vorhaben anlegen")
+    ini_add.add_argument("project")
+    ini_add.add_argument("slug", help="Kurzname, z. B. sich")
+    ini_add.add_argument("title")
+    ini_add.add_argument("--rank", type=float, default=None, help="Rang (kleiner = frueher); Default: hinten")
+    ini_rank = ini_sub.add_parser("rank", help="Rang eines Vorhabens setzen")
+    ini_rank.add_argument("project")
+    ini_rank.add_argument("slug")
+    ini_rank.add_argument("rank", type=float)
+    ini_assign = ini_sub.add_parser("assign", help="Tickets in dieser Reihenfolge zuordnen (naechste Nummern)")
+    ini_assign.add_argument("project")
+    ini_assign.add_argument("slug", help="Vorhaben; '-' = Zuordnung entfernen")
+    ini_assign.add_argument("tasks", nargs="+", help="Referenzen wie conclave#31 oder nur Nummern")
+
+    key_p = sub.add_parser("key", help="Schluessel fuer die verschluesselten Daten (secret.key)")
+    key_sub = key_p.add_subparsers(dest="key_command", required=True)
+    key_rotate = key_sub.add_parser("rotate", help="Neuen Schluessel erzeugen und alle Daten neu verschluesseln")
+    key_rotate.add_argument("--db", default=None, help="SQLite-DB, Default ist die aktive Conclave-DB")
+    key_rotate.add_argument("--drop-old", action="store_true",
+                            help="Abgeloeste Schluessel loeschen (nach Kompromittierung; aeltere Backups gelten "
+                                 "dann als fremd)")
 
     watch = sub.add_parser("watch", help="Conversation live beobachten (pollt auf neue Nachrichten)")
     watch.add_argument("conversation_id")
@@ -262,6 +294,10 @@ def run(argv: list[str] | None = None) -> int:
         return _run_migrate_personal(args)
     if args.command == "token":
         return _run_token_show(args)
+    if args.command == "key":
+        return _run_key_rotate(args)
+    if args.command == "board":
+        return _run_board(args)
 
     config = ConclaveConfig.from_sources()
     errors = validate_production_config(config)
@@ -503,6 +539,7 @@ def run(argv: list[str] | None = None) -> int:
             db_path=config.db_path,
             backup_dir=backup_dir,
             replace_workspace=not args.keep_workspace,
+            allow_foreign=args.allow_foreign,
         )
 
     elif args.command == "watch":
@@ -576,11 +613,13 @@ def _server_url(host: str, port: int) -> str:
 
 def _run_web(args) -> int:
     from conclave.runtime.api_token import read_token
-    from conclave.runtime.browser import url_with_token
+    from conclave.runtime.browser import is_local_url, url_with_token
 
     config = ConclaveConfig.from_sources()
     url = args.url or _server_url(config.host, config.port)
-    open_browser(url_with_token(url, read_token()))
+    # Das Mensch-Token nur an eine lokale Adresse haengen, nie an einen fremden Host (R5)
+    own = not args.url or is_local_url(url)
+    open_browser(url_with_token(url, read_token()) if own else url)
     print(f"Conclave Web: {url}")
     return 0
 
@@ -620,12 +659,119 @@ def _run_server(args, should_open_browser: bool = False) -> int:
     return 0
 
 
+def _show_reviewer_token(args, url: str) -> int:
+    """Reviewer-Token (P3): nur fuer den automatischen Reviewer, nie fuer cc oder andere Agenten."""
+    from conclave.runtime import api_token
+
+    if env_secret("CONCLAVE_REVIEWER_KEY"):
+        token, source = env_secret("CONCLAVE_REVIEWER_KEY"), "CONCLAVE_REVIEWER_KEY"
+    else:
+        path = api_token.reviewer_token_path()
+        existed = path.exists()
+        token, source = api_token.load_or_create_reviewer_token(path), str(path)
+        if not existed:
+            source += " (neu angelegt)"
+    print(f"Reviewer-Token: {source}")
+    print("Nur fuer den automatischen Reviewer. Agenten, die Code schreiben, duerfen es nicht lesen "
+          "(im Agent-Host sperren wie api.token).")
+    print()
+    print("MCP-Server fuer den Reviewer (liest reviewer.token selbst):")
+    print(f"  claude mcp add ConclaveReviewer -e CONCLAVE_API_URL={url} -- conclave-mcp --reviewer")
+    if args.reveal:
+        print()
+        print(token)
+    return 0
+
+
+def _run_board(args) -> int:
+    """Vorhaben verwalten (P2). Die CLI handelt als Mensch, wie alle lokalen Befehle."""
+    from conclave.application.board import BoardError
+    from conclave.domain.principal import HUMAN_PRINCIPAL
+
+    config = ConclaveConfig.from_sources()
+    board, close = _open_board(config)
+    try:
+        if args.initiative_command == "add":
+            ini = board.create_initiative(HUMAN_PRINCIPAL, args.project, args.slug, args.title, rank=args.rank)
+            print(f"Vorhaben {args.project}/{ini.slug} angelegt (Rang {ini.rank:g}).")
+        elif args.initiative_command == "rank":
+            ini = board.update_initiative(HUMAN_PRINCIPAL, args.project, args.slug, rank=args.rank)
+            print(f"Vorhaben {args.project}/{ini.slug}: Rang {ini.rank:g}.")
+        elif args.initiative_command == "assign":
+            slug = None if args.slug == "-" else args.slug
+            for task in args.tasks:
+                ref = task if ("#" in task or "/" in task) else f"{args.project}#{task}"
+                moved = board.assign_initiative(HUMAN_PRINCIPAL, ref, slug)
+                print(f"{moved.ref} -> {moved.initiative_ref or 'ohne Vorhaben'}  {moved.title}")
+        else:
+            for ini in board.list_initiatives(args.project):
+                print(f"  {args.project}/{ini.slug:<20} Rang {ini.rank:<8g} {ini.title}")
+    except BoardError as exc:
+        print(f"FEHLER: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        close()
+    return 0
+
+
+def _open_board(config):
+    """Board-Dienst auf der konfigurierten Datenbank, wie im Server (api/server.py)."""
+    from conclave.api.server import _build_board
+    if config.db_provider == "postgres":
+        import psycopg2
+        conn = psycopg2.connect(config.db_dsn)
+        conn.autocommit = True
+        from conclave.infrastructure.postgres.schema import initialize_schema
+    else:
+        from conclave.infrastructure.sqlite.connection import ThreadLocalConnection
+        from conclave.infrastructure.sqlite.schema import initialize_schema
+        conn = ThreadLocalConnection(config.db_path)
+    initialize_schema(conn)
+    return _build_board(conn, config), conn.close
+
+
+def _run_key_rotate(args) -> int:
+    """Schluesselwechsel (R13): neuer secret.key, alle Daten neu verschluesselt, alter Schluessel bleibt."""
+    from conclave.runtime.key_rotation import KeyRotationError, rotate_secret_key
+    from conclave.runtime.paths import get_runtime_paths
+
+    config = ConclaveConfig.from_sources()
+    postgres = config.db_provider == "postgres"
+    if postgres and args.db:
+        print("FEHLER: --db gilt nur fuer SQLite; mit PostgreSQL wird die konfigurierte DSN verwendet.",
+              file=sys.stderr)
+        return 1
+    if postgres:
+        import psycopg2
+        connection = psycopg2.connect(config.db_dsn)
+    else:
+        import sqlite3
+        connection = sqlite3.connect(str(args.db or config.db_path), timeout=30)
+    try:
+        count = rotate_secret_key(get_runtime_paths().secret_key_path, connection, postgres=postgres,
+                                  drop_old=args.drop_old)
+    except KeyRotationError as exc:
+        print(f"FEHLER: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        connection.close()
+    print(f"Schluessel gewechselt: {count} Werte neu verschluesselt.")
+    if args.drop_old:
+        print("Abgeloeste Schluessel geloescht; aeltere Backups gelten jetzt als fremd.")
+    else:
+        print("Der alte Schluessel liegt als secret.key.old-* daneben; er wird fuer aeltere Backups gebraucht.")
+    print("Einen laufenden Server danach neu starten.")
+    return 0
+
+
 def _run_token_show(args) -> int:
     """Zeigt Pfad und Einrichtung eines Tokens; den Wert nur mit --reveal (Z5)."""
     from conclave.runtime import api_token
 
     config = ConclaveConfig.from_sources()
     url = _server_url(config.host, config.port)
+    if getattr(args, "reviewer", False):
+        return _show_reviewer_token(args, url)
     if not args.agent:
         source = "CONCLAVE_API_KEY" if env_secret("CONCLAVE_API_KEY") else str(api_token.token_path())
         print(f"Mensch-Token: {source}")
@@ -706,7 +852,13 @@ def _run_migrate_personal(args) -> int:
 
 
 def main() -> None:
-    sys.exit(run())
+    from conclave.infrastructure.migrations import MigrationError
+    try:
+        sys.exit(run())
+    except MigrationError as exc:
+        # Kurze Meldung statt Traceback; die Migration ist zurueckgerollt (R1, R15)
+        print(f"FEHLER: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

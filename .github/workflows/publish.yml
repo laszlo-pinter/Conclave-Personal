@@ -1,5 +1,8 @@
 name: Publish
 
+# Veroeffentlicht nur ueber einen Tag v<Version>, der zu pyproject.toml passt,
+# und erst nach der vollen CI (Tests Linux/Windows, UI, Security, PostgreSQL)
+# und der Paketpruefung (R14).
 on:
   push:
     tags:
@@ -14,61 +17,57 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  test:
-    name: Release tests
+  version:
+    name: Tag and version
     runs-on: ubuntu-latest
-    env:
-      CONCLAVE_MODE: development
-      CONCLAVE_API_KEY: test-ci-local-key
-      PIP_DISABLE_PIP_VERSION_CHECK: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-          cache: pip
 
-      - name: Install package and test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev-all]"
-
-      - name: Run tests
+      - name: Check tag against pyproject.toml
         env:
-          CONCLAVE_SECRET_KEY_FILE: ${{ runner.temp }}/conclave-secret.key
-        run: python -m pytest
+          REF: ${{ github.ref }}
+        run: python scripts/release/check_version.py "$REF"
+
+  ci:
+    name: CI
+    needs: version
+    uses: ./.github/workflows/ci.yml
+    with:
+      release: true
 
   build:
     name: Build distributions
     runs-on: ubuntu-latest
-    needs: test
+    needs: [version, ci]
     env:
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-          cache: pip
 
-      - name: Install build dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install build
+      - name: Install pinned build tools
+        run: "python -m pip install --require-hashes --only-binary :all: -r requirements/release-tools.txt"
 
       - name: Build sdist and wheel
-        run: python -m build --sdist --wheel
+        run: python -m build --sdist --wheel --no-isolation
 
-      - name: Verify distribution names
-        run: |
-          test -f dist/conclave_personal-0.6.0-py3-none-any.whl
-          test -f dist/conclave_personal-0.6.0.tar.gz
+      - name: Check distributions
+        run: python scripts/release/check_dist.py dist
 
       - name: Upload distributions
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -79,7 +78,8 @@ jobs:
   publish:
     name: Publish to PyPI
     runs-on: ubuntu-latest
-    needs: build
+    needs: [version, ci, build]
+    if: startsWith(github.ref, 'refs/tags/v')
     environment:
       name: pypi
       url: https://pypi.org/project/conclave-personal/

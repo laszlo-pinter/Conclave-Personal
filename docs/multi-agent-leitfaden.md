@@ -132,7 +132,8 @@ Hinweis: Die Beobachtung entstand ohne die heutigen
 Workspace-Mechanismen. Agenten bekommen Dateien gezielt über
 `@workspace/<pfad>` in der Nachricht oder über `context_files:` in den
 Conversation-Regeln (lädt Workspace-Dateien in den System-Prompt) und
-können selbst `@read(<pfad>)` und `@save(<pfad>)` verwenden. Es gelten
+können selbst `@save(<pfad>)` verwenden, `@read(<pfad>)` nach Freigabe
+durch den Menschen je Conversation. Es gelten
 dieselben Grenzen: nur innerhalb des Workspace, keine versteckten
 Pfade, Agent-Leselimit. `context_files:`, `@read()` und `@save()`
 wertet nur der Universal-Adapter aus (Agenten mit Preset). Das ersetzt

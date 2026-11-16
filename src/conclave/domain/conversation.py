@@ -23,6 +23,7 @@ class Conversation:
     topic: str = ""
     floor: str | None = None          # participant_id mit Rederecht, None = niemand
     rules: str = ""                   # Chat-Regeln fuer Agenten (System-Instruktionen)
+    model_read: bool = False          # Modelle duerfen Dateien per @read lesen (Freigabe durch den Menschen, R6)
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     messages: list[Message] = field(default_factory=list)
     participants: list[Participant] = field(default_factory=list)

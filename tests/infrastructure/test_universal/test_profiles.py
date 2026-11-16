@@ -132,13 +132,14 @@ class TestGeminiProfile:
         )
         assert "gemini-flash-latest" in url
         assert "{model}" not in url
-        assert params == {"key": "AIza-test"}
+        assert params == {}                                   # Key nicht in der URL (R12)
 
-    def test_build_headers_no_auth(self):
+    def test_build_headers_key_in_goog_header(self):
         profile = GeminiProfile()
         headers = profile.build_headers("AIza-test")
         assert "Authorization" not in headers
         assert "X-API-Key" not in headers
+        assert headers["x-goog-api-key"] == "AIza-test"
 
     def test_build_body_gemini_format(self):
         profile = GeminiProfile()

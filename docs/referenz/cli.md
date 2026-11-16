@@ -11,7 +11,9 @@ conclave desktop [--host 127.0.0.1] [--port 8000] [--debug]
 ```
 
 `desktop` startet den lokalen Server und öffnet die Web-UI im Browser.
-`web`, `desktop` und `conclave-watch` nutzen das Mensch-Token.
+`web`, `desktop` und `conclave-watch` nutzen das Mensch-Token. `web --url`
+übergibt es nur an lokale Adressen (`127.0.0.1`, `localhost`, `::1`), nie an
+einen fremden Host.
 Wenn der bevorzugte Port belegt ist, wählt `desktop` automatisch einen freien
 Port.
 
@@ -101,7 +103,7 @@ conclave runs [--conversation-id <id>] [--limit 100]
 conclave usage [--by-conversation]
 conclave export <conversation_id>
 conclave backup [--dir <backup_dir>]
-conclave restore --backup <backup.zip> [--dir <backup_dir>] [--keep-workspace]
+conclave restore --backup <backup.zip> [--dir <backup_dir>] [--keep-workspace] [--allow-foreign]
 ```
 
 `backup` erstellt ein ZIP mit lokaler SQLite-DB und Workspace-Dateien. Ohne
@@ -114,6 +116,12 @@ wieder her. Vor dem Schreiben wird automatisch ein Pre-Restore-Backup erstellt;
 Anders als die API ersetzt die CLI standardmäßig den Workspace-Inhalt; mit
 `--keep-workspace` werden Dateien aus dem Backup in den bestehenden Workspace
 gemischt.
+Der Restore prüft und entpackt erst alles; schlägt ein Schritt fehl, bleiben
+Datenbank und Workspace unverändert. Ein Backup ohne belegte Herkunft (andere
+Instanz, verändert oder ältere Backups ohne Manifest) spielt `restore` nicht ein,
+sondern listet die Agents aus dem Backup mit ihren Ziel-URLs. Nach Prüfung mit
+`--allow-foreign` wiederholen. Details:
+[API-Referenz, Backup und Restore](api.md#backup-und-restore).
 
 ## Migration
 
@@ -129,13 +137,42 @@ angelegt.
 ## Tokens
 
 ```powershell
-conclave token show [--agent] [--reveal]
+conclave token show [--agent | --reviewer] [--reveal]
 ```
 
 Zeigt, woher ein Token kommt (Variable oder Datei). Ohne `--agent` das
 Mensch-Token, mit `--agent` das Agent-Token samt fertigem
 `claude mcp add`-Befehl für den MCP-Server; fehlt `agent.token`, wird es
-angelegt. Den Token-Wert gibt der Befehl nur mit `--reveal` aus.
+angelegt. Mit `--reviewer` entsprechend das Reviewer-Token und der Befehl für
+`conclave-mcp --reviewer`. Den Token-Wert gibt der Befehl nur mit `--reveal` aus.
+
+## Board
+
+```powershell
+conclave board initiative list <projekt>
+conclave board initiative add <projekt> <kurzname> <titel> [--rank <zahl>]
+conclave board initiative rank <projekt> <kurzname> <zahl>
+conclave board initiative assign <projekt> <kurzname|-> <ticket>...
+```
+
+Vorhaben eines Projekts verwalten (siehe
+[Mit dem Board arbeiten](../mit-dem-board-arbeiten.md#vorhaben)). Die CLI
+handelt als Mensch und arbeitet direkt auf der konfigurierten Datenbank.
+`assign` vergibt die Nummern in der Reihenfolge der Tickets (`projekt#n` oder
+nur die Nummer); `-` entfernt die Zuordnung.
+
+## Schlüssel
+
+```powershell
+conclave key rotate [--db <pfad>] [--drop-old]
+```
+
+Neuer `secret.key`, alle verschlüsselten Daten (SQLite oder PostgreSQL) werden
+neu verschlüsselt. Der alte Schlüssel bleibt als `secret.key.old-<Zeit>` für
+ältere Backups erhalten; mit `--drop-old` werden alle abgelösten Schlüssel
+gelöscht (nach einer Kompromittierung, ältere Backups gelten dann als fremd).
+`--db` gilt nur für SQLite. Danach den Server neu starten. Siehe
+[Sicherheit](../sicherheit.md#schlüsselwechsel).
 
 ## JSON-Ausgabe
 
@@ -156,7 +193,7 @@ Neben `conclave` installiert das Paket diese Konsolenprogramme:
 | Programm | Zweck |
 |----------|-------|
 | `conclave-api` | Startet den API-Server direkt (ohne die Launch-Logik von `conclave server`) |
-| `conclave-mcp` | MCP-Server, der die Conclave-API über `CONCLAVE_API_URL` (Default `http://localhost:8000`) anspricht. Nutzt nur das Agent-Token (`CONCLAVE_AGENT_KEY` bzw. `agent.token`, als Rückfall `CONCLAVE_API_KEY` mit Warnung), nie `api.token` |
+| `conclave-mcp` | MCP-Server, der die Conclave-API über `CONCLAVE_API_URL` (Default `http://localhost:8000`) anspricht. Nutzt nur das Agent-Token (`CONCLAVE_AGENT_KEY` bzw. `agent.token`), nie `api.token` oder `CONCLAVE_API_KEY`; mit dem Mensch-Token lehnt jedes Tool ab (Ausnahme zur Fehlersuche: `CONCLAVE_MCP_ALLOW_HUMAN=1`) |
 | `conclave-watch` | Beobachtet eine Conversation über die HTTP-API |
 
 ```powershell

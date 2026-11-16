@@ -3,7 +3,10 @@
 import json as _json
 import logging
 import os
+import re
+import threading
 import time
+from datetime import datetime, timedelta, timezone
 
 try:
     from flask import Flask, Response, g, jsonify, request, stream_with_context, send_file as flask_send_file
@@ -37,26 +40,37 @@ from conclave.domain.errors import (
     ProviderTimeout,
 )
 from conclave.domain.participant import ParticipantType
+from conclave.domain.ids import ID_RULE_ERROR, valid_id
 from conclave.domain.principal import HUMAN_PRINCIPAL
-from conclave.api.access import HUMAN_ONLY_ERROR, agent_may
+from conclave.api.access import HUMAN_ONLY_ERROR, agent_may, reviewer_may
 from conclave.application.consultations import ConsultationRequestError
-from conclave.application.board import BoardError, comment_to_dict, event_to_dict, project_to_dict, task_to_dict
-from conclave.domain.errors import TaskNotFound, TaskSourceError
+from conclave.application.board import (
+    BoardError, comment_to_dict, event_to_dict, initiative_to_dict, project_event_to_dict, project_to_dict,
+    task_to_dict,
+)
+from conclave.domain.errors import TaskNotFound, TaskSourceError, public_message, redact_secrets
 from conclave.cli.bootstrap import rate_limit_disabled, validate_rate_limit
-from conclave.cli.config import DEFAULT_RATE_LIMIT
+from conclave.cli.config import DEFAULT_RATE_LIMIT, LimitSettings
+from conclave.application.conversation_flow import RUN_ORIGIN
 from conclave.application.workspace_security import (
     agent_read_limit_bytes,
+    agent_write_problem,
     assert_size_allowed,
     is_hidden_workspace_path,
     resolve_workspace_path,
+    workspace_location_problem,
     workspace_root,
     text_size,
     ui_read_limit_bytes,
     write_limit_bytes,
 )
+from conclave.application import workspace_security
 from conclave.infrastructure.log import active_log_file, get_logger, read_log_tail
 from conclave.runtime.toml_edit import set_toml_string
-from conclave.runtime.backup import create_backup_archive, restore_backup_archive
+from conclave.runtime.backup import (
+    ForeignBackupError, WorkspaceBusyError, create_backup_archive, load_backup_secret, load_backup_secrets,
+    restore_backup_archive,
+)
 from conclave.runtime.assets import get_asset_root
 from conclave.runtime.env import env_secret
 
@@ -88,6 +102,7 @@ CONTENT_SECURITY_POLICY = "; ".join([
 PERMISSIONS_POLICY = "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
 
 BOARD_IMPORT_MAX_BYTES = 50 * 1024 * 1024    # Groesse des JSON-Exports, vor dem Parsen geprueft
+MAX_REQUEST_BYTES = 10 * 1024 * 1024         # alle anderen Anfragen (R6); der Import hat seine eigene Grenze
 
 # Ohne Token erreichbar (B12): UI-Seite, statische Dateien, Healthcheck, API-Doku.
 PUBLIC_GET_PATHS = frozenset({"/", "/health", "/api-docs", "/openapi.json"})
@@ -122,8 +137,25 @@ def is_host_allowed(host_header: str, allowed: set[tuple[str, str]]) -> bool:
     return bool(host) and ((host, "") in allowed or (host, port) in allowed)
 
 
+# Frei waehlbare IDs landen in URL-Pfaden (UI, MCP); dieselbe Regel gilt in den Diensten (R4, R15)
+_valid_id = valid_id
+
+
+# Routen, ueber die ein Agent Modelle aufruft; dafuer gelten Budget und gleichzeitige Laeufe (R11)
+MODEL_ROUTES = frozenset({
+    ("POST", "/conversations/<conversation_id>/participants/<participant_id>/invoke"),
+    ("POST", "/conversations/<conversation_id>/orchestrate"),
+    ("POST", "/conversations/<conversation_id>/orchestrate-parallel"),
+})
+
+
 def create_app(handler: CLIHandler, auth_service=None,
-               agent_service=None, config=None, service=None, consultations=None, board=None) -> Flask:
+               agent_service=None, config=None, service=None, consultations=None, board=None,
+               allow_unauthenticated: bool = False) -> Flask:
+    """Baut die Flask-App. Ohne ``auth_service`` nur mit ``allow_unauthenticated=True`` (Tests, R15)."""
+    if auth_service is None and not allow_unauthenticated:
+        raise ValueError("create_app braucht einen auth_service; ohne Anmeldung nur mit "
+                         "allow_unauthenticated=True (Tests).")
     import pathlib
     asset_root = get_asset_root()
     app = Flask(__name__, static_folder=str(asset_root / "static"), static_url_path="/static")
@@ -140,14 +172,44 @@ def create_app(handler: CLIHandler, auth_service=None,
         "source": getattr(config, "rate_limit_source", "default") if config else "default",
     }
 
+    limits = getattr(config, "limits", None) or LimitSettings()
+
+    def _request_role() -> str:
+        """Rolle laut Token, schon vor der Anmeldung (das Rate-Limit laeuft zuerst)."""
+        if auth_service is None:
+            return "human"
+        auth_header = request.headers.get("Authorization", "")
+        token = auth_header[7:] if auth_header.startswith("Bearer ") else request.headers.get("X-API-Key")
+        principal = auth_service.authenticate(token)
+        return principal.role if principal is not None else "anonymous"
+
+    def _rate_key() -> str:
+        # Nach Zugang und IP (R11): Agenten und UI teilen sich lokal keinen Topf mehr
+        return f"{_request_role()}:{get_remote_address()}"
+
     def _current_rate_limit() -> str:
+        if _request_role() in ("agent", "reviewer") and not rate_limit_disabled(limits.agent_rate_limit):
+            return limits.agent_rate_limit
         value = rate_limit_state["value"]
         return DEFAULT_RATE_LIMIT if rate_limit_disabled(value) else value
 
     if _has_limiter:
-        limiter = Limiter(get_remote_address, app=app, default_limits=[_current_rate_limit],
-                          default_limits_exempt_when=lambda: rate_limit_disabled(rate_limit_state["value"]),
-                          storage_uri="memory://")
+        def _rate_exempt() -> bool:
+            # Agenten haben ihr eigenes Limit; der allgemeine Schalter "off" gilt nur fuer die anderen (R11)
+            if _request_role() in ("agent", "reviewer") and not rate_limit_disabled(limits.agent_rate_limit):
+                return False
+            return rate_limit_disabled(rate_limit_state["value"])
+
+        limiter = Limiter(_rate_key, app=app, default_limits=[_current_rate_limit],
+                          default_limits_exempt_when=_rate_exempt, storage_uri="memory://")
+
+    if app.config.get("MAX_CONTENT_LENGTH") is None:      # Flask legt den Schluessel mit None an
+        app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
+
+    @app.errorhandler(413)
+    def _too_large(e):
+        return jsonify({"error": f"Anfrage zu gross (hoechstens {MAX_REQUEST_BYTES // (1024 * 1024)} MB).",
+                        "type": "RequestTooLarge"}), 413
 
     @app.errorhandler(429)
     def _rate_limited(e):
@@ -206,8 +268,60 @@ def create_app(handler: CLIHandler, auth_service=None,
             return
         if request.url_rule is None:
             return  # unbekannte Route: 404/405 wie bei allen anderen
-        if not agent_may(request.method, request.url_rule.rule):
+        # Der Reviewer (auch is_agent) hat eine eigene, engere Liste (P3)
+        allowed = reviewer_may if principal.is_reviewer else agent_may
+        if not allowed(request.method, request.url_rule.rule):
             return jsonify(HUMAN_ONLY_ERROR), 403
+
+    # ── Grenzen fuer Agenten (R11): Budget je Zugang und Conversation, gleichzeitige Laeufe ──
+    agent_runs = {"active": 0}
+    agent_runs_lock = threading.Lock()
+    run_repo = getattr(service, "_run_repo", None) if service is not None else None
+
+    @app.before_request
+    def _check_agent_limits():
+        principal = g.get("principal")
+        if (principal is None or not principal.is_agent or request.method == "OPTIONS"
+                or request.url_rule is None or (request.method, request.url_rule.rule) not in MODEL_ROUTES):
+            return
+        conversation_id = (request.view_args or {}).get("conversation_id")
+        since = datetime.now(timezone.utc) - timedelta(days=1)
+        if run_repo is not None:
+            if limits.agent_tokens_per_day:
+                used = run_repo.tokens_since(since, origin="agent")
+                if used >= limits.agent_tokens_per_day:
+                    return jsonify({
+                        "error": (f"Tagesbudget der Agenten erschoepft: {used} von {limits.agent_tokens_per_day} "
+                                  "Tokens in den letzten 24 Stunden ([limits] agent_tokens_per_day)."),
+                        "type": "AgentBudgetExceeded"}), 429
+            if limits.conversation_tokens_per_day and conversation_id:
+                used = run_repo.tokens_since(since, origin="agent", conversation_id=conversation_id)
+                if used >= limits.conversation_tokens_per_day:
+                    return jsonify({
+                        "error": (f"Budget dieser Conversation fuer Agenten erschoepft: {used} von "
+                                  f"{limits.conversation_tokens_per_day} Tokens in den letzten 24 Stunden "
+                                  "([limits] conversation_tokens_per_day)."),
+                        "type": "ConversationBudgetExceeded"}), 429
+        if limits.agent_concurrent_runs:
+            with agent_runs_lock:
+                if agent_runs["active"] >= limits.agent_concurrent_runs:
+                    return jsonify({
+                        "error": (f"Zu viele gleichzeitige Modelllaeufe von Agenten (hoechstens "
+                                  f"{limits.agent_concurrent_runs}, [limits] agent_concurrent_runs)."),
+                        "type": "TooManyAgentRuns"}), 429
+                agent_runs["active"] += 1
+                g.agent_run_slot = True
+        # Laeufe dieser Anfrage tragen die Herkunft "agent" schon beim Speichern
+        g.agent_origin_token = RUN_ORIGIN.set("agent")
+
+    @app.teardown_request
+    def _finish_agent_run(_exc=None):
+        if g.pop("agent_run_slot", False):
+            with agent_runs_lock:
+                agent_runs["active"] -= 1
+        token = g.pop("agent_origin_token", None)
+        if token is not None:
+            RUN_ORIGIN.reset(token)
 
     @app.before_request
     def _log_request_start():
@@ -330,12 +444,12 @@ def create_app(handler: CLIHandler, auth_service=None,
     # ── Error Handler ────────────────────────────────────────────────────
 
     def _error_json(e: Exception, status: int):
-        return jsonify({"error": str(e), "type": type(e).__name__}), status
+        return jsonify({"error": public_message(e), "type": type(e).__name__}), status
 
     def _cli_error_json(result: CLIResult, default_status: int):
         data = result.data or {}
         status = int(data.get("status", default_status))
-        payload = {"error": result.message}
+        payload = {"error": redact_secrets(result.message or "")}
         if data.get("type"):
             payload["type"] = data["type"]
         return jsonify(payload), status
@@ -470,6 +584,8 @@ def create_app(handler: CLIHandler, auth_service=None,
         model    = body.get("model", "")
         if not agent_id or not name or not model:
             return jsonify({"error": "id, name und model sind erforderlich."}), 400
+        if not _valid_id(agent_id):
+            return jsonify({"error": ID_RULE_ERROR, "type": "ValidationError"}), 400
         try:
             agent = Agent(
                 id=agent_id, name=name, provider=provider, model=model,
@@ -520,8 +636,8 @@ def create_app(handler: CLIHandler, auth_service=None,
                 max_messages=max_messages,
                 created_at=created_at,
             )
-        except (ValueError, Exception) as e:
-            return jsonify({"error": str(e)}), 400
+        except Exception as e:
+            return jsonify({"error": public_message(e)}), 400
         # Ohne neuen api_key bleibt der gespeicherte Key erhalten; entfernen nur ausdruecklich
         result = handler.update_agent(agent, clear_api_key=body.get("clear_api_key") is True)
         if not result.success:
@@ -616,16 +732,23 @@ def create_app(handler: CLIHandler, auth_service=None,
         result = handler.show_conversation(conversation_id)
         if not result.success:
             return jsonify({"error": result.message}), 404
-        return jsonify({"rules": result.data.get("rules", "")}), 200
+        return jsonify({"rules": result.data.get("rules", ""),
+                        "model_read": bool(result.data.get("model_read", False))}), 200
 
     @app.post("/conversations/<conversation_id>/rules")
     def set_rules(conversation_id: str):
         body = request.get_json() or {}
         rules = body.get("rules", "")
+        model_read = body.get("model_read")
+        if model_read is not None and not isinstance(model_read, bool):
+            return jsonify({"error": "model_read muss true oder false sein.", "type": "ValidationError"}), 400
         result = handler.set_rules(conversation_id, rules)
         if not result.success:
             return jsonify({"error": result.message}), 404
-        return jsonify({"rules": rules}), 200
+        if model_read is not None:
+            handler.set_model_read(conversation_id, model_read)
+        current = handler.show_conversation(conversation_id).data
+        return jsonify({"rules": rules, "model_read": bool(current.get("model_read", False))}), 200
 
     # ── Floor management ─────────────────────────────────────────────────
 
@@ -695,6 +818,8 @@ def create_app(handler: CLIHandler, auth_service=None,
 
         if not participant_id or not name:
             return jsonify({"error": "participant_id und name sind erforderlich.", "type": "ValidationError"}), 400
+        if not _valid_id(participant_id):
+            return jsonify({"error": ID_RULE_ERROR, "type": "ValidationError"}), 400
         if ptype_str not in ("model", "user"):
             return jsonify({"error": "type muss 'model' oder 'user' sein.", "type": "ValidationError"}), 400
         # Z2b: Agenten treten nie als Mensch auf, also keine Participants vom Typ user.
@@ -787,8 +912,8 @@ def create_app(handler: CLIHandler, auth_service=None,
                     yield f"data: {_json.dumps(event)}\n\n"
                 yield "data: [DONE]\n\n"
             except Exception as e:
-                logger.exception("orchestrate-parallel-stream Fehler: %s", e)
-                yield f"data: {_json.dumps({'event': 'stop', 'reason': 'error', 'message': str(e)})}\n\n"
+                logger.error("orchestrate-parallel-stream Fehler: %s", public_message(e))
+                yield f"data: {_json.dumps({'event': 'stop', 'reason': 'error', 'message': public_message(e)})}\n\n"
                 yield "data: [DONE]\n\n"
 
         return Response(
@@ -807,7 +932,9 @@ def create_app(handler: CLIHandler, auth_service=None,
                     yield f"data: {token}\n\n"
                 yield "data: [DONE]\n\n"
             except Exception as e:
-                yield f"data: [ERROR] {e}\n\n"
+                logger.error("stream Fehler: %s", public_message(e))
+                error = {"error": public_message(e), "type": type(e).__name__}
+                yield f"data: [ERROR] {_json.dumps(error)}\n\n"
 
         return Response(
             stream_with_context(generate()),
@@ -846,8 +973,8 @@ def create_app(handler: CLIHandler, auth_service=None,
                     yield f"data: {_json.dumps(event)}\n\n"
                 yield "data: [DONE]\n\n"
             except Exception as e:
-                logger.exception("auto-loop Fehler: %s", e)
-                yield f"data: {_json.dumps({'event': 'stop', 'reason': 'error', 'message': str(e)})}\n\n"
+                logger.error("auto-loop Fehler: %s", public_message(e))
+                yield f"data: {_json.dumps({'event': 'stop', 'reason': 'error', 'message': public_message(e)})}\n\n"
                 yield "data: [DONE]\n\n"
 
         return Response(
@@ -905,7 +1032,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         unknown = set(body) - allowed
         if unknown:
             raise BoardError(f"Unbekannte Felder: {sorted(unknown)}", 400, "ValidationError")
-        for name in ("project", "title", "description", "status"):
+        for name in ("project", "title", "description", "status", "kind", "control", "scope", "initiative"):
             if body.get(name) is not None and not isinstance(body[name], str):
                 raise BoardError(f"{name} muss Text sein.", 400, "ValidationError")
         tags = body.get("tags")
@@ -916,6 +1043,12 @@ def create_app(handler: CLIHandler, auth_service=None,
         index = body.get("index")
         if index is not None and (isinstance(index, bool) or not isinstance(index, int)):
             raise BoardError("index muss eine ganze Zahl sein.", 400, "ValidationError")
+        rank = body.get("rank")
+        if rank is not None and (isinstance(rank, bool) or not isinstance(rank, (int, float))):
+            raise BoardError("rank muss eine Zahl sein.", 400, "ValidationError")
+        version = body.get("version")
+        if version is not None and (isinstance(version, bool) or not isinstance(version, int)):
+            raise BoardError("version muss eine ganze Zahl sein.", 400, "ValidationError")
 
     def _flag(name: str, default: bool = False) -> bool:
         return request.args.get(name, "true" if default else "false").lower() in ("1", "true", "yes")
@@ -925,7 +1058,11 @@ def create_app(handler: CLIHandler, auth_service=None,
         """Spalten, Projekte und Aenderungszaehler des Boards."""
         b = _board()
         return jsonify({"statuses": list(b.flow.statuses), "projects": [project_to_dict(p) for p in b.list_projects()],
-                        "changes": b.change_token()}), 200
+                        "changes": b.change_token(), "control": b.control_state()}), 200
+
+    def _control(slug: str | None = None) -> dict:
+        """Offene Pausen und unquittierte Hinweise des Menschen (P6), in jeder Board-Antwort."""
+        return _board().control_state(slug)
 
     @app.get("/board/changes")
     def board_changes():
@@ -955,33 +1092,57 @@ def create_app(handler: CLIHandler, auth_service=None,
     def board_list_tasks():
         """Tickets in Board-Reihenfolge; Filter project, status (mehrfach), include_done."""
         statuses = request.args.getlist("status") or None
-        tasks = _board().list_tasks(request.args.get("project") or None, statuses,
-                                    include_done=_flag("include_done"))
-        return jsonify({"tasks": [task_to_dict(t) for t in tasks]}), 200
+        slug = request.args.get("project") or None
+        tasks = _board().list_tasks(slug, statuses, include_done=_flag("include_done"))
+        return jsonify({"tasks": [task_to_dict(t) for t in tasks], "control": _control(slug)}), 200
 
     @app.post("/board/tasks")
     def board_create_task():
-        """Ticket anlegen; neue Tickets landen in der ersten Spalte."""
+        """Ticket anlegen; neue Tickets landen in der ersten Spalte.
+
+        Steuertickets (nur Mensch): kind=control, control=pause|hint, scope=project|all (P6)."""
         body = _json_object()
-        _check_task_fields(body, {"project", "title", "description", "tags", "status", "human"})
+        _check_task_fields(body, {"project", "title", "description", "tags", "status", "human", "kind", "control",
+                                  "scope", "initiative"})
         task = _board().create_task(g.principal, body.get("project"), body.get("title"),
                                     description=body.get("description") or "", tags=body.get("tags") or [],
-                                    human=body.get("human", False), status=body.get("status"))
-        return jsonify(task_to_dict(task)), 201
+                                    human=body.get("human", False), status=body.get("status"),
+                                    kind=body.get("kind") or "task", control=body.get("control"),
+                                    scope=body.get("scope") or "project", initiative=body.get("initiative") or None)
+        return jsonify({**task_to_dict(task), "control": _control(task.project_slug)}), 201
 
     @app.get("/board/search")
     def board_search():
         """Suche in Titel, Tags, Beschreibung und Kommentaren."""
-        tasks = _board().search(request.args.get("q", ""), request.args.get("project") or None,
-                                include_done=_flag("include_done", True))
-        return jsonify({"tasks": [task_to_dict(t) for t in tasks]}), 200
+        slug = request.args.get("project") or None
+        tasks = _board().search(request.args.get("q", ""), slug, include_done=_flag("include_done", True))
+        return jsonify({"tasks": [task_to_dict(t) for t in tasks], "control": _control(slug)}), 200
 
     @app.post("/board/next")
     def board_next_task():
-        """Oberstes freies Ticket der ersten Spalte uebernehmen (atomar)."""
+        """Oberstes freies Ticket der ersten Spalte uebernehmen (atomar); mit ``task`` genau dieses."""
         body = request.get_json(silent=True) or {}
-        task = _board().next_task(g.principal, body.get("project") or None)
-        return jsonify({"task": task_to_dict(task) if task else None}), 200
+        ref = body.get("task")
+        if ref is not None and (not isinstance(ref, str) or not ref.strip()):
+            raise BoardError("task muss eine Ticket-Referenz wie 'api#12' sein.", 400, "ValidationError")
+        b = _board()
+        slug = body.get("project") or None
+        try:
+            task = b.next_task(g.principal, slug, task=ref)
+        except BoardError as e:
+            if e.type != "Paused":
+                raise
+            # Pause des Menschen (P6): kein Ticket, sondern die Pause
+            return jsonify({"task": None, "paused": True, "pause": e.pause, "control": _control(slug)}), 200
+        if task is None:
+            return jsonify({"task": None, "control": _control(slug)}), 200
+        # Nacharbeit (P3): der letzte Review-Kommentar kommt gleich mit
+        return jsonify({"task": task_to_dict(task), "last_review": _last_review(b, task.ref),
+                        "control": _control(task.project_slug)}), 200
+
+    def _last_review(b, ref: str):
+        comment = b.last_review(ref)
+        return comment_to_dict(comment) if comment else None
 
     def _ref(slug: str, number: int) -> str:
         return f"{slug}#{number}"
@@ -991,17 +1152,77 @@ def create_app(handler: CLIHandler, auth_service=None,
         """Ein Ticket mit Kommentaren."""
         b = _board()
         task = b.get_task(_ref(slug, number))
-        return jsonify({**task_to_dict(task), "comments": [comment_to_dict(c) for c in b.comments(task.ref)]}), 200
+        return jsonify({**task_to_dict(task), "comments": [comment_to_dict(c) for c in b.comments(task.ref)],
+                        "last_review": _last_review(b, task.ref), "control": _control(slug)}), 200
+
+    @app.get("/board/projects/<slug>/initiatives/<initiative>/tasks/<int:number>")
+    def board_get_task_in_initiative(slug: str, initiative: str, number: int):
+        """Ein Ticket ueber seine Vorhaben-Nummer (``projekt/vorhaben-n``, P2); wie das Ticket selbst."""
+        task = _board().get_task(f"{slug}/{initiative}-{number}")
+        return board_get_task(slug, task.number)
+
+    @app.get("/board/projects/<slug>/initiatives")
+    def board_list_initiatives(slug: str):
+        """Vorhaben des Projekts nach Rang (P2)."""
+        return jsonify({"initiatives": [initiative_to_dict(i) for i in _board().list_initiatives(slug)]}), 200
+
+    @app.post("/board/projects/<slug>/initiatives")
+    def board_create_initiative(slug: str):
+        """Vorhaben anlegen: slug, title, optional rank (Freigabe-Recht)."""
+        body = _json_object()
+        _check_initiative_fields(body, {"slug", "title", "rank"})
+        initiative = _board().create_initiative(g.principal, slug, body.get("slug"), body.get("title"),
+                                                rank=body.get("rank"))
+        return jsonify(initiative_to_dict(initiative)), 201
+
+    @app.put("/board/projects/<slug>/initiatives/<initiative>")
+    def board_update_initiative(slug: str, initiative: str):
+        """Vorhaben umbenennen oder ranken: title, rank (Freigabe-Recht)."""
+        body = _json_object()
+        _check_initiative_fields(body, {"title", "rank"})
+        changed = _board().update_initiative(g.principal, slug, initiative, title=body.get("title"),
+                                             rank=body.get("rank"))
+        return jsonify(initiative_to_dict(changed)), 200
+
+    def _check_initiative_fields(body: dict, allowed: set) -> None:
+        unknown = set(body) - allowed
+        if unknown:
+            raise BoardError(f"Unbekannte Felder: {sorted(unknown)}", 400, "ValidationError")
+        for name in ("slug", "title"):
+            if body.get(name) is not None and not isinstance(body[name], str):
+                raise BoardError(f"{name} muss Text sein.", 400, "ValidationError")
+        rank = body.get("rank")
+        if rank is not None and (isinstance(rank, bool) or not isinstance(rank, (int, float))):
+            raise BoardError("rank muss eine Zahl sein.", 400, "ValidationError")
 
     @app.patch("/board/projects/<slug>/tasks/<int:number>")
     def board_update_task(slug: str, number: int):
-        """Ticket aendern: title, description, tags, status, human, index (Position in der Spalte)."""
+        """Ticket aendern: title, description, tags, status, human, index, rank, version, initiative.
+
+        ``index`` ist der Platz in der Spalte; mit ``version`` wird nur geschrieben, wenn das
+        Ticket noch diesen Stand hat (sonst 409, R9). ``initiative`` ordnet das Ticket einem
+        Vorhaben zu (``null`` = keinem); das darf nur der Mensch (P2)."""
         body = _json_object()
-        _check_task_fields(body, {"title", "description", "tags", "status", "human", "index"})
-        task = _board().update_task(g.principal, _ref(slug, number), title=body.get("title"),
-                                    description=body.get("description"), tags=body.get("tags"),
-                                    status=body.get("status"), human=body.get("human"), index=body.get("index"))
-        return jsonify(task_to_dict(task)), 200
+        _check_task_fields(body, {"title", "description", "tags", "status", "human", "index", "rank", "version",
+                                  "initiative"})
+        b = _board()
+        if "initiative" in body and not b.can_approve(g.principal):
+            raise BoardError("Vorhaben ordnet nur der Mensch zu.", 403, "HumanOnly")
+        ref = _ref(slug, number)
+        fields = {k: v for k, v in body.items() if k != "initiative"}
+        task = None
+        if fields or "initiative" not in body:
+            task = b.update_task(g.principal, ref, title=body.get("title"), description=body.get("description"),
+                                 tags=body.get("tags"), status=body.get("status"), human=body.get("human"),
+                                 index=body.get("index"), rank=body.get("rank"), version=body.get("version"))
+        if "initiative" in body:
+            if task is None and body.get("version") is not None:
+                current = b.get_task(ref)
+                if current.version != body["version"]:
+                    raise BoardError(f"Ticket '{ref}' hat inzwischen Version {current.version} "
+                                     f"(erwartet {body['version']}); bitte neu laden.", 409, "Conflict")
+            task = b.assign_initiative(g.principal, ref, body.get("initiative") or None)
+        return jsonify({**task_to_dict(task), "control": _control(slug)}), 200
 
     @app.delete("/board/projects/<slug>/tasks/<int:number>")
     def board_delete_task(slug: str, number: int):
@@ -1020,12 +1241,32 @@ def create_app(handler: CLIHandler, auth_service=None,
         body = _json_object()
         comment = _board().add_comment(g.principal, _ref(slug, number), body.get("body"),
                                        author_name=body.get("author_name") or "")
-        return jsonify(comment_to_dict(comment)), 201
+        return jsonify({**comment_to_dict(comment), "control": _control(slug)}), 201
 
     @app.get("/board/projects/<slug>/tasks/<int:number>/history")
     def board_history(slug: str, number: int):
-        """Verlauf eines Tickets (Status, Titel, Beschreibung, Markierung)."""
+        """Verlauf eines Tickets: Anlegen und jede Aenderung mit Herkunft."""
         return jsonify({"history": [event_to_dict(e) for e in _board().history(_ref(slug, number))]}), 200
+
+    @app.post("/board/projects/<slug>/tasks/<int:number>/review")
+    def board_review_task(slug: str, number: int):
+        """Review-Status setzen (nur Reviewer-Zugang).
+
+        Body: state, comment, optional blocking, suggestions, checked. Ergebnis und Kommentar
+        werden zusammen gespeichert (P3)."""
+        body = _json_object()
+        unknown = set(body) - {"state", "comment", "blocking", "suggestions", "checked"}
+        if unknown:
+            raise BoardError(f"Unbekannte Felder: {', '.join(sorted(unknown))}.", 400, "ValidationError")
+        task = _board().review(g.principal, _ref(slug, number), body.get("state"), body.get("comment"),
+                               blocking=body.get("blocking"), suggestions=body.get("suggestions"),
+                               checked=body.get("checked"))
+        return jsonify(task_to_dict(task)), 200
+
+    @app.get("/board/projects/<slug>/history")
+    def board_project_history(slug: str):
+        """Verlauf eines Projekts: Anlegen, Umbenennen, geloeschte Tickets (nur Mensch)."""
+        return jsonify({"history": [project_event_to_dict(e) for e in _board().project_history(slug)]}), 200
 
     @app.put("/board/comments/<comment_id>")
     def board_edit_comment(comment_id: str):
@@ -1047,6 +1288,7 @@ def create_app(handler: CLIHandler, auth_service=None,
         if (request.content_length or 0) > BOARD_IMPORT_MAX_BYTES:
             raise too_large
         # Mit Obergrenze lesen: greift auch ohne Content-Length (z. B. chunked)
+        request.max_content_length = BOARD_IMPORT_MAX_BYTES + 1    # eigene Grenze statt der allgemeinen (R6)
         raw = request.stream.read(BOARD_IMPORT_MAX_BYTES + 1)
         if len(raw) > BOARD_IMPORT_MAX_BYTES:
             raise too_large
@@ -1164,6 +1406,11 @@ def create_app(handler: CLIHandler, auth_service=None,
             workspace_path = str(workspace_path).strip()
             if not workspace_path:
                 return jsonify({"error": "workspace_path darf nicht leer sein."}), 400
+            db_file = _sqlite_db_path()
+            problem = workspace_location_problem(pathlib.Path(workspace_path), backup_dir=_backup_root(),
+                                                 extra_files=(db_file,) if db_file else ())
+            if problem:
+                return jsonify({"error": problem, "type": "WorkspaceNotAllowed"}), 400
             WORKSPACE = workspace_path
             os.environ["CONCLAVE_WORKSPACE"] = workspace_path
             os.makedirs(WORKSPACE, exist_ok=True)
@@ -1246,6 +1493,7 @@ def create_app(handler: CLIHandler, auth_service=None,
             db_path=_sqlite_db_path(),
             workspace_root=pathlib.Path(WORKSPACE),
             backup_dir=_backup_root(),
+            secret=load_backup_secret(),
         )
         return jsonify({"backup": backup_path.name, "backup_path": str(backup_path), "format": "zip"}), 201
 
@@ -1288,6 +1536,9 @@ def create_app(handler: CLIHandler, auth_service=None,
                 "error": "Workspace leeren nur mit confirm: \"replace-workspace\".",
                 "status": "confirmation_required",
             }), 400
+        allow_foreign = body.get("allow_foreign", False)
+        if not isinstance(allow_foreign, bool):
+            return jsonify({"error": "allow_foreign muss true oder false sein.", "status": "invalid_request"}), 400
         try:
             result = restore_backup_archive(
                 backup_path=path,
@@ -1295,9 +1546,21 @@ def create_app(handler: CLIHandler, auth_service=None,
                 workspace_root=pathlib.Path(WORKSPACE),
                 backup_dir=_backup_root(),
                 replace_workspace=replace_workspace,
+                secret=load_backup_secrets(),
+                allow_foreign=allow_foreign,
             )
+        except ForeignBackupError as exc:
+            # Fremde oder unbelegte Herkunft: nichts geaendert, Agents des Backups zur Pruefung (R7)
+            return jsonify({
+                "error": f"{exc} Agents im Backup pruefen, dann mit allow_foreign: true wiederholen.",
+                "status": "origin_unverified",
+                "reason": exc.reason,
+                "agents": exc.agents,
+            }), 409
         except ValueError as exc:
             return jsonify({"error": str(exc), "status": "invalid_backup"}), 400
+        except WorkspaceBusyError as exc:
+            return jsonify({"error": str(exc), "status": "workspace_busy"}), 409
         except OSError as exc:
             logger.exception("Restore fehlgeschlagen: %s", exc)
             return jsonify({"error": "Restore fehlgeschlagen.", "status": "restore_failed"}), 500
@@ -1305,6 +1568,7 @@ def create_app(handler: CLIHandler, auth_service=None,
             "status": "restored",
             "format": "zip",
             "db_restored": result.db_restored,
+            "origin": result.origin,
             "workspace_files_restored": result.workspace_files_restored,
             "workspace_replaced": result.workspace_replaced,
             "pre_restore_backup_path": str(result.pre_restore_backup_path),
@@ -1369,13 +1633,23 @@ def create_app(handler: CLIHandler, auth_service=None,
             return jsonify({"error": "Pfad nicht erlaubt"}), 403
         if is_hidden_workspace_path(resolved.path, root=resolved.root):
             return jsonify({"error": "Pfad nicht erlaubt"}), 403
-        body = request.get_json() or {}
-        content = body.get("content", "")
-        if text_size(str(content)) > write_limit_bytes():
+        body = request.get_json(silent=True)
+        content = body.get("content", "") if isinstance(body, dict) else None
+        if not isinstance(content, str):
+            return jsonify({"error": "content muss Text sein.", "type": "ValidationError"}), 400
+        if text_size(content) > write_limit_bytes():
             return jsonify({"error": "Datei zu gross", "limit_bytes": write_limit_bytes()}), 413
-        os.makedirs(os.path.dirname(resolved.path), exist_ok=True)
-        with open(resolved.path, "w", encoding="utf-8") as fh:
-            fh.write(content)
+        # Agenten: nur neue Dateien oder unter agents/; vorhandene ueberschreibt der Mensch (R8)
+        create_only = False
+        if g.principal.is_agent:
+            problem = agent_write_problem(resolved)
+            if problem:
+                return jsonify({"error": problem, "type": "HumanOnly"}), 403
+            create_only = not resolved.relative.startswith(f"{workspace_security.AGENT_WRITE_DIR}/")
+        try:
+            workspace_security.write_text_atomic(resolved.path, content, create_only=create_only)
+        except FileExistsError:
+            return jsonify({"error": "Vorhandene Dateien ueberschreibt nur der Mensch.", "type": "HumanOnly"}), 403
         return jsonify({"path": resolved.relative, "size": len(content)}), 201
 
     @app.delete("/workspace/<path:filepath>")

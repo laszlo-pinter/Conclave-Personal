@@ -23,7 +23,7 @@ from conclave.infrastructure.log import get_logger
 logger = get_logger("infrastructure.system_prompt")
 
 
-def build_workspace_info() -> str:
+def build_workspace_info(model_read: bool = True) -> str:
     """Erstellt eine Workspace-Uebersicht fuer den System-Prompt.
 
     Die @read/@save/@workspace-Faehigkeiten werden immer erklaert. Das
@@ -41,9 +41,14 @@ def build_workspace_info() -> str:
         "Du hast Zugriff auf einen gemeinsamen Workspace.\n\n"
         "LESEN: Der Benutzer kann Dateien referenzieren mit @workspace/dateiname "
         "und der Inhalt wird automatisch in die Nachricht eingefuegt.\n"
-        "Du selbst kannst eine konkrete, dir bekannte Datei lesen mit "
-        "@read(pfad/zur/datei.py) in deiner Antwort. Lies nur Dateien, nach "
-        "denen ausdruecklich gefragt wurde - erkunde nicht von dir aus den Workspace.\n\n"
+        + (
+            "Du selbst kannst eine konkrete, dir bekannte Datei lesen mit "
+            "@read(pfad/zur/datei.py) in deiner Antwort. Lies nur Dateien, nach "
+            "denen ausdruecklich gefragt wurde - erkunde nicht von dir aus den Workspace.\n\n"
+            if model_read else
+            "Selbst Dateien lesen (@read) ist in dieser Unterhaltung ausgeschaltet. Brauchst du "
+            "eine Datei, bitte den Benutzer, sie mit @workspace/pfad einzufuegen.\n\n"
+        ) +
         "SCHREIBEN: Du kannst Dateien im Workspace speichern. Verwende dazu:\n"
         "@save(dateiname.md)\n"
         "Hier steht der Dateiinhalt...\n"
@@ -142,7 +147,7 @@ def assemble_system_prompt(
     if clean_rules:
         parts.append(f"Chat-Regeln:\n{clean_rules}")
         names.append("rules")
-    workspace_info = build_workspace_info()
+    workspace_info = build_workspace_info(model_read=bool(getattr(conversation, "model_read", False)))
     if workspace_info:
         parts.append(workspace_info)
         names.append("workspace_info")

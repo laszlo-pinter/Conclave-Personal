@@ -62,7 +62,8 @@ def test_agent_workflow_and_the_done_rule(client):
     detail = client.get(url, headers=_bearer(AGENT)).get_json()
     assert detail["comments"][0]["origin"] == "agent"
     history = client.get(url + "/history", headers=_bearer(AGENT)).get_json()["history"]
-    assert [(h["new"], h["origin"]) for h in history] == [("doing", "agent"), ("review", "agent"), ("done", "human")]
+    assert [(h["new"], h["origin"]) for h in history] == [("todo", "agent"), ("doing", "agent"), ("review", "agent"),
+                                                           ("done", "human")]
 
 
 def test_human_only_routes_for_agents(client):
@@ -166,7 +167,7 @@ def test_board_disabled_without_service():
     from unittest.mock import MagicMock
 
     from conclave.api.app import create_app
-    resp = create_app(MagicMock()).test_client().get("/board")
+    resp = create_app(MagicMock(), allow_unauthenticated=True).test_client().get("/board")
     assert resp.status_code == 503 and resp.get_json()["type"] == "BoardDisabled"
 
 

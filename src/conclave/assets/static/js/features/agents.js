@@ -83,6 +83,22 @@ async function loadPresets(){
   sel.innerHTML=presetsData.map(p=>`<option value="${attr(p.name)}">${esc(p.label||p.name)}</option>`).join('');
 }
 
+// Adresse weicht vom Preset ab: Keys aus der Umgebung gehen dorthin nicht (R3)
+function updateApiUrlHint(){
+  const url=document.getElementById('aApiUrl').value.trim();
+  const p=presetsData.find(x=>x.name===document.getElementById('aPreset').value)||{};
+  let foreign=false;
+  if(url&&!p.api_url){foreign=true;}
+  else if(url){
+    try{
+      const a=new URL(url), b=new URL(p.api_url.replace('{model}','m'));
+      foreign=a.protocol!==b.protocol||a.hostname!==b.hostname;   // wie der Server: Schema und Host
+    }
+    catch{foreign=true;}
+  }
+  document.getElementById('aApiUrlHint').hidden=!foreign;
+}
+
 function onPresetChange(){
   const name=document.getElementById('aPreset').value;
   const p=presetsData.find(x=>x.name===name);
@@ -99,6 +115,7 @@ function onPresetChange(){
   }
   // Erweiterte Felder setzen
   document.getElementById('aApiUrl').value=p.api_url||'';
+  updateApiUrlHint();
   document.getElementById('aResponsePath').value=p.response_path||'';
   document.getElementById('aMsgFormat').value=p.message_format||'standard';
   // Provider aus Preset-Name ableiten
@@ -136,6 +153,7 @@ function openAgentForm(id){
     document.getElementById('aResponsePath').value=a.response_path||'';
     document.getElementById('aMsgFormat').value=a.message_format||'standard';
     document.getElementById('aMaxMessages').value=a.max_messages??'';
+    updateApiUrlHint();
     if(a.system_prompt) sysEdited=true;
     const ro=document.querySelector(`#roleGroup .radio-opt[data-role="${a.role||''}"]`);
     if(ro){document.querySelectorAll('#roleGroup .radio-opt').forEach(el=>el.className='radio-opt');ro.classList.add(ro.dataset.role?'sel-role':'sel-none');}
@@ -188,7 +206,7 @@ async function saveAgent(){
   try{
     const body={id,name,provider,model,role,topic,system_prompt,preset,api_url,response_path,message_format,max_messages};
     if(api_key) body.api_key=api_key;
-    if(editingAgentId) await req('PUT',`/agents/${editingAgentId}`,body);
+    if(editingAgentId) await req('PUT',`/agents/${pathSeg(editingAgentId)}`,body);
     else await req('POST','/agents',body);
     editingAgentId=id;
     toast(wasEditing?t('agents.updated'):t('agents.created'),'ok');
@@ -206,7 +224,7 @@ async function testAgent(){
   const btn=document.getElementById('btnTestAgent');
   btn.disabled=true;btn.textContent=t('agents.testing');
   try{
-    const d=await req('POST',`/agents/${editingAgentId}/test`);
+    const d=await req('POST',`/agents/${pathSeg(editingAgentId)}/test`);
     if(d.success) toast(`Test OK: ${d.message}`,'ok');
     else toast(t('agents.testFailed', {message: d.message}),'err');
   }catch(e){toast(e.message,'err');}
@@ -214,7 +232,7 @@ async function testAgent(){
 }
 
 async function deleteAgent(id){
-  try{await req('DELETE',`/agents/${id}`);toast(t('agents.deleted'),'ok');await loadAgents();}
+  try{await req('DELETE',`/agents/${pathSeg(id)}`);toast(t('agents.deleted'),'ok');await loadAgents();}
   catch(e){toast(e.message,'err');}
 }
 

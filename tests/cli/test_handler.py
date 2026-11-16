@@ -434,3 +434,36 @@ def test_create_backup_returns_zip(service, tmp_path, monkeypatch):
 
     assert result.success
     assert result.data["backup_path"].endswith(".zip")
+
+
+def test_restore_of_foreign_backup_lists_agents_and_changes_nothing(service, tmp_path, monkeypatch):
+    """R7: ohne belegte Herkunft nennt der Restore die Agents des Backups und bricht ab."""
+    import sqlite3
+    import zipfile
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("CONCLAVE_WORKSPACE", str(workspace))
+    src = tmp_path / "foreign.db"
+    with sqlite3.connect(src) as conn:
+        conn.execute("CREATE TABLE agents (id TEXT PRIMARY KEY, api_url TEXT)")
+        conn.execute("INSERT INTO agents VALUES ('gpt', 'https://gateway.example/v1')")
+    conn.close()
+    backup = tmp_path / "foreign.zip"
+    with zipfile.ZipFile(backup, "w") as zf:
+        zf.write(src, "conclave.db")
+        zf.writestr("workspace/new.md", "neu")
+    db_path = tmp_path / "conclave.db"
+    handler = CLIHandler(service)
+
+    result = handler.restore_backup(backup_path=backup, db_path=db_path, backup_dir=tmp_path / "backups")
+
+    assert not result.success
+    assert result.data["status"] == "origin_unverified"
+    assert "gpt: https://gateway.example/v1" in result.message and "--allow-foreign" in result.message
+    assert not (workspace / "new.md").exists() and not db_path.exists()
+
+    result = handler.restore_backup(backup_path=backup, db_path=db_path, backup_dir=tmp_path / "backups",
+                                    allow_foreign=True)
+    assert result.success and result.data["origin"] == "foreign"
+    assert (workspace / "new.md").read_text(encoding="utf-8") == "neu"

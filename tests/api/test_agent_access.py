@@ -6,7 +6,10 @@ import pytest
 pytest.importorskip("flask")
 pytest.importorskip("mcp")
 
-from conclave.api.access import AGENT_ALLOWED, HUMAN_ONLY, HUMAN_ONLY_ERROR, PUBLIC, agent_may
+from conclave.api.access import (
+    AGENT_ALLOWED, AGENT_CONTEXT_READ, HUMAN_ONLY, HUMAN_ONLY_ERROR, PUBLIC, REVIEWER_ALLOWED, REVIEWER_ONLY,
+    agent_may,
+)
 from conclave.cli.config import ConclaveConfig
 
 HUMAN = "cvh_mensch-token"
@@ -44,16 +47,20 @@ def _url(rule):
 
 def test_every_route_is_assigned_exactly_once(app):
     registered = _registered(app)
-    assigned = AGENT_ALLOWED | HUMAN_ONLY | PUBLIC
+    assigned = AGENT_ALLOWED | HUMAN_ONLY | PUBLIC | REVIEWER_ONLY
     assert not registered - assigned, "Route ohne Zuordnung in api/access.py"
     assert not assigned - registered, "Eintrag in api/access.py ohne Route"
     assert not AGENT_ALLOWED & HUMAN_ONLY
     assert not (AGENT_ALLOWED | HUMAN_ONLY) & PUBLIC
+    assert not REVIEWER_ONLY & (AGENT_ALLOWED | HUMAN_ONLY | PUBLIC)
+    # Der Reviewer bekommt nur einen Teil des Agent-Zugangs plus das Review (P3)
+    assert REVIEWER_ALLOWED - REVIEWER_ONLY <= AGENT_ALLOWED
+    assert not REVIEWER_ALLOWED & HUMAN_ONLY
 
 
 def test_new_unassigned_route_fails_the_completeness_check(app):
     app.add_url_rule("/neu", "neu", lambda: "x", methods=["GET"])
-    assert _registered(app) - (AGENT_ALLOWED | HUMAN_ONLY | PUBLIC) == {("GET", "/neu")}
+    assert _registered(app) - (AGENT_ALLOWED | HUMAN_ONLY | PUBLIC | REVIEWER_ONLY) == {("GET", "/neu")}
     # und Agenten kommen nicht durch (Default deny)
     assert app.test_client().get("/neu", headers=_bearer(AGENT)).status_code == 403
     assert app.test_client().get("/neu", headers=_bearer(HUMAN)).status_code == 200
@@ -178,12 +185,18 @@ def test_every_mcp_tool_route_works_with_agent_token(app, mcp_via_app):
     call(server.conclave_board_comment, "api#1", "Branch board")
     call(server.conclave_board_update, "api#1", status="review")
     call(server.conclave_board_get, "api#1")
+    assert app.test_client().post("/board/projects/api/initiatives", json={"slug": "sich", "title": "S"},
+                                  headers=_bearer(HUMAN)).status_code == 201
+    call(server.conclave_board_create, "api", "P2", initiative="sich")
+    call(server.conclave_board_list, project="api")             # mit den Vorhaben (P2)
+    call(server.conclave_board_get, "api/sich-1")
 
     blocked = [(m, r, s) for m, r, s in hits if s in (401, 403)]
     assert not blocked, blocked
     used = {(m, r) for m, r, _ in hits}
-    # Die Allowlist ist genau das, was die Tools brauchen, plus whoami (Z5) - auch fuers Board (B4).
-    assert used | {("GET", "/auth/whoami")} == AGENT_ALLOWED
+    # Die Allowlist ist genau das, was die Tools brauchen, plus whoami (Z5) - auch fuers Board (B4) -
+    # und die lesbaren Kontextdaten aus E-S5 (a).
+    assert used | {("GET", "/auth/whoami")} | AGENT_CONTEXT_READ == AGENT_ALLOWED
 
 
 def test_delete_routes_are_refused_for_agents(app):

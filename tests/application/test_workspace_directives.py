@@ -148,12 +148,13 @@ class TestProcessAgentDirectivesSavePathTraversal:
 # ── _process_agent_directives: @read ─────────────────────────────────────────
 
 class TestProcessAgentDirectivesReadPathTraversal:
+    # Pfadschutz muss auch mit Freigabe (model_read, R6) halten
 
     def test_read_with_absolute_path_is_blocked(self, workspace, outside_file, monkeypatch):
         """@read(/tmp/secret.txt) darf nicht gelesen werden."""
         monkeypatch.setenv("CONCLAVE_WORKSPACE", str(workspace))
         content = f"@read({outside_file})"
-        result = ConversationFlowService._process_agent_directives(content)
+        result = ConversationFlowService._process_agent_directives(content, allow_read=True)
         assert "TOP SECRET" not in result
         assert "FEHLER" in result
 
@@ -161,14 +162,14 @@ class TestProcessAgentDirectivesReadPathTraversal:
         """@read(../../etc/passwd) darf nicht gelesen werden."""
         monkeypatch.setenv("CONCLAVE_WORKSPACE", str(workspace))
         content = "@read(../../etc/passwd)"
-        result = ConversationFlowService._process_agent_directives(content)
+        result = ConversationFlowService._process_agent_directives(content, allow_read=True)
         assert "FEHLER" in result
 
     def test_read_hidden_path_is_blocked(self, workspace, monkeypatch):
         monkeypatch.setenv("CONCLAVE_WORKSPACE", str(workspace))
         content = "@read(.private/secret.txt)"
 
-        result = ConversationFlowService._process_agent_directives(content)
+        result = ConversationFlowService._process_agent_directives(content, allow_read=True)
 
         assert "SECRET" not in result
         assert "FEHLER" in result
@@ -178,7 +179,7 @@ class TestProcessAgentDirectivesReadPathTraversal:
         monkeypatch.setenv("CONCLAVE_WORKSPACE_AGENT_READ_LIMIT_BYTES", "8")
         (workspace / "large.txt").write_text("zu viel text", encoding="utf-8")
 
-        result = ConversationFlowService._process_agent_directives("@read(large.txt)")
+        result = ConversationFlowService._process_agent_directives("@read(large.txt)", allow_read=True)
 
         assert "zu viel text" not in result
         assert "zu gross" in result

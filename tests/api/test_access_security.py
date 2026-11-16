@@ -68,7 +68,7 @@ def test_new_route_is_denied_for_agents_by_default(app):
 
 
 @pytest.mark.parametrize("path", ["/settings", "/logs", "/backups", "/agents/x", "/runs",
-                                  "/conversations/x/rules", "/usage/conversations"])
+                                  "/usage/conversations"])        # /rules ist seit E-S5 (a) lesbar
 def test_human_only_reads_are_denied(app, path):
     resp = app.test_client().get(path, headers=_bearer(AGENT_TOKEN))
     assert resp.status_code == 403 and resp.get_json()["type"] == "HumanOnly"
@@ -105,8 +105,10 @@ def test_token_in_query_string_is_not_accepted(app):
 
 # ── MCP-Server mit dem Mensch-Token ───────────────────────────────────────
 
-def test_mcp_server_warns_when_given_the_human_token(monkeypatch, capsys):
+def test_mcp_server_refuses_the_human_token(monkeypatch, capsys):
+    """R2: Mit dem Mensch-Token arbeitet der MCP-Server nicht (frueher nur eine Warnung)."""
     import httpx
+    from mcp.server.mcpserver.exceptions import ToolError
 
     import conclave.mcp_server as server
 
@@ -116,10 +118,38 @@ def test_mcp_server_warns_when_given_the_human_token(monkeypatch, capsys):
         seen["auth"] = headers.get("Authorization")
         return httpx.Response(200, json={"role": "human"}, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr(server, "_role_checked", False)
+    monkeypatch.setattr(server, "_confirmed_token", None)
+    monkeypatch.delenv("CONCLAVE_MCP_ALLOW_HUMAN", raising=False)
     monkeypatch.setattr(server.httpx, "get", fake_get)
     monkeypatch.setenv("CONCLAVE_AGENT_KEY", HUMAN_TOKEN)
-    server._check_role()
-    err = capsys.readouterr().err
-    assert "WARNUNG: conclave-mcp nutzt das Mensch-Token" in err and HUMAN_TOKEN not in err
+    with pytest.raises(ToolError, match="Mensch-Token"):
+        server._check_role()
+    assert HUMAN_TOKEN not in capsys.readouterr().err
     assert seen["auth"] == f"Bearer {HUMAN_TOKEN}"
+
+
+# ── R4 (conclave#34): frei waehlbare IDs ──────────────────────────────────
+
+@pytest.mark.parametrize("pid", ["../x", "../../../backup?", "a/b", "x?y=1", "x#y", ".", "..", "a b", "x" * 65, "ä"])
+def test_participant_ids_are_checked(app, pid):
+    c = app.test_client()
+    conv = c.post("/conversations", json={}, headers=_bearer(AGENT_TOKEN)).get_json()["conversation_id"]
+    for token in (AGENT_TOKEN, HUMAN_TOKEN):
+        resp = c.post(f"/conversations/{conv}/participants", json={"participant_id": pid, "name": "P"},
+                      headers=_bearer(token))
+        assert resp.status_code == 400 and resp.get_json()["type"] == "ValidationError", (pid, token)
+
+
+def test_valid_participant_id_is_accepted(app):
+    c = app.test_client()
+    conv = c.post("/conversations", json={}, headers=_bearer(AGENT_TOKEN)).get_json()["conversation_id"]
+    resp = c.post(f"/conversations/{conv}/participants", json={"participant_id": "gpt-5.1_x", "name": "P"},
+                  headers=_bearer(AGENT_TOKEN))
+    assert resp.status_code == 201
+
+
+@pytest.mark.parametrize("agent_id", ["../x", "a/b", "..", "x?y"])
+def test_new_agent_ids_are_checked(app, agent_id):
+    resp = app.test_client().post("/agents", json={"id": agent_id, "name": "A", "model": "m"},
+                                  headers=_bearer(HUMAN_TOKEN))
+    assert resp.status_code == 400 and resp.get_json()["type"] == "ValidationError"

@@ -1,13 +1,7 @@
 // static/js/utils.js — Utility-Funktionen
 
-const PALETTE=[
-  {bg:'rgba(0,212,170,.13)',  bd:'rgba(0,212,170,.45)',  tx:'#00d4aa'},
-  {bg:'rgba(139,108,247,.13)',bd:'rgba(139,108,247,.45)',tx:'#a594f9'},
-  {bg:'rgba(245,166,35,.12)', bd:'rgba(245,166,35,.4)',  tx:'#f5a623'},
-  {bg:'rgba(0,184,217,.12)',  bd:'rgba(0,184,217,.4)',   tx:'#00b8d9'},
-  {bg:'rgba(255,107,157,.12)',bd:'rgba(255,107,157,.4)', tx:'#ff6b9d'},
-  {bg:'rgba(82,196,26,.12)',  bd:'rgba(82,196,26,.4)',   tx:'#52c41a'},
-];
+// Farben aus theme.css (hell und dunkel)
+const PALETTE=[0, 1, 2, 3, 4, 5].map(i => ({bg: `var(--p${i}-bg)`, bd: `var(--p${i}-bd)`, tx: `var(--p${i}-tx)`}));
 const colorMap={};
 function colorFor(id){if(!colorMap[id]){const i=Object.keys(colorMap).length%PALETTE.length;colorMap[id]=PALETTE[i];}return colorMap[id];}
 
@@ -36,6 +30,13 @@ function closeOverlay(id){document.getElementById(id).classList.remove('open');}
 function scrollBottom(){const el=document.getElementById('messages');el.scrollTop=el.scrollHeight;}
 function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,120)+'px';}
 function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}}
+// Pfadsegment fuer API-URLs (R4): jede ID vollstaendig kodiert. "." und ".." loest der
+// Browser auch kodiert (%2e%2e) als Pfadschritt auf, deshalb werden sie abgelehnt.
+function pathSeg(value){
+  const s=String(value??'');
+  if(s===''||s==='.'||s==='..') throw new Error(t('api.invalidPathPart',{value:s}));
+  return encodeURIComponent(s);
+}
 // Maskiert fuer HTML-Text und Attributwerte (& < > " ').
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function attr(s){return esc(s);}
@@ -69,7 +70,7 @@ function showEmpty(){
   document.getElementById('floorbar').classList.remove('visible');document.getElementById('floorPanel').classList.remove('visible');
   document.getElementById('btnExport').disabled=true;
   // safe-html: statisches Markup + Uebersetzungen
-  document.getElementById('messages').innerHTML=`<div class="empty"><div class="empty-icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="9" stroke="#6b7280" stroke-width="1.5"/><circle cx="7.5" cy="11" r="2" fill="#6b7280"/><circle cx="14.5" cy="11" r="2" fill="#6b7280"/></svg></div><div class="empty-title">${t('conv.noneSelected')}</div><div class="empty-sub">${t('conv.selectOrCreate')}</div></div>`;
+  document.getElementById('messages').innerHTML=`<div class="empty"><div class="empty-icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="9" stroke="currentColor" stroke-width="1.5"/><circle cx="7.5" cy="11" r="2" fill="currentColor"/><circle cx="14.5" cy="11" r="2" fill="currentColor"/></svg></div><div class="empty-title">${t('conv.noneSelected')}</div><div class="empty-sub">${t('conv.selectOrCreate')}</div></div>`;
 }
 
 // ── Markdown ──────────────────────────────────────────────────────────────
@@ -86,10 +87,31 @@ function _createMarkdownPurifier(){
   if(typeof DOMPurify!=='function') return null;
   const purifier=DOMPurify(window);  // eigene Instanz, damit die Hooks lokal bleiben
   if(!purifier.isSupported) return null;
+  // class nur als Sprachangabe an code (Syntaxhervorhebung), sonst liessen sich App-Elemente nachbauen (R5)
+  purifier.addHook('uponSanitizeAttribute',(node,data)=>{
+    if(data.attrName==='class'&&!(node.tagName==='CODE'&&/^language-[\w+-]+$/.test(data.attrValue))){
+      data.keepAttr=false;
+    }
+  });
   purifier.addHook('afterSanitizeAttributes',node=>{
     if(node.tagName==='A'&&node.hasAttribute('href')){
-      node.setAttribute('target','_blank');
-      node.setAttribute('rel','noopener noreferrer');
+      const href=node.getAttribute('href');
+      // Fragment so bestimmen wie der Browser beim Oeffnen (URL-Parser entfernt u. a. Tabs und
+      // Zeilenumbrueche) und so lesen wie der Login (URLSearchParams auf location.hash).
+      let fragment='', parsed=true;
+      try{fragment=new URL(href,window.location.href).hash.slice(1);}catch{parsed=false;}
+      let decoded=fragment;
+      try{decoded=decodeURIComponent(fragment);}catch{}
+      let hasToken=!parsed;
+      try{hasToken=hasToken||new URLSearchParams(fragment).has('token');}catch{hasToken=true;}
+      if(hasToken||/token=/i.test(decoded)||/token=/i.test(fragment)){
+        node.removeAttribute('href');            // Links duerfen kein Token setzen (R5)
+      }else if(href.trim().startsWith('#')){
+        node.removeAttribute('target');          // Sprungmarke im selben Tab
+      }else{
+        node.setAttribute('target','_blank');
+        node.setAttribute('rel','noopener noreferrer');
+      }
     }
     // GFM-Tasklisten: nur deaktivierte Checkboxen
     if(node.tagName==='INPUT'){

@@ -8,13 +8,13 @@ import os
 from datetime import datetime, timezone
 
 from conclave.application.agent_service import AgentService
-from conclave.runtime.env import env_secret
 from conclave.application.conversation_flow import ConversationFlowService
 from conclave.application.orchestrator import Orchestrator, ParallelOrchestrator
 from conclave.application.workspace_security import (
     assert_size_allowed,
     is_hidden_workspace_path,
     resolve_workspace_path,
+    write_text_atomic,
     text_size,
     ui_read_limit_bytes,
     workspace_root,
@@ -29,6 +29,7 @@ from conclave.domain.errors import (
     EmptyConversation,
     ParticipantAlreadyRegistered,
     ParticipantNotRegistered,
+    public_message,
 )
 from conclave.domain.participant import ParticipantType
 
@@ -127,14 +128,14 @@ class CLIHandler:
                  provider_fallback_keys: dict[str, str] | None = None):
         self._service = service
         self._agent_service = agent_service
-        # Provider-Map fuer ENV/Config-Fallback-Keys (z.B. anthropic -> ANTHROPIC_API_KEY).
-        # Wird nur fuer die UI-Anzeige (api_key_set) genutzt, nicht fuer den Adapter-Build.
+        # Provider-Map fuer ENV/Config-Fallback-Keys (z.B. anthropic -> ANTHROPIC_API_KEY), fuer die
+        # Anzeige (api_key_set) und den Agent-Test; die Regeln stehen in cli/provider_keys.py (R3).
         self._provider_fallback_keys = provider_fallback_keys or {}
 
     def _agent_to_dict(self, a: Agent) -> dict:
         # api_key_set spiegelt den effektiven Stand: entweder eigener Key in DB
         # ODER ein Provider-Fallback-Key (aus .env / ConclaveConfig) verfuegbar.
-        effective_key = bool(a.api_key) or bool(self._fallback_key_for_agent(a))
+        effective_key = bool(a.api_key) or bool(self._fallback_key_for_agent(a, log=False))
         return {
             "id": a.id, "name": a.name, "provider": a.provider,
             "model": a.model, "role": a.role, "topic": a.topic,
@@ -148,17 +149,9 @@ class CLIHandler:
             "created_at": a.created_at.isoformat(),
         }
 
-    def _fallback_key_for_agent(self, agent: Agent) -> str:
-        if self._provider_fallback_keys.get(agent.provider):
-            return self._provider_fallback_keys[agent.provider]
-        preset_name = agent.preset or agent.provider
-        try:
-            from conclave.infrastructure.universal.presets import get_preset
-        except ImportError:
-            return ""
-        preset = get_preset(preset_name) or {}
-        key_env = preset.get("api_key_env", "")
-        return env_secret(key_env) if key_env else ""
+    def _fallback_key_for_agent(self, agent: Agent, *, log: bool = True) -> str:
+        from conclave.cli.provider_keys import fallback_key
+        return fallback_key(agent, self._provider_fallback_keys, log=log)
 
     def _run_to_dict(self, run) -> dict:
         usage = None
@@ -254,7 +247,7 @@ class CLIHandler:
                 "provider": agent.provider,
                 "model": agent.model,
                 "latency_ms": latency_ms,
-                "message": str(e)[:200],
+                "message": public_message(e)[:200],
                 "hint": "Provider erreichbar, API-Key und Modellnamen pruefen.",
             }
 
@@ -298,7 +291,9 @@ class CLIHandler:
 
         Ein leerer api_key bedeutet "gespeicherten Key behalten" - die UI zeigt
         gespeicherte Keys nie an und schickt sie daher beim Bearbeiten nicht mit.
-        Entfernt wird ein Key nur mit clear_api_key=True.
+        Entfernt wird ein Key mit clear_api_key=True, und wenn der Agent danach an
+        einen anderen Host sendet (Adresse, Preset oder Provider geaendert): Dann geht
+        der alte Key nicht an das neue Ziel, ausser er wird neu eingegeben (R3).
         """
         if not self._agent_service:
             return CLIResult(success=False, message="AgentService nicht verfügbar.")
@@ -306,7 +301,11 @@ class CLIHandler:
             if clear_api_key:
                 agent = replace(agent, api_key="")
             elif not agent.api_key:
-                agent = replace(agent, api_key=self._agent_service.get_agent(agent.id).api_key)
+                from conclave.cli.provider_keys import destination
+                stored = self._agent_service.get_agent(agent.id)
+                old, new = destination(stored), destination(agent)
+                same_target = bool(old[1]) and old == new
+                agent = replace(agent, api_key=stored.api_key if same_target else "")
             self._agent_service.update_agent(agent)
             return CLIResult(success=True, message=f"Agent '{agent.id}' aktualisiert.",
                              data={"id": agent.id})
@@ -359,6 +358,14 @@ class CLIHandler:
         except ConversationNotFound:
             return CLIResult(success=False, message=f"Conversation '{conversation_id}' nicht gefunden.")
         return CLIResult(success=True, message=f"Thema gesetzt: {topic}", data={"topic": topic})
+
+    def set_model_read(self, conversation_id: str, allowed: bool) -> CLIResult:
+        """Freigabe fuer @read in Modellantworten (R6)."""
+        try:
+            self._service.set_model_read(conversation_id, allowed)
+        except ConversationNotFound:
+            return CLIResult(success=False, message=f"Conversation '{conversation_id}' nicht gefunden.")
+        return CLIResult(success=True, message="Freigabe gesetzt.", data={"model_read": bool(allowed)})
 
     def set_rules(self, conversation_id: str, rules: str) -> CLIResult:
         try:
@@ -486,6 +493,7 @@ class CLIHandler:
                     for p in conversation.participants
                 ],
                 "rules": conversation.rules,
+                "model_read": bool(getattr(conversation, "model_read", False)),
             },
         )
 
@@ -757,7 +765,7 @@ class CLIHandler:
                         "ok": False,
                         "slot": slot,
                         "participant": participant_id,
-                        "message": str(exc),
+                        "message": public_message(exc),
                         "type": type(exc).__name__,
                         "status": status,
                     }
@@ -1073,10 +1081,11 @@ class CLIHandler:
             return CLIResult(success=False, message="Pfad nicht erlaubt.")
         if is_hidden_workspace_path(path, root=self._workspace_root()):
             return CLIResult(success=False, message="Pfad nicht erlaubt.")
+        if not isinstance(content, str):
+            return CLIResult(success=False, message="Inhalt muss Text sein.")
         if text_size(content) > write_limit_bytes():
             return CLIResult(success=False, message=f"Datei zu gross (Limit: {write_limit_bytes()} Bytes).")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+        write_text_atomic(path, content)
         return CLIResult(success=True, message="Datei gespeichert.",
                          data={"path": path.relative_to(self._workspace_root()).as_posix(),
                                "size": len(content)})
@@ -1086,8 +1095,9 @@ class CLIHandler:
         if backup_dir is None:
             backup_dir_env = os.environ.get("CONCLAVE_BACKUP_DIR", "").strip()
             backup_dir = Path(backup_dir_env) if backup_dir_env else root.parent / "backups"
-        from conclave.runtime.backup import create_backup_archive
-        backup_path = create_backup_archive(db_path=db_path, workspace_root=root, backup_dir=backup_dir)
+        from conclave.runtime.backup import create_backup_archive, load_backup_secret
+        backup_path = create_backup_archive(db_path=db_path, workspace_root=root, backup_dir=backup_dir,
+                                            secret=load_backup_secret())
         return CLIResult(success=True, message="Backup erstellt.",
                          data={"backup_path": str(backup_path), "format": "zip"})
 
@@ -1097,12 +1107,15 @@ class CLIHandler:
         db_path: Path | None = None,
         backup_dir: Path | None = None,
         replace_workspace: bool = True,
+        allow_foreign: bool = False,
     ) -> CLIResult:
         root = self._workspace_root()
         if backup_dir is None:
             backup_dir_env = os.environ.get("CONCLAVE_BACKUP_DIR", "").strip()
             backup_dir = Path(backup_dir_env) if backup_dir_env else root.parent / "backups"
-        from conclave.runtime.backup import restore_backup_archive
+        from conclave.runtime.backup import (
+            ForeignBackupError, WorkspaceBusyError, load_backup_secrets, restore_backup_archive,
+        )
         try:
             result = restore_backup_archive(
                 backup_path=backup_path,
@@ -1110,9 +1123,21 @@ class CLIHandler:
                 workspace_root=root,
                 backup_dir=backup_dir,
                 replace_workspace=replace_workspace,
+                secret=load_backup_secrets(),
+                allow_foreign=allow_foreign,
+            )
+        except ForeignBackupError as exc:
+            agents = "\n".join(f"  {a['id']}: {a['api_url'] or '(Standard des Presets)'}" for a in exc.agents)
+            return CLIResult(
+                success=False,
+                message=(f"{exc}\nAgents im Backup:\n{agents or '  (keine)'}\n"
+                         "Pruefen, dann mit --allow-foreign wiederholen. Es wurde nichts geaendert."),
+                data={"status": "origin_unverified", "reason": exc.reason, "agents": exc.agents},
             )
         except ValueError as exc:
             return CLIResult(success=False, message=str(exc), data={"status": "invalid_backup"})
+        except WorkspaceBusyError as exc:
+            return CLIResult(success=False, message=str(exc), data={"status": "workspace_busy"})
         except OSError:
             return CLIResult(success=False, message="Restore fehlgeschlagen.", data={"status": "restore_failed"})
         return CLIResult(
@@ -1125,5 +1150,6 @@ class CLIHandler:
                 "db_restored": result.db_restored,
                 "workspace_files_restored": result.workspace_files_restored,
                 "workspace_replaced": result.workspace_replaced,
+                "origin": result.origin,
             },
         )

@@ -20,7 +20,7 @@ def handler():
 
 @pytest.fixture
 def client(handler):
-    app = create_app(handler)
+    app = create_app(handler, allow_unauthenticated=True)
     app.config["TESTING"] = True
     with app.test_client() as c:
         yield c
@@ -45,7 +45,7 @@ from conclave.cli.config import DEFAULT_RATE_LIMIT, ConclaveConfig
 
 
 def _client_with_limit(handler, value):
-    app = create_app(handler, config=ConclaveConfig(rate_limit=value))
+    app = create_app(handler, config=ConclaveConfig(rate_limit=value), allow_unauthenticated=True)
     app.config["TESTING"] = True
     return app.test_client()
 

@@ -97,7 +97,7 @@ def context_server(tmp_path, monkeypatch):
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        with patch("httpx.post", _ok), patch("httpx.stream", _Stream):
+        with patch("conclave.infrastructure.universal.adapter._http_post", _ok), patch("conclave.infrastructure.universal.adapter._http_stream", _Stream):
             yield SimpleNamespace(url=f"http://127.0.0.1:{server.server_port}",
                                   token=config.api_key, conv_id=conv.id)
     finally:

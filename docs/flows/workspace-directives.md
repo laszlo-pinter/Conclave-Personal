@@ -12,9 +12,19 @@ unter Linux `~/Conclave/workspace`. Das gilt für alle Einstiegspunkte
 ## 1. @workspace/datei — User referenziert Dateien
 
 - **Datei:** `application/conversation_flow.py:_expand_workspace_refs()`
-- **Trigger:** Vor jedem Provider-Call (im Snapshot, nicht in der DB)
+- **Trigger:** Vor jedem Provider-Call (im Snapshot, nicht in der DB), nur in
+  Nachrichten von Mensch und Agent, nicht in Modellantworten
 - **Regex:** `@work(?:space|place)/([\w./-]+)` — matcht @workspace/ und @workplace/
-- **Aktion:** Dateiinhalt wird inline eingefügt als Markdown-Codeblock
+- **Aktion:** Dateiinhalt wird inline eingefügt als Markdown-Codeblock, in einem
+  Durchlauf (eingefügter Text wird nicht erneut durchsucht). Jede Datei einmal
+  pro Nachricht, gezählt nach aufgelöstem Pfad (weitere Verweise: „siehe
+  oben“), höchstens 10 Dateien pro Nachricht und zusammen höchstens das
+  Agent-Leselimit pro Prompt; neuere Nachrichten haben dabei Vorrang.
+- **Protokoll:** Beim Speichern der Nachricht entsteht je Datei ein Tool-Event
+  `workspace.expand` (Pfad, Größe bzw. Fehler). Eingesetzt wird bei jedem
+  Aufruf mit dem dann aktuellen Dateistand; ändert sich eine Datei später,
+  kann der gesendete Inhalt vom protokollierten abweichen. Consultations
+  protokollieren nichts, weil sie Ticket-Verweise nie einsetzen.
 - **Security:** `application/workspace_security.py:resolve_workspace_path()` blockt absolute Pfade und Traversal. `is_agent_visible()` blendet versteckte Pfadkomponenten aus.
 - **Limits:** `CONCLAVE_WORKSPACE_AGENT_READ_LIMIT_BYTES`, Default `524288`
 - **Fehler:** Pfad nicht erlaubt, Datei nicht gefunden, Dateigröße überschreitet das Limit, Datei nicht lesbar
@@ -24,8 +34,15 @@ unter Linux `~/Conclave/workspace`. Das gilt für alle Einstiegspunkte
 
 - **Datei:** `application/conversation_flow.py:_process_agent_directives_for_context()`
 - **Trigger:** Nach Agent-Antwort, vor Message-Persistierung
+- **Freigabe:** Standardmäßig aus. Der Mensch schaltet es je Conversation ein
+  (Dialog „Chat-Regeln“ bzw. `POST /conversations/<id>/rules` mit
+  `model_read: true`). Ohne Freigabe bleibt der Inhalt draußen, es entsteht ein
+  Tool-Event mit `error=read_not_allowed`, und der System-Prompt bietet `@read`
+  nicht an.
 - **Regex:** `@read\(([^)]+)\)`
-- **Aktion:** Ersetzt @read(pfad) durch Dateiinhalt als Markdown-Codeblock
+- **Aktion:** Ersetzt @read(pfad) durch Dateiinhalt als Markdown-Codeblock; je
+  Datei einmal, höchstens 10 Dateien und zusammen höchstens das Agent-Leselimit
+  pro Antwort
 - **Security:** Gleiche `resolve_workspace_path()`-/Hidden-Path-Prüfung wie `@workspace`
 - **Scope:** Gesamter Workspace (lesend)
 - **Limits:** `CONCLAVE_WORKSPACE_AGENT_READ_LIMIT_BYTES`, Default `524288`
@@ -44,7 +61,7 @@ unter Linux `~/Conclave/workspace`. Das gilt für alle Einstiegspunkte
 - **Trigger:** Nach Agent-Antwort, vor Message-Persistierung
 - **Regex:** `@save\(([^)]+)\)\s*\n(.*?)(?:@endsave|$)` (DOTALL)
 - **Aktion:** Schreibt Content zwischen @save und @endsave in workspace/output/. Fehlt `@endsave`, wird bis zum Ende der Antwort gespeichert.
-- **Security:** `resolve_output_path()` begrenzt Schreibzugriffe auf `workspace/output/`
+- **Security:** `resolve_output_path()` begrenzt Schreibzugriffe auf `workspace/output/`; geschrieben wird atomar (`write_text_atomic()`)
 - **Scope:** Nur workspace/output/ (schreibend) — für Agent-Directives ist der Rest schreibgeschützt. UI/API/CLI dürfen überall im Workspace schreiben (außer versteckten Pfaden), siehe Abschnitt 4.
 - **Limits:** `CONCLAVE_WORKSPACE_WRITE_LIMIT_BYTES`, Default `524288`
 - **Protokoll:** Der Schreibversuch erzeugt ein `tool_events`-DB-Ereignis
@@ -59,9 +76,10 @@ unter Linux `~/Conclave/workspace`. Das gilt für alle Einstiegspunkte
 
 - **GET /workspace** — Listet alle Dateien (Pfad, Größe, Änderungsdatum)
 - **GET /workspace/pfad** — Liest Dateiinhalt (UTF-8, 415 bei Binär)
-- **POST /workspace/pfad** — Schreibt Datei (Body: {content}) an beliebiger Stelle im Workspace, nicht nur in `output/`
+- **POST /workspace/pfad** — Schreibt Datei (Body: {content}, Text) an beliebiger Stelle im Workspace, nicht nur in `output/`; atomar über `write_text_atomic()`. Agenten: nur neue Dateien oder unter `agents/` (`agent_write_problem()`), `conclave_notify.json` gesperrt
 - **DELETE /workspace/pfad** — Löscht Datei
-- **Security:** `resolve_workspace_path()` und `is_hidden_workspace_path()` in `application/workspace_security.py`
+- **Security:** `resolve_workspace_path()` (inkl. `unsafe_path_component()` und `protected_files()`) und `is_hidden_workspace_path()` in `application/workspace_security.py`; der Ort des Workspace prüft `workspace_location_problem()` (Serverstart, `PUT /settings`)
+- **Test:** `tests/api/test_workspace_rules.py`
 - **Limits:** Lesen über UI/API: `CONCLAVE_WORKSPACE_UI_READ_LIMIT_BYTES`, Schreiben: `CONCLAVE_WORKSPACE_WRITE_LIMIT_BYTES`
 - **Test:** `tests/api/test_workspace_api.py`
 

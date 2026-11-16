@@ -118,6 +118,7 @@ def test_agent_comments_stay_immutable_for_the_human_too(client):
 def test_what_the_agent_may_do_still_works(client):
     """Gegenprobe: die Regeln sperren nicht mehr als noetig."""
     _setup_rules(client)
+    assert client.post("/board/next", json={"task": "api#1"}, headers=_bearer(AGENT)).status_code == 200
     assert client.patch(f"{URL}/1", json={"status": "review", "title": "neu"}, headers=_bearer(AGENT)).status_code == 200
     assert client.post(f"{URL}/2/comments", json={"body": "Nachtrag"}, headers=_bearer(AGENT)).status_code == 201
     assert client.get(f"{URL}/3", headers=_bearer(AGENT)).status_code == 200          # lesen darf er
@@ -136,7 +137,7 @@ def test_origin_fields_in_comment_body_are_ignored(client, extra):
     assert (data["origin"], data["actor_id"], data["author_name"]) == ("agent", "agent", "Laszlo")
 
 
-@pytest.mark.parametrize("extra", [{"origin": "human"}, {"version": 99}, {"number": 5}, {"assignee": "x"}])
+@pytest.mark.parametrize("extra", [{"origin": "human"}, {"created_by": "human"}, {"number": 5}, {"assignee": "x"}])
 def test_task_fields_outside_the_list_are_rejected(client, extra):
     _task(client)
     assert client.patch(f"{URL}/1", json=extra, headers=_bearer(AGENT)).status_code == 400
@@ -144,12 +145,44 @@ def test_task_fields_outside_the_list_are_rejected(client, extra):
                        headers=_bearer(AGENT)).status_code == 400
 
 
+def test_patch_with_stale_version_is_a_conflict(client):
+    """R9: ``version`` beim Aendern; veraltet -> 409, nichts geschrieben. Beim Anlegen nicht erlaubt."""
+    _task(client)
+    version = client.get(f"{URL}/1", headers=_bearer(HUMAN)).get_json()["version"]
+    assert client.patch(f"{URL}/1", json={"title": "Neu", "version": version}, headers=_bearer(HUMAN)).status_code == 200
+    resp = client.patch(f"{URL}/1", json={"title": "Alt", "version": version}, headers=_bearer(AGENT))
+    assert resp.status_code == 409 and resp.get_json()["type"] == "Conflict"
+    assert client.get(f"{URL}/1", headers=_bearer(HUMAN)).get_json()["title"] == "Neu"
+    assert client.patch(f"{URL}/1", json={"version": "2"}, headers=_bearer(HUMAN)).status_code == 400
+    assert client.post("/board/tasks", json={"project": "api", "title": "T", "version": 1},
+                       headers=_bearer(HUMAN)).status_code == 400
+
+
+def test_agent_cannot_create_a_ticket_in_review(client):
+    resp = client.post("/board/tasks", json={"project": "api", "title": "T", "status": "review"},
+                       headers=_bearer(AGENT))
+    assert resp.status_code == 403
+    assert client.get("/board/tasks?project=api", headers=_bearer(HUMAN)).get_json()["tasks"] == []
+
+
+def test_created_event_and_project_history_through_the_api(client):
+    _task(client)
+    events = client.get(f"{URL}/1/history", headers=_bearer(HUMAN)).get_json()["history"]
+    assert (events[0]["field"], events[0]["origin"]) == ("created", "human")
+    assert client.delete(f"{URL}/1", headers=_bearer(HUMAN)).status_code == 204
+    project = client.get("/board/projects/api/history", headers=_bearer(HUMAN)).get_json()["history"]
+    assert [e["field"] for e in project][-1] == "task_deleted"
+    assert client.get("/board/projects/api/history", headers=_bearer(AGENT)).status_code == 403
+
+
 def test_history_records_the_agent_not_a_claimed_author(client):
     _task(client)
-    client.patch(f"{URL}/1", json={"status": "doing", "author_name": "Laszlo"}, headers=_bearer(AGENT))
-    client.patch(f"{URL}/1", json={"status": "doing"}, headers=_bearer(AGENT))
+    assert client.patch(f"{URL}/1", json={"status": "doing", "author_name": "Laszlo"},
+                        headers=_bearer(AGENT)).status_code == 400                    # unbekanntes Feld
+    client.post("/board/next", json={"task": "api#1", "author_name": "Laszlo"}, headers=_bearer(AGENT))
     events = client.get(f"{URL}/1/history", headers=_bearer(HUMAN)).get_json()["history"]
-    assert [(e["field"], e["origin"], e["actor_id"]) for e in events] == [("status", "agent", "agent")]
+    assert [(e["field"], e["origin"], e["actor_id"]) for e in events] == [("created", "human", "human"),
+                                                                          ("status", "agent", "agent")]
 
 
 # ── Import mit falschem oder feindlichem Format ──────────────────────────
@@ -242,3 +275,56 @@ def test_injected_ticket_text_gives_the_agent_no_extra_rights(client):
     assert _changes(client) == before
     # Der Text bleibt unveraendert Daten
     assert client.get(f"{URL}/1", headers=_bearer(AGENT)).get_json()["description"] == INJECTION
+
+
+
+# ── conclave#51: gezielt uebernehmen, doing nicht ueberspringen ───────────
+
+def test_targeted_next_over_rest(client):
+    _task(client)
+    _task(client)
+    taken = client.post("/board/next", json={"task": "api#2"}, headers=_bearer(AGENT)).get_json()["task"]
+    assert (taken["ref"], taken["status"]) == ("api#2", "doing")
+    again = client.post("/board/next", json={"task": "api#2"}, headers=_bearer(AGENT))
+    assert again.status_code == 409 and again.get_json()["type"] == "NotClaimable"
+    assert client.post("/board/next", json={"task": 5}, headers=_bearer(AGENT)).status_code == 400
+    assert client.post("/board/next", json={"task": "api#99"}, headers=_bearer(AGENT)).status_code == 404
+
+
+def test_agent_cannot_jump_from_todo_to_review(client):
+    _task(client)
+    before = _changes(client)
+    resp = client.patch(f"{URL}/1", json={"status": "review"}, headers=_bearer(AGENT))
+    assert resp.status_code == 403 and "uebernehmen" in resp.get_json()["error"]
+    assert _changes(client) == before
+
+
+# ── P1 (conclave#56): Prioritaet nur durch den Menschen ───────────────────
+
+@pytest.mark.parametrize("body", [{"index": 0}, {"rank": 1}, {"rank": 0.5, "title": "x"}])
+def test_agent_cannot_reorder_over_rest(client, body):
+    _task(client)
+    _task(client)
+    before = _changes(client)
+    resp = client.patch(f"{URL}/2", json=body, headers=_bearer(AGENT))
+    assert resp.status_code == 403 and resp.get_json()["type"] == "HumanOnly"
+    assert _changes(client) == before
+
+
+def test_human_sets_rank_and_next_follows(client):
+    for _ in range(3):
+        _task(client)
+    assert client.patch(f"{URL}/3", json={"rank": -1}, headers=_bearer(HUMAN)).get_json()["rank"] == -1
+    assert client.patch(f"{URL}/2", json={"rank": "hoch"}, headers=_bearer(HUMAN)).status_code == 400
+    taken = client.post("/board/next", json={"project": "api"}, headers=_bearer(AGENT)).get_json()["task"]
+    assert taken["ref"] == "api#3"
+
+
+def test_targeted_next_rejects_empty_ref_and_other_project(client):
+    """Review #51: leere Referenz und abweichendes Projekt sind Fehler, kein stilles 'oberstes Ticket'."""
+    _task(client)
+    assert client.post("/board/next", json={"task": ""}, headers=_bearer(AGENT)).status_code == 400
+    client.post("/board/projects", json={"slug": "web", "name": "Web"}, headers=_bearer(HUMAN))
+    resp = client.post("/board/next", json={"task": "api#1", "project": "web"}, headers=_bearer(AGENT))
+    assert resp.status_code == 400
+    assert client.get(f"{URL}/1", headers=_bearer(HUMAN)).get_json()["status"] == "todo"

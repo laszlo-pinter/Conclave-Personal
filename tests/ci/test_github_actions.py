@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 PUBLISH_WORKFLOW = ROOT / ".github" / "workflows" / "publish.yml"
+CHECK_DIST = ROOT / "scripts" / "release" / "check_dist.py"
 
 
 def _workflow_text() -> str:
@@ -26,9 +27,10 @@ def test_ci_runs_personal_matrix_on_windows_and_linux():
 
 
 def test_ci_builds_and_inspects_release_artifacts():
-    text = _workflow_text()
+    assert "python -m build --sdist --wheel" in _workflow_text()
+    assert "python scripts/release/check_dist.py dist" in _workflow_text()
+    text = CHECK_DIST.read_text(encoding="utf-8")         # Pruefung steht im Skript (R14)
 
-    assert "python -m build --sdist --wheel" in text
     assert "conclave/assets/conclave-ui.html" in text
     assert "conclave/assets/static/openapi.json" in text
     assert "conclave/assets/static/vendor/purify.min.js" in text
@@ -75,9 +77,9 @@ def test_publish_workflow_uses_trusted_publishing():
 def test_publish_workflow_builds_conclave_personal_artifacts():
     text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
 
-    assert "python -m build --sdist --wheel" in text
-    assert "dist/conclave_personal-0.6.0-py3-none-any.whl" in text
-    assert "dist/conclave_personal-0.6.0.tar.gz" in text
+    assert "python -m build --sdist --wheel --no-isolation" in text
+    assert "python scripts/release/check_dist.py dist" in text       # Name und Version aus pyproject.toml
+    assert 'conclave_personal-{version}-py3-none-any.whl' in CHECK_DIST.read_text(encoding="utf-8")
 
 
 def test_ci_runs_ui_browser_tests_strictly():
@@ -99,6 +101,8 @@ def test_all_actions_are_pinned_to_commit_sha():
             if "uses:" not in line:
                 continue
             ref = line.split("uses:", 1)[1].split("#", 1)[0].strip()
+            if re.fullmatch(r"\./\.github/workflows/[\w.-]+\.ya?ml", ref):
+                continue                                         # eigener Workflow aus demselben Commit
             assert re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", ref), f"{workflow.name}: nicht gepinnt: {ref}"
             assert "# v" in line, f"{workflow.name}: Versionskommentar fehlt: {line.strip()}"
 

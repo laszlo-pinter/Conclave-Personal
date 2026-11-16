@@ -14,13 +14,14 @@ class PostgresConversationRepository:
         with self._connection.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO conversations (id, status, topic, floor, rules, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO conversations (id, status, topic, floor, rules, model_read, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (id) DO UPDATE SET
                     status     = EXCLUDED.status,
                     topic      = EXCLUDED.topic,
                     floor      = EXCLUDED.floor,
-                    rules      = EXCLUDED.rules
+                    rules      = EXCLUDED.rules,
+                    model_read = EXCLUDED.model_read
                 """,
                 (
                     conversation.id,
@@ -28,6 +29,7 @@ class PostgresConversationRepository:
                     conversation.topic,
                     conversation.floor,
                     conversation.rules,
+                    bool(conversation.model_read),
                     conversation.created_at,
                 ),
             )
@@ -38,7 +40,7 @@ class PostgresConversationRepository:
     def get_by_id(self, conversation_id: str) -> Conversation | None:
         with self._connection.cursor() as cur:
             cur.execute(
-                "SELECT id, status, topic, floor, rules, created_at FROM conversations WHERE id = %s",
+                "SELECT id, status, topic, floor, rules, created_at, model_read FROM conversations WHERE id = %s",
                 (conversation_id,),
             )
             row = cur.fetchone()
@@ -52,6 +54,7 @@ class PostgresConversationRepository:
             topic=row[2] or "",
             floor=row[3],
             rules=row[4] or "",
+            model_read=bool(row[6]),
             created_at=row[5] if isinstance(row[5], datetime) else datetime.fromisoformat(row[5]),
             messages=[],
             participants=[],
@@ -81,7 +84,7 @@ class PostgresConversationRepository:
     def list_all(self) -> list[Conversation]:
         with self._connection.cursor() as cur:
             cur.execute(
-                "SELECT id, status, topic, floor, rules, created_at FROM conversations "
+                "SELECT id, status, topic, floor, rules, created_at, model_read FROM conversations "
                 "WHERE status <> 'archived' ORDER BY created_at DESC"
             )
             rows = cur.fetchall()
@@ -93,6 +96,7 @@ class PostgresConversationRepository:
                 topic=row[2] or "",
                 floor=row[3],
                 rules=row[4] or "",
+                model_read=bool(row[6]),
                 created_at=row[5] if isinstance(row[5], datetime) else datetime.fromisoformat(row[5]),
                 messages=[],
                 participants=[],

@@ -2,11 +2,14 @@
 
 import json
 import logging
+import os
 import time
 from contextlib import contextmanager
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+
+from conclave.domain.errors import redact_secrets
 
 CONCLAVE_PREFIX = "conclave."
 
@@ -53,8 +56,11 @@ def configure_logging(level: str = "INFO", log_file: str | Path | None = None) -
 
     if log_file is not None:
         path = Path(log_file)
-        path.parent.mkdir(parents=True, exist_ok=True)
+        from conclave.runtime.file_security import create_private
+        create_private(path)                    # Log nur fuer den Benutzer, schon beim Anlegen (R13)
         handler = logging.FileHandler(path, encoding="utf-8")
+        if os.name != "nt":
+            path.chmod(0o600)                   # auch eine vorhandene Datei
         handler.setFormatter(JsonFormatter())
         handler.setLevel(logger.level)
         handler._conclave_managed = True  # type: ignore[attr-defined]
@@ -113,7 +119,7 @@ class JsonFormatter(logging.Formatter):
     """Formatiert Log-Records als einzeilige JSON-Objekte."""
 
     def format(self, record: logging.LogRecord) -> str:
-        record.message = record.getMessage()
+        record.message = redact_secrets(record.getMessage(), urls=False)   # Keys nie ins Log
         entry: dict[str, Any] = {
             "timestamp": self.formatTime(record, self.datefmt),
             "level": record.levelname,

@@ -11,7 +11,7 @@
 ### Workflows
 - [Example workflows](beispiel-workflows.md) - Writing, architecture, workspace context, and multi-agent runs
 - [Provider smoke test](provider-smoke-test.md) - Check Claude, Gemini, GPT, and DeepSeek locally
-- [Working with the board](mit-dem-board-arbeiten.md) - Work packages for humans and agents, Kanzo import, second opinions
+- [Working with the board](mit-dem-board-arbeiten.md) - Work packages for humans and agents, import, second opinions
 
 ### Product UI
 - [Personal UI architecture](personal-ui-architektur.md) - Studio, Agents, Workspace, Board, Runs, Settings
@@ -31,6 +31,8 @@
 - [Ports & adapters](architektur/ports-adapter.md) - Interfaces, ProviderProfiles, ResilientAdapter
 
 ### Release
+- [Release Notes v0.7.0](release-notes-v0.7.0.md) - Hardening, board priorities, initiatives, reviewer role, control tickets, light mode
+- [Release Notes v0.6.1](release-notes-v0.6.1.md) - `[consultations]` section, board as the place for work packages (included in v0.7.0)
 - [Release Notes v0.6.0](release-notes-v0.6.0.md) - Own board for work packages, consultations on it
 - [Release Notes v0.5.1](release-notes-v0.5.1.md) - File viewer in the Files area
 - [Release Notes v0.5.0](release-notes-v0.5.0.md) - Separate human and agent access

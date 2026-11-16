@@ -32,8 +32,15 @@ Mit dem Agent-Token sind nur die Routen erlaubt, die die MCP-Tools brauchen:
 - Board: `GET`/`POST /board/tasks`, `GET /board/search`, `POST /board/next`,
   `GET`/`PATCH /board/projects/<slug>/tasks/<n>`,
   `POST /board/projects/<slug>/tasks/<n>/comments`,
-  `GET /board/projects/<slug>/tasks/<n>/history` (die feineren Regeln prüft das
-  Board selbst, siehe [Board](#board))
+  `GET /board/projects/<slug>/tasks/<n>/history`,
+  `GET /board/projects/<slug>/initiatives`,
+  `GET /board/projects/<slug>/initiatives/<vorhaben>/tasks/<n>` (die feineren
+  Regeln prüft das Board selbst, siehe [Board](#board))
+
+Der Reviewer-Zugang (`reviewer.token`) hat eine engere Liste: `GET /auth/whoami`,
+`GET /board/tasks`, `GET /board/search`, `GET /board/projects/<slug>/tasks/<n>`
+samt `/history`, `POST .../comments` und als einziger
+`POST /board/projects/<slug>/tasks/<n>/review`.
 
 Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 `{"type": "HumanOnly", "error": "Nur für den Menschen-Zugang."}`.
@@ -93,7 +100,7 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `POST` | `/restore` | Stellt SQLite-DB und Workspace aus einem ZIP-Backup im Backup-Verzeichnis wieder her. |
 | `GET` | `/workspace` | Listet alle Dateien im Workspace. |
 | `GET` | `/workspace/<path:filepath>` | Liest eine Datei aus dem Workspace. |
-| `POST` | `/workspace/<path:filepath>` | Schreibt eine Datei in den Workspace. |
+| `POST` | `/workspace/<path:filepath>` | Schreibt eine Datei in den Workspace (`content` als Text). Agenten: nur neue Dateien oder unter `agents/`, sonst `403`. |
 | `DELETE` | `/workspace/<path:filepath>` | Löscht eine Datei aus dem Workspace. |
 | `GET` | `/board` | Spalten, Projekte und Änderungszähler (nur Mensch). |
 | `GET` | `/board/changes` | Änderungszähler; die UI lädt neu, wenn er steigt (nur Mensch). |
@@ -101,15 +108,21 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `PUT` | `/board/projects/<slug>` | Projekt umbenennen (nur Mensch). |
 | `DELETE` | `/board/projects/<slug>` | Projekt samt Tickets löschen (nur Mensch). |
 | `GET` | `/board/tasks` | Tickets in Board-Reihenfolge; Filter `project`, `status` (mehrfach), `include_done`. |
-| `POST` | `/board/tasks` | Ticket anlegen; neue Tickets landen in der ersten Spalte. |
+| `POST` | `/board/tasks` | Ticket anlegen; neue Tickets landen in der ersten Spalte. Optional `initiative`: Kurzname eines vorhandenen Vorhabens. |
 | `GET` | `/board/search` | Suche in Titel, Tags, Beschreibung und Kommentaren (`q`, `project`, `include_done`). |
-| `POST` | `/board/next` | Oberstes freies Ticket der ersten Spalte übernehmen (atomar). |
+| `POST` | `/board/next` | Oberstes freies Ticket der ersten Spalte übernehmen (atomar); `task` als `projekt#n` oder `projekt/vorhaben-n`. |
 | `GET` | `/board/projects/<slug>/tasks/<int:number>` | Ein Ticket mit Kommentaren. |
-| `PATCH` | `/board/projects/<slug>/tasks/<int:number>` | Ticket ändern: `title`, `description`, `tags`, `status`, `human`, `index`. |
+| `PATCH` | `/board/projects/<slug>/tasks/<int:number>` | Ticket ändern: `title`, `description`, `tags`, `status`, `human`, `index`, `rank`, optional `version`; `initiative` (Kurzname oder `null`) ordnet einem Vorhaben zu (nur Mensch). |
+| `GET` | `/board/projects/<slug>/initiatives` | Vorhaben des Projekts nach Rang. |
+| `POST` | `/board/projects/<slug>/initiatives` | Vorhaben anlegen: `slug`, `title`, optional `rank` (nur Mensch). |
+| `PUT` | `/board/projects/<slug>/initiatives/<initiative>` | Vorhaben umbenennen oder ranken: `title`, `rank` (nur Mensch). |
+| `GET` | `/board/projects/<slug>/initiatives/<initiative>/tasks/<int:number>` | Ein Ticket über seine Vorhaben-Nummer, Antwort wie oben. |
 | `DELETE` | `/board/projects/<slug>/tasks/<int:number>` | Ticket löschen (nur Mensch). |
 | `GET` | `/board/projects/<slug>/tasks/<int:number>/comments` | Kommentare mit Herkunft (nur Mensch; Agenten lesen sie über das Ticket). |
 | `POST` | `/board/projects/<slug>/tasks/<int:number>/comments` | Kommentar schreiben; die Herkunft kommt aus dem Token. |
-| `GET` | `/board/projects/<slug>/tasks/<int:number>/history` | Verlauf (Status, Titel, Beschreibung, Markierung). |
+| `GET` | `/board/projects/<slug>/tasks/<int:number>/history` | Verlauf mit Herkunft: Anlegen und jede Änderung. |
+| `POST` | `/board/projects/<slug>/tasks/<int:number>/review` | Review-Status setzen (nur Reviewer-Zugang). |
+| `GET` | `/board/projects/<slug>/history` | Projekt-Verlauf: Anlegen, Umbenennen, gelöschte Tickets (nur Mensch). |
 | `PUT` | `/board/comments/<comment_id>` | Eigenen Kommentar ändern (nur Mensch). |
 | `DELETE` | `/board/comments/<comment_id>` | Eigenen Kommentar löschen (nur Mensch). |
 | `POST` | `/board/import` | JSON-Export eines Kanzo-Boards übernehmen (nur Mensch, idempotent). |
@@ -161,7 +174,7 @@ Eine Consultation holt eine Zweitmeinung mehrerer Reviewer-Modelle zu einem
 Ticket und schreibt jede Antwort als Kommentar in das Ticket. Die Tickets kommen
 aus dem eigenen [Board](#board) (Kommentare mit Herkunft `system`) oder, mit
 `[board] source = "kanzo"`, aus [Kanzo](https://github.com/emanuele-em/kanzo).
-Voraussetzung: `[kanzo] reviewers` in `config.toml` (siehe
+Voraussetzung: `[consultations] reviewers` in `config.toml` (siehe
 [Konfiguration](konfiguration.md#consultations));
 ohne Reviewer-Liste antworten die Endpunkte mit `503`
 (`ConsultationsDisabled`). Sicherheit: [Sicherheit](../sicherheit.md#consultations).
@@ -175,7 +188,7 @@ ohne Reviewer-Liste antworten die Endpunkte mit `503`
 
 - `task` (Pflicht): Ticket-Referenz `projekt#nummer` (Kleinbuchstaben).
 - `question` (Pflicht, bis 4.000 Zeichen), `context` (optional, bis 8.000).
-- `reviewers`: Teilmenge von `[kanzo] reviewers`; Standard: alle erlaubten.
+- `reviewers`: Teilmenge von `[consultations] reviewers`; Standard: alle erlaubten.
 - `include_previous`: frühere Conclave-Kommentare des Tickets mitgeben
   (Standard `false`; dann als „frühere Modellausgabe“ gekennzeichnet).
 - Kein Feld `channel`: Der Kanal (`human` oder `agent`) ergibt sich aus dem
@@ -187,20 +200,28 @@ ohne Reviewer-Liste antworten die Endpunkte mit `503`
 Fehler: `400` (`ValidationError`, `ReviewerNotAllowed`, `ChannelNotAllowed`),
 `403` (`HumanOnlyTicket`: Ticket nur für Menschen, Anfrage mit dem
 Agent-Token), `404`
-(Ticket unbekannt), `429` (`ConsultationLimit`: `[kanzo] max_per_hour` pro
-Ticket und Stunde erreicht), `502` (Kanzo nicht erreichbar oder unbekanntes
+(Ticket unbekannt), `429` (`ConsultationLimit`: `[consultations] max_per_hour` pro
+Ticket und Stunde erreicht; gezählt je Zugang, Mensch und Agent getrennt, für die
+normalisierte Referenz der Quelle, also `api#012` wie `api#12`; Prüfen und Anlegen
+sind ein Schritt), `502` (Kanzo nicht erreichbar oder unbekanntes
 Ausgabeformat), `503` (nicht eingerichtet). Bei diesen Fehlern wird nichts
 gespeichert.
 
 Ablauf im Hintergrund: Conclave legt die Conversation
 `board:<task> · <id>` (bzw. `kanzo:<task> · <id>`) an, fragt alle Reviewer parallel und stellt jede Antwort
-als Kommentar zu. Status: `queued` → `running` → `done` | `failed`; nach einem
-Server-Neustart wird `running` zu `interrupted`. Jeder Kommentar endet mit einer
+als Kommentar zu. Status: `queued` → `running` → `done` | `failed`. Ein Lauf hält
+eine Lease, die der Worker verlängert; bleibt sie aus (Server beendet, Worker
+abgestürzt), wird `running` nach höchstens zwei Minuten zu `interrupted`, auch
+wenn mehrere Server dieselbe Datenbank nutzen. Statuswechsel überschreiben keinen
+inzwischen anders gesetzten Status. Wird das Ticket während des Laufs „nur für
+Menschen“, stellt Conclave keine Antwort eines Agent-Auftrags zu (`failed`).
+Im eigenen Board gelten als frühere Conclave-Kommentare nur solche mit Herkunft
+`system`; ein Agent-Kommentar, der eine Kennung nachahmt, bleibt im Prompt. Jeder Kommentar endet mit einer
 Schlusszeile wie
 
 `— Zweitmeinung von GPT (openai, gpt-5.6) über Conclave, nicht geprüft · consultation <id>/gpt`
 
-Lange Antworten werden vorher auf `[kanzo] comment_max_chars` gekürzt (mit
+Lange Antworten werden vorher auf `[consultations] comment_max_chars` gekürzt (mit
 Verweis auf die Conversation); die Schlusszeile bleibt immer erhalten.
 
 `GET /consultations/<id>` liefert zusätzlich `deliveries` (je Reviewer
@@ -232,27 +253,95 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
 {"ref": "api#12", "project": "api", "number": 12, "title": "Login reparieren",
  "description": "## Abnahme\n...", "tags": ["ui"], "status": "doing",
  "position": 1024.0, "human": false, "assignee": null, "version": 3,
- "created_at": "...", "updated_at": "..."}
+ "origin": "agent", "created_by": "agent", "created_at": "...", "updated_at": "..."}
 ```
 
 - **Anlegen** `POST /board/tasks`: `project` und `title` Pflicht, optional
-  `description`, `tags`, `human`, `status` (Standard: erste Spalte).
-- **Ändern** `PATCH`: nur übergebene Felder; `index` setzt die Position in der
-  (neuen) Spalte, gezählt ohne das Ticket selbst. Unbekannte Felder ergeben
-  `400`.
+  `description`, `tags`, `human`, `status` (Standard: erste Spalte; Agenten
+  nur die erste Spalte, sonst `403`). `origin` und `created_by` setzt der
+  Server aus dem Token (`created_by: "import"` für importierte Tickets, leer
+  für Tickets von vor dieser Version).
+- **Ändern** `PATCH`: nur übergebene Felder. `index` setzt den Platz in der
+  (neuen) Spalte, gezählt ohne das Ticket selbst: in der ersten Spalte die
+  Priorität (`rank`), sonst die Position. `rank` (Zahl) setzt die Priorität
+  direkt; kleiner steht weiter oben. `index` und `rank` nur mit dem
+  Mensch-Token, sonst `403 HumanOnly`. Unbekannte Felder ergeben `400`.
+  Mit `version` (aus dem zuletzt gelesenen Ticket) wird nur geschrieben, wenn
+  das Ticket noch diesen Stand hat; sonst `409 Conflict`.
+- **Priorität:** Die erste Spalte und `POST /board/next` folgen `rank`, dann der
+  Nummer; neue Tickets bekommen den nächsten Rang. In den anderen Spalten zählt
+  die Position (Reihenfolge des Ankommens). Neunummerieren (wenn zwischen zwei
+  Karten kein Platz mehr ist) erhöht die `version` der betroffenen Tickets; ein
+  vorher gelesener Stand ergibt dann `409` statt eines alten Rangs. Bei der
+  Einführung des Rangs bekam jedes vorhandene Ticket seine damalige Position als
+  Rang. Positionen zählen je Spalte, daher stehen Tickets, die damals nicht in der
+  ersten Spalte waren, beim Zurückschieben dort weit oben, bis der Mensch sie
+  umsortiert.
 - **`POST /board/next`** (`{"project": "api"}` optional): schiebt das oberste
   Ticket der ersten Spalte ohne Markierung „nur für Menschen“ atomar in die
-  zweite und liefert es (`{"task": ...}`, `null` wenn keines frei ist).
+  zweite und liefert es (`{"task": ...}`, `null` wenn keines frei ist). Mit
+  `{"task": "api#12"}` genau dieses Ticket; steht es nicht in der ersten Spalte
+  oder wurde inzwischen übernommen, `409 NotClaimable`; „nur für Menschen“
+  `403`; unbekannt `404`. Agenten verlassen die erste Spalte nur so: Eine
+  Statusänderung per `PATCH` aus der ersten Spalte ergibt `403`.
 - **Kommentare** `POST .../comments` mit `body` (Markdown), optional
   `author_name` (Anzeigename). `origin` (`human`/`agent`/`system`/`null`) und
   `actor_id` setzt der Server aus dem Token; solche Felder im Body werden
   ignoriert.
 - **Verlauf** `GET .../history`: `field`, `old`, `new` (vollständig), `origin`,
-  `actor_id`, `created_at`.
+  `actor_id`, `created_at`. Felder: `created` (Anlegen, `new` = Spalte bzw.
+  `import`), `status`, `title`, `description`, `human`, `rank`, `tags` (JSON-Liste),
+  `position` (Umsortieren in einer Spalte) und `comment` (Bearbeiten: alt → neu,
+  Löschen: alt → `null`). Gelöschte Kommentare verschwinden aus der Liste, ihr
+  Inhalt bleibt im Verlauf.
+- **Review** `POST .../review` (nur Reviewer-Zugang, Agent und Mensch `403`):
+  `{"state": "running"|"passed"|"rework"|"failed", "comment": "...",
+  "blocking": 0, "suggestions": 3, "checked": "branch @ abc..def"}`. Nur für
+  Tickets in der Review-Spalte (sonst `409 NotInReview`); außer bei `running`
+  ist `comment` Pflicht. Ergebnis, Kommentar (Herkunft `reviewer`) und Folgen
+  werden zusammen gespeichert:
+  - `passed` (grün): bleibt in `review`, der Zähler roter Reviews wird 0.
+  - `rework` (gelb) und `failed` (rot): zurück in die erste Spalte, dort vor
+    allen anderen Tickets (Verlauf mit Herkunft `system`).
+  - Das dritte `failed` in Folge macht das Ticket „nur für Menschen“; `rework`
+    zählt nicht mit. Nimmt der Mensch die Markierung wieder weg, beginnt die
+    Zählung neu (`review_red_count` → 0, mit Verlaufseintrag).
+  - Tickets „nur für Menschen“ bewertet der Reviewer nicht (`403`); auch der
+    Watcher startet für sie kein Review.
+  - Bei `POST /board/next` ohne Projekt kommt Nacharbeit (`rework`/`failed`)
+    aus allen Projekten zuerst, danach gilt die Board-Reihenfolge.
+  - Kommt ein Ticket wieder nach `review`, steht der Status auf `none`.
+
+  Tickets tragen `review` mit `state`, `at`, `red_count`, `blocking`,
+  `suggestions` und `checked`. `GET` auf ein Ticket und `POST /board/next`
+  liefern zusätzlich `last_review`, den jüngsten Kommentar des Reviewers.
+- **Steuertickets** (Anweisungen des Menschen an die Agenten): `POST /board/tasks`
+  mit `"kind": "control"`, `"control": "pause"|"hint"` und `"scope":
+  "project"|"all"`, nur mit dem Mensch-Token (sonst `403`). Ändern und Schließen
+  (nach „erledigt“) darf nur der Mensch; `POST /board/next` vergibt sie nie.
+  - **Pause:** Solange offen, liefert `POST /board/next` kein Ticket, sondern
+    `{"task": null, "paused": true, "pause": {"task", "reason", "by", "scope", …}}`,
+    auch mit `task`. Geltung: das Projekt des Steuertickets oder alle; `next`
+    ohne Projekt hält jede offene Pause an.
+  - **Hinweis:** bleibt offen, bis ein Agent ihn kommentiert; der erste Kommentar
+    eines Agenten gilt als Quittung (`directive.ack_by`, Verlauf `control_ack`).
+  - Jede Board-Antwort (`/board`, Liste, Suche, Ticket, Anlegen, `PATCH`,
+    Kommentar, `next`) trägt `control` mit offenen Pausen (`pauses`) und
+    unquittierten Hinweisen (`hints`). Nur Steuertickets mit Herkunft `human`
+    zählen; ein normales Ticket mit ähnlichem Text löst nichts aus.
+  - Tickets tragen `kind` (`task`/`control`) und bei Steuertickets `directive`
+    (`type`, `scope`, `ack_by`, `ack_at`).
+- **Projekt-Verlauf** `GET /board/projects/<slug>/history` (nur Mensch):
+  `created`, `name` (Umbenennen) und `task_deleted` (Referenz, Titel und Spalte
+  des gelöschten Tickets). Ein gelöschtes Ticket nimmt seinen eigenen Verlauf
+  mit; dieser Eintrag bleibt.
+- **Spalten umbenennen:** Wird die letzte Spalte in `[board] statuses`
+  umbenannt, verschiebt Conclave beim Start die Tickets der alten letzten Spalte
+  in die neue (Verlauf mit Herkunft `system`), damit sie erledigt bleiben.
 
 Regeln für das Agent-Token (Fehler `403 HumanOnly`): nicht nach oder aus der
-letzten Spalte schieben, erledigte Tickets nur lesen und kommentieren, keine
-erledigten Tickets anlegen, Tickets „nur für Menschen“ nur lesen, die
+letzten Spalte schieben, erledigte Tickets nur lesen und kommentieren, Tickets
+nur in der ersten Spalte anlegen, Tickets „nur für Menschen“ nur lesen, die
 Markierung setzen, aber nicht entfernen. Kommentare ändern und löschen nur der
 Mensch und nur eigene. Gleichzeitige Änderungen am selben Ticket: `409
 Conflict`.
@@ -268,8 +357,9 @@ ImportFormatError`). Antwort:
 ```
 
 Ticket-Nummern bleiben erhalten; vorhandene Tickets werden übersprungen, ohne
-neue Kommentare nachzutragen. Importierte Kommentare haben `origin: null`,
-importierte Tickets keinen Verlauf.
+neue Kommentare nachzutragen. Importierte Kommentare haben `origin: null`;
+importierte Tickets haben `origin: null`, `created_by: "import"` und als
+einzigen Verlaufseintrag `created` mit der Herkunft dessen, der importiert hat.
 
 ## Backup und Restore
 
@@ -282,13 +372,31 @@ importierte Tickets keinen Verlauf.
 - `GET /backups` listet die vorhandenen Backups (`name`, `size_bytes`,
   `modified_at`).
 - `POST /restore` akzeptiert nur einen Dateinamen aus dieser Liste:
-  `{"backup": "conclave-backup-20261026T120000Z.zip"}`. Pfade, `..`,
+  `{"backup": "conclave-backup-20261030T120000123456Z-3fa2c1.zip"}`. Pfade, `..`,
   Laufwerksangaben und Symlinks aus dem Verzeichnis heraus werden mit `400`
   abgelehnt; das frühere Feld `backup_path` wird nicht mehr unterstützt.
 - Standardmäßig bleibt der Workspace erhalten; Dateien aus dem Backup werden
   hinzugefügt bzw. überschrieben. Den Workspace vorher leeren nur mit
   `"replace_workspace": true` **und** `"confirm": "replace-workspace"`.
 - Vor jedem Restore wird automatisch ein `conclave-pre-restore-*.zip` angelegt.
+  Backup-Namen enthalten Mikrosekunden und einen Zufallsanteil; ein vorhandenes
+  Backup wird nie überschrieben.
+- Ein Backup enthält nur normale Dateien des Workspace; Symlinks und Junctions
+  werden übersprungen.
+- Der Restore prüft und entpackt das ganze Archiv zuerst in ein
+  Zwischenverzeichnis, tauscht dann den Workspace und spielt die Datenbank
+  zuletzt ein. Schlägt ein Schritt fehl, bleiben Datenbank und Workspace
+  unverändert. Trigger und Views aus der Backup-Datenbank werden verworfen.
+  Ist eine Datei im Workspace geöffnet (unter Windows z. B. im Editor),
+  antwortet der Restore mit `409`, `"status": "workspace_busy"`.
+- **Herkunft:** Jedes Backup enthält ein `manifest.json` mit Instanz-ID und
+  einer Signatur über den Inhalt, abgeleitet aus `secret.key`. Stammt ein Backup
+  nicht nachweislich von dieser Instanz (andere Instanz, verändert, ohne
+  Manifest wie ältere Backups), antwortet der Restore mit `409`,
+  `"status": "origin_unverified"`, dem Grund (`reason`) und den Agents des
+  Backups (`agents`: `id`, `api_url`), ohne etwas zu ändern. Nach Prüfung der
+  Agents mit `"allow_foreign": true` wiederholen. Die Antwort enthält dann
+  `"origin": "foreign"`, sonst `"own"`.
 - Die CLI (`conclave restore --backup <pfad>`) darf weiterhin beliebige Pfade
   verwenden.
 
@@ -311,7 +419,42 @@ importierte Tickets keinen Verlauf.
   die laufende Session (Herkunft `session`).
   Ungültige oder leere Werte → `400`; ist `CONCLAVE_RATE_LIMIT` gesetzt → `409`.
 - `workspace_path` in `PUT /settings` gilt nur für die laufende Session und
-  wird nicht gespeichert.
+  wird nicht gespeichert. Ein Ordner, der Home-, Konfigurations-, Daten-, Log-
+  oder Backup-Verzeichnis ist oder enthält, wird mit `400`
+  (`WorkspaceNotAllowed`) abgelehnt.
+
+## Workspace-Dateien
+
+- `POST /workspace/<pfad>` erwartet `{"content": "<Text>"}`; anderer Typ →
+  `400`. Geschrieben wird über eine temporäre Datei, die alte Datei bleibt bis
+  zum Austausch intakt.
+- Agenten legen nur neue Dateien an. Vorhandene Dateien überschreibt nur der
+  Mensch (`403 HumanOnly`); unter `agents/` dürfen Agenten auch überschreiben.
+  `conclave_notify.json` ist für Agenten gesperrt.
+- Pfade mit `:`, Windows-Gerätenamen (auch mit Endung), Punkt oder Leerzeichen
+  am Ende, Steuerzeichen oder 8.3-Kurznamen → `403`.
+
+## Chat-Regeln und @read
+
+`GET /conversations/<id>/rules` liefert `{"rules": "...", "model_read": false}`.
+`POST /conversations/<id>/rules` nimmt `rules` und optional `model_read`
+(`true`/`false`): Mit `true` dürfen Modelle in dieser Conversation Dateien per
+`@read()` lesen. Beide Routen nur mit dem Mensch-Token.
+
+## Größengrenzen
+
+Anfragen sind auf 10 MB begrenzt (`413 RequestTooLarge`), der Board-Import auf
+50 MB (`413 ImportTooLarge`). Board: Titel höchstens 300 Zeichen,
+Beschreibung und Kommentar höchstens 65.536 Zeichen, höchstens 50 Tags zu je 50
+Zeichen (sonst `400 ValidationError` bzw. beim Import `ImportFormatError`).
+
+## IDs
+
+Frei wählbare IDs (Participants, neue Agents) bestehen aus 1–64 Zeichen aus
+`A-Z`, `a-z`, `0-9`, `.`, `-` und `_`; `.` und `..` allein sind nicht
+erlaubt. Sonst antwortet die API mit `400 ValidationError`. Bestehende Agents
+mit anderen IDs lassen sich weiter bearbeiten, testen und löschen, aber nicht
+mehr als Participant hinzufügen; dafür den Agent mit passender ID neu anlegen.
 
 ## Fehlercodes
 
@@ -329,11 +472,14 @@ Fehler kommen als JSON `{"error": "...", "type": "..."}`. Wichtige Codes:
 - `409` — Konflikt (z. B. Agent/Participant/Projekt existiert bereits, kein
   Rederecht, Ticket inzwischen geändert, Rate-Limit durch
   `CONCLAVE_RATE_LIMIT` gesperrt)
-- `413` — Board-Import größer als 50 MB (`ImportTooLarge`)
+- `413` — Anfrage größer als 10 MB (`RequestTooLarge`) bzw. Board-Import größer als 50 MB (`ImportTooLarge`)
 - `415` — POST ohne JSON bzw. `X-Conclave-Client`; Binärdatei im Workspace
 - `421` — `Host`-Header nicht erlaubt
-- `429` — eigenes Rate-Limit überschritten (`RateLimitExceeded`) oder
-  Provider-Rate-Limit nach ausgeschöpften Retries (`ProviderRateLimit`)
+- `429` — eigenes Rate-Limit überschritten (`RateLimitExceeded`; getrennt nach
+  Zugang, Agenten mit eigener Grenze), Grenze für Agenten erreicht
+  (`AgentBudgetExceeded`, `ConversationBudgetExceeded`, `TooManyAgentRuns`, siehe
+  [Konfiguration](konfiguration.md#grenzen-für-agenten)) oder Provider-Rate-Limit
+  nach ausgeschöpften Retries (`ProviderRateLimit`)
 - `502` — Provider-Fehler (`ProviderUnavailable` u. a.), kein Adapter
   (`AdapterNotFound`)
 - `503` — Board oder Consultations in dieser Instanz nicht verfügbar

@@ -35,8 +35,8 @@ def _msg(seq, content="x", author=None):
                    content=content, sequence=seq, created_at=datetime.now(timezone.utc))
 
 
-def _conv(messages, rules=""):
-    conv = Conversation(id="c", topic="t")
+def _conv(messages, rules="", model_read=True):
+    conv = Conversation(id="c", topic="t", model_read=model_read)
     conv.messages = messages
     conv.rules = rules
     return conv
@@ -81,7 +81,7 @@ def test_executed_body_is_the_prepared_body():
     conv = _conv([_msg(1, "Frage")])
     prepared = adapter.prepare_request(conv, PART)
     recorder = _Recorder([_ok()])
-    with patch("httpx.post", recorder):
+    with patch("conclave.infrastructure.universal.adapter._http_post", recorder):
         result = adapter.complete(conv, PART)
     assert recorder.bodies == [prepared.body]
     assert isinstance(result, Completion)
@@ -149,7 +149,7 @@ def test_resilient_adapter_builds_request_once_and_counts_attempts(workspace):
 
     recorder = _Recorder([fail_and_change_file, _ok()])
     adapter = ResilientAdapter(UniversalAdapter(api_url=API_URL, api_key="k", model="m"), sleep_fn=lambda s: None)
-    with patch("httpx.post", recorder):
+    with patch("conclave.infrastructure.universal.adapter._http_post", recorder):
         result = adapter.complete(conv, PART)
     assert len(recorder.bodies) == 2
     assert recorder.bodies[0] == recorder.bodies[1]
@@ -160,7 +160,7 @@ def test_resilient_adapter_builds_request_once_and_counts_attempts(workspace):
 def test_resilient_adapter_single_attempt_keeps_report():
     recorder = _Recorder([_ok()])
     adapter = ResilientAdapter(UniversalAdapter(api_url=API_URL, api_key="k", model="m"))
-    with patch("httpx.post", recorder):
+    with patch("conclave.infrastructure.universal.adapter._http_post", recorder):
         result = adapter.complete(_conv([_msg(1)]), PART)
     assert result.report.attempts == 1
 
@@ -180,7 +180,7 @@ def test_concurrent_calls_of_same_adapter_keep_their_own_usage():
     def call(question):
         results[question] = adapter.complete(_conv([_msg(1, question)]), PART)
 
-    with patch("httpx.post", lambda url, json=None, **kw: respond(json)):
+    with patch("conclave.infrastructure.universal.adapter._http_post", lambda url, json=None, **kw: respond(json)):
         threads = [threading.Thread(target=call, args=(q,)) for q in ("kurz", "deutlich laenger")]
         for t in threads:
             t.start()
@@ -217,7 +217,7 @@ def test_parallel_flow_records_each_run_with_its_own_usage(service, db_connectio
             service.async_complete_participant(conv.id, "p1"),
         )
 
-    with patch("httpx.post", respond):
+    with patch("conclave.infrastructure.universal.adapter._http_post", respond):
         texts = asyncio.run(both())
     runs = run_repo.list_by_conversation(conv.id)
     assert sorted(texts) == ["111", "222"]
@@ -295,3 +295,13 @@ def test_no_last_usage_in_call_path():
     """Abnahme K1: Usage nur noch als Rueckgabewert, kein Adapter-Zustand."""
     offenders = [str(p.relative_to(SRC)) for p in SRC.rglob("*.py") if "last_usage" in p.read_text(encoding="utf-8")]
     assert offenders == []
+
+
+
+def test_workspace_hint_offers_read_only_with_opt_in(workspace):
+    """R6: ohne Freigabe bietet der System-Prompt @read nicht an und verweist auf @workspace."""
+    from conclave.infrastructure.system_prompt import build_system_prompt
+    off = build_system_prompt(None, _conv([_msg(1)], model_read=False))
+    on = build_system_prompt(None, _conv([_msg(1)], model_read=True))
+    assert "@read(pfad" not in off and "ausgeschaltet" in off and "@save(" in off
+    assert "@read(pfad" in on

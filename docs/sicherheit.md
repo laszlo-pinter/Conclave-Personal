@@ -59,14 +59,43 @@ Anfrage spielen dafür keine Rolle.
   gleiche Dateirechte), Präfix `cva_`. Der MCP-Server liest nur dieses Token,
   nie `api.token`. Ist es gleich dem Mensch-Token, gibt es keinen
   Agent-Zugang.
-- **Rolle prüfen:** `GET /auth/whoami` liefert `{"role": "human"|"agent"}`.
-  Bekommt der MCP-Server `human`, schreibt er eine Warnung nach stderr.
+- **Reviewer-Token:** `CONCLAVE_REVIEWER_KEY` bzw. `reviewer.token` (gleiche
+  Dateirechte), Präfix `cvr_`, für den automatischen Reviewer. Es darf das
+  Board lesen, kommentieren und als einziges den Review-Status setzen. Es darf
+  keine Tickets anlegen, ändern, verschieben oder übernehmen und keine anderen
+  Bereiche nutzen; für den Reviewer gelten alle Grenzen eines Agenten. Gleicht
+  es einem anderen Token, gibt es keinen Reviewer-Zugang. Agenten, die Code
+  schreiben, sollen es nicht lesen können: im Agent-Host sperren wie `api.token`.
+- **Rolle prüfen:** `GET /auth/whoami` liefert `{"role": "human"|"agent"|"reviewer"}`.
+  Bekommt der MCP-Server `human`, lehnt er jedes Tool ab (seit v0.7.0; nur mit
+  `CONCLAVE_MCP_ALLOW_HUMAN=1` arbeitet er trotzdem, mit Warnung, für die
+  Fehlersuche). `CONCLAVE_API_KEY` liest er nicht. Pfadteile in Tool-Aufrufen
+  werden vollständig kodiert. `conclave-mcp --reviewer` arbeitet nur mit der
+  Rolle `reviewer` und bietet nur drei Tools; der normale MCP-Server lehnt das
+  Reviewer-Token ab und kennt das Review-Tool nicht.
 - **Rechte des Agent-Zugangs:** nur die Routen, die die MCP-Tools brauchen
   (Liste in `api/access.py`); alles andere ergibt `403`
   `{"type": "HumanOnly"}`. Neue Routen sind für Agenten gesperrt, bis sie
   bewusst freigegeben werden. Agenten dürfen nicht löschen, keine Einstellungen,
   Agents, Backups oder Logs sehen oder ändern, keine Consultations wiederholen
   und nur Participants vom Typ `model` anlegen.
+- **Für Agenten lesbar, ohne MCP-Tool:** die Regeln einer Conversation
+  (`GET /conversations/<id>/rules`), ihre Tool-Events (`…/tool-events`) und
+  der Kontext-Report einer Antwort (`…/messages/<message_id>/context`).
+  Dieselben Daten liefern `GET /conversations/<id>` und der Export; es sind
+  keine Geheimnisse. Das Setzen der Regeln bleibt dem Menschen vorbehalten.
+- **Routen-Matrix:** `tests/security/test_route_matrix.py` hält für jede Route
+  fest, wer sie aufrufen darf, und prüft das mit jedem Zugang (kein Token,
+  Mensch, Agent, Reviewer). Eine neue Route ohne Eintrag lässt die CI scheitern.
+- Die App startet nur mit Anmeldung; ohne `auth_service` bricht `create_app`
+  ab (Ausnahme nur für Tests, ausdrücklich mit `allow_unauthenticated=True`).
+- IDs von Agents und Participants folgen derselben Regel in API und Diensten
+  (1–64 Zeichen aus `A-Z a-z 0-9 . - _`, nicht `.` oder `..`).
+- **Grenzen für Agenten:** Tagesbudget in Tokens für alle Agenten und je
+  Conversation, höchstens N gleichzeitige Modellläufe, eigenes Rate-Limit
+  (`[limits]`, siehe [Konfiguration](referenz/konfiguration.md#grenzen-für-agenten)).
+  Erschöpft → `429` mit Angabe, welche Grenze greift. Das Rate-Limit zählt nach
+  Zugang und IP, Agenten bremsen die UI also nicht aus.
 - **Herkunft:** Nachrichten über `POST /conversations/<id>/messages` tragen
   `origin: human|agent` aus dem Token (UI: „über Agent“). Ältere Nachrichten
   und Wege ohne Token (CLI) haben `origin: null` (unbekannt). Für die Modelle
@@ -113,6 +142,38 @@ Oktober 2026):
   oder (Linux/macOS) `XDG_CONFIG_HOME` setzt, trägt die dort gesetzten Pfade ein.
 - `secret.key` gehört dazu: Mit ihm und der Datenbank ließen sich die
   gespeicherten Provider-Keys entschlüsseln.
+
+### Dateirechte
+
+- `secret.key` und die Token-Dateien entstehen nur einmal, auch wenn zwei
+  Prozesse gleichzeitig starten, und sind nur für den Benutzer lesbar.
+  Hat eine vorhandene Datei weitere Rechte, entfernt Conclave sie beim Start
+  und schreibt eine Warnung ins Log. Eine leere Token-Datei wird mit Warnung
+  durch ein neues Token ersetzt.
+- Windows: Datei und Konfigurationsverzeichnis (`%APPDATA%\Conclave`) haben
+  ohne Vererbung nur Einträge für den Benutzer, SYSTEM und die Administratoren;
+  andere Gruppen verlieren den Zugriff. Das Verzeichnis wird nur gehärtet, wenn
+  `secret.key` darin liegt.
+- Linux/macOS: Konfigurations-, Daten- und Log-Verzeichnis `0700`;
+  Datenbank, Logs und Backups `0600`.
+
+### Schlüsselwechsel
+
+```powershell
+conclave key rotate
+```
+
+Erzeugt einen neuen `secret.key` und verschlüsselt alle Daten in einer
+Transaktion neu. Der alte Schlüssel bleibt als `secret.key.old-<Zeit>` neben
+der Datei liegen; ältere Backups brauchen ihn, und sie gelten weiterhin als
+eigene. Bricht der Wechsel ab, setzt ein erneuter Aufruf ihn fort; es geht
+nichts verloren. Ein laufender Server wird danach neu gestartet. Kommt der
+Schlüssel aus `CONCLAVE_SECRET_KEY`, wird er dort gewechselt.
+
+Abgelöste Schlüssel gelten weiter: zum Entschlüsseln und für die Prüfung, ob
+ein Backup ein eigenes ist. Wer wechselt, weil der alte Schlüssel in fremde
+Hände gelangt sein könnte, nimmt `conclave key rotate --drop-old`. Danach
+werden alle abgelösten Schlüssel gelöscht, und ältere Backups gelten als fremd.
 - `Read`-Deny-Regeln gelten für die Datei-Tools von Claude Code und für
   Shell-Befehle, die Claude Code als Dateizugriff erkennt (`cat`, `head`,
   `sed` …). Sie gelten **nicht** für Programme, die Dateien selbst öffnen,
@@ -129,12 +190,25 @@ Oktober 2026):
   `marked` in HTML gewandelt und anschließend mit DOMPurify gefiltert
   (`renderMarkdown()` in `static/js/utils.js`).
 - Erlaubt sind nur Text- und Strukturelemente (Absätze, Listen, Tabellen,
-  Code, Links). Skripte, Bilder, SVG, Formulare, `style`-, `id`- und
-  Event-Attribute werden entfernt. Einzige Ausnahme sind GFM-Aufgabenlisten:
+  Code, Links). Skripte, Bilder, SVG, Formulare, `style`-, `id`-, `class`-
+  und Event-Attribute werden entfernt; `class` bleibt nur als Sprachangabe
+  `language-*` an `code`. Einzige Ausnahme sind GFM-Aufgabenlisten:
   `input` bleibt nur als deaktivierte Checkbox erhalten, andere Eingabefelder
   werden entfernt.
-- Links sind nur mit `http(s)`, `mailto` oder `#` erlaubt und öffnen mit
-  `target="_blank"` und `rel="noopener noreferrer"`.
+- Links sind nur mit `http(s)`, `mailto` oder `#` erlaubt. Externe Links
+  öffnen mit `target="_blank"` und `rel="noopener noreferrer"`, Sprungmarken
+  (`#…`) im selben Tab. Links, deren Fragment `token=` enthält, verlieren ihr
+  Ziel.
+- **Token in der UI:** Das Token liegt nur im `sessionStorage` des Tabs (bis
+  v0.6.1 dauerhaft im `localStorage`; ein altes Token wird einmal übernommen
+  und dort gelöscht). `conclave desktop` und `conclave web` übergeben es beim
+  Start im URL-Fragment. Ein Token aus dem Fragment prüft die UI zuerst per
+  `/auth/whoami`: Ein Mensch-Token in einem Tab ohne gespeichertes Token gilt
+  sofort; ein Agent-Token, ein ungültiges Token oder ein Wechsel gegenüber dem
+  gespeicherten Token gelten erst nach einer Rückfrage, die die Rolle nennt. Die Rolle
+  des aktuellen Zugangs („Mensch“ oder „Agent“) steht in der Seitenleiste.
+  `conclave web --url` hängt das Token nur an lokale Adressen, nie an einen
+  fremden Host.
 - Ist DOMPurify nicht geladen, wird nie HTML ausgegeben, nur escapter Text.
 - Alle Bibliotheken und Schriften (DOMPurify, marked, highlight.js, Swagger UI,
   Syne, Syne Mono, DM Sans) werden lokal unter `static/vendor/` ausgeliefert;
@@ -163,6 +237,10 @@ Oktober 2026):
   Artefakten ausgeschlossen.
 - Agent-Keys werden lokal verschlüsselt gespeichert, wenn sie in der DB
   abgelegt werden.
+- Keys aus der Umgebung bzw. Konfiguration (`OPENAI_API_KEY` usw.) gehen nur
+  an Host und Schema ihres Presets. Ein gespeicherter Agent-Key wird verworfen,
+  wenn der Agent nach einer Änderung an einen anderen Host sendet und kein
+  neuer Key eingegeben wird.
 - `CONCLAVE_SECRET_KEY` oder `CONCLAVE_SECRET_KEY_FILE` nach der Erstanlage
   nicht ohne Backup wechseln, sonst können verschlüsselte Werte unlesbar
   werden.
@@ -175,15 +253,55 @@ Oktober 2026):
 - Pfad-Traversal und absolute Ausbrüche werden blockiert.
 - Versteckte Pfade mit Komponenten wie `.private/` werden nicht gelesen oder
   angezeigt.
+- Pfadkomponenten mit `:`, Windows-Gerätenamen (`CON`, `NUL`, `COM1` usw.,
+  auch mit Endung), Punkt oder Leerzeichen am Ende, Steuerzeichen und
+  8.3-Kurznamen (`NAME~1`) werden abgelehnt.
+- Der Workspace darf Home-, Konfigurations-, Daten-, Log- und
+  Backup-Verzeichnis nicht sein oder enthalten, ebenso keine Token-,
+  Schlüssel- oder Datenbankdatei. Der Server startet mit einem solchen
+  `CONCLAVE_WORKSPACE` nicht; `PUT /settings` lehnt ihn mit `400` ab.
+  Token-, Schlüssel- und Datenbankdateien sind über den Workspace nie
+  erreichbar.
+- Agenten legen nur neue Dateien an; vorhandene Dateien überschreibt nur der
+  Mensch (`403`). Unter `agents/` dürfen Agenten auch überschreiben.
+  `conclave_notify.json` ist für Agenten gesperrt.
+- Dateien werden über eine temporäre Datei geschrieben und dann ausgetauscht;
+  bricht das Schreiben ab, bleibt die alte Datei erhalten.
 - Dateigrößenlimits verhindern versehentliche Vollimporte großer Dateien in
   Agent-Kontexte.
 - `context_files:` in den Chat-Regeln unterliegt denselben Grenzen wie
   `@workspace/` und `@read()`: nur Dateien im Workspace, keine versteckten
   Pfade, Agent-Leselimit.
+- `@workspace/` wird nur in Nachrichten von Mensch und Agent eingesetzt, je Datei
+  einmal (auch bei anderer Schreibweise des Pfads), höchstens 10 Dateien pro
+  Nachricht und zusammen höchstens das Agent-Leselimit pro Prompt (neuere
+  Nachrichten zuerst); jede Datei steht beim Speichern der Nachricht einmal als
+  Tool-Event im Verlauf. Texte, deren Verweise nie eingesetzt werden (Tickets
+  in Consultations), erzeugen keine solchen Einträge.
+- `@read()` in Modellantworten ist standardmäßig aus und wird nur nach Freigabe
+  durch den Menschen je Conversation ausgeführt, mit denselben Grenzen.
+- Anfragen sind auf 10 MB begrenzt (`413 RequestTooLarge`), der Board-Import auf
+  50 MB. Board-Felder haben Längengrenzen (Titel 300 Zeichen, Beschreibung und
+  Kommentar 65.536 Zeichen, höchstens 50 Tags zu je 50 Zeichen).
 - `POST /restore` stellt nur Backups aus dem Backup-Verzeichnis wieder her
   (Dateiname, keine Pfade) und leert den Workspace nur nach ausdrücklicher
-  Bestätigung. ZIP-Inhalte werden auf Pfad-Traversal, Symlinks und Größe
-  geprüft; vor jedem Restore entsteht ein automatisches Backup.
+  Bestätigung. ZIP-Inhalte werden auf Pfad-Traversal, Symlinks, Größe und
+  Prüfsummen geprüft; vor jedem Restore entsteht ein automatisches Backup.
+- Ein Restore ändert nichts, solange nicht das ganze Archiv geprüft und
+  entpackt ist; die Datenbank kommt zuletzt. Backups enthalten keine verlinkten
+  Inhalte (Symlinks, Junctions).
+- Bricht ein Restore ab (Absturz, beendeter Prozess), rollt der nächste Start
+  von Server oder Restore ihn zurück: Der alte Workspace kommt wieder an seinen
+  Platz, passend zur alten Datenbank. Das automatische Backup
+  `conclave-pre-restore-*` bleibt erhalten. Bricht er erst beim Einspielen der
+  Datenbank ab, ist der Stand unklar: Dann rollt Conclave nichts zurück, sondern
+  meldet im Log, dass das Sicherheits-Backup einzuspielen ist. Lässt sich ein
+  Rest nicht zurückrollen (z. B. eine geöffnete Datei), steht das im Log, und
+  der Start geht weiter.
+- Backups tragen eine Signatur, abgeleitet aus `secret.key`. Ein Backup ohne
+  belegte eigene Herkunft wird erst nach Bestätigung eingespielt; vorher zeigt
+  Conclave die Agents und Ziel-URLs aus dem Backup. Trigger und Views aus
+  Backup-Datenbanken werden verworfen.
 
 ## Provider
 
@@ -193,10 +311,22 @@ Oktober 2026):
 - Lokale Ollama-Modelle können ohne API-Key betrieben werden.
 - Provider-Fehler liefern `429` (Rate-Limit), `504` (Timeout) oder `502`
   (nicht erreichbar, sonstige Fehler).
-- Custom-Provider-URLs werden gegen SSRF-Risiken geprüft. Private,
-  reservierte, Loopback- und Link-Local-Ziele werden blockiert; DNS-Auflösung
-  auf solche Ziele wird ebenfalls abgelehnt. Localhost ist nur für explizite
-  lokale Provider wie Ollama erlaubt.
+- Ausgehende Verbindungen zu Providern sind auf öffentliche Adressen
+  beschränkt. Conclave löst den Namen bei jeder Anfrage auf, prüft jede
+  Adresse und verbindet sich mit der geprüften Adresse; Host-Header und
+  TLS-Servername bleiben beim Namen. Nicht auflösbare Namen werden abgelehnt.
+- Proxy-Variablen aus der Umgebung (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`)
+  gelten nicht für Anfragen an Provider; die Verbindung geht direkt an die
+  geprüfte Adresse.
+- Entfernte Provider nur über `https`. `localhost` ist nur für den lokalen
+  Provider (Ollama) erlaubt, und nur auf dessen Port
+  (`CONCLAVE_OLLAMA_PORT`, Standard `11434`). Ein Agent mit einer nicht mehr
+  erlaubten URL wird beim Start übersprungen; sein Aufruf nennt den Grund.
+- Provider-Keys stehen in Headern, nicht in der URL (Gemini:
+  `x-goog-api-key`).
+- Fehlermeldungen an Clients und im Log enthalten keine Provider-URLs und
+  keine Keys. Unbekannte Fehler erscheinen nur mit ihrem Typ, Details stehen
+  im Server-Log. Streams melden Fehler als `data: [ERROR] {"error": ..., "type": ...}`.
 
 ## Board
 
@@ -210,12 +340,16 @@ setzt seine Regeln am Token durch, nicht an Angaben in der Anfrage:
 - **Freigabe-Recht** (heute: der Mensch): nach und aus der letzten Spalte
   schieben, löschen, Projekte verwalten, importieren. Mit dem Agent-Token
   ergibt das `403 HumanOnly`, ohne dass etwas geschrieben wird.
+- **Priorität** (`rank`, Reihenfolge der ersten Spalte und von `next_task`)
+  ändert nur der Mensch; Agenten bekommen für `index` und `rank` `403`.
 - **Agenten** lesen erledigte Tickets und Tickets „nur für Menschen“ nur
   (erledigte dürfen sie kommentieren), dürfen die Markierung „nur für
   Menschen“ setzen, aber nicht entfernen, und bekommen solche Tickets nie über
-  `next_task`. Die Prüfungen laufen im selben Schreibvorgang wie die Änderung
-  (keine Lücke zwischen Prüfen und Schreiben); `next_task` vergibt jedes Ticket
-  genau einmal.
+  `next_task`. Aus der ersten Spalte kommen sie nur über `next_task` heraus
+  (oberstes oder bestimmtes Ticket), sodass jede Übernahme im Verlauf steht.
+  Die Prüfungen laufen im selben Schreibvorgang wie die Änderung (keine Lücke
+  zwischen Prüfen und Schreiben); `next_task` vergibt jedes Ticket genau
+  einmal.
 - **Unveränderliche Kommentare:** Kommentare von Agenten, von Conclave und
   importierte kann niemand ändern oder löschen; der Mensch nur seine eigenen.
 - **Verlauf:** Änderungen an Status, Titel, Beschreibung und Markierung werden
@@ -274,9 +408,13 @@ werden als Daten behandelt:
   reicht: Ein Agent, der `api.token` lesen kann, hat den Mensch-Zugang.
 - **Feste Adresse:** Die Kanzo-Adresse steht nur in `config.toml`
   (`[kanzo] url`); die API nimmt keine Ziel-URL an (SSRF).
-- **Grenzen:** Reviewer nur aus `[kanzo] reviewers` (wer Ticket-Inhalte sieht),
-  höchstens `max_per_hour` Consultations pro Ticket und Stunde, Kommentare
-  gekürzt. Nach einem Neustart werden Modelle nie automatisch erneut aufgerufen.
+- **Grenzen:** Reviewer nur aus `[consultations] reviewers` (wer Ticket-Inhalte sieht),
+  höchstens `max_per_hour` Consultations pro Ticket und Stunde, je Zugang und
+  für die normalisierte Referenz, atomar gezählt; Kommentare gekürzt. Nach einem
+  Neustart werden Modelle nie automatisch erneut aufgerufen.
+- **Erneute Prüfung:** Vor dem Zustellen prüft Conclave noch einmal „nur für
+  Menschen“; ein inzwischen markiertes Ticket bekommt keinen Kommentar aus einem
+  Agent-Auftrag.
 - **Datenabfluss:** Der Ticket-Inhalt geht an die Provider der Reviewer; die
   Antwort von `POST /consultations` und jeder Kommentar nennen sie. Bei Kanzo
   landen die Kommentare mit `kanzo sync` im Git-Repository des Kanzo-Boards.
@@ -289,23 +427,58 @@ werden als Daten behandelt:
   Schwachstellen, `bandit` den Quellcode (ab Schweregrad „medium“). Ausnahmen
   stehen als `# nosec <ID>` mit Begründung direkt im Code.
 - Der Job `ui-browser` lädt die UI in Chromium und prüft XSS-Schutz, CSP und
-  Token-Login; `tests/ui/test_html_sinks.py` lehnt neue `innerHTML`-Stellen
-  ohne `// safe-html:`-Begründung ab.
+  Token-Login; `tests/ui/test_html_sinks.py` lehnt neue HTML-Senken ohne
+  `// safe-html:`-Begründung ab: `innerHTML`/`outerHTML` (auch `+=`),
+  `insertAdjacentHTML`, `document.write`, `srcdoc`, Zuweisungen an `.href`,
+  Event-Handler per `setAttribute('on…')`, `createContextualFragment` und
+  `DOMParser`.
+- Der Job `vendor` lädt die npm-Pakete der ausgelieferten Bibliotheken und
+  Schriften, prüft sie gegen die Integrität in `THIRD_PARTY.md` (sha512) und
+  vergleicht jede Datei Byte für Byte (`scripts/check_vendor.py`).
+- Absturztests (`tests/security/test_crash_safety.py`) brechen Migration,
+  Workspace-Write und Restore in einem eigenen Prozess mittendrin ab und prüfen
+  den Zustand danach.
 - Alle GitHub Actions sind auf Commit-SHAs gepinnt (Version als Kommentar).
   Updates erfolgen bewusst: neue SHA per `git ls-remote --tags` ermitteln und
   Kommentar mitpflegen.
+- Checkouts speichern keine Git-Zugangsdaten (`persist-credentials: false`).
 
 ## Release-Artefakte
 
 Der CI-Job `build` (`.github/workflows/ci.yml`) baut Wheel und Source
-Distribution bei jedem Push auf `main` und jedem Pull Request und prüft sie auf
-verbotene Inhalte:
+Distribution bei jedem Push auf `main` und jedem Pull Request.
+`scripts/release/check_dist.py` prüft sie auf Name und Version, Pflichtdateien
+und verbotene Inhalte:
 
 - keine Workspace-Daten
 - keine Datenbanken
-- keine Secret-Key-Dateien
-- keine Logs
+- keine Secret-Key- und Token-Dateien
+- keine Logs und `.env`-Dateien
 - keine Python-Caches
 - keine alten DSGVO-/Legal-Pfade
+
+Build-Werkzeuge (`pip`, `build`, `setuptools`, `wheel` und ihre
+Abhängigkeiten) stehen mit Hashes in `requirements/release-tools.txt`. Gebaut
+wird ohne Isolation mit genau diesen Werkzeugen.
+
+## Veröffentlichen
+
+`.github/workflows/publish.yml` veröffentlicht nur unter diesen Bedingungen:
+
+1. Der Lauf gehört zu einem Tag `v<Version>`, und die Version passt zu
+   `pyproject.toml` (`scripts/release/check_version.py`). Ohne Tag oder bei
+   Abweichung bricht der Lauf ab.
+2. Die volle CI ist grün: Tests unter Linux und Windows, UI-Tests, `pip-audit`
+   und `bandit`, PostgreSQL, Paketprüfung. Im Release-Lauf ohne pip-Cache.
+3. Die Pakete werden mit den gepinnten Werkzeugen neu gebaut und geprüft.
+4. Der Job `publish` läuft im GitHub-Environment `pypi`. Dort ist eine Freigabe
+   durch den Maintainer Pflicht (Einstellung in GitHub, siehe unten).
+
+Einrichtung des Environments in GitHub: Repository → Settings → Environments
+→ `pypi` → „Required reviewers“ aktivieren und den Maintainer eintragen;
+„Prevent self-review“ nicht setzen, wenn nur eine Person freigibt. Unter
+„Deployment branches and tags“ „Selected branches and tags“ wählen und die
+Regel `v*` (Typ Tag) anlegen. Bei PyPI ist das Projekt per Trusted Publishing
+an diesen Workflow und dieses Environment gebunden.
 
 Siehe auch: [Release Notes v0.2.0](release-notes-v0.2.0.md) (Sicherheits-Release) und die folgenden Versionen im [Dokumentationsindex](index.md).

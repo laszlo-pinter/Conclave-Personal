@@ -43,7 +43,8 @@ def _text(result) -> str:
 
 @pytest.fixture(autouse=True)
 def fresh_role_check(monkeypatch):
-    monkeypatch.setattr(server, "_role_checked", False)
+    monkeypatch.setattr(server, "_confirmed_token", None)
+    monkeypatch.delenv("CONCLAVE_MCP_ALLOW_HUMAN", raising=False)
 
 
 @pytest.fixture
@@ -162,10 +163,14 @@ def test_never_reads_the_human_token_file(tmp_path, monkeypatch):
     assert server.read_token() == ""                                         # kein agent.token, keine Variablen
     (tmp_path / "agent.token").write_text("cva_agent\n", encoding="utf-8")
     assert server.read_token() == "cva_agent"
-    monkeypatch.setenv("CONCLAVE_API_KEY", "cvh_alt")
-    assert server.read_token() == "cva_agent"                                # Agent-Token hat Vorrang
     monkeypatch.setenv("CONCLAVE_AGENT_KEY", "cva_env")
     assert server.read_token() == "cva_env"
+
+
+def test_human_token_variable_is_no_longer_a_fallback(tmp_path, monkeypatch):
+    """R2: CONCLAVE_API_KEY (Mensch-Token) wird nie mehr gelesen, auch ohne agent.token."""
+    monkeypatch.setenv("CONCLAVE_API_KEY", "cvh_alt")
+    assert server.read_token() == ""
 
 
 def test_all_remaining_tools_work_with_agent_token(conclave_api, capsys):
@@ -207,29 +212,43 @@ def test_all_remaining_tools_work_with_agent_token(conclave_api, capsys):
     assert "WARNUNG" not in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("variable", ["CONCLAVE_AGENT_KEY", "CONCLAVE_API_KEY"])
-def test_human_token_triggers_warning(conclave_api, monkeypatch, tmp_path, capsys, variable):
+def test_human_token_is_rejected_for_every_tool(conclave_api, monkeypatch, capsys):
+    """R2: Mit dem Mensch-Token lehnt jedes Tool ab, ohne Anfrage an die eigentliche Route."""
     _url, human, _agent = conclave_api
-    if variable == "CONCLAVE_API_KEY":
-        (tmp_path / "agent.token").unlink()          # alte Einrichtung: nur CONCLAVE_API_KEY
-    monkeypatch.setenv(variable, human)
+    monkeypatch.setenv("CONCLAVE_AGENT_KEY", human)
+    for name, args in [("conclave_list_conversations", {}), ("conclave_list_agents", {}),
+                       ("conclave_board_list", {})]:
+        result = _call(name, args)
+        assert result.is_error and "Mensch-Token" in _text(result), name
+    assert human not in capsys.readouterr().err
+
+
+def test_human_token_only_with_explicit_opt_in(conclave_api, monkeypatch, capsys):
+    _url, human, _agent = conclave_api
+    monkeypatch.setenv("CONCLAVE_AGENT_KEY", human)
+    monkeypatch.setenv("CONCLAVE_MCP_ALLOW_HUMAN", "1")
     assert not _call("conclave_list_conversations").is_error
     assert not _call("conclave_list_conversations").is_error
     err = capsys.readouterr().err
-    assert err.count("WARNUNG: conclave-mcp nutzt das Mensch-Token") == 1    # einmal pro Prozess
-    assert human not in err
+    assert err.count("CONCLAVE_MCP_ALLOW_HUMAN") == 1 and human not in err     # einmal pro Token
 
 
-def test_old_server_without_roles_is_reported(monkeypatch, capsys):
+def test_old_server_without_roles_is_rejected(monkeypatch):
     import httpx
+    requested = []
 
     def fake_get(url, **kw):
         return httpx.Response(404, json={"error": "nicht gefunden"}, request=httpx.Request("GET", url))
 
+    def fake_request(method, url, **kw):
+        requested.append(url)
+        return httpx.Response(200, json={}, request=httpx.Request(method, url))
+
     monkeypatch.setattr(server.httpx, "get", fake_get)
-    monkeypatch.setattr(server, "API_URL", "http://127.0.0.1:9")
-    _call("conclave_list_agents")
-    assert "aelter als v0.5.0" in capsys.readouterr().err
+    monkeypatch.setattr(server.httpx, "request", fake_request)
+    monkeypatch.setenv("CONCLAVE_AGENT_KEY", "cva_x")
+    result = _call("conclave_list_agents")
+    assert result.is_error and "v0.5.0" in _text(result) and requested == []
 
 
 def test_delete_tools_are_gone():
@@ -237,14 +256,74 @@ def test_delete_tools_are_gone():
     assert not hasattr(server, "conclave_delete_file")
 
 
-def test_role_check_is_repeated_after_401(conclave_api, monkeypatch, tmp_path, capsys):
-    """Falsches Token zuerst: der Check gilt nicht als erledigt, die Warnung kommt spaeter noch."""
-    _url, human, _agent = conclave_api
+def test_role_check_is_repeated_after_401_and_token_change(conclave_api, monkeypatch):
+    """Falsches Token zuerst, dann das Mensch-Token: die Pruefung laeuft erneut und lehnt ab;
+    ein spaeter bestaetigtes Agent-Token gilt nur fuer genau dieses Token."""
+    _url, human, agent = conclave_api
     monkeypatch.setenv("CONCLAVE_AGENT_KEY", "falsch")
     assert _call("conclave_list_conversations").is_error
-    monkeypatch.setenv("CONCLAVE_AGENT_KEY", human)
+    monkeypatch.setenv("CONCLAVE_AGENT_KEY", agent)
     assert not _call("conclave_list_conversations").is_error
-    assert "WARNUNG: conclave-mcp nutzt das Mensch-Token" in capsys.readouterr().err
+    monkeypatch.setenv("CONCLAVE_AGENT_KEY", human)                     # Token wechselt im laufenden Prozess
+    result = _call("conclave_list_conversations")
+    assert result.is_error and "Mensch-Token" in _text(result)
+
+
+def test_server_unreachable_then_human_is_still_rejected(conclave_api, monkeypatch):
+    url, human, _agent = conclave_api
+    monkeypatch.setenv("CONCLAVE_AGENT_KEY", human)
+    monkeypatch.setattr(server, "API_URL", "http://127.0.0.1:9")
+    assert _call("conclave_list_conversations").is_error                # nicht erreichbar
+    monkeypatch.setattr(server, "API_URL", url)
+    result = _call("conclave_list_conversations")
+    assert result.is_error and "Mensch-Token" in _text(result)
+
+
+# ── R2: Pfadparameter kodiert ─────────────────────────────────────────────
+
+@pytest.fixture
+def recorded(monkeypatch):
+    """httpx gemockt: whoami liefert agent, jede andere Anfrage wird nur aufgezeichnet."""
+    import httpx
+    urls = []
+
+    def fake_get(url, **kw):
+        return httpx.Response(200, json={"role": "agent"}, request=httpx.Request("GET", url))
+
+    def fake_request(method, url, **kw):
+        urls.append(httpx.URL(url).raw_path.decode())
+        return httpx.Response(200, json={"messages": []}, request=httpx.Request(method, url))
+
+    monkeypatch.setattr(server.httpx, "get", fake_get)
+    monkeypatch.setattr(server.httpx, "request", fake_request)
+    monkeypatch.setenv("CONCLAVE_AGENT_KEY", "cva_x")
+    return urls
+
+
+@pytest.mark.parametrize("filepath", ["../logs", "a/../../backup", "..", "a//b", "a/./b", "..\\settings", ""])
+def test_workspace_paths_with_traversal_send_no_request(recorded, filepath):
+    for name, args in [("conclave_read_file", {"filepath": filepath}),
+                       ("conclave_upload_file", {"filepath": filepath, "content": "x"})]:
+        assert _call(name, args).is_error, (name, filepath)
+    assert recorded == []
+
+
+def test_workspace_path_segments_are_encoded(recorded):
+    assert not _call("conclave_read_file", {"filepath": "notizen/plan?x=1#a.md"}).is_error
+    assert recorded == ["/workspace/notizen/plan%3Fx%3D1%23a.md"]
+
+
+@pytest.mark.parametrize("value", ["../../backup", "a/b", "x?y=1", "x#y", "..", "."])
+def test_ids_reach_only_their_route(recorded, value):
+    _call("conclave_get_conversation", {"conversation_id": value})
+    _call("conclave_invoke", {"conversation_id": "c1", "participant_id": value})
+    _call("conclave_get_consultation", {"consultation_id": value})
+    for path in recorded:
+        assert path.startswith(("/conversations/", "/consultations/")), path
+        assert "/../" not in path and "?" not in path and "#" not in path, path
+    if value in ("..", ".") or "/" in value:
+        assert recorded == []                       # gar nicht erst angefragt (Server dekodiert %2F)
+
 
 
 # ── B4: Board-Tools ───────────────────────────────────────────────────────
@@ -278,7 +357,7 @@ def test_board_tools_workflow_rights_and_data_note(conclave_api):
 
     detail = _json("conclave_board_get", {"task": "api#2"})
     assert detail["comments"][0] == {"origin": "agent", "author": "cc", "body": "Commit abc"}
-    assert [h["new"] for h in detail["history"]] == ["doing", "review"]
+    assert [h["new"] for h in detail["history"]] == ["todo", "doing", "review"]
     listed = _json("conclave_board_list", {"query": "abnahme"})["tasks"]
     assert [t["task"] for t in listed] == ["api#2"]
 
@@ -312,6 +391,7 @@ def test_board_get_does_not_repeat_long_descriptions_and_list_filters_search(con
     httpx.post(f"{url}/board/projects", json={"slug": "api", "name": "API"}, headers=h)
     _json("conclave_board_create", {"project": "api", "title": "Suchwort eins", "description": "x" * 3000})
     _json("conclave_board_create", {"project": "api", "title": "Suchwort zwei"})
+    _json("conclave_board_next", {"task": "api#1"})                          # uebernehmen (#51)
     _json("conclave_board_update", {"task": "api#1", "description": "y" * 3000, "status": "review"})
     detail = _json("conclave_board_get", {"task": "api#1"})
     assert {"field": "description", "new": "(geaendert)", "origin": "agent"} in detail["history"]
@@ -351,3 +431,25 @@ def test_consult_on_human_only_board_ticket_is_rejected_for_the_agent(tmp_path, 
     finally:
         srv.shutdown()
         thread.join(timeout=5)
+
+
+def test_instructions_name_the_conclave_board_as_authoritative():
+    """B8: nach dem Umzug gilt nur noch das Board in Conclave."""
+    text = server.mcp.instructions or ""
+    assert "massgebliche Ort fuer Arbeitspakete" in text and "nicht parallel" in text
+    assert "festgelegt hat" not in text                    # Uebergangsregel aus B4 entfaellt
+
+
+
+def test_board_next_with_task_and_malformed_reference(conclave_api):
+    import httpx
+    url, human, _agent = conclave_api
+    h = {"Authorization": f"Bearer {human}"}
+    httpx.post(f"{url}/board/projects", json={"slug": "api", "name": "API"}, headers=h)
+    for title in ("eins", "zwei"):
+        httpx.post(f"{url}/board/tasks", json={"project": "api", "title": title}, headers=h)
+    assert _json("conclave_board_next", {"task": "api#2"})["task"] == "api#2"
+    again = _call("conclave_board_next", {"task": "api#2"})
+    assert again.is_error and "409" in _text(again)
+    bad = _call("conclave_board_next", {"task": "../x"})
+    assert bad.is_error and "API" not in _text(bad)

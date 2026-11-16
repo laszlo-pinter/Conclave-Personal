@@ -1,7 +1,8 @@
 """Consultation - Zweitmeinung mehrerer Reviewer-Modelle zu einem externen Ticket (z. B. Kanzo).
 
-Lebenszyklus: queued -> running -> done | failed; nach einem Server-Neustart
-wird ``running`` zu ``interrupted``. Jede Reviewer-Antwort hat eine eigene
+Lebenszyklus: queued -> running -> done | failed. Ein Lauf haelt eine Lease (``owner``,
+``lease_until``), die der Worker verlaengert; laeuft sie ab (Neustart, abgestuerzter
+Worker), wird ``running`` zu ``interrupted`` (R10). Jede Reviewer-Antwort hat eine eigene
 Zustellung (``ConsultationDelivery``) mit Kennung gegen Doppelte.
 """
 
@@ -42,6 +43,8 @@ class Consultation:
     conversation_id: str | None = None
     created_at: datetime = field(default_factory=_now)
     finished_at: datetime | None = None
+    owner: str | None = None               # Worker, der den Lauf haelt (R10)
+    lease_until: datetime | None = None
 
     def __post_init__(self) -> None:
         if not self.source_ref.strip():

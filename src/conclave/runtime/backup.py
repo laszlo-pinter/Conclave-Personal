@@ -1,19 +1,40 @@
-"""Backup and restore helpers for local Conclave runtime data."""
+"""Backup and restore helpers for local Conclave runtime data.
+
+Ein Restore prueft und entpackt erst alles in ein Staging-Verzeichnis, tauscht dann
+den Workspace und spielt die DB zuletzt ein. Schlaegt ein Schritt fehl, bleibt der
+alte Zustand erhalten (R7). Jedes Backup traegt ein Manifest mit Instanz-ID und
+HMAC ueber den Inhalt; ohne gueltige eigene Herkunft verlangt der Restore eine
+Bestaetigung.
+"""
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import os
+import secrets
 import shutil
 import sqlite3
 import stat
 import tempfile
 import zipfile
-from dataclasses import dataclass
+import zlib
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
+from conclave.runtime.env import env_secret
+from conclave.infrastructure.log import get_logger
+
+logger = get_logger("runtime.backup")
+
 
 DEFAULT_RESTORE_MAX_BYTES = 512 * 1024 * 1024
+MANIFEST_NAME = "manifest.json"
+MANIFEST_MAX_BYTES = 8 * 1024 * 1024
+MANIFEST_FORMAT = 1
+_CHUNK = 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -22,7 +43,77 @@ class RestoreResult:
     db_restored: bool
     workspace_files_restored: int
     workspace_replaced: bool
+    origin: str = "own"                      # "own" oder "foreign" (bestaetigt)
 
+
+@dataclass
+class ForeignBackupError(Exception):
+    """Das Backup stammt nicht nachweislich von dieser Instanz; Restore nur mit Bestaetigung."""
+
+    reason: str
+    agents: list[dict] = field(default_factory=list)
+
+    def __str__(self) -> str:
+        return f"Herkunft des Backups nicht belegt ({self.reason}). Restore nur mit Bestaetigung."
+
+
+class WorkspaceBusyError(OSError):
+    """Der Workspace laesst sich nicht tauschen, weil ein Prozess darin Dateien offen hat."""
+
+
+def load_backup_secret() -> bytes | None:
+    """Schluessel fuer das Backup-Manifest: derselbe wie fuer die Verschluesselung (secret.key).
+
+    Legt keinen Schluessel an; ohne Schluessel sind Backups nicht signiert.
+    """
+    keys = _known_keys()
+    return keys[0][0] if keys else None
+
+
+def load_backup_secrets() -> list[bytes]:
+    """Aktueller und aeltere Schluessel (nach einem Wechsel), zum Pruefen eigener Backups.
+
+    Je Schluessel die normalisierte Form (so wird signiert) und, falls abweichend, die
+    Rohform der Datei: aeltere Versionen haben mit einem Zeilenumbruch am Ende signiert.
+    """
+    secrets_: list[bytes] = []
+    for normalized, raw in _known_keys():
+        secrets_ += [k for k in (normalized, raw) if k not in secrets_]
+    return secrets_
+
+
+def _known_keys() -> list[tuple[bytes, bytes]]:
+    """(normalisiert, roh) fuer alle bekannten Schluessel, der aktuelle zuerst."""
+    env_key = env_secret("CONCLAVE_SECRET_KEY")
+    if env_key:
+        return [(env_key.strip().encode(), env_key.encode())]
+    from conclave.infrastructure.crypto import key_file_paths
+    from conclave.runtime.paths import get_runtime_paths
+    path = get_runtime_paths().secret_key_path
+    pending, retired = key_file_paths(path)
+    keys = []
+    for candidate in (pending, path, *retired):
+        try:
+            if candidate.is_file():
+                raw = candidate.read_bytes()
+                keys.append((raw.strip(), raw))
+        except OSError:
+            continue
+    return keys
+
+
+def instance_id(secret: bytes) -> str:
+    """Oeffentliche Kennung der Instanz, abgeleitet aus dem Schluessel (nicht umkehrbar)."""
+    return hmac.new(secret, b"conclave-instance-id-v1", hashlib.sha256).hexdigest()[:16]
+
+
+def _manifest_mac(secret: bytes, body: dict) -> str:
+    key = hmac.new(secret, b"conclave-backup-manifest-v1", hashlib.sha256).digest()
+    payload = json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+    return hmac.new(key, payload, hashlib.sha256).hexdigest()
+
+
+# ── Backup ──────────────────────────────────────────────────────────────────
 
 def create_backup_archive(
     *,
@@ -30,25 +121,117 @@ def create_backup_archive(
     workspace_root: Path,
     backup_dir: Path,
     prefix: str = "conclave-backup",
+    secret: bytes | None = None,
 ) -> Path:
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    backup_path = backup_dir / f"{prefix}-{stamp}.zip"
+    from conclave.runtime.file_security import make_private_dirs
+    make_private_dirs(backup_dir)
     workspace_root = workspace_root.resolve()
+    backup_path = _new_backup_path(backup_dir, prefix)
+    files: dict[str, dict] = {}
 
-    with zipfile.ZipFile(backup_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        if db_path and db_path.is_file():
-            zf.write(db_path, "conclave.db")
-        if workspace_root.is_dir():
-            for path in workspace_root.rglob("*"):
-                if not path.is_file():
-                    continue
-                if path.resolve() == backup_path.resolve():
-                    continue
-                zf.write(path, PurePosixPath("workspace", *path.relative_to(workspace_root).parts).as_posix())
+    # Modus "x": ein vorhandenes Backup wird nie ueberschrieben; aufgeraeumt wird nur das eigene
+    archive = zipfile.ZipFile(backup_path, "x", compression=zipfile.ZIP_DEFLATED)
+    try:
+        with archive as zf:
+            if db_path and db_path.is_file():
+                with tempfile.TemporaryDirectory(dir=str(backup_dir), prefix=".snapshot-") as tmp_dir:
+                    snapshot = Path(tmp_dir) / "conclave.db"
+                    _snapshot_db(db_path, snapshot)
+                    files["conclave.db"] = _add_file(zf, snapshot, "conclave.db")
+            if workspace_root.is_dir():
+                for path in _workspace_files(workspace_root, skip=backup_path.resolve()):
+                    arcname = PurePosixPath("workspace", *path.relative_to(workspace_root).parts).as_posix()
+                    files[arcname] = _add_file(zf, path, arcname)
+            body = {
+                "format": MANIFEST_FORMAT,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "instance_id": instance_id(secret) if secret else None,
+                "files": files,
+            }
+            manifest = dict(body, hmac=_manifest_mac(secret, body) if secret else None)
+            zf.writestr(MANIFEST_NAME, json.dumps(manifest, sort_keys=True, indent=1))
+    except BaseException:
+        backup_path.unlink(missing_ok=True)
+        raise
 
+    from conclave.runtime.file_security import restrict
+    restrict(backup_path)                       # Backup enthaelt DB und Workspace: nur der Benutzer
     return backup_path
 
+
+def _new_backup_path(backup_dir: Path, prefix: str) -> Path:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    return backup_dir / f"{prefix}-{stamp}-{secrets.token_hex(3)}.zip"
+
+
+def _snapshot_db(db_path: Path, target: Path) -> None:
+    """Konsistenter Stand der laufenden DB ueber die SQLite-Backup-API; sonst Dateikopie."""
+    try:
+        source = sqlite3.connect(f"file:{db_path.resolve().as_posix()}?mode=ro", uri=True, timeout=30)
+        try:
+            dest = sqlite3.connect(str(target))
+            try:
+                source.backup(dest)
+            finally:
+                dest.close()
+        finally:
+            source.close()
+    except sqlite3.DatabaseError:
+        target.unlink(missing_ok=True)
+        shutil.copyfile(db_path, target)
+
+
+def _add_file(zf: zipfile.ZipFile, path: Path, arcname: str) -> dict:
+    info = zipfile.ZipInfo.from_file(path, arcname)
+    info.compress_type = zipfile.ZIP_DEFLATED
+    digest = hashlib.sha256()
+    size = 0
+    with open(path, "rb") as src, zf.open(info, "w", force_zip64=info.file_size > zipfile.ZIP64_LIMIT) as dst:
+        while chunk := src.read(_CHUNK):
+            digest.update(chunk)
+            size += len(chunk)
+            dst.write(chunk)
+    return {"size": size, "sha256": digest.hexdigest()}
+
+
+def _is_link(path: Path) -> bool:
+    """Symlink oder Junction (bzw. Mount-Point unter Windows)."""
+    if path.is_symlink():
+        return True
+    isjunction = getattr(os.path, "isjunction", None)
+    if isjunction is not None:
+        return isjunction(path)
+    try:
+        tag = getattr(os.lstat(path), "st_reparse_tag", 0)
+    except OSError:
+        return True                                # nicht pruefbar: wie ein Link behandeln
+    return tag == getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", -1)
+
+
+def _workspace_files(root: Path, skip: Path):
+    """Regulaere Dateien unterhalb von ``root``; Links und alles ausserhalb der Wurzel bleiben draussen."""
+    pending = [root]
+    while pending:
+        directory = pending.pop()
+        try:
+            entries = sorted(os.scandir(directory), key=lambda e: e.name)
+        except OSError:
+            continue
+        for entry in entries:
+            path = Path(entry.path)
+            if _is_link(path):
+                continue
+            try:
+                path.resolve().relative_to(root)
+            except ValueError:
+                continue
+            if entry.is_dir(follow_symlinks=False):
+                pending.append(path)
+            elif entry.is_file(follow_symlinks=False) and path.resolve() != skip:
+                yield path
+
+
+# ── Restore ─────────────────────────────────────────────────────────────────
 
 def restore_backup_archive(
     *,
@@ -57,49 +240,251 @@ def restore_backup_archive(
     workspace_root: Path,
     backup_dir: Path,
     replace_workspace: bool = True,
+    secret: bytes | list[bytes] | None = None,
+    allow_foreign: bool = False,
 ) -> RestoreResult:
+    # Mehrere Schluessel: eigene Backups von vor einem Schluesselwechsel bleiben eigene
+    known = [s for s in (secret if isinstance(secret, list) else [secret]) if s]
+    secret = known[0] if known else None
     backup_path = backup_path.expanduser().resolve()
     workspace_root = workspace_root.expanduser().resolve()
     backup_dir = backup_dir.expanduser().resolve()
+    if workspace_root == workspace_root.parent:
+        raise ValueError("Refusing to restore into the filesystem root.")
+    workspace_root.parent.mkdir(parents=True, exist_ok=True)
 
+    recover_interrupted_restores(workspace_root)     # Reste eines abgebrochenen Restores zuerst
+    staging = Path(tempfile.mkdtemp(dir=str(workspace_root.parent), prefix=f".{workspace_root.name}-restore-"))
+    (staging / _OWNER).write_text(str(os.getpid()), encoding="utf-8")
     try:
-        with zipfile.ZipFile(backup_path, "r") as zf:
-            members = zf.infolist()
-            _validate_members(members)
+        # 1. Alles pruefen und ins Staging entpacken, bevor irgendetwas geaendert wird
+        try:
+            with zipfile.ZipFile(backup_path, "r") as zf:
+                members = zf.infolist()
+                _validate_members(members)
+                if zf.testzip() is not None:
+                    raise ValueError("Backup archive is corrupt (checksum mismatch).")
+                staged_db, staged_files, digests = _stage(zf, members, staging)
+                manifest = _read_manifest(zf, members)
+        except zipfile.BadZipFile as exc:
+            raise ValueError("Backup archive is not a valid ZIP file.") from exc
+        except (EOFError, zlib.error) as exc:
+            raise ValueError("Backup archive is corrupt.") from exc
 
-            db_member = next((m for m in members if _member_path(m).parts == ("conclave.db",)), None)
-            workspace_members = [
-                m for m in members
-                if not m.is_dir() and len(_member_path(m).parts) > 1 and _member_path(m).parts[0] == "workspace"
-            ]
+        reason = _origin_problem(manifest, digests, known)
+        if staged_db is not None:
+            _check_and_clean_db(staged_db)
+        if reason is not None and not allow_foreign:
+            raise ForeignBackupError(reason, _agents_in(staged_db) if staged_db is not None else [])
 
-            pre_restore_backup = create_backup_archive(
-                db_path=db_path,
-                workspace_root=workspace_root,
-                backup_dir=backup_dir,
-                prefix="conclave-pre-restore",
-            )
+        staged_workspace = staging / "workspace"
+        if staged_files and not replace_workspace:
+            _preflight_merge(workspace_root, staged_files)
 
-            db_restored = False
-            if db_member is not None and db_path is not None:
-                _restore_db(zf, db_member, db_path)
-                db_restored = True
+        # 2. Sicherheits-Backup des aktuellen Zustands
+        pre_restore_backup = create_backup_archive(
+            db_path=db_path,
+            workspace_root=workspace_root,
+            backup_dir=backup_dir,
+            prefix="conclave-pre-restore",
+            secret=secret,
+        )
 
-            if workspace_members:
+        # 3. Workspace tauschen, 4. DB zuletzt; bei einem Fehler zurueck. Das Journal erlaubt
+        # nach einem Absturz (ohne except/finally) das Zurueckrollen beim naechsten Start.
+        _write_json(staging / _JOURNAL, {
+            "mode": "replace" if replace_workspace else "merge",
+            "had_workspace": workspace_root.exists(),
+            "files": [rel.as_posix() for rel in staged_files],
+        })
+        undo = None
+        if staged_files:
+            try:
                 if replace_workspace:
-                    _clear_directory_contents(workspace_root)
-                workspace_root.mkdir(parents=True, exist_ok=True)
-                for member in workspace_members:
-                    _restore_workspace_member(zf, member, workspace_root)
+                    undo = _swap_workspace(staged_workspace, workspace_root, staging / "previous")
+                else:
+                    undo = _merge_workspace(staged_workspace, workspace_root, staged_files, staging / "previous")
+            except PermissionError as exc:
+                raise WorkspaceBusyError(
+                    "Workspace ist in Benutzung (eine Datei darin ist geoeffnet). "
+                    "Programme schliessen und erneut versuchen; es wurde nichts geaendert.") from exc
+        db_restored = False
+        try:
+            if staged_db is not None and db_path is not None:
+                # Ab hier ist der Stand nach einem Absturz unklar: nicht automatisch zurueckrollen
+                (staging / _DB_STARTED).write_text("", encoding="utf-8")
+                _restore_db(staged_db, db_path)
+                db_restored = True
+        except BaseException:
+            if undo is not None:
+                undo()
+            raise
+        (staging / _DONE).write_text("", encoding="utf-8")
 
-            return RestoreResult(
-                pre_restore_backup_path=pre_restore_backup,
-                db_restored=db_restored,
-                workspace_files_restored=len(workspace_members),
-                workspace_replaced=replace_workspace,
-            )
-    except zipfile.BadZipFile as exc:
-        raise ValueError("Backup archive is not a valid ZIP file.") from exc
+        return RestoreResult(
+            pre_restore_backup_path=pre_restore_backup,
+            db_restored=db_restored,
+            workspace_files_restored=len(staged_files),
+            workspace_replaced=replace_workspace,
+            origin="own" if reason is None else "foreign",
+        )
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)   # folgt unter Windows keinen Junctions
+
+
+# ── Abgebrochener Restore (R15) ─────────────────────────────────────────────
+
+_OWNER, _JOURNAL, _DB_STARTED, _DONE = "owner", "journal.json", "db_started", "done"
+
+
+def _write_json(path: Path, data: dict) -> None:
+    """Atomar: Temp-Datei, dann rename (das Ziel gibt es noch nicht). Nie ein halbes Journal."""
+    tmp = path.with_name(path.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as handle:
+        handle.write(json.dumps(data))
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.rename(tmp, path)
+
+
+def recover_interrupted_restores(workspace_root: Path) -> int:
+    """Rollt Restores zurueck, deren Prozess abgestuerzt ist; gibt ihre Zahl zurueck.
+
+    Ein Staging-Ordner gehoert einem laufenden Restore, solange dessen Prozess lebt; den
+    laesst die Pruefung in Ruhe. Ohne Journal wurde nichts getauscht, mit ``done`` ist der
+    Restore fertig: dann wird nur aufgeraeumt. Lief schon das Einspielen der DB
+    (``db_started``), ist der Stand unklar: dann wird nichts zurueckgerollt, sondern auf das
+    Sicherheits-Backup verwiesen. Sonst kommt der alte Workspace zurueck; die DB ist in diesem
+    Fall noch die alte. Fehler beim Zurueckrollen werden gemeldet und halten den Start nicht auf.
+    """
+    workspace_root = workspace_root.expanduser().resolve()
+    parent = workspace_root.parent
+    if not parent.is_dir():
+        return 0
+    recovered = 0
+    for staging in sorted(parent.glob(f".{workspace_root.name}-restore-*")):
+        owner = staging / _OWNER
+        if not staging.is_dir() or _is_link(staging) or not owner.is_file():
+            continue                                   # fremd oder von einer aelteren Version
+        try:
+            pid = int(owner.read_text(encoding="utf-8").strip() or 0)
+        except (OSError, ValueError):
+            continue
+        if _process_alive(pid):
+            continue
+        try:
+            if _recover_one(staging, workspace_root):
+                recovered += 1
+        except OSError as exc:
+            logger.error("Abgebrochener Restore in %s nicht zurueckgerollt (%s). Programme schliessen, die "
+                         "Dateien im Workspace geoeffnet haben, und neu starten; das Sicherheits-Backup "
+                         "conclave-pre-restore-* bleibt erhalten", staging, type(exc).__name__)
+    return recovered
+
+
+def _recover_one(staging: Path, workspace_root: Path) -> bool:
+    """True, wenn zurueckgerollt wurde. Raeumt nur auf, was sicher nicht mehr gebraucht wird."""
+    journal_path = staging / _JOURNAL
+    moved = (staging / "previous").exists()
+    if (staging / _DONE).exists() or not journal_path.exists():
+        if not journal_path.exists() and moved:
+            logger.warning("Reste eines Restores ohne Journal in %s bleiben liegen", staging)
+            return False
+        shutil.rmtree(staging, ignore_errors=True)     # fertig oder vor dem Tausch abgebrochen
+        return False
+    journal = _read_journal(journal_path)
+    if journal is None:
+        if moved:
+            logger.warning("Journal in %s unlesbar; verschobene Dateien bleiben dort liegen", staging)
+            return False
+        logger.warning("Journal in %s unlesbar; es wurde nichts getauscht, Reste entfernt", staging)
+        shutil.rmtree(staging, ignore_errors=True)
+        return False
+    if (staging / _DB_STARTED).exists():
+        logger.warning("Restore ist beim Einspielen der Datenbank abgebrochen; Stand unklar, nichts "
+                       "zurueckgerollt. Das Sicherheits-Backup conclave-pre-restore-* einspielen; die Reste "
+                       "liegen in %s", staging)
+        return False
+    _roll_back(staging, workspace_root, journal)
+    logger.warning("Abgebrochener Restore zurueckgerollt: alter Workspace wiederhergestellt; "
+                   "das Sicherheits-Backup conclave-pre-restore-* bleibt erhalten")
+    shutil.rmtree(staging, ignore_errors=True)
+    return True
+
+
+def _read_journal(path: Path) -> dict | None:
+    """Journal lesen und pruefen; None, wenn es unlesbar ist oder unsichere Pfade enthaelt."""
+    try:
+        journal = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(journal, dict) or journal.get("mode") not in ("replace", "merge"):
+        return None
+    files = journal.get("files")
+    if not isinstance(files, list) or not all(isinstance(f, str) and _safe_relative(f) for f in files):
+        return None
+    return journal
+
+
+def _safe_relative(rel: str) -> bool:
+    """Wie bei Archiv-Eintraegen: relativ, ohne Laufwerk, ohne "." und ".." (Defense in Depth)."""
+    if not rel or "\\" in rel or ":" in rel or rel.startswith("/"):
+        return False
+    return all(part not in ("", ".", "..") for part in rel.split("/"))
+
+
+def _roll_back(staging: Path, workspace_root: Path, journal: dict) -> None:
+    if not journal.get("files"):
+        return                                         # nur die DB: der Workspace wurde nicht angefasst
+    previous, staged, discarded = staging / "previous", staging / "workspace", staging / "discarded"
+    discarded.mkdir(exist_ok=True)
+    if journal.get("mode") == "replace":
+        swapped = not staged.exists()                  # der neue Workspace liegt schon an seinem Platz
+        if swapped and workspace_root.exists():
+            os.replace(workspace_root, discarded / "workspace")
+        if previous.exists():
+            os.replace(previous, workspace_root)
+        return
+    for rel in journal.get("files", []):
+        rel_path = Path(*PurePosixPath(rel).parts)
+        target, old, new = workspace_root / rel_path, previous / rel_path, staged / rel_path
+        if not new.exists() and target.exists():       # schon eingespielt: wieder entfernen
+            (discarded / rel_path).parent.mkdir(parents=True, exist_ok=True)
+            os.replace(target, discarded / rel_path)
+        if old.exists():                               # ueberschriebene Datei zurueck
+            target.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(old, target)
+
+
+def _process_alive(pid: int) -> bool:
+    """Lebt der Prozess? Nur lesend: unter Windows wuerde os.kill(pid, 0) ihn beenden."""
+    if pid <= 0:
+        return False
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+    import ctypes
+    from ctypes import wintypes
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel32.OpenProcess(0x1000, False, pid)            # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return ctypes.get_last_error() == 5                      # Zugriff verweigert: es gibt ihn
+    try:
+        code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return True
+        return code.value == 259                                 # STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 def _restore_limit_bytes() -> int:
@@ -115,6 +500,8 @@ def _restore_limit_bytes() -> int:
 
 def _validate_members(members: list[zipfile.ZipInfo]) -> None:
     total_size = 0
+    seen: set[str] = set()
+    files: list[str] = []
     for member in members:
         path = _member_path(member)
         parts = path.parts
@@ -128,14 +515,25 @@ def _validate_members(members: list[zipfile.ZipInfo]) -> None:
             raise ValueError(f"Backup archive contains an unsafe path: {member.filename}")
         if path.is_absolute():
             raise ValueError(f"Backup archive contains an absolute path: {member.filename}")
-        if parts[0] != "workspace" and parts != ("conclave.db",):
+        if parts[0] != "workspace" and parts not in (("conclave.db",), (MANIFEST_NAME,)):
             raise ValueError(f"Backup archive contains an unsupported path: {member.filename}")
         if _is_symlink(member):
             raise ValueError(f"Backup archive contains a symlink: {member.filename}")
+        key = path.as_posix().lower()                # Windows: Gross/Klein gilt als derselbe Name
         if not member.is_dir():
+            if key in seen:
+                raise ValueError(f"Backup archive contains a duplicate path: {member.filename}")
+            seen.add(key)
+            files.append(key)
             total_size += max(0, member.file_size)
             if total_size > _restore_limit_bytes():
                 raise ValueError("Backup archive exceeds the configured restore size limit.")
+    for key in files:                                # Datei und Ordner mit demselben Namen
+        parent = PurePosixPath(key).parent
+        while parent.parts:
+            if parent.as_posix() in seen:
+                raise ValueError(f"Backup archive uses a file name as a folder: {parent.as_posix()}")
+            parent = parent.parent
 
 
 def _member_path(member: zipfile.ZipInfo) -> PurePosixPath:
@@ -147,55 +545,191 @@ def _is_symlink(member: zipfile.ZipInfo) -> bool:
     return mode == stat.S_IFLNK
 
 
-def _restore_db(zf: zipfile.ZipFile, member: zipfile.ZipInfo, db_path: Path) -> None:
-    """Spielt die Backup-DB ueber die SQLite-Backup-API in die bestehende DB ein.
+def _stage(zf: zipfile.ZipFile, members: list[zipfile.ZipInfo], staging: Path):
+    """Entpackt DB und Workspace-Dateien ins Staging; liefert Pfade und Pruefsummen."""
+    staged_db = None
+    staged_files: list[PurePosixPath] = []
+    digests: dict[str, dict] = {}
+    budget = [_restore_limit_bytes()]
+    for member in members:
+        parts = _member_path(member).parts
+        if member.is_dir() or parts == (MANIFEST_NAME,):
+            continue
+        if parts == ("conclave.db",):
+            staged_db = staging / "conclave.db"
+            digests[member.filename] = _extract(zf, member, staged_db, budget)
+        elif len(parts) > 1:
+            rel = PurePosixPath(*parts[1:])
+            digests[member.filename] = _extract(zf, member, staging / "workspace" / rel, budget)
+            staged_files.append(rel)
+    return staged_db, staged_files, digests
+
+
+def _extract(zf: zipfile.ZipFile, member: zipfile.ZipInfo, target: Path, budget: list[int]) -> dict:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256()
+    size = 0
+    with zf.open(member, "r") as src, open(target, "xb") as dst:
+        while chunk := src.read(_CHUNK):
+            size += len(chunk)
+            budget[0] -= len(chunk)
+            if budget[0] < 0:
+                raise ValueError("Backup archive exceeds the configured restore size limit.")
+            digest.update(chunk)
+            dst.write(chunk)
+    if size != member.file_size:
+        raise ValueError(f"Backup archive member has a wrong size: {member.filename}")
+    return {"size": size, "sha256": digest.hexdigest()}
+
+
+def _read_manifest(zf: zipfile.ZipFile, members: list[zipfile.ZipInfo]) -> dict | None:
+    member = next((m for m in members if m.filename == MANIFEST_NAME), None)
+    if member is None or member.file_size > MANIFEST_MAX_BYTES:
+        return None
+    try:
+        data = json.loads(zf.read(member).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _origin_problem(manifest: dict | None, digests: dict[str, dict], secrets_: list[bytes]) -> str | None:
+    """None, wenn das Backup nachweislich von dieser Instanz stammt und unveraendert ist."""
+    if manifest is None:
+        return "kein Manifest"
+    if not secrets_:
+        return "kein Schluessel zum Pruefen"
+    mac = manifest.get("hmac")
+    body = {k: v for k, v in manifest.items() if k != "hmac"}
+    if not isinstance(mac, str) or not mac:
+        return "nicht signiert"
+    secret = next((s for s in secrets_ if manifest.get("instance_id") == instance_id(s)), None)
+    if secret is None:
+        return "andere Instanz"
+    if not hmac.compare_digest(mac, _manifest_mac(secret, body)):
+        return "Signatur ungueltig"
+    if manifest.get("files") != digests:
+        return "Inhalt veraendert"
+    return None
+
+
+def _check_and_clean_db(path: Path) -> None:
+    """Integritaet pruefen; Trigger und Views verwerfen (das Schema von Conclave hat keine)."""
+    conn = sqlite3.connect(str(path))
+    try:
+        try:
+            ok = conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        except sqlite3.DatabaseError as exc:
+            raise ValueError("Backup archive contains no valid SQLite database.") from exc
+        if not ok:
+            raise ValueError("Backup database failed the SQLite integrity check.")
+        objects = conn.execute("SELECT type, name FROM sqlite_master WHERE type IN ('trigger', 'view')").fetchall()
+        for kind, name in objects:
+            quoted = '"' + str(name).replace('"', '""') + '"'
+            conn.execute(f"DROP {'TRIGGER' if kind == 'trigger' else 'VIEW'} IF EXISTS {quoted}")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _agents_in(path: Path) -> list[dict]:
+    """Agents der Backup-DB fuer die Warnung (ID und Ziel-URL)."""
+    conn = sqlite3.connect(str(path))
+    try:
+        rows = conn.execute("SELECT id, api_url FROM agents ORDER BY id").fetchall()
+    except sqlite3.DatabaseError:
+        return []
+    finally:
+        conn.close()
+    return [{"id": str(agent_id), "api_url": str(api_url or "")} for agent_id, api_url in rows]
+
+
+def _preflight_merge(workspace_root: Path, files: list[PurePosixPath]) -> None:
+    """Zusammenfuehren: Jedes Ziel muss eine normale Datei (oder frei) in normalen Ordnern sein."""
+    for rel in files:
+        current = workspace_root
+        for part in rel.parts[:-1]:
+            current = current / part
+            if current.is_symlink() or (current.exists() and (_is_link(current) or not current.is_dir())):
+                raise ValueError(f"Backup archive contains an unsafe workspace path: workspace/{rel}")
+        target = workspace_root / Path(*rel.parts)
+        if target.is_symlink() or (target.exists() and (_is_link(target) or not target.is_file())):
+            raise ValueError(f"Backup archive contains an unsafe workspace path: workspace/{rel}")
+
+
+def _swap_workspace(staged: Path, workspace_root: Path, previous: Path):
+    """Ersetzt den Workspace per Rename; liefert die Rueckgaengig-Funktion."""
+    had_workspace = workspace_root.exists()
+    if had_workspace:
+        os.replace(workspace_root, previous)
+    try:
+        os.replace(staged, workspace_root)
+    except BaseException:
+        if had_workspace:
+            os.replace(previous, workspace_root)
+        raise
+
+    def undo():
+        os.replace(workspace_root, staged)
+        if had_workspace:
+            os.replace(previous, workspace_root)
+
+    return undo
+
+
+def _merge_workspace(staged: Path, workspace_root: Path, files: list[PurePosixPath], previous: Path):
+    """Legt Dateien einzeln per Rename in den Workspace; ueberschriebene wandern nach ``previous``."""
+    replaced: list[Path] = []
+    added: list[Path] = []
+    created_dirs: list[Path] = []
+
+    def undo():
+        for target in reversed(added):
+            target.unlink(missing_ok=True)
+        for rel in reversed(replaced):
+            os.replace(previous / rel, workspace_root / rel)
+        for directory in reversed(created_dirs):
+            try:
+                directory.rmdir()
+            except OSError:
+                pass
+
+    try:
+        for rel in files:
+            rel_path = Path(*rel.parts)
+            target = workspace_root / rel_path
+            for parent in reversed(target.parents):
+                if parent == workspace_root or workspace_root in parent.parents:
+                    if not parent.exists():
+                        parent.mkdir()
+                        created_dirs.append(parent)
+            if target.exists():
+                (previous / rel_path).parent.mkdir(parents=True, exist_ok=True)
+                os.replace(target, previous / rel_path)
+                replaced.append(rel_path)
+            os.replace(staged / rel_path, target)
+            added.append(target)
+    except BaseException:
+        undo()
+        raise
+    return undo
+
+
+def _restore_db(staged_db: Path, db_path: Path) -> None:
+    """Spielt die gepruefte Backup-DB ueber die SQLite-Backup-API in die bestehende DB ein.
 
     Die Datei wird nicht ersetzt: offene Verbindungen des laufenden Servers und
     die WAL-Dateien bleiben gueltig und sehen die wiederhergestellten Daten ab
-    ihrer naechsten Transaktion. Die Backup-DB wird vorher auf Integritaet geprueft.
+    ihrer naechsten Transaktion. Die Backup-API schreibt in einer Transaktion.
     """
     db_path = db_path.expanduser().resolve()
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=str(db_path.parent), prefix=".restore-") as tmp_dir:
-        tmp_path = Path(tmp_dir) / "restore.db"
-        with zf.open(member, "r") as src, open(tmp_path, "wb") as dst:
-            shutil.copyfileobj(src, dst)
-        source = sqlite3.connect(str(tmp_path))
-        try:
-            try:
-                ok = source.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-            except sqlite3.DatabaseError as exc:
-                raise ValueError("Backup archive contains no valid SQLite database.") from exc
-            if not ok:
-                raise ValueError("Backup database failed the SQLite integrity check.")
-            target = sqlite3.connect(str(db_path), timeout=30)
-            try:
-                source.backup(target)
-            finally:
-                target.close()
-        finally:
-            source.close()
-
-
-def _restore_workspace_member(zf: zipfile.ZipFile, member: zipfile.ZipInfo, workspace_root: Path) -> None:
-    rel = Path(*_member_path(member).parts[1:])
-    target = (workspace_root / rel).resolve()
+    source = sqlite3.connect(str(staged_db))
     try:
-        target.relative_to(workspace_root)
-    except ValueError as exc:
-        raise ValueError(f"Backup archive contains an unsafe workspace path: {member.filename}") from exc
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with zf.open(member, "r") as src, open(target, "wb") as dst:
-        shutil.copyfileobj(src, dst)
-
-
-def _clear_directory_contents(root: Path) -> None:
-    root = root.expanduser().resolve()
-    if root == root.parent:
-        raise ValueError("Refusing to clear filesystem root during restore.")
-    root.mkdir(parents=True, exist_ok=True)
-    for child in root.iterdir():
-        if child.is_dir():
-            shutil.rmtree(child)
-        else:
-            child.unlink()
+        target = sqlite3.connect(str(db_path), timeout=30)
+        try:
+            source.backup(target)
+        finally:
+            target.close()
+    finally:
+        source.close()

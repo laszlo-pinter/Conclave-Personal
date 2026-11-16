@@ -40,7 +40,7 @@ def client(handler, auth_service):
 @pytest.fixture
 def open_client(handler):
     """Client ohne Auth (Rueckwaertskompatibilitaet)."""
-    app = create_app(handler)
+    app = create_app(handler, allow_unauthenticated=True)
     app.config["TESTING"] = True
     with app.test_client() as c:
         yield c

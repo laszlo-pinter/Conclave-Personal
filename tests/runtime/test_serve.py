@@ -127,7 +127,14 @@ def test_waitress_streams_server_sent_events_without_buffering():
                 assert chunk, "Verbindung vorzeitig geschlossen"
                 received += chunk
             first_event_after = time.monotonic() - start
+            # Stream zu Ende lesen: sonst schreibt der Handler nach server.close() in einen
+            # geschlossenen Socket (WinError 10038 im Log eines spaeteren Tests, R15)
+            while b"data: 2" not in received:
+                chunk = sock.recv(4096)
+                assert chunk, "Verbindung vorzeitig geschlossen"
+                received += chunk
         # Ohne Pufferung kommt das erste Event sofort, nicht erst nach ~1,5 s Stream-Dauer
         assert first_event_after < 0.4, f"erstes Event erst nach {first_event_after:.2f}s"
     finally:
         server.close()
+        thread.join(timeout=5)

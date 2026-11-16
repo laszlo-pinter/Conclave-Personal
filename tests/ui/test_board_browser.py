@@ -190,8 +190,10 @@ def test_status_change_and_comment_from_task_view(chromium, board_server):
         assert task["status"] == "done"
         assert [(c["origin"], c["body"]) for c in task["comments"]] == [("human", "Abgenommen")]
         events = board_server.human.get("/board/projects/api/tasks/1/history").json()["history"]
-        assert [(e["field"], e["new"], e["origin"]) for e in events] == [("status", "done", "human")]
-        assert page.locator("#boardTaskHistory .board-event").count() == 1
+        assert [(e["field"], e["new"], e["origin"]) for e in events] == [("created", "todo", "agent"),
+                                                                          ("status", "done", "human")]
+        assert page.locator("#boardTaskHistory .board-event").count() == 2
+        assert page.locator("#boardTaskHistory .board-event-field").first.inner_text() == "Angelegt"
         assert errors == [] and _csp_problems(page) == []
     finally:
         page.close()
@@ -232,11 +234,30 @@ def test_live_refresh_after_api_changes(chromium, board_server):
         # Ein Agent arbeitet ueber die API; die UI zieht ohne Neuladen nach
         _task(board_server.agent, title="Vom Agenten")
         board_server.agent.post("/board/projects/api/tasks/1/comments", json={"body": "Branch board"})
+        assert board_server.agent.post("/board/next", json={"task": "api#1"}).status_code == 200
         assert board_server.agent.patch("/board/projects/api/tasks/1", json={"status": "review"}).status_code == 200
         _card(page, "api#2").wait_for(timeout=15000)
         page.locator("#boardTaskComments .board-comment[data-origin='agent']").wait_for(timeout=15000)
         assert page.locator("#boardTaskStatus").input_value() == "review"
         assert _column_refs(page, "review") == ["api#1"]
+        assert errors == [] and _csp_problems(page) == []
+    finally:
+        page.close()
+
+
+def test_card_shows_the_initiative_number(chromium, board_server):
+    """P2: Die Karte zeigt die Vorhaben-Nummer neben der Projektnummer; Tickets ohne Vorhaben nicht."""
+    assert board_server.human.post("/board/projects/api/initiatives",
+                                   json={"slug": "sich", "title": "Sicherheit"}).status_code == 201
+    _task(board_server.agent, title="ohne Vorhaben")
+    assert board_server.agent.post("/board/tasks", json={"project": "api", "title": "mit",
+                                                          "initiative": "sich"}).status_code == 201
+    page, errors = _open_board(chromium, board_server)
+    try:
+        _card(page, "api#2").wait_for(timeout=10000)
+        badge = _card(page, "api#2").locator(".board-initiative")
+        assert badge.inner_text() == "api/sich-1" and badge.is_visible()
+        assert _card(page, "api#1").locator(".board-initiative").count() == 0
         assert errors == [] and _csp_problems(page) == []
     finally:
         page.close()

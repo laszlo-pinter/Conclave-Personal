@@ -103,7 +103,7 @@ def build_unit_of_work(config: ConclaveConfig) -> object:
         return PostgresUnitOfWork(dsn=config.db_dsn)
     else:
         from conclave.infrastructure.sqlite.unit_of_work import SQLiteUnitOfWork
-        config.db_path.parent.mkdir(parents=True, exist_ok=True)
+        _make_private_dirs(config.db_path.parent)
         connection = sqlite3.connect(str(config.db_path))
         initialize_schema(connection)
         return SQLiteUnitOfWork(connection)
@@ -119,9 +119,11 @@ def build_service(
         config = load_config()
     if connection is None:
         resolved_path = db_path or config.db_path
-        resolved_path.parent.mkdir(parents=True, exist_ok=True)
+        _make_private_dirs(Path(resolved_path).parent)
+        _create_db_file(Path(resolved_path))
         connection = sqlite3.connect(str(resolved_path))
         initialize_schema(connection)
+        _restrict_db_files(Path(resolved_path))
 
     if crypto is None:
         crypto = _load_crypto()
@@ -149,9 +151,11 @@ def build_agent_service(
         config = load_config()
     if connection is None:
         resolved_path = db_path or config.db_path
-        resolved_path.parent.mkdir(parents=True, exist_ok=True)
+        _make_private_dirs(Path(resolved_path).parent)
+        _create_db_file(Path(resolved_path))
         connection = sqlite3.connect(str(resolved_path))
         initialize_schema(connection)
+        _restrict_db_files(Path(resolved_path))
 
     if crypto is None:
         crypto = _load_crypto()
@@ -183,6 +187,27 @@ def _migrate_config_agents(svc: AgentService, config: ConclaveConfig) -> None:
             pass
 
 
+def _make_private_dirs(folder: Path) -> None:
+    from conclave.runtime.file_security import make_private_dirs
+    make_private_dirs(folder)
+
+
+def _create_db_file(db_path: Path) -> None:
+    """Neue DB-Datei gleich nur fuer den Benutzer anlegen (nicht ``:memory:``)."""
+    if str(db_path) != ":memory:":
+        from conclave.runtime.file_security import create_private
+        create_private(db_path)
+
+
+def _restrict_db_files(db_path: Path) -> None:
+    """POSIX: DB samt WAL-Dateien nur fuer den Benutzer (R13); Windows: Rechte des Datenordners."""
+    if os.name == "nt":
+        return
+    for path in (db_path, db_path.with_name(db_path.name + "-wal"), db_path.with_name(db_path.name + "-shm")):
+        if path.is_file():
+            path.chmod(0o600)
+
+
 def _build_adapter_for_agent(agent, config: ConclaveConfig):
     """Baut einen ResilientAdapter fuer einen einzelnen Agent."""
     from conclave.infrastructure.universal.resilient import ResilientAdapter
@@ -197,22 +222,14 @@ def _build_adapter_for_agent(agent, config: ConclaveConfig):
 
 
 def _fallback_key_for_agent(agent, config: ConclaveConfig) -> str:
-    api_key = {
+    """Key aus Konfiguration bzw. Umgebung, nur fuer den Host des Presets (R3)."""
+    from conclave.cli.provider_keys import fallback_key
+    return fallback_key(agent, {
         "anthropic": config.anthropic_api_key,
         "openai": config.openai_api_key,
         "openai-responses": config.openai_api_key,
         "gemini": config.gemini_api_key,
-    }.get(agent.provider, "")
-    if api_key:
-        return api_key
-
-    preset_name = agent.preset or agent.provider
-    if not preset_name:
-        return ""
-    from conclave.infrastructure.universal.presets import get_preset
-    preset = get_preset(preset_name) or {}
-    key_env = preset.get("api_key_env", "")
-    return env_secret(key_env) if key_env else ""
+    })
 
 
 def build_registry(
@@ -242,7 +259,13 @@ def build_registry(
 
         # Eager: vorhandene Agents beim Start laden
         for agent in agent_service.list_agents():
-            adapter = _build_adapter_for_agent(agent, config)
+            try:
+                adapter = _build_adapter_for_agent(agent, config)
+            except ValueError as exc:
+                # Nicht erlaubte URL: Start geht weiter, der Aufruf meldet den Grund
+                from conclave.infrastructure.log import get_logger
+                get_logger("cli.bootstrap").warning("Agent '%s' nicht geladen: %s", agent.id, exc)
+                continue
             if adapter:
                 registry.register(agent.id, adapter)
 

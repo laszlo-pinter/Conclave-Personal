@@ -286,7 +286,7 @@ def test_create_app_does_not_start_workers(repo):
     with pytest.MonkeyPatch.context() as mp:
         started = []
         mp.setattr(ConsultationWorker, "start", lambda self: started.append(self))
-        create_app(MagicMock())
+        create_app(MagicMock(), allow_unauthenticated=True)
         assert started == []
 
 
@@ -313,11 +313,11 @@ def test_worker_survives_errors_outside_the_processor(repo):
     original = repo.claim
     calls = []
 
-    def flaky_claim(cid):
+    def flaky_claim(cid, **lease):
         calls.append(cid)
         if len(calls) == 1:
             raise RuntimeError("database is locked")
-        return original(cid)
+        return original(cid, **lease)
 
     repo.claim = flaky_claim
     worker = ConsultationWorker(repo, rec := Recorder(repo))

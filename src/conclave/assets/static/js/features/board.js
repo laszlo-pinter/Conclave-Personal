@@ -3,9 +3,12 @@
 // Werte aus der API kommen nur per textContent ins DOM; Beschreibung und Kommentare
 // laufen ueber renderMarkdown() (DOMPurify).
 
-let _board = {statuses: [], projects: [], tasks: [], changes: null, open: null, query: ''};
+let _board = {statuses: [], projects: [], tasks: [], changes: null, open: null, query: '',
+              control: {pauses: [], hints: []}, role: '', approvalsOnly: false, stuck: ''};
 let _boardTimer = null;
 const BOARD_POLL_MS = 5000;
+const REVIEW_STUCK_MS = 30 * 60 * 1000;     // "laeuft" laenger als 30 Minuten: haengt (P4)
+const REVIEW_RED_LIMIT = 3;                 // E-R3: nach drei roten uebernimmt der Mensch
 
 function _boardEl(tag, cls, text) {
   const el = document.createElement(tag);
@@ -25,6 +28,7 @@ function _boardShowDone() { return document.getElementById('boardShowDone').chec
 function originLabel(origin) {
   if (origin === 'human') return t('board.originHuman');
   if (origin === 'agent') return t('board.originAgent');
+  if (origin === 'reviewer') return t('board.originReviewer');
   if (origin === 'system') return t('board.originSystem');
   return t('board.originUnknown');
 }
@@ -39,6 +43,8 @@ function _boardDate(iso) {
 
 async function loadBoard() {
   try {
+    // Drag & Drop und der Hinweis auf Freigaben nur fuer den Menschen (P4, Rolle wie in R5)
+    _board.role = await whoami();
     await _reloadBoard();
   } catch (e) {
     _boardMessage(e.message, true);
@@ -52,6 +58,7 @@ async function _reloadBoard() {
   _board.statuses = data.statuses || [];
   _board.projects = data.projects || [];
   _board.changes = data.changes;
+  _board.control = data.control || {pauses: [], hints: []};
   _renderBoardProjects();
   await _loadBoardTasks();
   // Per Klick auf den Hintergrund geschlossen: nicht weiter nachladen
@@ -73,6 +80,8 @@ async function _loadBoardTasks() {
   }
   _board.tasks = data.tasks || [];
   renderBoard();
+  renderBoardControl();
+  renderBoardApprovals();
 }
 
 function _boardMessage(text, isError) {
@@ -102,14 +111,22 @@ function _renderBoardProjects() {
 
 // ── Spalten und Karten ───────────────────────────────────────────────────
 
+// Welche Tickets gerade als "haengt" gelten: aendert sich mit der Uhr, nicht mit dem Board (P4, Review-B1)
+function _stuckKey() {
+  return _board.tasks.filter(task => _reviewState(task) === 'stuck').map(task => task.ref).join(' ');
+}
+
 function renderBoard() {
+  _board.stuck = _stuckKey();
   const cols = document.getElementById('boardColumns');
   if (!_board.projects.length) { _boardMessage(t('board.noProjects')); return; }
   const done = _board.statuses[_board.statuses.length - 1];
   cols.replaceChildren(..._board.statuses.map(status => {
     const col = _boardEl('div', 'board-col');
     col.dataset.status = status;
-    const tasks = _board.tasks.filter(task => task.status === status);
+    // Steuertickets stehen im Banner ueber den Spalten, nicht als Karte (P6)
+    const tasks = _board.tasks.filter(task => task.status === status && task.kind !== 'control'
+                                              && (!_board.approvalsOnly || _waitsForApproval(task)));
     const head = _boardEl('div', 'board-col-head');
     head.append(_boardEl('span', 'board-col-name', status), _boardEl('span', 'board-col-count', String(tasks.length)));
     const list = _boardEl('div', 'board-col-list');
@@ -123,20 +140,84 @@ function renderBoard() {
   }));
 }
 
+// ── Review-Status (P4) ──────────────────────────────────────────────────
+
+function _reviewState(task) {
+  const review = task.review || {};
+  const state = review.state || 'none';
+  if (state === 'running' && review.at && Date.now() - Date.parse(review.at) > REVIEW_STUCK_MS) return 'stuck';
+  return state;
+}
+
+function _waitsForApproval(task) {
+  return task.status === 'review' && _reviewState(task) === 'passed';
+}
+
+const REVIEW_SYMBOLS = {running: '●', stuck: '⚠', passed: '✓', rework: '↻', failed: '✕'};
+
+// Badge mit Symbol und Text, nie nur Farbe; long = Ticketansicht mit den Zahlen
+function _reviewBadge(task, long) {
+  const state = _reviewState(task);
+  if (state === 'none') return null;
+  const review = task.review || {};
+  let text = t('board.review.' + state);
+  const firstColumn = task.status === _board.statuses[0];
+  if ((state === 'rework' || state === 'failed') && firstColumn && review.at) {
+    text += ' · ' + t('board.review.fromReview', {date: _boardDate(review.at)});
+  }
+  if (state === 'failed' && review.red_count) {
+    text += ' · ' + t('board.review.redRounds', {n: review.red_count, max: REVIEW_RED_LIMIT});
+  }
+  if (long && (state === 'rework' || state === 'failed' || state === 'passed')
+      && review.blocking !== null && review.blocking !== undefined) {
+    text += ' · ' + t('board.review.counts', {blocking: review.blocking, suggestions: review.suggestions || 0});
+  }
+  const badge = _boardEl('span', 'board-review');
+  badge.dataset.state = state;
+  badge.setAttribute('aria-label', t('board.review.label') + ': ' + text);
+  badge.title = text;
+  const symbol = _boardEl('span', 'board-review-symbol' + (state === 'running' ? ' pulse' : ''), REVIEW_SYMBOLS[state]);
+  symbol.setAttribute('aria-hidden', 'true');
+  badge.append(symbol, _boardEl('span', 'board-review-text', text));
+  return badge;
+}
+
+function renderBoardApprovals() {
+  const hint = document.getElementById('boardApprovals');
+  if (!hint) return;
+  const count = _board.tasks.filter(_waitsForApproval).length;
+  hint.hidden = _board.role !== 'human' || (!count && !_board.approvalsOnly);
+  hint.textContent = t(count === 1 ? 'board.approvals.one' : 'board.approvals.many', {n: count});
+  hint.setAttribute('aria-pressed', _board.approvalsOnly ? 'true' : 'false');
+  hint.classList.toggle('active', _board.approvalsOnly);
+}
+
+function toggleBoardApprovals() {
+  _board.approvalsOnly = !_board.approvalsOnly;
+  renderBoard();
+  renderBoardApprovals();
+}
+
 function _boardCard(task) {
   const card = _boardEl('div', 'board-card' + (task.human ? ' human' : ''));
-  card.draggable = true;
+  // Verschieben aendert Spalte und Prioritaet: nur der Mensch (P1, P4)
+  card.draggable = _board.role === 'human';
   card.dataset.action = 'board-open-task';
   card.dataset.ref = task.ref;
   card.dataset.project = task.project;
   const top = _boardEl('div', 'board-card-top');
   top.appendChild(_boardEl('span', 'board-ref', task.ref));
+  if (task.initiative_ref) {                    // Vorhaben-Nummer (P2), z. B. conclave/sich-3
+    top.appendChild(_boardEl('span', 'board-initiative', task.initiative_ref));
+  }
   if (task.human) {
     const mark = _boardEl('span', 'board-human', t('board.humanShort'));
     mark.title = t('board.humanOnly');
     top.appendChild(mark);
   }
   card.append(top, _boardEl('div', 'board-card-title', task.title));
+  const badge = _reviewBadge(task, false);
+  if (badge) card.appendChild(badge);
   if (task.tags.length) {
     const tags = _boardEl('div', 'board-tags');
     task.tags.forEach(tag => tags.appendChild(_boardEl('span', 'board-tag', tag)));
@@ -157,6 +238,7 @@ function _bindColumnDrop(col) {
   col.addEventListener('drop', e => {
     e.preventDefault();
     col.classList.remove('drop');
+    if (_board.role !== 'human') return;
     const ref = e.dataTransfer.getData('text/plain');
     const task = _board.tasks.find(x => x.ref === ref);
     if (!task) return;
@@ -201,7 +283,7 @@ async function openBoardTask(ref) {
   document.getElementById('boardCommentBody').value = '';
   // Nichts vom zuvor geoeffneten Ticket stehen lassen
   document.getElementById('boardTaskRef').textContent = ref;
-  ['boardTaskTitle', 'boardTaskTags', 'boardTaskComments', 'boardTaskHistory']
+  ['boardTaskTitle', 'boardTaskReview', 'boardTaskTags', 'boardTaskComments', 'boardTaskHistory']
     .forEach(id => document.getElementById(id).replaceChildren());
   document.getElementById('boardTaskDesc').replaceChildren(_boardEl('div', 'surface-empty', t('common.loading')));
   openOverlay('overlayBoardTask');
@@ -226,6 +308,8 @@ async function _renderOpenTask() {
   if (_board.open !== ref) return;
   document.getElementById('boardTaskRef').textContent = task.ref;
   document.getElementById('boardTaskTitle').textContent = task.title;
+  const review = _reviewBadge(task, true);
+  document.getElementById('boardTaskReview').replaceChildren(...(review ? [review] : []));
   const status = document.getElementById('boardTaskStatus');
   status.replaceChildren(..._board.statuses.map(s => { const o = _boardEl('option', '', s); o.value = s; return o; }));
   status.value = task.status;
@@ -269,7 +353,7 @@ function _boardEvent(ev) {
   item.append(_boardEl('span', 'board-time', _boardDate(ev.created_at)),
               _boardEl('span', 'board-origin origin-' + (ev.origin || 'unknown'), originLabel(ev.origin)),
               _boardEl('span', 'board-event-field', t('board.field.' + ev.field)));
-  if (ev.field === 'description') {
+  if (ev.field === 'description' || ev.field === 'comment') {
     // Volltext nur aufklappbar, damit der Verlauf lesbar bleibt
     const details = _boardEl('details', 'board-event-details');
     details.append(_boardEl('summary', '', t('board.showChange')),
@@ -339,6 +423,73 @@ async function createBoardTask() {
   await _refreshBoard();
 }
 
+// ── Steuertickets: Banner und Pause (P6) ─────────────────────────────────
+
+// Offene Pausen und Hinweise aus /board (gilt unabhaengig von Filter und Suche), dazu
+// quittierte Hinweise aus der Ticketliste, bis der Mensch sie schliesst.
+function _boardControlEntries() {
+  const done = _board.statuses[_board.statuses.length - 1];
+  const entries = [..._board.control.pauses, ..._board.control.hints].map(c => ({...c, ack_by: null}));
+  _board.tasks.filter(task => task.kind === 'control' && task.status !== done && task.directive?.ack_by)
+    .forEach(task => {
+      if (!entries.some(e => e.task === task.ref)) {
+        entries.push({task: task.ref, type: task.directive.type, reason: task.title, text: task.description,
+                      scope: task.directive.scope === 'all' ? 'all' : task.project, ack_by: task.directive.ack_by});
+      }
+    });
+  return entries;
+}
+
+function renderBoardControl() {
+  const box = document.getElementById('boardControl');
+  const entries = _boardControlEntries();
+  box.hidden = !entries.length;
+  box.classList.toggle('paused', entries.some(e => e.type === 'pause'));
+  if (!entries.length) { box.replaceChildren(); return; }
+  box.replaceChildren(_boardEl('div', 'board-control-head', t('board.controlTitle')), ...entries.map(e => {
+    const item = _boardEl('div', 'board-control-item ' + (e.type === 'pause' ? 'pause' : 'hint'));
+    item.dataset.ref = e.task;
+    const kind = _boardEl('span', 'board-control-kind', t(e.type === 'pause' ? 'board.controlPause' : 'board.controlHint'));
+    const scope = _boardEl('span', 'board-control-scope',
+      e.scope === 'all' ? t('board.controlAll') : `${t('board.project')}: ${e.scope}`);
+    const body = _boardEl('div', 'board-control-body');
+    body.appendChild(_boardEl('div', 'board-control-reason', e.reason));
+    if (e.text) body.appendChild(_boardEl('div', 'board-control-text', e.text));
+    if (e.type === 'hint') {
+      body.appendChild(_boardEl('div', 'board-control-ack',
+        e.ack_by ? t('board.controlAcked').replace('{name}', e.ack_by) : t('board.controlOpen')));
+    }
+    const close = _boardEl('button', 'btn-sm board-control-close', t('board.controlClose'));
+    close.dataset.action = 'board-close-control';
+    close.dataset.ref = e.task;
+    item.append(kind, _boardEl('span', 'board-ref', e.task), scope, body, close);
+    return item;
+  }));
+}
+
+async function pauseBoardAgents() {
+  const slug = _boardProject() || _board.projects[0]?.slug;
+  if (!slug) { toast(t('board.noProjects'), 'err'); return; }
+  try {
+    await req('POST', '/board/tasks', {project: slug, title: t('board.pauseTitle'), kind: 'control',
+                                       control: 'pause', scope: 'all'});
+    toast(t('board.paused'), 'ok');
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+  await _refreshBoard();
+}
+
+async function closeBoardControl(ref) {
+  const done = _board.statuses[_board.statuses.length - 1];
+  try {
+    await req('PATCH', _taskPath(ref), {status: done});
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+  await _refreshBoard();
+}
+
 // ── Live-Refresh ─────────────────────────────────────────────────────────
 
 async function _refreshBoard() {
@@ -361,6 +512,12 @@ function _startBoardPolling() {
     try {
       const {changes} = await req('GET', '/board/changes');
       if (changes !== _board.changes) await _reloadBoard();
+      else if (_stuckKey() !== _board.stuck) {
+        // Ein Review ueberschreitet die 30 Minuten, ohne dass sich etwas aendert: neu zeichnen
+        renderBoard();
+        renderBoardApprovals();
+        if (_board.open) await _renderOpenTask();
+      }
     } catch { /* naechster Versuch */ }
   }, BOARD_POLL_MS);
 }
