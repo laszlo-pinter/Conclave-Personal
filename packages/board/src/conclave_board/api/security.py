@@ -11,8 +11,9 @@ MAX_REQUEST_BYTES = 10 * 1024 * 1024         # alle anderen Anfragen (R6); der I
 
 CLIENT_HEADER = "X-Conclave-Client"
 
-# Host-Allowlist gegen DNS-Rebinding (B2). Loopback-Namen sind immer erlaubt,
-# CONCLAVE_ALLOWED_HOSTS ergaenzt sie. Eintraege ohne Port gelten fuer jeden Port.
+# Host-Allowlist gegen DNS-Rebinding (B2). Loopback-Namen sind immer erlaubt; weitere Hosts
+# ergaenzt die App (Personal: CONCLAVE_ALLOWED_HOSTS, Board-Server: CONCLAVE_BOARD_ALLOWED_HOSTS).
+# Eintraege ohne Port gelten fuer jeden Port.
 DEFAULT_ALLOWED_HOSTS = "localhost,127.0.0.1,[::1]"
 
 

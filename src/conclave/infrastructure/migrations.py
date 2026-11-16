@@ -117,12 +117,6 @@ MIGRATIONS: list[Migration] = [
 ]
 
 
-
-
-
-
-
-
 def _add_run_origin(connection, is_postgres: bool) -> None:
     statements = []
     if not _has_column(connection, is_postgres, "runs", "origin"):
@@ -150,14 +144,6 @@ def _add_consultation_lease(connection, is_postgres: bool) -> None:
                 cur.execute(statement)
         else:
             connection.execute(statement)
-
-
-
-
-
-
-
-
 
 
 def _add_model_read_column(connection, is_postgres: bool) -> None:
@@ -382,11 +368,6 @@ def _create_consultations_tables(connection, is_postgres: bool) -> None:
         """)
         for index in indexes:
             connection.execute(index)
-
-
-
-
-# ── Runner ────────────────────────────────────────────────────────────────
 
 
 # ── Runner (Tabelle _migrations) ────────────────────────────────────────

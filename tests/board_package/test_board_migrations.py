@@ -180,15 +180,74 @@ def test_order_of_the_two_series_does_not_matter(tmp_path):
     assert _schema(board_first) == _schema(personal_first)
 
 
-def test_no_migration_of_one_series_touches_tables_of_the_other():
+PERSONAL_TABLES = ("agents", "audit_log", "config", "consultation_deliveries", "consultations", "context_reports",
+                   "conversations", "messages", "participants", "runs", "tool_events", "usage_records", "_migrations")
+
+
+def _migration_source(migration) -> str:
+    """Text einer Migration samt der Funktionen, die ``fn`` aufruft (rekursiv im selben Modul).
+
+    ``inspect.getsource`` auf das Lambda allein liefert nur die Zeile ``fn=lambda ...``."""
     import inspect
+    import types
+    parts = [*migration.statements, *(f"{t} {c}" for t, c, _ in migration.columns)]
+    seen, todo = set(), [migration.fn] if migration.fn else []
+    while todo:
+        fn = todo.pop()
+        if fn in seen:
+            continue
+        seen.add(fn)
+        parts.append(inspect.getsource(fn))
+        for name in fn.__code__.co_names:
+            target = fn.__globals__.get(name)
+            if isinstance(target, types.FunctionType) and target.__module__ == fn.__module__:
+                todo.append(target)
+    return "\n".join(parts)
+
+
+def _touched(text: str, names) -> set[str]:
+    import re
+    return {name for name in names if re.search(r"\b" + re.escape(name) + r"\b", text)}
+
+
+def test_migration_source_follows_the_called_functions():
+    """Gegenprobe zum Hilfsmittel: Das Lambda von 012 fuehrt bis zu den Board-Tabellen."""
+    board_012 = next(m for m in BOARD_MIGRATIONS if m.id == "012_board")
+    assert "board_initiatives" in _migration_source(board_012)       # ueber _initiatives_table
+
+
+def test_personal_migrations_do_not_touch_board_tables():
     board_ids = {m.id for m in BOARD_MIGRATIONS}
     for migration in MIGRATIONS:
-        source = inspect.getsource(migration.fn) if migration.fn else ""
-        text = " ".join([source, *migration.statements, *(t for t, _, _ in migration.columns)])
-        if migration.id in board_ids:
-            continue
-        assert "board_" not in text, migration.id
+        if migration.id not in board_ids:
+            assert "board_" not in _migration_source(migration), migration.id
+
+
+def test_board_migrations_do_not_touch_personal_tables():
+    for migration in BOARD_MIGRATIONS:
+        assert _touched(_migration_source(migration), PERSONAL_TABLES) == set(), migration.id
+
+
+def test_each_series_alone_creates_only_its_own_objects(tmp_path):
+    """Dieselbe Annahme am Schema: Tabellen und Indizes jeder Reihe allein."""
+    board = _connect(tmp_path / "board.db")
+    run_board_migrations(board)
+    names = {r[0] for r in board.execute("SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")}
+    assert names and all(n.startswith(("board_", "idx_board_")) for n in names), names
+
+    personal = _connect(tmp_path / "personal.db")
+    import conclave.infrastructure.sqlite.schema as schema
+    board_ids = {m.id for m in BOARD_MIGRATIONS}
+    original_board, original_personal = schema.run_board_migrations, schema.run_migrations
+    schema.run_board_migrations = lambda *a, **k: []
+    schema.run_migrations = lambda connection, is_postgres=False: run_migrations(
+        connection, is_postgres, migrations=[m for m in MIGRATIONS if m.id not in board_ids])
+    try:
+        initialize_schema(personal)
+    finally:
+        schema.run_board_migrations, schema.run_migrations = original_board, original_personal
+    names = {r[0] for r in personal.execute("SELECT name FROM sqlite_master")}
+    assert not [n for n in names if "board" in n], names
 
 
 # ── Fehler bleiben fail-closed (R1) ────────────────────────────────────────

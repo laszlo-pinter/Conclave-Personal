@@ -12,3 +12,7 @@ conclave-board serve --port 8200
 On first start the configuration folder gets `secret.key` and the token files
 `api.token` (human), `agent.token` and `reviewer.token`, readable only by the
 user. PostgreSQL: `conclave-board serve --dsn postgresql://...` (extra `postgres`).
+
+The server binds to `127.0.0.1` by default. Additional allowed `Host` headers
+(comma-separated, optionally with port) go into `CONCLAVE_BOARD_ALLOWED_HOSTS`;
+`localhost`, `127.0.0.1` and `[::1]` are always allowed.
