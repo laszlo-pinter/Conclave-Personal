@@ -2,6 +2,7 @@
 
 - genau ein Wheel und ein Sdist mit der Version aus pyproject.toml
 - Pflichtdateien im Wheel (UI, OpenAPI, Vendor-Skripte, Entry Points)
+- das mitgebuendelte Board-Paket mit seiner Lizenz (Apache-2.0, T1)
 - keine verbotenen Dateien (Workspace, Datenbanken, Schluessel, Logs, Caches, interne Doku)
 
 Aufruf: python scripts/release/check_dist.py [dist] [pyproject.toml]
@@ -21,7 +22,12 @@ REQUIRED_WHEEL = (
     "conclave/assets/static/vendor/highlight/highlight.min.js",
     "conclave/assets/static/vendor/swagger-ui/swagger-ui-bundle.js",
     "conclave/assets/static/vendor/fonts/fonts.css",
+    "conclave_board/__init__.py",
+    "conclave_board/api/routes.py",
+    "conclave_board/infrastructure/migrations.py",
 )
+# Lizenzdateien in den Metadaten (relativ zu <name>-<version>.dist-info/licenses/)
+REQUIRED_LICENSES = ("LICENSE", "packages/board/LICENSE", "packages/board/NOTICE")
 
 BANNED = (
     "workspace/",
@@ -59,7 +65,9 @@ def problems(dist: Path, pyproject: Path) -> list[str]:
     entry_points = [n for n in wheel_names if n.endswith(".dist-info/entry_points.txt")]
     if len(entry_points) != 1:
         found.append(f"Unerwartete entry_points-Dateien: {entry_points}")
-    missing = sorted(set(REQUIRED_WHEEL) - wheel_names)
+    info = f"conclave_personal-{version}.dist-info/licenses/"
+    missing = sorted(set(REQUIRED_WHEEL) - wheel_names) + sorted(
+        info + name for name in REQUIRED_LICENSES if info + name not in wheel_names)
     if missing:
         found.append(f"Im Wheel fehlen Pflichtdateien: {missing}")
     with tarfile.open(sdists[0]) as archive:

@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "conclave-board"
+# Gleicher Stand wie conclave-personal (Release im Gleichschritt, tests/packaging prueft das)
+version = "0.7.0"
+description = "Board server for teams: tickets, review and priority over REST, without a user interface."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Laszlo Pinter" }]
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Web Environment",
+    "Framework :: Flask",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+]
+# Nur was das Board braucht: kein Provider-SDK, kein httpx, keine UI
+dependencies = [
+    "cryptography>=42.0",
+    "flask>=3.1",
+    "flask-limiter>=4.0",
+    "waitress>=3.0.2",
+]
+
+[project.optional-dependencies]
+# LGPL-3.0, als Treiber dynamisch genutzt; ausdrueckliche Ausnahme der Lizenzpruefung (T1)
+postgres = ["psycopg2-binary>=2.9"]
+
+[project.scripts]
+conclave-board = "conclave_board.server:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

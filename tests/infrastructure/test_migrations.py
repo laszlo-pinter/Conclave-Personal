@@ -177,7 +177,7 @@ def test_open_transaction_of_the_caller_is_not_committed(db):
 
 
 def test_commit_failure_is_reported_with_the_migration(db, monkeypatch):
-    import conclave.infrastructure.migrations as m
+    import conclave_board.infrastructure.migrations as m      # der Runner liegt im Board-Paket (T1)
     run_migrations(db, is_postgres=False)
     real = m._finish
 

@@ -1,47 +1,34 @@
 # src/conclave/infrastructure/migrations.py
-"""Einfaches Schema-Migrationssystem.
+"""Migrationsreihe von Personal (Tabelle ``_migrations``).
 
-Jede Migration hat eine ID und fuegt Spalten hinzu, fuehrt Anweisungen aus
-oder ruft eine Funktion auf. Die Tabelle _migrations haelt fest, welche
-Migrationen gelaufen sind; neue laufen beim Start automatisch.
+Runner, ``Migration`` und ``MigrationError`` liegen im Board-Paket
+(``conclave_board.infrastructure.migrations``), ebenso die Migrationsreihe des
+Boards. Damit bestehende Datenbanken und aeltere Versionen unveraendert
+funktionieren, enthaelt die Liste hier weiter die sechs Board-Migrationen bis
+v0.7.0 an ihrem alten Platz (dieselben Objekte); ``_migrations`` bleibt
+vollstaendig. Neue Board-Migrationen kommen nur in die Reihe des Boards.
 
-Jede Migration laeuft in einer eigenen Transaktion und wird im selben Schritt
-eingetragen. Schlaegt sie fehl, wird alles zurueckgerollt, nichts eingetragen
-und der Start mit ``MigrationError`` abgebrochen. Spalten, die schon da sind
-(z. B. weil das Grundschema sie anlegt), werden vorher geprueft und nicht
-erneut angelegt.
+Personal fuehrt beide Reihen aus (``initialize_schema``): erst diese, dann
+``run_board_migrations``. Die Board-Reihe uebernimmt die sechs alten
+Migrationen aus ``_migrations``, statt sie erneut auszufuehren.
 """
 
 from __future__ import annotations
 
-import logging
-from dataclasses import dataclass
-from typing import Callable
+from conclave_board.infrastructure.migrations import (  # noqa: F401  (alte Namen bleiben hier erreichbar)
+    BOARD_MIGRATIONS,
+    PERSONAL_TABLE,
+    Migration,
+    MigrationError,
+    _has_column,
+    applied_ids,
+    ensure_table,
+    logger,
+    run_board_migrations,
+    run_series,
+)
 
-logger = logging.getLogger("conclave.migrations")
-
-
-@dataclass(frozen=True)
-class Migration:
-    id: str
-    description: str
-    # (Tabelle, Spalte, Definition): ADD COLUMN nur, wenn die Spalte fehlt
-    columns: tuple[tuple[str, str, str], ...] = ()
-    statements: tuple[str, ...] = ()
-    fn: Callable | None = None
-
-
-class MigrationError(RuntimeError):
-    """Eine Migration ist fehlgeschlagen; die Datenbank ist unveraendert, der Start bricht ab."""
-
-    def __init__(self, migration_id: str, statement: str | None, cause: Exception):
-        where = f" bei Anweisung {statement.strip()[:200]!r}" if statement else ""
-        super().__init__(
-            f"Migration {migration_id} fehlgeschlagen{where}: {type(cause).__name__}: {cause}. "
-            "Die Migration wurde zurueckgerollt und nicht eingetragen; der Start wird abgebrochen. "
-            "Datenbank-Backup und Log pruefen."
-        )
-        self.migration_id = migration_id
+_BOARD = {migration.id: migration for migration in BOARD_MIGRATIONS}
 
 
 # ── Alle Migrationen in chronologischer Reihenfolge ─────────────────────
@@ -106,36 +93,16 @@ MIGRATIONS: list[Migration] = [
         description="Herkunft von User-Nachrichten (human/agent, NULL = unbekannt)",
         columns=(("messages", "origin", "TEXT"),),
     ),
-    Migration(
-        id="012_board",
-        description="Board: Projekte, Tickets, Kommentare, Verlauf, Zaehler (Plan board.md, B1)",
-        fn=lambda connection, is_postgres: _create_board_tables(connection, is_postgres),
-    ),
+    _BOARD["012_board"],
     Migration(
         id="013_conversation_model_read",
         description="Freigabe je Conversation: Modelle duerfen Dateien per @read lesen (R6)",
         fn=lambda connection, is_postgres: _add_model_read_column(connection, is_postgres),
     ),
-    Migration(
-        id="014_board_rank",
-        description="Prioritaet je Ticket (rank), uebernommen aus der bisherigen Position (P1)",
-        fn=lambda connection, is_postgres: _add_board_rank(connection, is_postgres),
-    ),
-    Migration(
-        id="015_board_history",
-        description="Herkunft der Tickets, geloeschte Kommentare, Projekt-Verlauf und Board-Einstellungen (R9)",
-        fn=lambda connection, is_postgres: _add_board_history(connection, is_postgres),
-    ),
-    Migration(
-        id="016_board_review",
-        description="Review-Status je Ticket (P3)",
-        fn=lambda connection, is_postgres: _add_board_review(connection, is_postgres),
-    ),
-    Migration(
-        id="017_board_control",
-        description="Steuertickets des Menschen: Pause und Hinweis (P6)",
-        fn=lambda connection, is_postgres: _add_board_control(connection, is_postgres),
-    ),
+    _BOARD["014_board_rank"],
+    _BOARD["015_board_history"],
+    _BOARD["016_board_review"],
+    _BOARD["017_board_control"],
     Migration(
         id="018_consultation_lease",
         description="Consultations: Lease je Lauf statt pauschalem Abbruch beim Start (R10)",
@@ -146,67 +113,14 @@ MIGRATIONS: list[Migration] = [
         description="Herkunft je Lauf (human/agent) fuer die Budgets der Agenten (R11)",
         fn=lambda connection, is_postgres: _add_run_origin(connection, is_postgres),
     ),
-    Migration(
-        id="020_board_initiatives",
-        description="Vorhaben im Projekt mit eigener fortlaufender Nummer (P2)",
-        fn=lambda connection, is_postgres: _add_board_initiatives(connection, is_postgres),
-    ),
+    _BOARD["020_board_initiatives"],
 ]
 
 
-def _initiatives_table(ts: str, real: str) -> str:
-    return f"""CREATE TABLE IF NOT EXISTS board_initiatives (
-            id          TEXT PRIMARY KEY,
-            project_id  TEXT NOT NULL REFERENCES board_projects(id) ON DELETE CASCADE,
-            slug        TEXT NOT NULL,
-            title       TEXT NOT NULL,
-            rank        {real} NOT NULL DEFAULT 0,
-            next_number INTEGER NOT NULL DEFAULT 1,
-            created_at  {ts} NOT NULL,
-            UNIQUE(project_id, slug)
-        )"""
 
 
-def _add_board_initiatives(connection, is_postgres: bool) -> None:
-    ts = "TIMESTAMPTZ" if is_postgres else "TEXT"
-    real = "DOUBLE PRECISION" if is_postgres else "REAL"
-    statements = [_initiatives_table(ts, real)]
-    if not _has_column(connection, is_postgres, "board_tasks", "initiative_id"):
-        # Ohne Fremdschluessel wie im Basisschema: Vorhaben werden nicht einzeln geloescht,
-        # beim Loeschen des Projekts entfernt CASCADE Vorhaben und Tickets zusammen
-        statements.append("ALTER TABLE board_tasks ADD COLUMN initiative_id TEXT")
-    if not _has_column(connection, is_postgres, "board_tasks", "initiative_number"):
-        statements.append("ALTER TABLE board_tasks ADD COLUMN initiative_number INTEGER")
-    # Eine Nummer je Vorhaben nur einmal (lueckenlos wie die Projektnummer)
-    statements.append("CREATE UNIQUE INDEX IF NOT EXISTS idx_board_tasks_initiative "
-                      "ON board_tasks(initiative_id, initiative_number)")
-    for statement in statements:
-        if is_postgres:
-            with connection.cursor() as cur:
-                cur.execute(statement)
-        else:
-            connection.execute(statement)
 
 
-def _board_history_tables(ts: str) -> list[str]:
-    return [
-        f"""CREATE TABLE IF NOT EXISTS board_project_events (
-            id         TEXT PRIMARY KEY,
-            project_id TEXT NOT NULL REFERENCES board_projects(id) ON DELETE CASCADE,
-            field      TEXT NOT NULL,
-            old_value  TEXT,
-            new_value  TEXT,
-            origin     TEXT,
-            actor_id   TEXT,
-            seq        INTEGER NOT NULL DEFAULT 0,
-            created_at {ts} NOT NULL
-        )""",
-        "CREATE INDEX IF NOT EXISTS idx_board_project_events ON board_project_events(project_id, seq)",
-        """CREATE TABLE IF NOT EXISTS board_settings (
-            key   TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        )""",
-    ]
 
 
 def _add_run_origin(connection, is_postgres: bool) -> None:
@@ -238,68 +152,12 @@ def _add_consultation_lease(connection, is_postgres: bool) -> None:
             connection.execute(statement)
 
 
-def _add_board_control(connection, is_postgres: bool) -> None:
-    ts = "TIMESTAMPTZ" if is_postgres else "TEXT"
-    columns = (("kind", "TEXT NOT NULL DEFAULT 'task'"), ("control", "TEXT"),
-               ("control_scope", "TEXT NOT NULL DEFAULT ''"), ("control_ack_by", "TEXT NOT NULL DEFAULT ''"),
-               ("control_ack_at", ts))
-    statements = [f"ALTER TABLE board_tasks ADD COLUMN {column} {ddl}" for column, ddl in columns
-                  if not _has_column(connection, is_postgres, "board_tasks", column)]
-    # Steuertickets werden bei jeder Board-Antwort gelesen (Feld control)
-    statements.append("CREATE INDEX IF NOT EXISTS idx_board_tasks_kind ON board_tasks(kind, status)")
-    for statement in statements:
-        if is_postgres:
-            with connection.cursor() as cur:
-                cur.execute(statement)
-        else:
-            connection.execute(statement)
 
 
-def _add_board_review(connection, is_postgres: bool) -> None:
-    ts = "TIMESTAMPTZ" if is_postgres else "TEXT"
-    columns = (("review_state", "TEXT NOT NULL DEFAULT 'none'"), ("review_at", ts),
-               ("review_red_count", "INTEGER NOT NULL DEFAULT 0"), ("review_blocking", "INTEGER"),
-               ("review_suggestions", "INTEGER"), ("review_checked", "TEXT NOT NULL DEFAULT ''"))
-    for column, ddl in columns:
-        if _has_column(connection, is_postgres, "board_tasks", column):
-            continue
-        statement = f"ALTER TABLE board_tasks ADD COLUMN {column} {ddl}"
-        if is_postgres:
-            with connection.cursor() as cur:
-                cur.execute(statement)
-        else:
-            connection.execute(statement)
 
 
-def _add_board_history(connection, is_postgres: bool) -> None:
-    ts = "TIMESTAMPTZ" if is_postgres else "TEXT"
-    statements = []
-    for column, ddl in (("origin", "TEXT"), ("actor_id", "TEXT"), ("created_by", "TEXT NOT NULL DEFAULT ''")):
-        if not _has_column(connection, is_postgres, "board_tasks", column):
-            statements.append(f"ALTER TABLE board_tasks ADD COLUMN {column} {ddl}")
-    if not _has_column(connection, is_postgres, "board_comments", "deleted_at"):
-        statements.append(f"ALTER TABLE board_comments ADD COLUMN deleted_at {ts}")
-    statements += _board_history_tables(ts)
-    for statement in statements:
-        if is_postgres:
-            with connection.cursor() as cur:
-                cur.execute(statement)
-        else:
-            connection.execute(statement)
 
 
-def _add_board_rank(connection, is_postgres: bool) -> None:
-    if _has_column(connection, is_postgres, "board_tasks", "rank"):
-        return
-    real = "DOUBLE PRECISION" if is_postgres else "REAL"
-    statements = (f"ALTER TABLE board_tasks ADD COLUMN rank {real} NOT NULL DEFAULT 0",
-                  "UPDATE board_tasks SET rank = position")      # sichtbare Reihenfolge bleibt
-    for statement in statements:
-        if is_postgres:
-            with connection.cursor() as cur:
-                cur.execute(statement)
-        else:
-            connection.execute(statement)
 
 
 def _add_model_read_column(connection, is_postgres: bool) -> None:
@@ -526,237 +384,28 @@ def _create_consultations_tables(connection, is_postgres: bool) -> None:
             connection.execute(index)
 
 
-def _create_board_tables(connection, is_postgres: bool) -> None:
-    ts = "TIMESTAMPTZ" if is_postgres else "TEXT"
-    boolean = "BOOLEAN NOT NULL DEFAULT FALSE" if is_postgres else "INTEGER NOT NULL DEFAULT 0"
-    real = "DOUBLE PRECISION" if is_postgres else "REAL"
-    statements = [
-        f"""CREATE TABLE IF NOT EXISTS board_projects (
-            id         TEXT PRIMARY KEY,
-            slug       TEXT NOT NULL UNIQUE,
-            name       TEXT NOT NULL,
-            created_at {ts} NOT NULL
-        )""",
-        """CREATE TABLE IF NOT EXISTS board_counters (
-            project_id  TEXT PRIMARY KEY REFERENCES board_projects(id) ON DELETE CASCADE,
-            next_number INTEGER NOT NULL
-        )""",
-        f"""CREATE TABLE IF NOT EXISTS board_tasks (
-            id          TEXT PRIMARY KEY,
-            project_id  TEXT NOT NULL REFERENCES board_projects(id) ON DELETE CASCADE,
-            number      INTEGER NOT NULL,
-            title       TEXT NOT NULL,
-            description TEXT NOT NULL DEFAULT '',
-            tags        TEXT NOT NULL DEFAULT '[]',
-            status      TEXT NOT NULL,
-            position    {real} NOT NULL DEFAULT 0,
-            rank        {real} NOT NULL DEFAULT 0,
-            human       {boolean},
-            assignee    TEXT,
-            version     INTEGER NOT NULL DEFAULT 1,
-            created_at  {ts} NOT NULL,
-            updated_at  {ts} NOT NULL,
-            origin      TEXT,
-            actor_id    TEXT,
-            created_by  TEXT NOT NULL DEFAULT '',
-            review_state       TEXT NOT NULL DEFAULT 'none',
-            review_at          {ts},
-            review_red_count   INTEGER NOT NULL DEFAULT 0,
-            review_blocking    INTEGER,
-            review_suggestions INTEGER,
-            review_checked     TEXT NOT NULL DEFAULT '',
-            kind               TEXT NOT NULL DEFAULT 'task',
-            control            TEXT,
-            control_scope      TEXT NOT NULL DEFAULT '',
-            control_ack_by     TEXT NOT NULL DEFAULT '',
-            control_ack_at     {ts},
-            initiative_id      TEXT,
-            initiative_number  INTEGER,
-            UNIQUE(project_id, number)
-        )""",
-        f"""CREATE TABLE IF NOT EXISTS board_comments (
-            id          TEXT PRIMARY KEY,
-            task_id     TEXT NOT NULL REFERENCES board_tasks(id) ON DELETE CASCADE,
-            body        TEXT NOT NULL,
-            origin      TEXT,
-            actor_id    TEXT,
-            author_name TEXT NOT NULL DEFAULT '',
-            seq         INTEGER NOT NULL DEFAULT 0,
-            created_at  {ts} NOT NULL,
-            updated_at  {ts},
-            deleted_at  {ts}
-        )""",
-        f"""CREATE TABLE IF NOT EXISTS board_events (
-            id         TEXT PRIMARY KEY,
-            task_id    TEXT NOT NULL REFERENCES board_tasks(id) ON DELETE CASCADE,
-            field      TEXT NOT NULL,
-            old_value  TEXT,
-            new_value  TEXT,
-            origin     TEXT,
-            actor_id   TEXT,
-            seq        INTEGER NOT NULL DEFAULT 0,
-            created_at {ts} NOT NULL
-        )""",
-        """CREATE TABLE IF NOT EXISTS board_meta (
-            key   TEXT PRIMARY KEY,
-            value INTEGER NOT NULL
-        )""",
-        *_board_history_tables(ts),
-        _initiatives_table(ts, real),
-        "INSERT INTO board_meta (key, value) VALUES ('changes', 0) ON CONFLICT (key) DO NOTHING",
-        "CREATE INDEX IF NOT EXISTS idx_board_tasks_column ON board_tasks(project_id, status, position)",
-        "CREATE INDEX IF NOT EXISTS idx_board_comments_task ON board_comments(task_id, seq)",
-        "CREATE INDEX IF NOT EXISTS idx_board_events_task ON board_events(task_id, seq)",
-    ]
-    if is_postgres:
-        with connection.cursor() as cur:
-            for statement in statements:
-                cur.execute(statement)
-    else:
-        for statement in statements:
-            connection.execute(statement)
 
 
 # ── Runner ────────────────────────────────────────────────────────────────
 
+
+# ── Runner (Tabelle _migrations) ────────────────────────────────────────
+
 def _ensure_migrations_table(connection, is_postgres: bool) -> None:
     """Erstellt die _migrations Tracking-Tabelle."""
-    if is_postgres:
-        with connection.cursor() as cur:
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS _migrations (
-                    id          TEXT PRIMARY KEY,
-                    description TEXT NOT NULL,
-                    applied_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                )
-            """)
-        connection.commit()
-    else:
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS _migrations (
-                id          TEXT PRIMARY KEY,
-                description TEXT NOT NULL,
-                applied_at  TEXT NOT NULL DEFAULT (datetime('now'))
-            )
-        """)
-        connection.commit()
+    ensure_table(connection, is_postgres, PERSONAL_TABLE)
 
 
 def _get_applied(connection, is_postgres: bool) -> set[str]:
     """Gibt die IDs aller bereits ausgefuehrten Migrationen zurueck."""
-    if is_postgres:
-        with connection.cursor() as cur:
-            cur.execute("SELECT id FROM _migrations")
-            return {row[0] for row in cur.fetchall()}
-    else:
-        return {row[0] for row in connection.execute("SELECT id FROM _migrations").fetchall()}
-
-
-def _has_column(connection, is_postgres: bool, table: str, column: str) -> bool:
-    if is_postgres:
-        with connection.cursor() as cur:
-            cur.execute("SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() "
-                        "AND table_name = %s AND column_name = %s", (table, column))
-            return cur.fetchone() is not None
-    # PRAGMA nimmt keine Parameter; Tabellennamen kommen nur aus MIGRATIONS (Konstanten)
-    return any(row[1] == column for row in connection.execute(f"PRAGMA table_info({table})"))  # nosec B608
-
-
-def _execute(connection, is_postgres: bool, migration: Migration, statement: str) -> None:
-    try:
-        if is_postgres:
-            with connection.cursor() as cur:
-                cur.execute(statement)
-        else:
-            connection.execute(statement)
-    except Exception as e:
-        raise MigrationError(migration.id, statement, e) from e
-
-
-def _apply_migration(connection, migration: Migration, is_postgres: bool) -> None:
-    """Fuehrt eine einzelne Migration aus (innerhalb der Transaktion des Runners)."""
-    for table, column, definition in migration.columns:
-        if not _has_column(connection, is_postgres, table, column):
-            _execute(connection, is_postgres, migration, f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
-    for statement in migration.statements:
-        _execute(connection, is_postgres, migration, statement)
-    if migration.fn:
-        migration.fn(connection, is_postgres)
-
-
-def _pg_autocommit(connection) -> bool:
-    return bool(getattr(connection, "autocommit", False))
-
-
-def _begin(connection, is_postgres: bool) -> None:
-    if is_postgres:
-        if _pg_autocommit(connection):            # ohne BEGIN liefe jede Anweisung fuer sich
-            with connection.cursor() as cur:
-                cur.execute("BEGIN")
-        return
-    if connection.in_transaction:                 # fremde halbe Arbeit nicht mit festschreiben
-        raise RuntimeError("Vor der Migration ist noch eine Transaktion offen.")
-    connection.execute("BEGIN IMMEDIATE")         # DDL ist in SQLite transaktional
-
-
-def _finish(connection, is_postgres: bool, ok: bool) -> None:
-    if is_postgres and _pg_autocommit(connection):
-        with connection.cursor() as cur:
-            cur.execute("COMMIT" if ok else "ROLLBACK")
-    elif ok:
-        connection.commit()
-    else:
-        connection.rollback()
-
-
-def _record_migration(connection, migration: Migration, is_postgres: bool) -> None:
-    """Markiert eine Migration als ausgefuehrt."""
-    if is_postgres:
-        with connection.cursor() as cur:
-            cur.execute(
-                "INSERT INTO _migrations (id, description) VALUES (%s, %s)",
-                (migration.id, migration.description),
-            )
-    else:
-        connection.execute(
-            "INSERT INTO _migrations (id, description) VALUES (?, ?)",
-            (migration.id, migration.description),
-        )
+    return applied_ids(connection, is_postgres, PERSONAL_TABLE)
 
 
 def run_migrations(connection, is_postgres: bool = False, migrations: list[Migration] | None = None) -> list[str]:
-    """Fuehrt alle ausstehenden Migrationen aus, jede in einer eigenen Transaktion.
+    """Fuehrt alle ausstehenden Migrationen von Personal aus, jede in einer eigenen Transaktion.
 
     Returns: Liste der ausgefuehrten Migrations-IDs.
     Raises: MigrationError, wenn eine Migration fehlschlaegt; dann ist sie
         zurueckgerollt, nicht eingetragen, und spaetere laufen nicht.
     """
-    if not is_postgres and connection.in_transaction:   # fremde halbe Arbeit nicht mit festschreiben
-        connection.rollback()
-        raise MigrationError("(vor den Migrationen)", None,
-                             RuntimeError("Vor den Migrationen war noch eine Transaktion offen."))
-    _ensure_migrations_table(connection, is_postgres)
-    applied = _get_applied(connection, is_postgres)
-    executed = []
-
-    for migration in MIGRATIONS if migrations is None else migrations:
-        if migration.id in applied:
-            continue
-        try:
-            _begin(connection, is_postgres)
-            _apply_migration(connection, migration, is_postgres)
-            _record_migration(connection, migration, is_postgres)
-            _finish(connection, is_postgres, ok=True)
-        except Exception as e:
-            try:
-                _finish(connection, is_postgres, ok=False)
-            except Exception as rollback_error:  # noqa: BLE001 - die eigentliche Ursache bleibt die Meldung
-                logger.error("Rollback der Migration %s fehlgeschlagen: %s", migration.id, rollback_error)
-            logger.error("Migration %s fehlgeschlagen, zurueckgerollt: %s", migration.id, e)
-            if isinstance(e, MigrationError):
-                raise
-            raise MigrationError(migration.id, None, e) from e
-        executed.append(migration.id)
-        logger.info("Migration %s ausgefuehrt: %s", migration.id, migration.description)
-
-    return executed
+    return run_series(connection, is_postgres, MIGRATIONS if migrations is None else migrations, PERSONAL_TABLE)

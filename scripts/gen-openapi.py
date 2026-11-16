@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Generiert die OpenAPI-Spec aus den Flask-Routes in app.py."""
+"""Generiert die OpenAPI-Spec aus den Flask-Routes in app.py und im Board-Blueprint.
+
+Die Board-Routen (conclave_board/api/routes.py) stehen in der Spec an der Stelle,
+an der app.py den Blueprint einbindet; die Reihenfolge bleibt wie vor dem Schnitt (T1).
+"""
 
 import json
 import re
@@ -7,6 +11,8 @@ from pathlib import Path
 
 APP_PY = Path(__file__).parent.parent / "src" / "conclave" / "api" / "app.py"
 ROOT = Path(__file__).parent.parent
+BOARD_ROUTES_PY = ROOT / "packages" / "board" / "src" / "conclave_board" / "api" / "routes.py"
+BLUEPRINT_LINE = "app.register_blueprint(create_board_blueprint("
 OUTS = (
     ROOT / "static" / "openapi.json",
     ROOT / "src" / "conclave" / "assets" / "static" / "openapi.json",
@@ -300,6 +306,7 @@ SCHEMAS = {
 
 def _human_only() -> frozenset:
     import sys
+    sys.path.insert(0, str(ROOT / "packages" / "board" / "src"))
     sys.path.insert(0, str(ROOT / "src"))
     from conclave.api.access import HUMAN_ONLY as routes
     return routes
@@ -315,7 +322,7 @@ def _project_version() -> str:
 
 def extract_routes(source: str) -> list[dict]:
     pattern = re.compile(
-        r'@app\.(get|post|put|patch|delete)\(["\']([^"\']+)["\']\)\s*\n'
+        r'@(?:app|bp)\.(get|post|put|patch|delete)\(["\']([^"\']+)["\']\)\s*\n'
         r'\s*def\s+(\w+)\(.*?\):\s*\n'
         r'(?:\s*"""(.*?)""")?',
         re.DOTALL,
@@ -427,8 +434,17 @@ def build_spec(routes: list[dict]) -> dict:
     }
 
 
-def main():
+def combined_source() -> str:
+    """app.py mit den Board-Routen an der Stelle, an der der Blueprint eingebunden wird."""
     source = APP_PY.read_text(encoding="utf-8")
+    if BLUEPRINT_LINE not in source:
+        raise SystemExit(f"{APP_PY}: Einbindung des Board-Blueprints nicht gefunden")
+    at = source.index(BLUEPRINT_LINE)
+    return source[:at] + BOARD_ROUTES_PY.read_text(encoding="utf-8") + source[at:]
+
+
+def main():
+    source = combined_source()
     routes = extract_routes(source)
     spec = build_spec(routes)
     payload = json.dumps(spec, indent=2, ensure_ascii=False)

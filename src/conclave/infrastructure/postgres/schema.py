@@ -1,6 +1,6 @@
 # src/conclave/infrastructure/postgres/schema.py
 
-from conclave.infrastructure.migrations import run_migrations
+from conclave.infrastructure.migrations import run_board_migrations, run_migrations
 
 
 def initialize_schema(connection) -> None:
@@ -171,3 +171,4 @@ def initialize_schema(connection) -> None:
 
     # Migrationen fuer bestehende DBs (fuegt fehlende Spalten hinzu)
     run_migrations(connection, is_postgres=True)
+    run_board_migrations(connection, is_postgres=True)    # Reihe des Boards (T1), uebernimmt die alten

@@ -354,6 +354,13 @@ src/conclave/
   cli/             command line
   runtime/         platform-neutral desktop/server launch logic
 
+packages/board/src/conclave_board/
+                   board package (Apache-2.0, bundled with Personal):
+                   board domain, service, storage, migrations, REST
+                   blueprint, shared building blocks (tokens, crypto,
+                   file permissions, log); runs on its own as
+                   `conclave-board serve`
+
 src/conclave/assets/
   conclave-ui.html installed UI resource
   static/js/       api, i18n, state, utils, main, swagger-init
@@ -519,3 +526,7 @@ This project was created exclusively by LLM models.
 PolyForm Noncommercial License 1.0.0. See [LICENSE](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/LICENSE).
 
 Free for noncommercial use.
+
+The bundled board package (`conclave_board`, in `packages/board`) is licensed
+under the Apache License 2.0; see `packages/board/LICENSE` and
+`packages/board/NOTICE`.

@@ -7,7 +7,18 @@ Routen, eine neue Route muss also bewusst zugeordnet werden.
 
 Der Reviewer hat eine eigene, engere Liste (REVIEWER_ALLOWED): Board lesen,
 kommentieren und den Review-Status setzen, sonst nichts.
+
+Die Board-Routen und ihre Zuordnung kommen aus dem Board-Paket (T1).
 """
+
+from conclave_board.api.access import (  # noqa: F401
+    BOARD_AGENT_ALLOWED,
+    BOARD_HUMAN_ONLY,
+    BOARD_REVIEWER_ALLOWED,
+    BOARD_REVIEWER_ONLY,
+    HUMAN_ONLY_ERROR,
+    WHOAMI,
+)
 
 # Lesbar fuer Agenten, ohne dass ein MCP-Tool sie braucht (E-S5 a, R15): dieselben Daten
 # liefern GET /conversations/<id> und der Export; es sind keine Geheimnisse.
@@ -37,21 +48,7 @@ AGENT_ALLOWED = AGENT_CONTEXT_READ | frozenset({
     ("POST", "/workspace/<path:filepath>"),
     ("POST", "/consultations"),
     ("GET", "/consultations/<consultation_id>"),
-}) | frozenset({
-    # Board: genau was die Tools conclave_board_* brauchen (B4). Die feineren Regeln
-    # (letzte Spalte, Markierung, Tickets "nur fuer Menschen") prueft der BoardService.
-    ("GET", "/board/tasks"),
-    ("POST", "/board/tasks"),
-    ("GET", "/board/search"),
-    ("POST", "/board/next"),
-    ("GET", "/board/projects/<slug>/tasks/<int:number>"),
-    ("PATCH", "/board/projects/<slug>/tasks/<int:number>"),
-    ("POST", "/board/projects/<slug>/tasks/<int:number>/comments"),
-    ("GET", "/board/projects/<slug>/tasks/<int:number>/history"),
-    # Vorhaben (P2): lesen und Tickets ueber projekt/vorhaben-n aufrufen
-    ("GET", "/board/projects/<slug>/initiatives"),
-    ("GET", "/board/projects/<slug>/initiatives/<initiative>/tasks/<int:number>"),
-})
+}) | BOARD_AGENT_ALLOWED
 
 # Nur mit dem Mensch-Token: Einstellungen, Agents verwalten, Backup/Restore, Logs,
 # Loeschen (E2), Floor und Auto-Loop, Wiederholen von Consultations (rerun kostet Geld)
@@ -87,21 +84,7 @@ HUMAN_ONLY = frozenset({
     ("POST", "/conversations/<conversation_id>/rules"),
     ("GET", "/conversations/<conversation_id>/participants/<participant_id>/context-preview"),
     ("GET", "/conversations/<conversation_id>/participants/<participant_id>/stream"),
-    # Board: UI-Uebersicht, Projekte verwalten, loeschen, Kommentare aendern, Import
-    ("GET", "/board"),
-    ("GET", "/board/changes"),
-    ("GET", "/board/projects/<slug>/tasks/<int:number>/comments"),
-    ("GET", "/board/projects/<slug>/history"),
-    ("POST", "/board/projects"),
-    ("PUT", "/board/projects/<slug>"),
-    ("DELETE", "/board/projects/<slug>"),
-    ("DELETE", "/board/projects/<slug>/tasks/<int:number>"),
-    ("PUT", "/board/comments/<comment_id>"),
-    ("DELETE", "/board/comments/<comment_id>"),
-    ("POST", "/board/import"),
-    ("POST", "/board/projects/<slug>/initiatives"),
-    ("PUT", "/board/projects/<slug>/initiatives/<initiative>"),
-})
+}) | BOARD_HUMAN_ONLY
 
 # Ohne Token erreichbar (PUBLIC_GET_PATHS und statische Dateien in app.py).
 PUBLIC = frozenset({
@@ -113,22 +96,11 @@ PUBLIC = frozenset({
 })
 
 # Nur der Reviewer-Zugang (P3); Agent und Mensch lehnt der BoardService ab
-REVIEWER_ONLY = frozenset({
-    ("POST", "/board/projects/<slug>/tasks/<int:number>/review"),
-})
+REVIEWER_ONLY = BOARD_REVIEWER_ONLY
 
 # Was der Reviewer-MCP (conclave-mcp --reviewer) braucht: lesen, kommentieren, Review-Status
-REVIEWER_ALLOWED = REVIEWER_ONLY | frozenset({
-    ("GET", "/auth/whoami"),
-    ("GET", "/board/tasks"),
-    ("GET", "/board/search"),
-    ("GET", "/board/projects/<slug>/tasks/<int:number>"),
-    ("GET", "/board/projects/<slug>/tasks/<int:number>/history"),
-    ("POST", "/board/projects/<slug>/tasks/<int:number>/comments"),
-    ("GET", "/board/projects/<slug>/initiatives/<initiative>/tasks/<int:number>"),
-})
+REVIEWER_ALLOWED = BOARD_REVIEWER_ALLOWED | WHOAMI
 
-HUMAN_ONLY_ERROR = {"type": "HumanOnly", "error": "Nur für den Menschen-Zugang."}
 
 
 def agent_may(method: str, rule: str) -> bool:

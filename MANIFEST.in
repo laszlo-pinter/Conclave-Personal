@@ -1,6 +1,10 @@
 include README.md
 include PROJECT.md
 include LICENSE
+include packages/board/LICENSE
+include packages/board/NOTICE
+include packages/board/README.md
+include packages/board/pyproject.toml
 include THIRD_PARTY.md
 exclude conclave-ui.html
 recursive-include src/conclave/assets *

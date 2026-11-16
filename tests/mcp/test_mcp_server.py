@@ -8,6 +8,7 @@ laufenden Conclave-Server und ueber stdio wie Claude Code.
 
 import asyncio
 import json
+import os
 import sys
 import threading
 from pathlib import Path
@@ -128,9 +129,11 @@ def test_unreachable_server_is_reported_to_the_model(monkeypatch):
 
 def test_starts_over_stdio_like_claude_code():
     """Wie Claude Code: Prozess starten, Handshake, Tools abfragen."""
-    src = str(Path(server.__file__).resolve().parents[1])
+    src = Path(server.__file__).resolve().parents[1]
+    board_src = src.parent / "packages" / "board" / "src"          # Board-Paket liegt daneben (T1)
     params = StdioServerParameters(command=sys.executable, args=["-m", "conclave.mcp_server"],
-                                   env={"PYTHONPATH": src, "CONCLAVE_API_URL": "http://127.0.0.1:9"})
+                                   env={"PYTHONPATH": os.pathsep.join((str(src), str(board_src))),
+                                        "CONCLAVE_API_URL": "http://127.0.0.1:9"})
 
     async def check():
         async with Client(params) as client:

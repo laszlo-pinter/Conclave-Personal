@@ -14,7 +14,6 @@ Tokens werden nie geloggt, nur Pfade.
 """
 
 import os
-import secrets
 from pathlib import Path
 
 from conclave.infrastructure.log import get_logger
@@ -26,9 +25,8 @@ logger = get_logger("runtime.api_token")
 TOKEN_FILE_NAME = "api.token"
 AGENT_TOKEN_FILE_NAME = "agent.token"
 REVIEWER_TOKEN_FILE_NAME = "reviewer.token"
-HUMAN_PREFIX = "cvh_"
-AGENT_PREFIX = "cva_"
-REVIEWER_PREFIX = "cvr_"
+# Anlegen der Datei und Praefixe kommen aus dem Board-Paket (T1)
+from conclave_board.runtime.tokens import AGENT_PREFIX, HUMAN_PREFIX, REVIEWER_PREFIX, create_token_file  # noqa: E402,F401
 
 
 def _path(override_env: str, file_name: str) -> Path:
@@ -87,24 +85,4 @@ def load_or_create_agent_token(path: Path | None = None) -> str:
 
 def load_or_create_token(path: Path | None = None, prefix: str = HUMAN_PREFIX) -> str:
     """Token fuer den Server: vorhandene Datei lesen oder neues Token anlegen."""
-    from conclave.runtime.file_security import create_exclusive, harden, replace_private
-
-    path = path or token_path()
-    try:
-        existing = path.read_text(encoding="utf-8").strip()
-    except FileNotFoundError:
-        existing = None
-    if existing:
-        harden(path)                            # vorhandene Datei: fremde Rechte entfernen (R13)
-        return existing
-
-    data = (prefix + secrets.token_urlsafe(32) + "\n").encode("utf-8")
-    if existing is None:
-        # Exklusiv anlegen: bei gleichzeitigem Start gewinnt genau ein Token
-        if create_exclusive(path, data):
-            logger.info("Token erzeugt: %s", path)
-    else:
-        # Leere Datei (z. B. Absturz beim Schreiben): ersetzen statt mit leerem Token starten
-        logger.warning("Token-Datei %s ist leer; neues Token erzeugt", path)
-        replace_private(path, data)
-    return path.read_text(encoding="utf-8").strip()
+    return create_token_file(path or token_path(), prefix=prefix)
