@@ -11,7 +11,8 @@ conclave-board serve --port 8200
 
 On first start the configuration folder gets `secret.key` and the token files
 `api.token` (human), `agent.token` and `reviewer.token`, readable only by the
-user. PostgreSQL: `conclave-board serve --dsn postgresql://...` (extra `postgres`).
+user. PostgreSQL: `conclave-board serve --dsn postgresql://...` (extra `postgres`);
+`CONCLAVE_BOARD_POOL_SIZE` sets the number of connections (default 10).
 
 The server binds to `127.0.0.1` by default. Additional allowed `Host` headers
 (comma-separated, optionally with port) go into `CONCLAVE_BOARD_ALLOWED_HOSTS`;

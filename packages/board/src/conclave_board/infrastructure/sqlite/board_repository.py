@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from contextlib import contextmanager
 from datetime import datetime
 
@@ -72,6 +73,7 @@ class SQLiteBoardRepository:
         self._connection = connection
         self._crypto = crypto
         self._autocommit = autocommit
+        self._local = threading.local()           # Tiefe verschachtelter Transaktionen je Thread
 
     # ── Ausfuehrung (Postgres ueberschreibt) ─────────────────────────────
 
@@ -98,15 +100,34 @@ class SQLiteBoardRepository:
 
     @contextmanager
     def _tx(self):
-        """Ein Schreibvorgang: Commit bei Erfolg, Rollback bei Ausnahme (nur mit autocommit)."""
+        """Ein Schreibvorgang: Commit bei Erfolg, Rollback bei Ausnahme (nur mit autocommit).
+
+        Verschachtelt (z. B. in ``locked_task``) schliesst er sich der aeusseren Transaktion an;
+        Commit oder Rollback macht nur die aeusserste."""
+        depth = getattr(self._local, "depth", 0)
+        self._local.depth = depth + 1
         try:
             yield
         except BaseException:
-            if self._autocommit:
+            if depth == 0 and self._autocommit:
                 self._connection.rollback()
             raise
-        if self._autocommit:
+        finally:
+            self._local.depth = depth
+        if depth == 0 and self._autocommit:
             self._connection.commit()
+
+    @contextmanager
+    def locked_task(self, task_id: str):
+        """Transaktion, in der niemand sonst schreibt; ``True``, wenn das Ticket existiert.
+
+        SQLite sperrt die ganze Datenbank (``BEGIN IMMEDIATE``), das schliesst die Zeile ein.
+        Gegenstueck zu ``SELECT ... FOR UPDATE`` unter PostgreSQL (T2)."""
+        with self._tx():
+            if self._autocommit and not self._connection.in_transaction:
+                self._connection.execute("BEGIN IMMEDIATE")
+            row = self._one("SELECT id FROM board_tasks WHERE id = ?", (task_id,))
+            yield row is not None
 
     def _dt(self, value):
         return value.isoformat() if value is not None else None

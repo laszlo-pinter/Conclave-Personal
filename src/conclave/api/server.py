@@ -81,12 +81,14 @@ def _seed_agents(agent_service):
 
 def _build_postgres(config):
     """Baut alle Services mit PostgreSQL."""
-    import psycopg2
-    conn = psycopg2.connect(config.db_dsn)
-    conn.autocommit = True
+    # Verbindungspool fuer parallele Anfragen und Worker (T2); Migrationen auf eigener Verbindung
+    from conclave_board.infrastructure.postgres.pool import ConnectionPool, PooledConnection, pool_size
+    pool = ConnectionPool(config.db_dsn, size=pool_size("CONCLAVE_DB_POOL_SIZE"))
 
     from conclave.infrastructure.postgres.schema import initialize_schema
-    initialize_schema(conn)
+    with pool.dedicated() as setup:
+        initialize_schema(setup)
+    conn = PooledConnection(pool)
 
     from conclave.infrastructure.postgres.conversation_repository import PostgresConversationRepository
     from conclave.infrastructure.postgres.message_repository import PostgresMessageRepository

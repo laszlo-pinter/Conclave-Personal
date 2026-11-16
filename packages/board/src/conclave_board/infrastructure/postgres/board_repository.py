@@ -3,38 +3,33 @@
 
 """Board-Repository fuer PostgreSQL.
 
-Die Verbindung laeuft mit ``autocommit`` (``api/server.py``): Jede Anweisung wird
-einzeln festgeschrieben. Alles, was zusammengehoert, ist deshalb **eine**
-Anweisung:
+Transaktionsmodell (T2): **Jeder Schreibvorgang ist eine Transaktion** (``_tx`` bzw.
+``@_transactional``) auf einer Verbindung, die fuer die Dauer an den Thread gebunden
+ist (``pool.PooledConnection`` im Server, ``pool.DirectConnection`` ueber einer
+einzelnen Verbindung). Verschachtelte Aufrufe schliessen sich der aeusseren
+Transaktion an. ``locked_task`` sperrt die Ticket-Zeile (``SELECT ... FOR UPDATE``)
+fuer Regeln vom Typ "erst pruefen, dann schreiben"; alles, was darin geschieht, laeuft
+in derselben Transaktion.
+
+Die Anweisungen selbst bleiben, wo es sie schon gab, CTEs: Sie halten die Zahl der
+Rundreisen klein und sind fuer sich korrekt unter READ COMMITTED, z. B.:
 
 - Ticket anlegen: Die CTE erhoeht die Zaehler-Zeile des Projekts (Zeilensperre),
-  das ``INSERT`` uebernimmt die Nummer. ``MAX(number)+1`` wuerde unter READ
-  COMMITTED doppelte Nummern liefern.
-- Projekt anlegen: Projekt und Zaehler-Zeile in einer CTE.
-- Loeschen: ``ON DELETE CASCADE`` (in der Basisklasse).
+  das ``INSERT`` uebernimmt die Nummer. ``MAX(number)+1`` wuerde doppelte Nummern liefern.
 - Kommentar/Verlauf: Zaehler erhoehen und ``seq`` uebernehmen in einer CTE.
-- Ticket aendern bzw. ``next_task`` samt Verlauf: eine Anweisung. Der Zaehler steigt
-  dabei einmal um die Zahl der Eintraege (dieselbe Zeile zweimal zu aendern geht in
-  einer Anweisung nicht); die Eintraege bekommen die Werte darunter als ``seq``.
-
-Wo der Aenderungszaehler nicht Teil der Anweisung ist (Neunummerieren), folgt er als
-eigene Anweisung; dort ist er nur ein Signal fuer die UI.
-
-R9: Anlegen samt Ereignis ``created``, Kommentar aendern/loeschen samt Verlauf, Ticket
-loeschen samt Eintrag im Projekt-Verlauf und Projekt anlegen/umbenennen samt Verlauf
-sind ebenfalls je eine Anweisung.
-
-P2: Ein Ticket mit Vorhaben bekommt Projekt- und Vorhaben-Nummer in derselben Anweisung
-(zwei Zaehler-Zeilen, beide gesperrt). Vorhaben anlegen/aendern und Tickets zuordnen
-samt Verlauf sind je eine Anweisung.
+- Ticket aendern bzw. ``next_task`` samt Verlauf: eine bedingte Anweisung (Version
+  bzw. Ausgangsspalte); der Zaehler steigt einmal um die Zahl der Eintraege.
+- Loeschen: ``ON DELETE CASCADE``.
 """
 
 from __future__ import annotations
 
 from contextlib import contextmanager
+from functools import wraps
 
 from conclave_board.domain.board import Initiative, Project, ProjectEvent, Task, TaskComment, TaskEvent
 from conclave_board.domain.board import POSITION_STEP
+from conclave_board.infrastructure.postgres.pool import as_transactional
 from conclave_board.infrastructure.sqlite.board_repository import SQLiteBoardRepository
 
 _TASK_INSERT_COLUMNS = ("id, project_id, number, title, description, tags, status, position, rank, human, "
@@ -55,11 +50,25 @@ class _Result:
         return self._rows[0] if self._rows else None
 
 
+class _Conflict(Exception):
+    """Das Ticket wurde inzwischen geaendert; die Transaktion wird zurueckgerollt."""
+
+
+def _transactional(method):
+    """Der Schreibvorgang laeuft in einer Transaktion (oder in der schon offenen)."""
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._tx():
+            return method(self, *args, **kwargs)
+    return wrapper
+
+
 class PostgresBoardRepository(SQLiteBoardRepository):
     placeholder = "%s"
 
     def __init__(self, connection, crypto=None) -> None:
-        super().__init__(connection, crypto, autocommit=False)
+        # Rohe psycopg2-Verbindungen (Tests, CLI) bekommen dieselbe Transaktions-Schnittstelle
+        super().__init__(as_transactional(connection), crypto, autocommit=False)
 
     def _execute(self, sql: str, params: tuple = ()):
         with self._connection.cursor() as cur:
@@ -69,7 +78,18 @@ class PostgresBoardRepository(SQLiteBoardRepository):
 
     @contextmanager
     def _tx(self):
-        yield                                     # autocommit; zusammengehoeriges ist eine Anweisung
+        with self._connection.transaction():
+            yield
+
+    @contextmanager
+    def locked_task(self, task_id: str):
+        """Transaktion mit Zeilensperre auf das Ticket (``FOR UPDATE``); ``True``, wenn es existiert.
+
+        Parallele Aufrufe fuer dasselbe Ticket warten, bis die erste Transaktion endet; was
+        darin gelesen wird, aendert sonst niemand. Grundlage fuer die Regeln aus T5."""
+        with self._tx():
+            row = self._one("SELECT id FROM board_tasks WHERE id = ? FOR UPDATE", (task_id,))
+            yield row is not None
 
     def _dt(self, value):
         return value
@@ -77,6 +97,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
     def _bool(self, value) -> bool:
         return bool(value)
 
+    @_transactional
     def create_project(self, project: Project, event: ProjectEvent | None = None) -> None:
         if event is None:
             self._execute(
@@ -96,6 +117,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
              self._enc(event.old_value), self._enc(event.new_value), event.origin, event.actor_id,
              event.created_at))
 
+    @_transactional
     def rename_project(self, slug: str, name: str, event: ProjectEvent | None = None) -> bool:
         if event is None:
             return super().rename_project(slug, name)
@@ -109,6 +131,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
              self._enc(event.new_value), event.origin, event.actor_id, event.created_at))
         return result.rowcount == 1
 
+    @_transactional
     def create_task(self, task: Task, event: TaskEvent | None = None) -> Task:
         values = (task.id, task.project_id, *self._task_params(task), *self._origin_params(task))
         if task.initiative_id:
@@ -169,6 +192,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
         task.number, task.initiative_number = int(row[0]), int(row[1])
         return task
 
+    @_transactional
     def create_initiative(self, initiative: Initiative, event: ProjectEvent | None = None) -> None:
         if event is None:
             super().create_initiative(initiative)
@@ -183,6 +207,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
              initiative.created_at, event.id, event.field_name, self._enc(event.old_value),
              self._enc(event.new_value), event.origin, event.actor_id, event.created_at))
 
+    @_transactional
     def update_initiative(self, initiative: Initiative, events=()) -> None:
         events = list(events)
         if len(events) != 1:
@@ -199,10 +224,18 @@ class PostgresBoardRepository(SQLiteBoardRepository):
              event.created_at))
 
     def assign_initiative(self, task: Task, initiative: Initiative | None, event: TaskEvent) -> bool:
-        """Zwei Anweisungen: Die Nummer wird nur vergeben, wenn das Ticket noch diese Version hat;
-        dann Ticket, Zaehler und Verlauf in einer. Aendert jemand das Ticket genau dazwischen,
-        bleibt im Vorhaben eine Luecke (wie bei einem geloeschten Ticket); doppelte Nummern gibt
-        es nie (UNIQUE). Den Verlaufswert verschluesselt die App, deshalb steht die Nummer vorher fest."""
+        try:
+            with self._tx():
+                return self._assign_initiative(task, initiative, event)
+        except _Conflict:
+            return False
+
+    def _assign_initiative(self, task: Task, initiative: Initiative | None, event: TaskEvent) -> bool:
+        """Zwei Anweisungen in einer Transaktion: Die Nummer wird nur vergeben, wenn das Ticket noch
+        diese Version hat; dann Ticket, Zaehler und Verlauf. Aendert jemand das Ticket genau dazwischen,
+        wird alles zurueckgerollt (keine Luecke im Vorhaben). Den Verlaufswert verschluesselt die App,
+        deshalb steht die Nummer vorher fest. Laeuft schon eine aeussere Transaktion (``locked_task``),
+        schreibt sie den Zaehler fest; dann bleibt wie vor T2 eine Luecke, nie eine doppelte Nummer."""
         number = None
         if initiative is not None:
             row = self._one(
@@ -210,7 +243,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
                 "AND EXISTS (SELECT 1 FROM board_tasks WHERE id = ? AND version = ?) "
                 "RETURNING next_number - 1", (initiative.id, task.id, task.version))
             if row is None:
-                return False
+                raise _Conflict
             number = int(row[0])
             event.new_value = f"{task.project_slug}/{initiative.slug}-{number}"
         result = self._execute(
@@ -223,7 +256,9 @@ class PostgresBoardRepository(SQLiteBoardRepository):
             (initiative.id if initiative else None, number, task.updated_at, task.id, task.version,
              event.id, event.field_name, self._enc(event.old_value), self._enc(event.new_value), event.origin,
              event.actor_id, event.created_at))
-        return result.rowcount == 1
+        if result.rowcount != 1:
+            raise _Conflict                       # Zaehler nicht stehen lassen: Rollback
+        return True
 
     _IMPORT_TASK = (
         f"WITH u AS (INSERT INTO board_tasks ({_TASK_INSERT_COLUMNS}) "  # nosec B608 - feste Texte
@@ -237,6 +272,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
         "           SELECT ?, u.id, ?, ?, ?, ?, ?, c.value - ?, ? FROM u, c WHERE ?) ")
     _COMMENT_ROW = "SELECT ?, ?, ?, ?, ?, ?, c.value - ?, ?::timestamptz, ?::timestamptz FROM c, u"  # Typen fuer NULL im UNION
 
+    @_transactional
     def import_task(self, task: Task, comments=(), event: TaskEvent | None = None) -> bool:
         """Ticket mit vorgegebener Nummer, Zaehler-Sprung, Kommentaren und Ereignis ``created`` in
         einer Anweisung; ``False``, wenn die Nummer inzwischen vergeben ist (dann wird nichts geschrieben)."""
@@ -261,6 +297,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
         result = self._execute(sql, tuple(params))
         return result.rowcount == (len(comments) or 1)
 
+    @_transactional
     def renumber_column(self, project_id: str, status: str) -> None:
         """Eine Anweisung: Postgres rechnet die Rangfolge auf dem Stand vor dem UPDATE aus."""
         self._execute(
@@ -270,6 +307,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
             (POSITION_STEP, project_id, status))
         self._bump()
 
+    @_transactional
     def renumber_ranks(self, project_id: str) -> None:
         """Eine Anweisung, wie renumber_column."""
         self._execute(
@@ -279,6 +317,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
             (POSITION_STEP, project_id))
         self._bump()
 
+    @_transactional
     def add_comment(self, comment: TaskComment, *, only_if_not_human: bool = False) -> bool:
         result = self._execute(
             "WITH t AS (SELECT 1 FROM board_tasks WHERE id = ? AND (NOT human OR ?)), "
@@ -306,17 +345,20 @@ class PostgresBoardRepository(SQLiteBoardRepository):
              self._enc(event.new_value), event.origin, event.actor_id, event.created_at))
         return result.rowcount == 1
 
+    @_transactional
     def update_comment(self, comment: TaskComment, event: TaskEvent | None = None) -> bool:
         if event is None:
             return super().update_comment(comment)
         return self._comment_change("body = ?, updated_at = ?", (self._enc(comment.body), comment.updated_at),
                                     comment.id, event)
 
+    @_transactional
     def delete_comment(self, comment_id: str, deleted_at=None, event: TaskEvent | None = None) -> bool:
         if event is None:
             return super().delete_comment(comment_id, deleted_at)
         return self._comment_change("body = '', deleted_at = ?", (deleted_at,), comment_id, event)
 
+    @_transactional
     def delete_task(self, task_id: str, tombstone: ProjectEvent | None = None) -> bool:
         if tombstone is None:
             return super().delete_task(task_id)
@@ -330,6 +372,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
              self._enc(tombstone.new_value), tombstone.origin, tombstone.actor_id, tombstone.created_at))
         return result.rowcount == 1
 
+    @_transactional
     def add_event(self, event: TaskEvent) -> None:
         self._execute(
             "WITH c AS (UPDATE board_meta SET value = value + 1 WHERE key = 'changes' RETURNING value) "
@@ -367,6 +410,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
                        e.origin, e.actor_id, n - i, e.created_at]
         return " UNION ALL ".join([self._EVENT_ROW] * n), params
 
+    @_transactional
     def update_task(self, task: Task, events=(), comment: TaskComment | None = None) -> bool:
         events = list(events)
         if not events:
@@ -389,6 +433,7 @@ class PostgresBoardRepository(SQLiteBoardRepository):
             return True
         return False
 
+    @_transactional
     def claim_task(self, task_id: str, from_status: str, to_status: str, position: float, updated_at,
                    event: TaskEvent | None = None) -> bool:
         if event is None:

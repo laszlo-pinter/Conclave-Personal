@@ -32,6 +32,7 @@ wenige Werte ein Fallback (siehe [TOML-Config](#toml-config)).
 | CONCLAVE_DB_PROVIDER | sqlite | `sqlite` oder `postgres`. `postgres` wirkt nur für `conclave server`, `conclave desktop` und `conclave-api`; alle anderen CLI-Kommandos nutzen immer SQLite |
 | CONCLAVE_DB_PATH | plattformabhängig | SQLite-Dateipfad |
 | CONCLAVE_DB_DSN | — | PostgreSQL Connection String |
+| CONCLAVE_DB_POOL_SIZE | 10 | Höchstzahl gleichzeitiger PostgreSQL-Verbindungen des Servers (Anfragen und Worker). Ist keine frei, wartet eine Anfrage bis zu 30 Sekunden |
 
 ## Backup
 

@@ -37,6 +37,7 @@ beruehrt Tabellen der anderen.
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Callable
 
@@ -461,6 +462,19 @@ def _advisory_lock(connection, is_postgres: bool, lock: bool) -> None:
         cur.execute("SELECT pg_advisory_lock(%s)" if lock else "SELECT pg_advisory_unlock(%s)",
                     (ADVISORY_LOCK_KEY,))
     _commit(connection, is_postgres)
+
+
+@contextmanager
+def advisory_lock(connection, is_postgres: bool):
+    """Sperre fuer Schema und Migrationen unter PostgreSQL (wiederholt in derselben Sitzung erlaubt)."""
+    _advisory_lock(connection, is_postgres, True)
+    try:
+        yield
+    finally:
+        try:
+            _advisory_lock(connection, is_postgres, False)
+        except Exception as unlock_error:  # noqa: BLE001 - Sperre faellt spaetestens mit der Verbindung
+            logger.warning("Advisory-Sperre der Migrationen nicht freigegeben: %s", unlock_error)
 
 
 def run_series(connection, is_postgres: bool, migrations: list[Migration], table: str) -> list[str]:

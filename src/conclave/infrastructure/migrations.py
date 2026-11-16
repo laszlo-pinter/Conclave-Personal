@@ -21,6 +21,7 @@ from conclave_board.infrastructure.migrations import (  # noqa: F401  (alte Name
     Migration,
     MigrationError,
     _has_column,
+    advisory_lock,
     applied_ids,
     ensure_table,
     logger,

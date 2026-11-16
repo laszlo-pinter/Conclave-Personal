@@ -51,13 +51,15 @@ def open_board(*, db_path: Path | None = None, dsn: str = "", config_dir: Path |
     crypto = CryptoService.load_or_generate(config_dir / "secret.key")
     if dsn:
         try:
-            import psycopg2
+            import psycopg2  # noqa: F401
         except ImportError:
             raise SystemExit("PostgreSQL braucht 'psycopg2-binary' (pip install \"conclave-board[postgres]\").") from None
         from conclave_board.infrastructure.postgres.board_repository import PostgresBoardRepository
-        connection = psycopg2.connect(dsn)
-        connection.autocommit = True
-        run_board_migrations(connection, is_postgres=True)
+        from conclave_board.infrastructure.postgres.pool import ConnectionPool, PooledConnection, pool_size
+        pool = ConnectionPool(dsn, size=pool_size("CONCLAVE_BOARD_POOL_SIZE"))
+        with pool.dedicated() as setup:                     # Migrationen nicht ueber den Pool (T2)
+            run_board_migrations(setup, is_postgres=True)
+        connection = PooledConnection(pool)
         repo = PostgresBoardRepository(connection, crypto)
     else:
         from conclave_board.infrastructure.sqlite.board_repository import SQLiteBoardRepository
