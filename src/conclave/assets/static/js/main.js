@@ -70,6 +70,7 @@ const _actions = {
   'ws-viewer-close':     () => closeWorkspaceViewer(),
   'board-new':           () => openBoardNew(),
   'board-pause':         () => pauseBoardAgents(),
+  'board-approvals':     () => toggleBoardApprovals(),
   'board-close-control': (el) => closeBoardControl(el.dataset.ref),
   'board-create':        () => createBoardTask(),
   'board-open-task':     (el) => openBoardTask(el.dataset.ref),

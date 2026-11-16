@@ -132,13 +132,30 @@ conclave board initiative list conclave
 ## In der UI
 
 Der Bereich „Board“ zeigt die Spalten aus `config.toml` mit Karten (Referenz,
-Vorhaben-Nummer, Titel, Tags, Markierung „nur für Menschen“). Karten lassen sich per Drag & Drop
+Vorhaben-Nummer, Titel, Tags, Markierung „nur für Menschen“, Review-Status). Karten lassen sich per Drag & Drop
 in eine andere Spalte und innerhalb der Spalte verschieben. Ein Klick öffnet
 das Ticket: Beschreibung (Markdown, gefiltert wie Modellantworten),
 Kommentare mit Herkunft, Verlauf, Status, Markierung und ein Feld für neue
 Kommentare. Dazu kommen ein neues Ticket, die Suche, die Projektauswahl und
 der Schalter „Erledigte zeigen“. Ändert ein Agent etwas, zieht die UI nach
 wenigen Sekunden nach.
+
+Der Review-Status steht an der Karte und in der Ticket-Ansicht, immer mit
+Symbol und Text neben der Farbe:
+
+| Status | Anzeige |
+|---|---|
+| läuft | ● „Review läuft“ (neutral, pulsierend) |
+| grün | ✓ „in Ordnung“ |
+| gelb | ↻ „Nacharbeit“; zurück in der ersten Spalte mit „aus Review vom …“ |
+| rot | ✕ „nicht bestanden“ mit den roten Runden, z. B. „rot 2/3“ |
+| hängt | ⚠ „Review hängt“ (läuft seit mehr als 30 Minuten) |
+
+Die Ticket-Ansicht nennt dazu die Zahl der blockierenden Punkte und Vorschläge.
+Über den Spalten steht „N Tickets warten auf deine Freigabe“ (grün in
+`review`); ein Klick zeigt nur diese, ein zweiter wieder alle. Karten
+verschieben lässt sich nur mit dem Mensch-Zugang, weil das Spalte und
+Priorität ändert.
 
 ## Ein Ablauf als Beispiel
 

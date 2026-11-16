@@ -4,9 +4,11 @@
 // laufen ueber renderMarkdown() (DOMPurify).
 
 let _board = {statuses: [], projects: [], tasks: [], changes: null, open: null, query: '',
-              control: {pauses: [], hints: []}};
+              control: {pauses: [], hints: []}, role: '', approvalsOnly: false};
 let _boardTimer = null;
 const BOARD_POLL_MS = 5000;
+const REVIEW_STUCK_MS = 30 * 60 * 1000;     // "laeuft" laenger als 30 Minuten: haengt (P4)
+const REVIEW_RED_LIMIT = 3;                 // E-R3: nach drei roten uebernimmt der Mensch
 
 function _boardEl(tag, cls, text) {
   const el = document.createElement(tag);
@@ -41,6 +43,8 @@ function _boardDate(iso) {
 
 async function loadBoard() {
   try {
+    // Drag & Drop und der Hinweis auf Freigaben nur fuer den Menschen (P4, Rolle wie in R5)
+    _board.role = await whoami();
     await _reloadBoard();
   } catch (e) {
     _boardMessage(e.message, true);
@@ -77,6 +81,7 @@ async function _loadBoardTasks() {
   _board.tasks = data.tasks || [];
   renderBoard();
   renderBoardControl();
+  renderBoardApprovals();
 }
 
 function _boardMessage(text, isError) {
@@ -114,7 +119,8 @@ function renderBoard() {
     const col = _boardEl('div', 'board-col');
     col.dataset.status = status;
     // Steuertickets stehen im Banner ueber den Spalten, nicht als Karte (P6)
-    const tasks = _board.tasks.filter(task => task.status === status && task.kind !== 'control');
+    const tasks = _board.tasks.filter(task => task.status === status && task.kind !== 'control'
+                                              && (!_board.approvalsOnly || _waitsForApproval(task)));
     const head = _boardEl('div', 'board-col-head');
     head.append(_boardEl('span', 'board-col-name', status), _boardEl('span', 'board-col-count', String(tasks.length)));
     const list = _boardEl('div', 'board-col-list');
@@ -128,9 +134,68 @@ function renderBoard() {
   }));
 }
 
+// ── Review-Status (P4) ──────────────────────────────────────────────────
+
+function _reviewState(task) {
+  const review = task.review || {};
+  const state = review.state || 'none';
+  if (state === 'running' && review.at && Date.now() - Date.parse(review.at) > REVIEW_STUCK_MS) return 'stuck';
+  return state;
+}
+
+function _waitsForApproval(task) {
+  return task.status === 'review' && _reviewState(task) === 'passed';
+}
+
+const REVIEW_SYMBOLS = {running: '●', stuck: '⚠', passed: '✓', rework: '↻', failed: '✕'};
+
+// Badge mit Symbol und Text, nie nur Farbe; long = Ticketansicht mit den Zahlen
+function _reviewBadge(task, long) {
+  const state = _reviewState(task);
+  if (state === 'none') return null;
+  const review = task.review || {};
+  let text = t('board.review.' + state);
+  const firstColumn = task.status === _board.statuses[0];
+  if ((state === 'rework' || state === 'failed') && firstColumn && review.at) {
+    text += ' · ' + t('board.review.fromReview', {date: _boardDate(review.at)});
+  }
+  if (state === 'failed' && review.red_count) {
+    text += ' · ' + t('board.review.redRounds', {n: review.red_count, max: REVIEW_RED_LIMIT});
+  }
+  if (long && (state === 'rework' || state === 'failed' || state === 'passed')
+      && review.blocking !== null && review.blocking !== undefined) {
+    text += ' · ' + t('board.review.counts', {blocking: review.blocking, suggestions: review.suggestions || 0});
+  }
+  const badge = _boardEl('span', 'board-review');
+  badge.dataset.state = state;
+  badge.setAttribute('aria-label', t('board.review.label') + ': ' + text);
+  badge.title = text;
+  const symbol = _boardEl('span', 'board-review-symbol' + (state === 'running' ? ' pulse' : ''), REVIEW_SYMBOLS[state]);
+  symbol.setAttribute('aria-hidden', 'true');
+  badge.append(symbol, _boardEl('span', 'board-review-text', text));
+  return badge;
+}
+
+function renderBoardApprovals() {
+  const hint = document.getElementById('boardApprovals');
+  if (!hint) return;
+  const count = _board.tasks.filter(_waitsForApproval).length;
+  hint.hidden = _board.role !== 'human' || (!count && !_board.approvalsOnly);
+  hint.textContent = t(count === 1 ? 'board.approvals.one' : 'board.approvals.many', {n: count});
+  hint.setAttribute('aria-pressed', _board.approvalsOnly ? 'true' : 'false');
+  hint.classList.toggle('active', _board.approvalsOnly);
+}
+
+function toggleBoardApprovals() {
+  _board.approvalsOnly = !_board.approvalsOnly;
+  renderBoard();
+  renderBoardApprovals();
+}
+
 function _boardCard(task) {
   const card = _boardEl('div', 'board-card' + (task.human ? ' human' : ''));
-  card.draggable = true;
+  // Verschieben aendert Spalte und Prioritaet: nur der Mensch (P1, P4)
+  card.draggable = _board.role === 'human';
   card.dataset.action = 'board-open-task';
   card.dataset.ref = task.ref;
   card.dataset.project = task.project;
@@ -145,6 +210,8 @@ function _boardCard(task) {
     top.appendChild(mark);
   }
   card.append(top, _boardEl('div', 'board-card-title', task.title));
+  const badge = _reviewBadge(task, false);
+  if (badge) card.appendChild(badge);
   if (task.tags.length) {
     const tags = _boardEl('div', 'board-tags');
     task.tags.forEach(tag => tags.appendChild(_boardEl('span', 'board-tag', tag)));
@@ -165,6 +232,7 @@ function _bindColumnDrop(col) {
   col.addEventListener('drop', e => {
     e.preventDefault();
     col.classList.remove('drop');
+    if (_board.role !== 'human') return;
     const ref = e.dataTransfer.getData('text/plain');
     const task = _board.tasks.find(x => x.ref === ref);
     if (!task) return;
@@ -209,7 +277,7 @@ async function openBoardTask(ref) {
   document.getElementById('boardCommentBody').value = '';
   // Nichts vom zuvor geoeffneten Ticket stehen lassen
   document.getElementById('boardTaskRef').textContent = ref;
-  ['boardTaskTitle', 'boardTaskTags', 'boardTaskComments', 'boardTaskHistory']
+  ['boardTaskTitle', 'boardTaskReview', 'boardTaskTags', 'boardTaskComments', 'boardTaskHistory']
     .forEach(id => document.getElementById(id).replaceChildren());
   document.getElementById('boardTaskDesc').replaceChildren(_boardEl('div', 'surface-empty', t('common.loading')));
   openOverlay('overlayBoardTask');
@@ -234,6 +302,8 @@ async function _renderOpenTask() {
   if (_board.open !== ref) return;
   document.getElementById('boardTaskRef').textContent = task.ref;
   document.getElementById('boardTaskTitle').textContent = task.title;
+  const review = _reviewBadge(task, true);
+  document.getElementById('boardTaskReview').replaceChildren(...(review ? [review] : []));
   const status = document.getElementById('boardTaskStatus');
   status.replaceChildren(..._board.statuses.map(s => { const o = _boardEl('option', '', s); o.value = s; return o; }));
   status.value = task.status;
