@@ -38,6 +38,8 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("CONCLAVE_BACKUP_DIR", str(tmp_path / "backups"))
     monkeypatch.delenv("CONCLAVE_API_KEY", raising=False)
     monkeypatch.delenv("CONCLAVE_AGENT_KEY", raising=False)
+    for name in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "CONCLAVE_LOG_DIR"):
+        monkeypatch.delenv(name, raising=False)            # Linux-Runner setzen XDG_CONFIG_HOME selbst
     app, _ = _build_app(ConclaveConfig(db_path=tmp_path / "data" / "c.db", api_key=HUMAN, agent_api_key=AGENT))
     app.config["TESTING"] = True
     client = app.test_client()
@@ -185,11 +187,29 @@ def test_workspace_equal_to_home_is_rejected(env):
     assert os.environ["CONCLAVE_WORKSPACE"] == str(env.workspace)
 
 
-@pytest.mark.parametrize("sub", ["cfg", "data", "backups", "home/AppData", "."])
+@pytest.mark.parametrize("sub", ["cfg", "data", "backups", "."])
 def test_workspace_containing_runtime_directories_is_rejected(env, sub):
     target = (env.tmp / sub).resolve()
     resp = env.client.put("/settings", json={"workspace_path": str(target)}, headers=env.human)
     assert resp.status_code == 400, sub
+    assert os.environ["CONCLAVE_WORKSPACE"] == str(env.workspace)
+
+
+@pytest.mark.parametrize("system, sub", [
+    ("windows", "home/AppData"),                    # %APPDATA%, %LOCALAPPDATA%
+    ("linux", "home/.config"),                      # XDG: Konfiguration
+    ("linux", "home/.local"),                       # XDG: Daten und Logs
+])
+def test_workspace_containing_the_platform_directories_is_rejected(env, monkeypatch, system, sub):
+    """Die Laufzeitordner haengen vom System ab; geprueft wird der Ordner des jeweiligen Systems."""
+    import dataclasses
+
+    from conclave.runtime import paths, platform_info
+    monkeypatch.setattr(paths, "get_platform_info",
+                        lambda: dataclasses.replace(platform_info.get_platform_info(), system=system))
+    target = (env.tmp / sub).resolve()
+    resp = env.client.put("/settings", json={"workspace_path": str(target)}, headers=env.human)
+    assert resp.status_code == 400, (system, sub)
     assert os.environ["CONCLAVE_WORKSPACE"] == str(env.workspace)
 
 
