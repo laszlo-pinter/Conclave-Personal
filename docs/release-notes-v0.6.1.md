@@ -1,5 +1,7 @@
 # Release Notes: v0.6.1
 
+> Not published separately; these changes are part of [v0.7.0](release-notes-v0.7.0.md).
+
 A small follow-up to v0.6.0: consultation settings get their own section in
 `config.toml`, and `conclave-mcp` names the board in Conclave as the place for
 work packages.

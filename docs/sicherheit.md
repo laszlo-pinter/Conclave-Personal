@@ -67,7 +67,7 @@ Anfrage spielen dafür keine Rolle.
   es einem anderen Token, gibt es keinen Reviewer-Zugang. Agenten, die Code
   schreiben, sollen es nicht lesen können: im Agent-Host sperren wie `api.token`.
 - **Rolle prüfen:** `GET /auth/whoami` liefert `{"role": "human"|"agent"|"reviewer"}`.
-  Bekommt der MCP-Server `human`, lehnt er jedes Tool ab (seit v0.6.2; nur mit
+  Bekommt der MCP-Server `human`, lehnt er jedes Tool ab (seit v0.7.0; nur mit
   `CONCLAVE_MCP_ALLOW_HUMAN=1` arbeitet er trotzdem, mit Warnung, für die
   Fehlersuche). `CONCLAVE_API_KEY` liest er nicht. Pfadteile in Tool-Aufrufen
   werden vollständig kodiert. `conclave-mcp --reviewer` arbeitet nur mit der
@@ -315,6 +315,9 @@ werden alle abgelösten Schlüssel gelöscht, und ältere Backups gelten als fre
   beschränkt. Conclave löst den Namen bei jeder Anfrage auf, prüft jede
   Adresse und verbindet sich mit der geprüften Adresse; Host-Header und
   TLS-Servername bleiben beim Namen. Nicht auflösbare Namen werden abgelehnt.
+- Proxy-Variablen aus der Umgebung (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`)
+  gelten nicht für Anfragen an Provider; die Verbindung geht direkt an die
+  geprüfte Adresse.
 - Entfernte Provider nur über `https`. `localhost` ist nur für den lokalen
   Provider (Ollama) erlaubt, und nur auf dessen Port
   (`CONCLAVE_OLLAMA_PORT`, Standard `11434`). Ein Agent mit einer nicht mehr
