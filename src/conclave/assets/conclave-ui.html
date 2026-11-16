@@ -12,6 +12,7 @@
 <script src="static/vendor/marked.min.js"></script>
 <script src="static/vendor/highlight/highlight.min.js"></script>
 <script src="static/vendor/purify.min.js"></script>
+<script src="static/js/theme.js"></script>
 <script src="static/js/state.js"></script>
 <script src="static/js/api.js"></script>
 <script src="static/js/i18n.js"></script>
@@ -111,6 +112,14 @@
       <select id="languageSelect" aria-label="Language">
         <option value="de" data-i18n="lang.de">Deutsch</option>
         <option value="en" data-i18n="lang.en">English</option>
+      </select>
+    </div>
+    <div class="language-row">
+      <span data-i18n="theme.label">Darstellung</span>
+      <select id="themeSelect" aria-label="Theme">
+        <option value="system" data-i18n="theme.system">System</option>
+        <option value="light" data-i18n="theme.light">Hell</option>
+        <option value="dark" data-i18n="theme.dark">Dunkel</option>
       </select>
     </div>
     <div class="api-status"><div class="api-dot" id="apiDot"></div><span id="apiLabel">Verbinde…</span></div>

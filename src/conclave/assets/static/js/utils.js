@@ -1,13 +1,7 @@
 // static/js/utils.js — Utility-Funktionen
 
-const PALETTE=[
-  {bg:'rgba(0,212,170,.13)',  bd:'rgba(0,212,170,.45)',  tx:'#00d4aa'},
-  {bg:'rgba(139,108,247,.13)',bd:'rgba(139,108,247,.45)',tx:'#a594f9'},
-  {bg:'rgba(245,166,35,.12)', bd:'rgba(245,166,35,.4)',  tx:'#f5a623'},
-  {bg:'rgba(0,184,217,.12)',  bd:'rgba(0,184,217,.4)',   tx:'#00b8d9'},
-  {bg:'rgba(255,107,157,.12)',bd:'rgba(255,107,157,.4)', tx:'#ff6b9d'},
-  {bg:'rgba(82,196,26,.12)',  bd:'rgba(82,196,26,.4)',   tx:'#52c41a'},
-];
+// Farben aus theme.css (hell und dunkel)
+const PALETTE=[0, 1, 2, 3, 4, 5].map(i => ({bg: `var(--p${i}-bg)`, bd: `var(--p${i}-bd)`, tx: `var(--p${i}-tx)`}));
 const colorMap={};
 function colorFor(id){if(!colorMap[id]){const i=Object.keys(colorMap).length%PALETTE.length;colorMap[id]=PALETTE[i];}return colorMap[id];}
 
@@ -76,7 +70,7 @@ function showEmpty(){
   document.getElementById('floorbar').classList.remove('visible');document.getElementById('floorPanel').classList.remove('visible');
   document.getElementById('btnExport').disabled=true;
   // safe-html: statisches Markup + Uebersetzungen
-  document.getElementById('messages').innerHTML=`<div class="empty"><div class="empty-icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="9" stroke="#6b7280" stroke-width="1.5"/><circle cx="7.5" cy="11" r="2" fill="#6b7280"/><circle cx="14.5" cy="11" r="2" fill="#6b7280"/></svg></div><div class="empty-title">${t('conv.noneSelected')}</div><div class="empty-sub">${t('conv.selectOrCreate')}</div></div>`;
+  document.getElementById('messages').innerHTML=`<div class="empty"><div class="empty-icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="9" stroke="currentColor" stroke-width="1.5"/><circle cx="7.5" cy="11" r="2" fill="currentColor"/><circle cx="14.5" cy="11" r="2" fill="currentColor"/></svg></div><div class="empty-title">${t('conv.noneSelected')}</div><div class="empty-sub">${t('conv.selectOrCreate')}</div></div>`;
 }
 
 // ── Markdown ──────────────────────────────────────────────────────────────

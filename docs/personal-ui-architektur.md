@@ -39,6 +39,19 @@ Die Umschaltung betrifft die sichtbaren Kernflächen der App:
 API-Fehlermeldungen aus dem Backend können weiterhin im Originaltext des
 Servers erscheinen.
 
+## Heller und dunkler Modus
+
+Die UI folgt der Systemeinstellung (`prefers-color-scheme`). Unter
+„Darstellung“ im Sidebar-Footer lässt sich das überstimmen: System, Hell oder
+Dunkel. Die Wahl wird lokal im Browser unter `conclave_ui_theme` gespeichert
+und setzt `data-theme` auf `<html>`.
+
+Farben stehen nur in `static/css/theme.css`, als Variablen für beide Modi.
+`components.css`, `layout.css` und die Skripte verwenden ausschließlich diese
+Variablen; ein Test meldet feste Farbwerte außerhalb von `theme.css`. Texte
+erreichen in beiden Modi einen Kontrast von mindestens 4,5:1. Code-Blöcke
+bleiben auch im hellen Modus dunkel, passend zum Syntax-Highlighting.
+
 ## 1. Studio
 
 ### Zweck

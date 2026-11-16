@@ -62,7 +62,7 @@
 
 /* Empty state */
 .empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:40px}
-.empty-icon{width:54px;height:54px;background:var(--bg-3);border:1px solid var(--border);border-radius:50%;display:grid;place-items:center;margin-bottom:6px}
+.empty-icon{color:var(--text-faint);width:54px;height:54px;background:var(--bg-3);border:1px solid var(--border);border-radius:50%;display:grid;place-items:center;margin-bottom:6px}
 .empty-title{font-family:var(--font-hd);font-weight:700;font-size:17px;color:var(--text-dim)}
 .empty-sub{font-size:13px;color:var(--text-faint);max-width:280px;line-height:1.6}
 

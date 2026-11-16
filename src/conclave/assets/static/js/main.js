@@ -103,6 +103,7 @@ function _bindStaticUiEvents() {
     if (el) el.addEventListener(event, handler)
   }
   on('languageSelect', 'change', (e) => setLanguage(e.target.value))
+  on('themeSelect', 'change', (e) => setTheme(e.target.value))
   on('logLevel', 'change', () => loadLogs())
   on('wsUpload', 'change', (e) => uploadWsFile(e.target))
   on('fileInput', 'change', (e) => handleFile(e.target))
