@@ -14,7 +14,12 @@ ASSETS = Path(__file__).resolve().parents[2] / "src" / "conclave" / "assets"
 
 # Kontrast aller sichtbaren Texte; Hintergruende mit Alpha werden ueber die Vorfahren verrechnet
 CONTRAST_JS = r"""
-() => {
+async () => {
+  // Einblend-Animationen (z. B. msgIn) erst zu Ende laufen lassen; nur Dauer-Animationen auslassen
+  await Promise.all(document.getAnimations()
+    .filter(a => a.effect && a.effect.getComputedTiming().iterations !== Infinity)
+    .map(a => a.finished.catch(() => null)));
+  const endless = el => el.getAnimations().some(a => a.effect.getComputedTiming().iterations === Infinity);
   const parse = c => { const m = c.match(/rgba?\(([^)]+)\)/); if (!m) return [0, 0, 0, 0];
     const p = m[1].split(/[ ,\/]+/).filter(Boolean).map(Number); return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1]; };
   const over = (top, under) => { const a = top[3] + under[3] * (1 - top[3]); if (!a) return [0, 0, 0, 0];
@@ -29,7 +34,7 @@ CONTRAST_JS = r"""
     if (!own || !el.checkVisibility({opacityProperty: true, visibilityProperty: true})) continue;
     if (el.closest('[disabled], option, .hljs, pre, script, style')) continue;
     const s = getComputedStyle(el);
-    if (s.animationName !== 'none') continue;
+    if (endless(el)) continue;
     const bg = background(el);
     const fg = over(parse(s.color), bg);
     const [l1, l2] = [lum(fg), lum(bg)].sort((a, b) => b - a);
@@ -123,7 +128,7 @@ HEX_OR_RGB = re.compile(r"#[0-9a-fA-F]{3,8}\b|rgba?\(\s*\d")
 
 
 @pytest.mark.parametrize("path", [
-    "static/css/components.css", "static/css/layout.css",
+    "conclave-ui.html", "static/css/components.css", "static/css/layout.css",
     *[str(p.relative_to(ASSETS)).replace("\\", "/") for p in sorted((ASSETS / "static" / "js").rglob("*.js"))],
 ])
 def test_no_fixed_colors_outside_the_theme(path):
@@ -131,6 +136,40 @@ def test_no_fixed_colors_outside_the_theme(path):
     text = (ASSETS / path).read_text(encoding="utf-8")
     text = re.sub(r"&#\d+;", "", text)                      # HTML-Entities wie &#127908; sind keine Farben
     assert HEX_OR_RGB.findall(text) == [], path
+
+
+def _light_blocks():
+    """Der helle Satz steht zweimal: fuer "System" (Media-Query) und fuer data-theme="light"."""
+    css = (ASSETS / "static" / "css" / "theme.css").read_text(encoding="utf-8")
+    media = css[css.index(':root:not([data-theme="dark"]){') :]
+    media = media[media.index("{") + 1 : media.index("}")]
+    forced = css[css.index(':root[data-theme="light"]{') :]
+    forced = forced[forced.index("{") + 1 : forced.index("}")]
+    return media, forced
+
+
+def test_both_light_blocks_are_identical():
+    """Review-V1: der Systemmodus darf keine anderen Farben zeigen als "Hell"."""
+    media, forced = _light_blocks()
+    declarations = lambda block: sorted(d.strip() for d in block.split(";") if d.strip())  # noqa: E731
+    assert declarations(media) == declarations(forced)
+    assert len(declarations(media)) > 20
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_logo_mark_is_readable(chromium, live_server, scheme):
+    """Review-B1: das Logo-Zeichen steht auf --accent und braucht dort genug Kontrast."""
+    context, page, errors = _open(chromium, live_server, scheme)
+    try:
+        colors = page.evaluate("""() => { const mark = document.querySelector('.logo-mark');
+            const circle = mark.querySelector('circle');
+            return [getComputedStyle(circle).stroke, getComputedStyle(mark).backgroundColor]; }""")
+        rgb = [tuple(int(float(x)) for x in re.findall(r"[\d.]+", c)[:3]) for c in colors]
+        hexes = ["#" + "".join(f"{v:02x}" for v in c) for c in rgb]
+        assert _ratio(*hexes) >= 4.5, (scheme, colors)
+        assert errors == []
+    finally:
+        context.close()
 
 
 def _theme_blocks():

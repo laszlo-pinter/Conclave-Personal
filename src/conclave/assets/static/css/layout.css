@@ -3,7 +3,7 @@
 /* ── Sidebar ── */
 .sb{width:var(--sidebar);background:var(--bg-2);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;flex-shrink:0}
 .sb-logo{padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
-.logo-mark{width:30px;height:30px;background:var(--accent);border-radius:50%;display:grid;place-items:center;flex-shrink:0}
+.logo-mark{width:30px;height:30px;background:var(--accent);color:var(--on-accent);border-radius:50%;display:grid;place-items:center;flex-shrink:0}
 .logo-mark svg{width:14px;height:14px}
 .logo-text{font-family:var(--font-hd);font-weight:800;font-size:19px;letter-spacing:-.5px}
 .sb-tabs{display:grid;grid-template-columns:repeat(5,1fr);padding:10px 8px 0;gap:3px;border-bottom:1px solid var(--border)}
