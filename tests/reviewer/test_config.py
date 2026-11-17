@@ -136,7 +136,8 @@ def test_run_with_the_new_section(conf, cfg, server, repo, tmp_path, monkeypatch
 # ── import-config ────────────────────────────────────────────────────────
 
 def test_import_takes_projects_and_limits(tmp_path):
-    old = _write(tmp_path / "old" / "config.toml", OLD) if (tmp_path / "old").mkdir() is None else None
+    (tmp_path / "old").mkdir()
+    old = _write(tmp_path / "old" / "config.toml", OLD)
     target = _write(tmp_path / "conclave.toml", '[server]\nport = 8000\n')
     shown = []
     assert rc.import_config(old, target, confirm=lambda text: shown.append(text) or True)
@@ -176,3 +177,36 @@ def test_import_config_command(tmp_path, capsys, monkeypatch):
     assert not target.exists() and "Nichts geschrieben" in capsys.readouterr().out
     assert main(["import-config", str(old), "--target", str(target), "--yes"]) == 0
     assert tomllib.loads(target.read_text(encoding="utf-8"))["reviewer"]["projects"]["kanzo"] == "C:\\Code\\kanzo"
+
+
+# ── Review #90 ───────────────────────────────────────────────────────────
+
+def test_relative_prompt_file_is_relative_to_the_config(conf, tmp_path, monkeypatch):
+    """V2: nie gegen das Arbeitsverzeichnis (W4 startet aus conclave desktop)."""
+    _write(conf.parent / "eigen.md", "Board {board}: {get} und {comment}.")
+    _write(conf, '[reviewer]\nprompt_file = "eigen.md"\n[reviewer.projects]\na = "x"\n')
+    monkeypatch.chdir(tmp_path)                                   # ein anderes Arbeitsverzeichnis
+    assert rc.prompt_text(rc.load()).startswith("Board {board}")
+
+
+@pytest.mark.parametrize("case", ["old-missing", "old-invalid", "target-invalid"])
+def test_import_errors_are_clear_messages(tmp_path, case):
+    """V3: Meldung statt Traceback."""
+    old, target = tmp_path / "old.toml", tmp_path / "ziel.toml"
+    if case != "old-missing":
+        _write(old, OLD if case == "target-invalid" else "[projects\n")
+    if case == "target-invalid":
+        _write(target, "[server\n")
+    with pytest.raises(rc.ConfigError, match="gibt es nicht" if case == "old-missing" else "kein gueltiges TOML"):
+        rc.import_config(old, target, confirm=lambda text: True)
+
+
+def test_import_writes_atomically_and_privately(tmp_path):
+    """V1: replace_private, nur fuer den Benutzer; keine .tmp-Reste."""
+    (tmp_path / "old").mkdir()
+    (tmp_path / "ziel").mkdir()
+    old = _write(tmp_path / "old" / "config.toml", OLD)
+    target = _write(tmp_path / "ziel" / "config.toml", "[server]\nport = 8000\n")
+    assert rc.import_config(old, target, confirm=lambda text: True)
+    assert file_security.foreign_access(target) == []
+    assert [p.name for p in target.parent.iterdir()] == ["config.toml"]

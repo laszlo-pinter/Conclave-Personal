@@ -6,7 +6,7 @@
     max_reviews_per_hour = 6
     review_timeout_minutes = 30
     claude_exe = ""            # leer: VS-Code-Erweiterung, sonst PATH
-    prompt_file = ""           # leer: die mitgelieferte Fassung
+    prompt_file = ""           # leer: die mitgelieferte Fassung; relativ zum Ordner dieser config.toml
     [reviewer.projects]
     conclave = ["C:\\...\\Conclave_original", "C:\\...\\conclave-board-team"]
 
@@ -120,6 +120,8 @@ def prompt_text(cfg: dict) -> str:
     """Die mitgelieferte Fassung oder ``prompt_file``; ohne die Platzhalter kein Start."""
     if cfg.get("prompt_file"):
         source = Path(cfg["prompt_file"]).expanduser()
+        if not source.is_absolute() and cfg.get("_config_path"):
+            source = Path(cfg["_config_path"]).parent / source      # nie gegen das Arbeitsverzeichnis
         try:
             text = source.read_text(encoding="utf-8")
         except OSError as e:
@@ -161,20 +163,33 @@ def imported_section(old: dict, old_path: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _read_toml(path: Path, what: str) -> tuple[str, dict]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise ConfigError(f"{what} {path} gibt es nicht.") from None
+    except OSError as e:
+        raise ConfigError(f"{what} {path}: nicht lesbar ({e.__class__.__name__}).") from None
+    try:
+        return text, tomllib.loads(text)
+    except tomllib.TOMLDecodeError as e:
+        raise ConfigError(f"{what} {path}: kein gueltiges TOML ({e}).") from None
+
+
 def import_config(old_path: Path, target: Path, *, confirm) -> bool:
-    """Zeigt den Abschnitt und schreibt ihn erst nach ``confirm(text)``; ein vorhandenes [reviewer] bleibt."""
-    with old_path.open("rb") as f:
-        old = tomllib.load(f)
+    """Zeigt den Abschnitt und schreibt ihn erst nach ``confirm(text)``; ein vorhandenes [reviewer] bleibt.
+
+    Geschrieben wird atomar und nur fuer den Benutzer (``replace_private``, R13): Die Konfiguration
+    behaelt so keine weiteren Rechte, und ein Abbruch laesst keine halbe Datei zurueck."""
+    _text, old = _read_toml(old_path, "Alte Konfiguration")
     text = imported_section(old, old_path)
-    existing = target.read_text(encoding="utf-8") if target.exists() else ""
-    if existing and "reviewer" in tomllib.loads(existing):
+    existing, current = _read_toml(target, "Ziel") if target.exists() else ("", {})
+    if "reviewer" in current:
         raise ConfigError(f"{target}: [reviewer] gibt es schon; nichts geaendert.")
     if not confirm(text):
         return False
     merged = existing + ("\n" if existing and not existing.endswith("\n") else "") + ("\n" if existing else "") + text
     tomllib.loads(merged)                                   # vor dem Schreiben pruefen
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(target.name + ".tmp")
-    tmp.write_text(merged, encoding="utf-8")
-    tmp.replace(target)
+    from conclave_board.runtime.file_security import replace_private
+    replace_private(target, merged.encode("utf-8"))
     return True
