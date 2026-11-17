@@ -292,3 +292,26 @@ def test_control_tickets_are_closed_with_the_right_to_create_them(board):
     with pytest.raises(BoardError, match="Steuerticket"):
         board.update_task(BEN, project_pause.ref, status="done")
     assert board.update_task(ANNA, project_pause.ref, status="done").status == "done"
+
+
+def test_policy_checks_the_new_assignee(board):
+    """T6-Review V1: Die Policy kann einen unbekannten Zustaendigen ablehnen; ``None`` prueft sie nicht."""
+    checked = []
+
+    def check_assignee(principal, task, assignee):
+        checked.append(assignee)
+        if assignee == "niemand":
+            raise BoardError("assignee: unbekanntes Konto.", 400, "ValidationError")
+
+    board.policy.check_assignee = check_assignee
+    board.create_task(ANNA, "api", "T")
+    with pytest.raises(BoardError, match="unbekanntes Konto"):
+        board.update_task(ANNA, "api#1", assignee="niemand")
+    assert board.get_task("api#1").assignee is None
+    assert board.update_task(ANNA, "api#1", assignee="ben").assignee == "ben"
+    board.update_task(ANNA, "api#1", assignee=None)
+    assert checked == ["niemand", "ben"]
+
+
+def test_personal_policy_accepts_any_assignee():
+    PersonalPolicy().check_assignee(HUMAN_PRINCIPAL, None, "irgendwer")

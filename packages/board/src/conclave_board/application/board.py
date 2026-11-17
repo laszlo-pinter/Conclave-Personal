@@ -518,6 +518,8 @@ class BoardService:
             mine = assignee in (None, principal.actor_id) and task.assignee in (None, principal.actor_id)
             self._require(principal, "assign:self" if mine else "assign:other", task.project_slug, task,
                           message="Andere zustaendig machen darf nur, wer das Freigabe-Recht hat.")
+            if assignee is not None and assignee != task.assignee:
+                self.policy.check_assignee(principal, task, assignee)
         for name, new in (("title", title), ("description", description), ("status", status), ("human", human)):
             old = getattr(task, name)
             if new is not None and new != old:

@@ -47,6 +47,10 @@ class BoardPolicy:
         """Zustaendiger beim Uebernehmen (``assignee``); ``None`` = unveraendert lassen."""
         return None
 
+    def check_assignee(self, principal: Principal, task: "Task", assignee: str) -> None:
+        """Ist ``assignee`` als Zustaendiger dieses Tickets gueltig (z. B. ein aktives Konto mit
+        Zugang zum Projekt)? Bei Verstoss ``BoardError`` werfen; ``None`` (niemand) prueft der Dienst nicht."""
+
     def lock_key(self, principal: Principal, task: "Task", new_status: str) -> str | None:
         """Schluessel einer Sperre, unter der ``check_status_change`` und das Schreiben laufen."""
         return None
