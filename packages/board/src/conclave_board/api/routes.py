@@ -128,11 +128,11 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
         b = _board()
         projects = [p for p in b.list_projects() if g.principal.sees(p.slug)]
         return jsonify({"statuses": list(b.flow.statuses), "projects": [project_to_dict(p) for p in projects],
-                        "changes": b.change_token(), "control": b.control_state()}), 200
+                        "changes": b.change_token(), "control": b.control_state(principal=g.principal)}), 200
 
     def _control(slug: str | None = None) -> dict:
         """Offene Pausen und unquittierte Hinweise des Menschen (P6), in jeder Board-Antwort."""
-        return _board().control_state(slug)
+        return _board().control_state(slug, g.get("principal"))
 
     @bp.get("/changes")
     def board_changes():

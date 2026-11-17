@@ -99,6 +99,12 @@ class BoardService:
         return principal.role, principal.actor_id or principal.role
 
     @staticmethod
+    def _require_all_projects(principal: Principal, what: str) -> None:
+        """Was ueber Projektgrenzen hinweg wirkt, braucht einen Zugang zu allen Projekten (T4)."""
+        if principal.projects is not None:
+            raise _forbidden(f"{what} nur mit Zugang zu allen Projekten.")
+
+    @staticmethod
     def require_visible(principal: Principal, slug: str | None) -> None:
         """Fremde Projekte gibt es fuer diesen Zugang nicht: 404 wie bei einem fehlenden (T4)."""
         if slug is not None and not principal.sees(slug):
@@ -125,6 +131,7 @@ class BoardService:
 
     def create_project(self, principal: Principal, slug: str, name: str) -> Project:
         self._require_approval(principal)
+        self._require_all_projects(principal, "Projekte anlegen")
         if not isinstance(slug, str) or not isinstance(name, str):   # fehlt oder kein Text: 400 statt 500
             raise _invalid("slug und name muessen Text sein.")
         try:
@@ -535,9 +542,9 @@ class BoardService:
                 raise _invalid(f"Ticket '{task}' gehoert nicht zum Projekt '{slug}'.")
             if ticket.kind == "control":
                 raise _forbidden(f"'{task}' ist ein Steuerticket des Menschen und wird nicht uebernommen.")
-            self._raise_if_paused(ticket.project_slug)
+            self._raise_if_paused(ticket.project_slug, principal)
             return self._claim(task, origin, actor_id)
-        self._raise_if_paused(slug)
+        self._raise_if_paused(slug, principal)
         # Nacharbeit aus dem Review zuerst, auch ueber Projekte hinweg; sonst Board-Reihenfolge
         candidates = sorted(self.list_tasks(slug, [first]), key=lambda t: t.review_state not in REWORK_STATES)
         for candidate in candidates:
@@ -672,12 +679,17 @@ class BoardService:
 
     # ── Steuertickets (P6) ───────────────────────────────────────────────
 
-    def _open_controls(self, slug: str | None = None) -> list[Task]:
-        """Offene Steuertickets mit Herkunft Mensch, die fuer ``slug`` gelten (ohne slug: alle)."""
+    def _open_controls(self, slug: str | None = None, principal: Principal | None = None) -> list[Task]:
+        """Offene Steuertickets mit Herkunft Mensch, die fuer ``slug`` gelten (ohne slug: alle).
+
+        Mit ``principal`` nur, was dieser Zugang sehen darf (T4): Steuertickets fremder Projekte
+        gibt es fuer ihn nicht; ``scope=all`` gilt fuer alle und bleibt sichtbar."""
         open_statuses = [s for s in self.flow.statuses if s != self.flow.last]
         found = []
         for task in self._repo.list_tasks(None, open_statuses, kind="control"):
             if task.kind != "control" or task.origin != "human":
+                continue
+            if principal is not None and task.control_scope != "all" and not principal.sees(task.project_slug):
                 continue
             if slug is None or task.control_scope == "all" or task.project_slug == slug:
                 found.append(task)
@@ -690,14 +702,14 @@ class BoardService:
                 "reason": task.title, "text": task.description, "by": task.created_by or "human",
                 "at": _iso(task.created_at)}
 
-    def control_state(self, slug: str | None = None) -> dict:
+    def control_state(self, slug: str | None = None, principal: Principal | None = None) -> dict:
         """Offene Pausen und unquittierte Hinweise, fuer jede Board-Antwort (Feld ``control``)."""
-        controls = self._open_controls(slug)
+        controls = self._open_controls(slug, principal)
         return {"pauses": [self._control_entry(t) for t in controls if t.control == "pause"],
                 "hints": [self._control_entry(t) for t in controls if t.control == "hint" and not t.control_ack_by]}
 
-    def _raise_if_paused(self, slug: str | None) -> None:
-        pauses = [t for t in self._open_controls(slug) if t.control == "pause"]
+    def _raise_if_paused(self, slug: str | None, principal: Principal | None = None) -> None:
+        pauses = [t for t in self._open_controls(slug, principal) if t.control == "pause"]
         if pauses:
             entry = self._control_entry(pauses[0])
             error = BoardError(f"Pausiert durch {entry['by']} ({entry['task']}): {entry['reason']}", 409, "Paused")
@@ -730,6 +742,13 @@ class BoardService:
         if not principal.is_human or comment.origin != "human":
             raise _forbidden("Nur eigene Kommentare des Menschen sind aenderbar; "
                              "Kommentare von Agenten und Conclave sind unveraenderlich.")
+        if principal.actor_id is not None or principal.projects is not None:
+            # Mit Konten (T4): nur Kommentare des eigenen Kontos, nur in sichtbaren Projekten
+            task = self._repo.get_task_by_id(comment.task_id)
+            if task is None or not principal.sees(task.project_slug):
+                raise BoardError("Kommentar nicht gefunden.", 404, "CommentNotFound")
+            if comment.actor_id != (principal.actor_id or principal.role):
+                raise _forbidden("Nur eigene Kommentare sind aenderbar.")
         return comment
 
     def edit_comment(self, principal: Principal, comment_id: str, body: str) -> TaskComment:
@@ -782,6 +801,7 @@ class BoardService:
         from conclave_board.application.board_import import ImportFormatError, parse_export
 
         self._require_approval(principal)
+        self._require_all_projects(principal, "Import")       # legt Projekte an, meldet vorhandene Tickets
         origin, actor_id = self.actor(principal)
         try:
             projects = parse_export(data, self.flow.statuses)
