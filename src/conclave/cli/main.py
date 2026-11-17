@@ -657,7 +657,17 @@ def _run_server(args, should_open_browser: bool = False) -> int:
     if not env_secret("CONCLAVE_API_KEY"):
         print(f"Conclave API-Token: {token_path()}")
     from conclave.runtime.serve import serve
-    serve(app, config.host, config.port, debug=config.debug)
+    reviewer = None
+    if should_open_browser:                    # nur conclave desktop startet den Reviewer (W4, E-W3)
+        from conclave.runtime.reviewer_launch import start_reviewer
+        log = get_logger("cli.reviewer")
+        reviewer = start_reviewer(lambda msg: (log.info(msg), print(f"Conclave Reviewer: {msg}")))
+    try:
+        serve(app, config.host, config.port, debug=config.debug)
+    finally:
+        if reviewer is not None:
+            from conclave.runtime.reviewer_launch import stop_reviewer
+            stop_reviewer(reviewer)
     return 0
 
 

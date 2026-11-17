@@ -62,6 +62,7 @@ class Reviewer:
         self.mcp_config = data_dir / "mcp-board.json"
         self.worktrees = data_dir / "worktrees"
         self.state_file = data_dir / "state.json"
+        self.status_file = data_dir / "status.json"      # fuer conclave-reviewer status (W4)
 
     def prepare(self) -> None:
         """Datenordner nur fuer den Benutzer (R13); neue Dateien darin erben das unter Windows."""
@@ -88,6 +89,19 @@ class Reviewer:
             f.write(line)
         if sys.stdout:
             print(line, end="", flush=True)
+
+    def write_status(self, **updates) -> None:
+        """Was ``conclave-reviewer status`` zeigt: PID, Start, laufendes Ticket, letztes Ergebnis."""
+        from conclave_board.runtime.file_security import replace_private
+        try:
+            current = json.loads(self.status_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            current = {}
+        current.update(updates)
+        try:
+            replace_private(self.status_file, json.dumps(current, ensure_ascii=False).encode("utf-8"))
+        except OSError as e:
+            self.log(f"status not written: {e}")
 
     def load_state(self):
         try:
@@ -201,7 +215,10 @@ class Reviewer:
             replace_private(self.mcp_config, json.dumps(servers).encode("utf-8"))
             self.log(f"{key}: review started ({checked}) in {worktree}")
             self.current_task = key
+            self.write_status(current_task=key)
             outcome = self.run_claude(key, self.command_for(task, key, checked, extra, missing), str(worktree))
+            self.write_status(current_task=None, last_result={"task": key, "outcome": outcome,
+                                                              "at": datetime.now().isoformat(timespec="seconds")})
         finally:
             self.current_task = None
             for r, path in reversed(added):             # innere Worktrees zuerst
@@ -348,6 +365,9 @@ class Reviewer:
         self.log(f"watching {BOARDS['conclave']['name']} {self.cfg['conclave_url']} for tickets moved to "
                  f"{self.cfg['review_status']!r}" + (" (dry run)" if dry_run else ""))
         state, reachable = self.load_state(), True
+        if not dry_run:
+            self.write_status(pid=os.getpid(), started_at=datetime.now().isoformat(timespec="seconds"),
+                              current_task=None, version=_version())
         self.send_heartbeat()
         stop = None if once else self.start_heartbeat()
         try:
