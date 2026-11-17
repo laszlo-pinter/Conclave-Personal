@@ -33,3 +33,14 @@ def test_run_output_names_the_origin():
     from conclave.cli.handler import CLIHandler
     run = _run(datetime.now(UTC), "agent")
     assert CLIHandler._run_to_dict(object.__new__(CLIHandler), run)["origin"] == "agent"
+
+
+def test_openapi_documents_origin_and_the_consultation_429():
+    """#94-Review V1: Run-Schema mit origin, POST /consultations mit 429 und den Fehlertypen."""
+    import json
+    from pathlib import Path
+    spec = json.loads((Path(__file__).resolve().parents[3] / "static" / "openapi.json").read_text(encoding="utf-8"))
+    run = spec["paths"]["/runs/{run_id}"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+    assert "origin" in run["properties"]
+    text = spec["paths"]["/consultations"]["post"]["responses"]["429"]["description"]
+    assert "AgentBudgetExceeded" in text and "TooManyAgentRuns" in text

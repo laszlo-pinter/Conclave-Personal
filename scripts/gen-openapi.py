@@ -198,6 +198,10 @@ SCHEMAS = {
             "reviewers": {"type": "array", "items": {"type": "object", "properties": {
                 "id": {"type": "string"}, "provider": {"type": "string"}}}},
         }},
+        "errors": {"429": "ConsultationLimit (je Ticket und Stunde); fuer Agenten auch AgentBudgetExceeded "
+                          "(Tagesbudget, [limits]). Erreicht ein Agent erst im Worker eine Grenze "
+                          "(Budget oder TooManyAgentRuns), endet die Consultation mit status failed und "
+                          "der Meldung in error."},
     },
     ("GET", "/consultations/<consultation_id>"): {
         "response": {"required": ["id", "status", "deliveries"], "properties": {
@@ -251,6 +255,8 @@ SCHEMAS = {
         "response": {"required": ["id", "conversation_id"], "properties": {
             "id": {"type": "string"},
             "conversation_id": {"type": "string"},
+            "origin": {"type": "string", "nullable": True, "enum": ["agent", None],
+                       "description": "agent, wenn ein Agent den Lauf ausgeloest hat (R11); sonst null"},
         }},
     },
     ("GET", "/settings"): {

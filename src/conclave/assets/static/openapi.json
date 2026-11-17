@@ -1684,6 +1684,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "ConsultationLimit (je Ticket und Stunde); fuer Agenten auch AgentBudgetExceeded (Tagesbudget, [limits]). Erreicht ein Agent erst im Worker eine Grenze (Budget oder TooManyAgentRuns), endet die Consultation mit status failed und der Meldung in error."
           }
         },
         "requestBody": {
@@ -11210,6 +11213,15 @@
                     },
                     "conversation_id": {
                       "type": "string"
+                    },
+                    "origin": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": [
+                        "agent",
+                        null
+                      ],
+                      "description": "agent, wenn ein Agent den Lauf ausgeloest hat (R11); sonst null"
                     }
                   }
                 }
