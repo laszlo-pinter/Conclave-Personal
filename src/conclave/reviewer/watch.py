@@ -43,15 +43,30 @@ def load_config(path: Path) -> dict:
 class Reviewer:
     """Ein Reviewer mit Konfiguration, Datenordner (Log, Zustand, Sperre, Worktrees) und Prompt-Ordner."""
 
-    def __init__(self, cfg: dict, data_dir: Path, base_dir: Path | None = None) -> None:
+    def __init__(self, cfg: dict, data_dir: Path, base_dir: Path | None = None, prompt: str | None = None) -> None:
+        """``prompt``: der Text (W2, Ressource oder ``prompt_file``); ohne ihn die alte Form aus ``base_dir``."""
         self.cfg = cfg
         self.data_dir = data_dir
-        self.base_dir = base_dir or data_dir           # dort liegt die Prompt-Datei
+        self.base_dir = base_dir or data_dir           # alte Form: dort liegt die Prompt-Datei
+        self.prompt = prompt
         self.log_file = data_dir / "reviewer.log"
         self.lock_file = data_dir / "reviewer.lock"
         self.mcp_config = data_dir / "mcp-board.json"
         self.worktrees = data_dir / "worktrees"
-        self.state_file = data_dir / "state-conclave.json"
+        self.state_file = data_dir / "state.json"
+
+    def prepare(self) -> None:
+        """Datenordner nur fuer den Benutzer (R13); neue Dateien darin erben das unter Windows."""
+        from conclave_board.runtime.file_security import make_private_dirs, restrict
+        make_private_dirs(self.data_dir)
+        restrict(self.data_dir, directory=True)
+
+    @staticmethod
+    def _private_file(path: Path) -> None:
+        from conclave_board.runtime.file_security import create_private, restrict
+        if not path.exists():
+            create_private(path)
+            restrict(path)
 
     # ── Protokoll und Zustand ────────────────────────────────────────────
 
@@ -60,6 +75,7 @@ class Reviewer:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         if self.log_file.exists() and self.log_file.stat().st_size > LOG_LIMIT:
             self.log_file.replace(self.log_file.with_suffix(".log.1"))
+        self._private_file(self.log_file)
         with self.log_file.open("a", encoding="utf-8") as f:
             f.write(line)
         if sys.stdout:
@@ -72,9 +88,8 @@ class Reviewer:
             return None
 
     def save_state(self, state: dict) -> None:
-        tmp = self.state_file.with_suffix(".tmp")
-        tmp.write_text(json.dumps(state, indent=1, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(self.state_file)
+        from conclave_board.runtime.file_security import replace_private
+        replace_private(self.state_file, json.dumps(state, indent=1, ensure_ascii=False).encode("utf-8"))
 
     # ── Board ueber HTTP, nur mit dem Reviewer-Token ──────────────────────
 
@@ -129,7 +144,8 @@ class Reviewer:
 
     def command_for(self, task: dict, key: str, checked: str, extra, missing) -> list[str]:
         return command.review_command(self.cfg, task, key, mcp_config=self.mcp_config,
-                                      prompt_text=command.prompt(self.cfg, self.base_dir), checked=checked,
+                                      prompt_text=(command.fill_prompt(self.cfg, self.prompt) if self.prompt is not None
+                                                   else command.prompt(self.cfg, self.base_dir)), checked=checked,
                                       extra=extra, missing=missing)
 
     def run_review(self, task: dict, key: str, repo: str | list[str], dry_run: bool) -> None:
@@ -172,8 +188,9 @@ class Reviewer:
             for index, (r, commit, _b) in enumerate(found[1:], start=1):
                 added.append((r, worktrees.add_worktree(self.worktrees, r, key, commit, inside=worktree)))
                 extra.append((refs.repo_name(r), f"_repos/{refs.repo_name(r)}", refs.git_server(index, r)))
-            command.write_mcp_config(self.mcp_config,
-                                     command.mcp_servers(self.cfg, [str(p) for _r, p in added], self.token_file()))
+            from conclave_board.runtime.file_security import replace_private
+            servers = command.mcp_servers(self.cfg, [str(p) for _r, p in added], self.token_file())
+            replace_private(self.mcp_config, json.dumps(servers).encode("utf-8"))
             self.log(f"{key}: review started ({checked}) in {worktree}")
             outcome = self.run_claude(key, self.command_for(task, key, checked, extra, missing), str(worktree))
         finally:
@@ -294,10 +311,8 @@ def legacy_locks(cfg: dict, config_path: Path) -> tuple[Path, ...]:
     return tuple(dict.fromkeys(paths))
 
 
-def default_data_dir(config_path: Path) -> Path:
-    """Eigener Datenordner (``<Conclave-Datenordner>/reviewer``), nie der des alten Watchers: dessen Log,
-    Zustand und Worktrees bleiben unberuehrt (bis W5 ist er massgeblich)."""
-    if os.environ.get("CONCLAVE_REVIEWER_DATA_DIR"):
-        return Path(os.environ["CONCLAVE_REVIEWER_DATA_DIR"])
-    from conclave.runtime.paths import get_runtime_paths
-    return get_runtime_paths().data_dir / "reviewer"
+def default_data_dir(config_path: Path | None = None) -> Path:
+    """Eigener Datenordner (``<Konfigurationsordner von Conclave>/reviewer``), nie der des alten Watchers:
+    dessen Log, Zustand und Worktrees bleiben unberuehrt (bis W5 ist er massgeblich)."""
+    from conclave.reviewer.config import data_dir
+    return data_dir()

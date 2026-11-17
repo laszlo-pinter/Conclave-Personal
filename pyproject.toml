@@ -119,4 +119,5 @@ where = ["src", "packages/board/src"]
     "assets/static/vendor/swagger-ui/*",
     "assets/scripts/windows/*.ps1",
     "assets/scripts/linux/*",
+    "reviewer/reviewer-prompt-conclave.md",
 ]

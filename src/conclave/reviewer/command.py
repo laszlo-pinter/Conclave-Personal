@@ -86,8 +86,12 @@ def mcp_servers(cfg: dict, repos: list[str], token_file: Path) -> dict:
 
 
 def prompt(cfg: dict, base_dir: Path) -> str:
+    """Alte Form (W1, config.toml des alten Watchers): Prompt-Datei relativ zu deren Ordner."""
+    return fill_prompt(cfg, (base_dir / cfg.get("prompt_file", "reviewer-prompt-conclave.md")).read_text(encoding="utf-8"))
+
+
+def fill_prompt(cfg: dict, text: str) -> str:
     b = BOARDS["conclave"]
-    text = (base_dir / cfg.get("prompt_file", "reviewer-prompt-conclave.md")).read_text(encoding="utf-8")
     for key, value in (("{author}", cfg["author"]), ("{board}", b["name"]), ("{get}", b["get"]),
                        ("{comment}", b["comment"]), ("{comment_args}", b["comment_args"])):
         text = text.replace(key, value)
