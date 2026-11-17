@@ -127,21 +127,35 @@ class SQLiteBoardRepository:
                 self._connection.execute("BEGIN IMMEDIATE")
             yield
 
-    def change_token_for(self, project_slugs: list[str]) -> int:
-        """Aenderungszaehler nur ueber diese Projekte: hoechste Folgenummer ihrer Eintraege (T5)."""
-        if not project_slugs:
-            return 0
-        marks = ", ".join("?" for _ in project_slugs)
-        queries = (
-            f"SELECT MAX(e.seq) FROM board_events e JOIN board_tasks t ON t.id = e.task_id "      # nosec B608
-            f"JOIN board_projects p ON p.id = t.project_id WHERE p.slug IN ({marks})",
-            f"SELECT MAX(c.seq) FROM board_comments c JOIN board_tasks t ON t.id = c.task_id "    # nosec B608
-            f"JOIN board_projects p ON p.id = t.project_id WHERE p.slug IN ({marks})",
-            f"SELECT MAX(e.seq) FROM board_project_events e JOIN board_projects p ON p.id = e.project_id "  # nosec B608
-            f"WHERE p.slug IN ({marks})",
-        )
-        values = [self._one(q, tuple(project_slugs))[0] for q in queries]
+    def change_token_for(self, project_slugs: list[str], actor_id: str | None = None) -> int:
+        """Aenderungszaehler nur ueber diese Projekte: hoechste Folgenummer ihrer Eintraege (T5).
+
+        Dazu kommen Steuertickets, die ueber Projektgrenzen gelten (``all``, bei ``mine`` die des
+        eigenen Menschen): Wer sie sieht, soll auch merken, wenn sie entstehen oder enden."""
+        marks = ", ".join("?" for _ in project_slugs) or "NULL"
+        params = tuple(project_slugs)
+        queries = [
+            (f"SELECT MAX(e.seq) FROM board_events e JOIN board_tasks t ON t.id = e.task_id "      # nosec B608
+             f"JOIN board_projects p ON p.id = t.project_id WHERE p.slug IN ({marks})", params),
+            (f"SELECT MAX(c.seq) FROM board_comments c JOIN board_tasks t ON t.id = c.task_id "    # nosec B608
+             f"JOIN board_projects p ON p.id = t.project_id WHERE p.slug IN ({marks})", params),
+            (f"SELECT MAX(e.seq) FROM board_project_events e JOIN board_projects p ON p.id = e.project_id "  # nosec B608
+             f"WHERE p.slug IN ({marks})", params),
+            ("SELECT MAX(e.seq) FROM board_events e JOIN board_tasks t ON t.id = e.task_id "
+             "WHERE t.kind = 'control' AND (t.control_scope = 'all' OR (t.control_scope = 'mine' AND t.actor_id = ?))",
+             (actor_id,)),
+        ]
+        values = [self._one(q, p)[0] for q, p in queries]
         return int(max((v for v in values if v is not None), default=0))
+
+    def status_since_many(self, task_ids: list[str]) -> dict[str, datetime]:
+        """Letzter Statuswechsel je Ticket in einer Abfrage (T5, haengende Tickets)."""
+        if not task_ids:
+            return {}
+        marks = ", ".join("?" for _ in task_ids)
+        rows = self._all(f"SELECT task_id, MAX(created_at) FROM board_events WHERE field = 'status' "  # nosec B608
+                         f"AND task_id IN ({marks}) GROUP BY task_id", tuple(task_ids))
+        return {row[0]: _ts(row[1]) for row in rows}
 
     @contextmanager
     def locked_task(self, task_id: str):

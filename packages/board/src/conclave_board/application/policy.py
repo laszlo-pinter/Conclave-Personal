@@ -9,9 +9,9 @@ eine Erweiterung (z. B. Rollen je Projekt) ersetzt sie. Die festen Regeln fuer A
 Reviewer (nur erste Spalte anlegen, nicht nach "erledigt", "nur fuer Menschen" nur lesen ...)
 bleiben im Dienst und gelten immer.
 
-Aktionen fuer ``can``:
+Lesen regelt allein ``Principal.projects`` (fremde Projekte gibt es nicht, 404); die Policy
+wird dafuer nicht gefragt. Aktionen fuer ``can``:
 
-- ``read``: Projekt lesen (zusaetzlich zu ``Principal.projects``)
 - ``write``: Tickets anlegen, aendern, uebernehmen
 - ``comment``: kommentieren (auch der Reviewer)
 - ``approve``: Freigabe-Recht: nach und aus "erledigt", loeschen, Rang setzen, Vorhaben pflegen,
@@ -61,6 +61,6 @@ class PersonalPolicy(BoardPolicy):
     """Conclave Personal: Der Mensch darf alles, Agenten schreiben, nur der Mensch gibt frei."""
 
     def can(self, principal, action, project, task=None) -> bool:
-        if action in ("read", "write", "comment"):
+        if action in ("write", "comment"):
             return True
         return principal.is_human            # approve, release, control:*

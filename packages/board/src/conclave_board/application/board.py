@@ -132,7 +132,7 @@ class BoardService:
         """Aenderungszaehler; fuer eingeschraenkte Zugaenge nur ueber die sichtbaren Projekte (T5)."""
         if principal.projects is None:
             return self._repo.change_token()
-        return self._repo.change_token_for(sorted(principal.projects))
+        return self._repo.change_token_for(sorted(principal.projects), principal.actor_id)
 
     # ── Projekte ─────────────────────────────────────────────────────────
 
@@ -647,8 +647,7 @@ class BoardService:
 
     def status_since(self, task: Task) -> datetime | None:
         """Seit wann das Ticket in seiner Spalte steht (letzter Statuswechsel, sonst angelegt)."""
-        changes = [e.created_at for e in self._repo.list_events(task.id) if e.field_name == "status"]
-        return max(changes) if changes else task.created_at
+        return self._repo.status_since_many([task.id]).get(task.id) or task.created_at
 
     def stuck(self, principal: Principal, slug: str | None = None, older_than: timedelta = timedelta(hours=1)
               ) -> list[tuple[Task, datetime]]:
@@ -656,10 +655,11 @@ class BoardService:
         self.require_visible(principal, slug)
         limit = self._now() - older_than
         found = []
-        for task in self.list_tasks(slug, [self.flow.second]):
-            if not principal.sees(task.project_slug) or task.kind == "control":
-                continue
-            since = self.status_since(task)
+        tasks = [t for t in self.list_tasks(slug, [self.flow.second])
+                 if principal.sees(t.project_slug) and t.kind != "control"]
+        changed = self._repo.status_since_many([t.id for t in tasks])          # eine Abfrage (Review V3)
+        for task in tasks:
+            since = changed.get(task.id) or task.created_at
             if since is not None and since <= limit:
                 found.append((task, since))
         return sorted(found, key=lambda pair: pair[1])

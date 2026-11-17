@@ -194,3 +194,22 @@ def test_personal_repositories_work_over_the_pool(fresh_schema, crypto):
         assert len(conversations.list_all()) == CLIENTS
     finally:
         pool.close()
+
+
+def test_scoped_change_token_and_status_since_on_postgres(repo):
+    """T5-Review: change_token_for und status_since_many mit Postgres-Platzhaltern."""
+    from conclave_board.application.board import BoardService
+    from conclave_board.domain.principal import Principal
+    web = Project.create("web", "Web")
+    repo.create_project(web)
+    board = BoardService(repo)
+    board.create_task(HUMAN_PRINCIPAL, "api", "hier")
+    taken = board.next_task(Principal("agent"), "api")              # vor der Pause "alle"
+    scoped = Principal("agent", actor_id="agent", projects=frozenset({"api"}))
+    before = board.change_token_for(scoped)
+    board.create_task(HUMAN_PRINCIPAL, "web", "dort")
+    assert board.change_token_for(scoped) == before
+    board.create_task(HUMAN_PRINCIPAL, "web", "Pause alle", kind="control", control="pause", scope="all")
+    assert board.change_token_for(scoped) > before
+    since = repo.status_since_many([taken.id])
+    assert since[taken.id] is not None and board.status_since(taken) == since[taken.id]

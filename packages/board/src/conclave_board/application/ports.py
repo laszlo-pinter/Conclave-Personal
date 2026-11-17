@@ -74,8 +74,12 @@ class BoardRepository(Protocol):
         """Kontextmanager: Transaktion unter einer benannten Sperre (T5)."""
         ...
 
-    def change_token_for(self, project_slugs: list[str]) -> int:
-        """Aenderungszaehler nur ueber diese Projekte (T5)."""
+    def change_token_for(self, project_slugs: list[str], actor_id: str | None = None) -> int:
+        """Aenderungszaehler nur ueber diese Projekte, plus projektuebergreifende Steuertickets (T5)."""
+        ...
+
+    def status_since_many(self, task_ids: list[str]) -> dict:
+        """Letzter Statuswechsel je Ticket (T5)."""
         ...
 
     def get_setting(self, key: str) -> str | None: ...

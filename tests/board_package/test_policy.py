@@ -229,3 +229,41 @@ def test_every_approval_check_names_the_project(tmp_path):
         with pytest.raises(BoardError, match="Freigabe-Recht"):
             call()
     assert ("approve", None) not in board.policy.locks
+
+
+def test_change_token_notices_cross_project_control_tickets(board):
+    """Review V1: Steuertickets mit Geltung all/mine aus fremden Projekten zaehlen fuer den, den sie betreffen."""
+    scoped_ben = Principal("agent", actor_id="ben", projects=frozenset({"api"}))
+    scoped_anna = Principal("agent", actor_id="anna", projects=frozenset({"api"}))
+    before_ben, before_anna = board.change_token_for(scoped_ben), board.change_token_for(scoped_anna)
+    board.create_task(ANNA, "web", "Pause alle", kind="control", control="pause", scope="all")
+    assert board.change_token_for(scoped_ben) > before_ben
+    before_ben, before_anna = board.change_token_for(scoped_ben), board.change_token_for(scoped_anna)
+    board.create_task(BEN, "web", "Bens Pause", kind="control", control="pause", scope="mine")
+    assert board.change_token_for(scoped_ben) > before_ben            # betrifft Bens Agenten
+    assert board.change_token_for(scoped_anna) == before_anna         # Anna nicht
+    before = board.change_token_for(scoped_ben)
+    board.update_task(ANNA, "web#1", status="done")                   # Pause "alle" endet
+    assert board.change_token_for(scoped_ben) > before
+
+
+def test_stuck_reads_status_changes_in_one_query(board, monkeypatch):
+    """Review V3: eine Abfrage fuer alle Tickets statt des ganzen Verlaufs je Ticket."""
+    for i in range(3):
+        board.create_task(ANNA, "api", f"T{i}")
+        board.next_task(BEN_AGENT, "api")
+    calls = []
+    original = board._repo.status_since_many
+    monkeypatch.setattr(board._repo, "list_events", lambda *a: pytest.fail("Verlauf je Ticket geladen"))
+    monkeypatch.setattr(board._repo, "status_since_many", lambda ids: calls.append(ids) or original(ids))
+    assert len(board.stuck(ANNA, "api", timedelta(seconds=0))) == 3
+    assert len(calls) == 1 and len(calls[0]) == 3
+
+
+def test_reading_is_not_a_policy_action():
+    """Review V2: Lesen regelt Principal.projects; die Policy kennt keine Aktion "read"."""
+    import inspect
+
+    import conclave_board.application.board as service_module
+    assert '"read"' not in inspect.getsource(service_module)
+    assert "read" not in inspect.getsource(PersonalPolicy.can)
