@@ -35,10 +35,12 @@ geaendert, gilt die Pruefung nicht mehr fuer den neuen Stand -> 409 statt Uebers
 from __future__ import annotations
 
 import json
+import logging
 from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
 from typing import Callable
 
+from conclave_board.application.events import BoardEvent, Listener, events_for
 from conclave_board.application.policy import BoardPolicy, PersonalPolicy
 from conclave_board.application.ports import BoardRepository
 from conclave_board.domain.board import (
@@ -68,6 +70,7 @@ SYSTEM_ACTOR = "conclave"
 LAST_STATUS_KEY = "last_status"
 REWORK_STATES = ("rework", "failed")
 CHECKED_MAX = 200
+_events_log = logging.getLogger("conclave_board.events")
 
 
 class BoardError(ConclaveError):
@@ -97,6 +100,42 @@ class BoardService:
         self._now = now
         # Rechte und Regeln je Einsatz (T5); Standard sind die Regeln von Personal
         self.policy = policy or PersonalPolicy()
+        self._listeners: list[Listener] = []            # Ereignisse (T9), z. B. Webhooks
+
+    # ── Ereignisse (T9) ─────────────────────────────────────────────────
+
+    def add_listener(self, listener: Listener) -> None:
+        """Empfaenger fuer Ereignisse ohne Inhalte (siehe ``application/events.py``)."""
+        self._listeners.append(listener)
+
+    def _publish(self, events: list[BoardEvent]) -> None:
+        """Nach dem Speichern: an alle Empfaenger; ihre Fehler erreichen die Anfrage nie."""
+        for event in events:
+            for listener in list(self._listeners):
+                try:
+                    listener(event)
+                except Exception:  # noqa: BLE001 - ein Empfaenger darf das Schreiben nie scheitern lassen
+                    _events_log.exception("Empfaenger fuer %s an %s fehlgeschlagen", event.type, event.ref)
+
+    def _written(self, task: Task, history=(), comment: TaskComment | None = None) -> None:
+        if self._listeners:
+            self._publish(events_for(task, list(history), self._now(), comment))
+
+    def _update(self, task: Task, events, comment: TaskComment | None = None) -> bool:
+        """``update_task`` des Repositorys; bei Erfolg die Ereignisse dazu."""
+        events = list(events)
+        if not self._repo.update_task(task, events, comment):
+            return False
+        self._written(task, events, comment)
+        return True
+
+    def _claim_task(self, task_id: str, first: str, second: str, position: float, event: TaskEvent) -> bool:
+        """``claim_task`` des Repositorys (atomar); bei Erfolg der Statuswechsel als Ereignis."""
+        if not self._repo.claim_task(task_id, first, second, position, self._now(), event):
+            return False
+        if self._listeners:
+            self._written(self._repo.get_task_by_id(task_id), [event])
+        return True
 
     # ── Wer handelt ──────────────────────────────────────────────────────
 
@@ -447,6 +486,7 @@ class BoardService:
             task.initiative_id, task.initiative_slug, task.initiative_rank = chosen.id, chosen.slug, chosen.rank
         event = TaskEvent.create(task.id, "created", None, status, origin, actor_id=actor_id)
         created = self._repo.create_task(task, event)
+        self._written(created, [event])
         if kind == "control":
             self.policy.record(principal, "control", created.project_slug, created.ref,
                                {"type": control, "scope": scope})
@@ -562,7 +602,7 @@ class BoardService:
             if moved_column:
                 self.policy.check_status_change(self, principal, task, task.status)
             # Ticket und Verlauf zusammen, nur wenn seit dem Lesen niemand geaendert hat
-            if not self._repo.update_task(task, events):
+            if not self._update(task, events):
                 if self._repo.get_task_by_id(task.id) is None:
                     raise BoardError(f"Ticket '{ref}' nicht gefunden.", 404, "TaskNotFound")
                 raise BoardError(f"Ticket '{ref}' wurde inzwischen geaendert; bitte neu laden.", 409, "Conflict")
@@ -631,14 +671,14 @@ class BoardService:
         """Uebernehmen und Zustaendigkeit setzen (Policy), zusammen in einer Transaktion."""
         assignee = self.policy.assignee_for(principal)
         with self._repo.locked_task(task.id):
-            if not self._repo.claim_task(task.id, first, second, position, self._now(), event):
+            if not self._claim_task(task.id, first, second, position, event):
                 return False
             if assignee is not None and assignee != task.assignee:
                 claimed = self._repo.get_task_by_id(task.id)
                 origin, actor_id = self.actor(principal)
                 change = TaskEvent.create(task.id, "assignee", claimed.assignee, assignee, origin, actor_id=actor_id)
                 claimed.assignee = assignee
-                if not self._repo.update_task(claimed, [change]):
+                if not self._update(claimed, [change]):
                     raise BoardError(f"Ticket '{task.ref}' wurde inzwischen geaendert.", 409, "Conflict")
         return True
 
@@ -656,8 +696,7 @@ class BoardService:
         event = TaskEvent.create(task.id, "status", first, second, origin, actor_id=actor_id)
         claimed = (self._claim_with_assignee(task, first, second, self._end_position(task.project_id, second), event,
                                              principal) if principal is not None else
-                   self._repo.claim_task(task.id, first, second, self._end_position(task.project_id, second),
-                                         self._now(), event))
+                   self._claim_task(task.id, first, second, self._end_position(task.project_id, second), event))
         if claimed:
             return self._repo.get_task_by_id(task.id)
         current = self.get_task(ref)
@@ -703,7 +742,7 @@ class BoardService:
         task.status, task.assignee = self.flow.first, None
         task.position = self._end_position(task.project_id, task.status)
         task.updated_at = self._now()
-        if not self._repo.update_task(task, events):
+        if not self._update(task, events):
             raise BoardError(f"Ticket '{ref}' wurde inzwischen geaendert; bitte neu laden.", 409, "Conflict")
         self.policy.record(principal, "release", task.project_slug, task.ref, {})
         return task
@@ -774,7 +813,7 @@ class BoardService:
                 task.human = True
         task.updated_at = self._now()
         note = (TaskComment.create(task.id, comment, origin, actor_id=actor_id) if comment.strip() else None)
-        if not self._repo.update_task(task, events, note):
+        if not self._update(task, events, note):
             if self._repo.get_task_by_id(task.id) is None:
                 raise BoardError(f"Ticket '{ref}' nicht gefunden.", 404, "TaskNotFound")
             raise BoardError(f"Ticket '{ref}' wurde inzwischen geaendert; bitte neu laden.", 409, "Conflict")
@@ -834,7 +873,7 @@ class BoardService:
         by = f"{name} ({origin})" if name else origin
         task.control_ack_by, task.control_ack_at, task.updated_at = by, self._now(), self._now()
         event = TaskEvent.create(task.id, "control_ack", None, by, origin, actor_id=actor_id)
-        if not self._repo.update_task(task, [event], comment):
+        if not self._update(task, [event], comment):
             raise BoardError(f"Ticket '{task.ref}' wurde inzwischen geaendert; bitte erneut kommentieren.",
                              409, "Conflict")
         return comment
@@ -901,6 +940,7 @@ class BoardService:
             if self._repo.get_task_by_id(task.id) is None:
                 raise BoardError(f"Ticket '{task.ref}' nicht gefunden.", 404, "TaskNotFound")
             raise _forbidden("Ticket ist nur fuer Menschen: Agenten duerfen es nur lesen.")
+        self._written(task, (), comment)
         return comment
 
     def _own_comment(self, principal: Principal, comment_id: str) -> TaskComment:
@@ -956,7 +996,7 @@ class BoardService:
                 task.status = self.flow.last
                 task.position = self._end_position(task.project_id, self.flow.last)
                 task.updated_at = self._now()
-                if self._repo.update_task(task, [event]):
+                if self._update(task, [event]):
                     moved += 1
         if stored != self.flow.last:
             self._repo.set_setting(LAST_STATUS_KEY, self.flow.last)

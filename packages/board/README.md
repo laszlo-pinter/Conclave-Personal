@@ -47,6 +47,13 @@ changes to its rules:
   events (approval, rank, control, release) for an audit log. The default
   `PersonalPolicy` keeps the rules of Conclave Personal. The fixed rules for
   agents and the reviewer always apply.
+- **Events:** `BoardService.add_listener(fn)` calls `fn(BoardEvent)` after every
+  successful write: ticket or control ticket created, status changed, review
+  result, assignee changed, comment written, hint acknowledged. An event carries
+  no contents (no title, description or comment text), only reference, project,
+  origin, account, time and small metadata such as old and new status
+  (`conclave_board.application.events`). Listeners run in the request and must
+  return quickly; an exception is logged and never fails the write.
 - **Migrations:** `run_extension_migrations(conn, is_postgres, migrations,
   "<name>_migrations")` runs an extension's own series with its own tracking
   table, with the same transaction and lock rules as the board series.
