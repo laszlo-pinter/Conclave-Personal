@@ -61,6 +61,7 @@ async function _reloadBoard() {
   _board.projects = data.projects || [];
   _board.changes = data.changes;
   _board.control = data.control || {pauses: [], hints: []};
+  renderBoardReviewer(data.reviewer);
   _renderBoardProjects();
   await _loadBoardTasks();
   // Per Klick auf den Hintergrund geschlossen: nicht weiter nachladen
@@ -618,9 +619,47 @@ async function checkBoardNotifications() {
   }
 }
 
+// ── Laeuft der Reviewer? (W3) ────────────────────────────────────────────
+
+const NOTIFY_REVIEWER_OFF_KEY = 'conclave.board.notifyReviewerOff';
+
+function renderBoardReviewer(status) {
+  const el = document.getElementById('boardReviewer');
+  if (!el) return;
+  if (!status) { el.hidden = true; return; }
+  el.hidden = false;
+  el.dataset.state = status.state;
+  const text = status.state === 'active' ? t('board.reviewerActive')
+    : status.since ? t('board.reviewerOffSince', {date: _boardDate(status.since)}) : t('board.reviewerOff');
+  el.replaceChildren(_boardEl('span', 'board-review-symbol', status.state === 'active' ? '●' : '○'),
+                     _boardEl('span', '', text));
+}
+
+// Liegen Tickets in review und der Reviewer ist aus, meldet das ein Desktop-Hinweis: einmal je Ausfall
+// (gemerkt wird der Zeitpunkt des letzten Herzschlags, "nie" fuer einen Reviewer, der nie lief).
+async function checkReviewerOff() {
+  if (!boardNotifyEnabled()) return;                  // nur mit eingeschaltetem Hinweis; die Anzeige laedt das Board
+  const status = await req('GET', BOARD_API + '/reviewer');
+  if (_boardActive()) renderBoardReviewer(status);
+  if (status.state === 'active') { _store(NOTIFY_REVIEWER_OFF_KEY, null); return; }
+  const period = status.since || 'nie';
+  if (_store(NOTIFY_REVIEWER_OFF_KEY) === period) return;
+  const review = _board.statuses.length ? _board.statuses[_board.statuses.length - 2] : 'review';
+  const data = await req('GET', BOARD_API + '/tasks?status=' + encodeURIComponent(review));
+  const waiting = (data.tasks || []).filter(task => task.status === review);
+  if (!waiting.length) return;
+  _store(NOTIFY_REVIEWER_OFF_KEY, period);
+  if (document.visibilityState === 'visible' && document.hasFocus()) return;
+  const note = new Notification(t('board.notify.reviewerOffTitle'),
+                                {body: t('board.notify.reviewerOffBody', {n: waiting.length}), tag: 'conclave-reviewer-off'});
+  note.onclick = () => { window.focus(); switchTab('board'); note.close(); };
+}
+
 function startBoardNotifications() {
   renderBoardNotify();
   if (_notify.timer) return;
-  _notify.timer = setInterval(() => { checkBoardNotifications().catch(() => { /* naechster Versuch */ }); },
-                              NOTIFY_POLL_MS);
+  _notify.timer = setInterval(() => {
+    checkBoardNotifications().catch(() => { /* naechster Versuch */ });
+    checkReviewerOff().catch(() => { /* naechster Versuch */ });
+  }, NOTIFY_POLL_MS);
 }

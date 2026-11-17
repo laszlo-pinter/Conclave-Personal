@@ -722,11 +722,14 @@ class BoardService:
                blocking: int | None = None, suggestions: int | None = None, checked: str | None = "") -> Task:
         """Review-Status setzen, nur mit dem Reviewer-Zugang. Ergebnis, Kommentar (Herkunft
         ``reviewer``) und die Folgen (zurueck in die erste Spalte, Markierung nach drei roten)
-        gehen in einem Schritt."""
+        gehen in einem Schritt.
+
+        ``none`` (W3) gibt ein haengendes Review frei: nur aus ``running``, ohne Ergebnis und ohne
+        Rot-Zaehler; das Ticket bleibt in review und wird neu geprueft."""
         if not principal.is_reviewer:
             raise _forbidden("Den Review-Status setzt nur der Reviewer-Zugang.")
-        if state not in REVIEW_RESULTS:
-            raise _invalid(f"state muss einer von {REVIEW_RESULTS} sein.")
+        if state not in REVIEW_RESULTS and state != "none":
+            raise _invalid(f"state muss einer von {REVIEW_RESULTS} sein (oder none, um ein haengendes Review freizugeben).")
         for name, value in (("blocking", blocking), ("suggestions", suggestions)):
             if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 0):
                 raise _invalid(f"{name} muss eine ganze Zahl ab 0 sein.")
@@ -736,7 +739,7 @@ class BoardService:
             raise _invalid(f"checked: Text mit hoechstens {CHECKED_MAX} Zeichen.")
         if not isinstance(comment, str):
             raise _invalid("comment muss Text sein.")
-        if state != "running" and not comment.strip():
+        if state not in ("running", "none") and not comment.strip():
             raise _invalid("Ein Ergebnis braucht den Review-Kommentar.")
         try:
             check_field_limits(text=comment, what="Kommentar")
@@ -748,9 +751,12 @@ class BoardService:
         if task.status != self.flow.review:
             raise BoardError(f"Ticket '{ref}' steht nicht in '{self.flow.review}' (sondern in '{task.status}').",
                              409, "NotInReview")
+        if state == "none" and task.review_state != "running":
+            raise BoardError(f"Ticket '{ref}': nur ein laufendes Review (running) laesst sich freigeben, nicht "
+                             f"'{task.review_state}'.", 409, "ReviewNotRunning")
         origin, actor_id = self.actor(principal)
         events = [TaskEvent.create(task.id, "review_state", task.review_state, state, origin, actor_id=actor_id)]
-        task.review_state, task.review_at = state, self._now()
+        task.review_state, task.review_at = state, (None if state == "none" else self._now())
         if state != "running":
             task.review_blocking, task.review_suggestions, task.review_checked = blocking, suggestions, checked
         if state == "passed":
@@ -773,6 +779,28 @@ class BoardService:
                 raise BoardError(f"Ticket '{ref}' nicht gefunden.", 404, "TaskNotFound")
             raise BoardError(f"Ticket '{ref}' wurde inzwischen geaendert; bitte neu laden.", 409, "Conflict")
         return task
+
+    # ── Herzschlag des Reviewers (W3) ─────────────────────────────────────
+
+    REVIEWER_STALE_SECONDS = 180                        # drei verpasste Herzschlaege (alle 60 s): aus
+
+    def reviewer_heartbeat(self, principal: Principal, version: str = "", task: str | None = None) -> dict:
+        """Lebenszeichen des Reviewers (nur Reviewer-Zugang); im Speicher des Servers."""
+        if not principal.is_reviewer:
+            raise _forbidden("Den Herzschlag sendet nur der Reviewer-Zugang.")
+        if not isinstance(version, str) or len(version) > 50:
+            raise _invalid("version: Text mit hoechstens 50 Zeichen.")
+        if task is not None and (not isinstance(task, str) or len(task) > 200):
+            raise _invalid("task: Ticket-Referenz oder null.")
+        self._reviewer_seen = {"at": self._now(), "version": version, "task": task}
+        return self.reviewer_status()
+
+    def reviewer_status(self) -> dict:
+        """``active`` mit Version und laufendem Ticket, oder ``off`` (``since``: letzter Herzschlag, None = nie)."""
+        seen = getattr(self, "_reviewer_seen", None)
+        if seen and (self._now() - seen["at"]).total_seconds() <= self.REVIEWER_STALE_SECONDS:
+            return {"state": "active", "last_seen": _iso(seen["at"]), "version": seen["version"], "task": seen["task"]}
+        return {"state": "off", "since": _iso(seen["at"]) if seen else None}
 
     def last_review(self, ref: str) -> TaskComment | None:
         """Juengster Kommentar des Reviewers, z. B. fuer die Nacharbeit."""

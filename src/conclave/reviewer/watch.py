@@ -1,6 +1,9 @@
 """Die Schleife des Reviewers: Spalte ``review`` beobachten, Reviews starten, Zustand merken.
 
-Fragt ``GET /board/tasks?status=review`` mit dem Reviewer-Token ab (nie Agent- oder Mensch-Token).
+Fragt den Aenderungszaehler ``GET /board/v1/changes`` ab und liest die Spalte review
+(``GET /board/v1/tasks?status=review``) nur nach einer Aenderung, immer mit dem Reviewer-Token (nie
+Agent- oder Mensch-Token). Etwa alle 60 s meldet er sich mit einem Herzschlag (W3); beim Start gibt
+er haengende Reviews (``running`` ohne Lauf) frei und prueft sie neu.
 Fuer jedes neu nach review geschobene Ticket: Review-Status ``running``, Worktree(s) der genannten
 Commits, ``claude -p`` dort; der Reviewer setzt das Ergebnis selbst ueber ``conclave-mcp --reviewer``.
 Endet der Lauf ohne Ergebnis (Zeitlimit, Absturz), bleibt der Status ``running`` und ein Kommentar
@@ -16,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 import time
 import tomllib
 import urllib.error
@@ -42,6 +46,10 @@ def load_config(path: Path) -> dict:
 
 class Reviewer:
     """Ein Reviewer mit Konfiguration, Datenordner (Log, Zustand, Sperre, Worktrees) und Prompt-Ordner."""
+
+    current_task: str | None = None                   # fuer den Herzschlag: welches Ticket gerade geprueft wird
+    _last_changes = None
+    _heartbeat_ok = True
 
     def __init__(self, cfg: dict, data_dir: Path, base_dir: Path | None = None, prompt: str | None = None) -> None:
         """``prompt``: der Text (W2, Ressource oder ``prompt_file``); ohne ihn die alte Form aus ``base_dir``."""
@@ -120,7 +128,7 @@ class Reviewer:
 
     def task_url(self, key: str) -> str:
         project, number = key.split("#", 1)
-        return f"{self.cfg['conclave_url']}/board/projects/{urllib.parse.quote(project, safe='')}/tasks/{int(number)}"
+        return f"{self.cfg['conclave_url']}/board/v1/projects/{urllib.parse.quote(project, safe='')}/tasks/{int(number)}"
 
     def set_review(self, key: str, state: str, comment: str = "") -> None:
         self.post_json(self.task_url(key) + "/review", {"state": state, "comment": comment})
@@ -132,7 +140,7 @@ class Reviewer:
     def fetch_tasks(self) -> dict:
         """Tickets nach Referenz, mit Projekt, Titel, Status, "nur fuer Menschen" und Review-Status."""
         query = urllib.parse.urlencode({"status": self.cfg["review_status"]})
-        data = self.get_json(f"{self.cfg['conclave_url']}/board/tasks?{query}")
+        data = self.get_json(f"{self.cfg['conclave_url']}/board/v1/tasks?{query}")
         return {t["ref"]: {"project": t["project"], "title": t["title"], "status": t["status"],
                            "human": t["human"], "review_state": (t.get("review") or {}).get("state", "none")}
                 for t in data["tasks"]}
@@ -192,8 +200,10 @@ class Reviewer:
             servers = command.mcp_servers(self.cfg, [str(p) for _r, p in added], self.token_file())
             replace_private(self.mcp_config, json.dumps(servers).encode("utf-8"))
             self.log(f"{key}: review started ({checked}) in {worktree}")
+            self.current_task = key
             outcome = self.run_claude(key, self.command_for(task, key, checked, extra, missing), str(worktree))
         finally:
+            self.current_task = None
             for r, path in reversed(added):             # innere Worktrees zuerst
                 worktrees.remove_worktree(r, path)
         after = self.get_json(self.task_url(key))
@@ -276,7 +286,56 @@ class Reviewer:
             return True
         return {k: t["status"] for k, t in tasks.items()} != state["statuses"]
 
+    # ── Aenderungszaehler, Herzschlag, haengende Reviews (W3) ─────────────
+
+    def changes(self):
+        return self.get_json(f"{self.cfg['conclave_url']}/board/v1/changes")["changes"]
+
+    def send_heartbeat(self) -> None:
+        try:
+            self.post_json(f"{self.cfg['conclave_url']}/board/v1/reviewer/heartbeat",
+                           {"version": _version(), "task": self.current_task})
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            if self._heartbeat_ok:
+                self.log(f"heartbeat not sent: {e}")
+            self._heartbeat_ok = False
+            return
+        self._heartbeat_ok = True
+
+    def start_heartbeat(self) -> threading.Event:
+        """Herzschlag in einem eigenen Thread, auch waehrend ein Review laeuft (claude blockiert die Schleife)."""
+        stop = threading.Event()
+        every = float(self.cfg.get("heartbeat_seconds", 60))
+
+        def beat():
+            while not stop.wait(every):
+                self.send_heartbeat()
+
+        threading.Thread(target=beat, name="reviewer-heartbeat", daemon=True).start()
+        return stop
+
+    def recover_hanging(self, dry_run: bool) -> list[str]:
+        """Beim Start: ``running`` ohne Lauf (dieser Reviewer laeuft ja erst jetzt; die Sperre schliesst einen
+        zweiten aus) kommentieren und auf ``none`` zuruecksetzen; diese Tickets werden neu geprueft."""
+        hanging = [k for k, t in self.fetch_tasks().items()
+                   if t["status"] == self.cfg["review_status"] and t.get("review_state") == "running"]
+        for key in hanging:
+            if dry_run:
+                self.log(f"{key}: dry run, would release the hanging review")
+                continue
+            self.set_review(key, "none", "Review hing (Status „läuft“ ohne laufenden Reviewer, z. B. nach einem "
+                                         "Absturz oder Neustart). Es wird jetzt neu geprüft.")
+            self.log(f"{key}: hanging review released, reviewing again")
+        return [] if dry_run else hanging
+
     def poll_once(self, state, dry_run: bool):
+        if state is not None and not state["pending"]:
+            current = self.changes()
+            if current == self._last_changes:
+                return state                           # nichts geaendert: die Spalte nicht lesen
+            self._last_changes = current
+        else:
+            self._last_changes = self.changes()
         tasks = self.fetch_tasks()                     # nur die Spalte review; mit dem letzten Stand vergleichen
         if self.changed(state, tasks):
             state = self.check(state, tasks, dry_run)
@@ -288,6 +347,25 @@ class Reviewer:
         self.log(f"watching {BOARDS['conclave']['name']} {self.cfg['conclave_url']} for tickets moved to "
                  f"{self.cfg['review_status']!r}" + (" (dry run)" if dry_run else ""))
         state, reachable = self.load_state(), True
+        self.send_heartbeat()
+        stop = None if once else self.start_heartbeat()
+        try:
+            recovered = self.recover_hanging(dry_run)
+        except (urllib.error.URLError, OSError, ValueError, KeyError) as e:
+            self.log(f"hanging reviews not checked: {e}")
+            recovered = []
+        if recovered:
+            if state is None:                          # erster Lauf: das Board merken, die freigegebenen trotzdem pruefen
+                state = self.check(None, self.fetch_tasks(), dry_run)
+            state["pending"] = list(dict.fromkeys([*state["pending"], *recovered]))
+            self.save_state(state)
+        try:
+            self._loop(state, reachable, dry_run, once)
+        finally:
+            if stop is not None:
+                stop.set()
+
+    def _loop(self, state, reachable: bool, dry_run: bool, once: bool) -> None:
         while True:
             try:
                 state = self.poll_once(state, dry_run)
@@ -301,6 +379,14 @@ class Reviewer:
             if once:
                 return
             time.sleep(self.cfg["poll_seconds"])
+
+
+def _version() -> str:
+    try:
+        from importlib.metadata import version
+        return version("conclave-personal")
+    except Exception:  # noqa: BLE001 - Quellbaum ohne Installation
+        return "dev"
 
 
 def legacy_locks(cfg: dict, config_path: Path) -> tuple[Path, ...]:

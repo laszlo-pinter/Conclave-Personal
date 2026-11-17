@@ -2010,12 +2010,45 @@
                         "hints",
                         "pauses"
                       ]
+                    },
+                    "reviewer": {
+                      "type": "object",
+                      "required": [
+                        "state"
+                      ],
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "off"
+                          ]
+                        },
+                        "since": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "last_seen": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "version": {
+                          "type": "string"
+                        },
+                        "task": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
                     }
                   },
                   "required": [
                     "changes",
                     "control",
                     "projects",
+                    "reviewer",
                     "statuses"
                   ]
                 }
@@ -2027,6 +2060,130 @@
           }
         },
         "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
+      }
+    },
+    "/board/v1/reviewer": {
+      "get": {
+        "summary": "Laeuft der automatische Reviewer? ``active`` oder ``off`` mit ``since`` (W3).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_reviewer_status",
+        "responses": {
+          "200": {
+            "description": "Erfolg",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "state"
+                  ],
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "off"
+                      ]
+                    },
+                    "since": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "last_seen": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "task": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
+      }
+    },
+    "/board/v1/reviewer/heartbeat": {
+      "post": {
+        "summary": "Lebenszeichen des Reviewers, etwa alle 60 s (nur Reviewer-Zugang). Body: version, task.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_reviewer_heartbeat",
+        "responses": {
+          "200": {
+            "description": "Erfolg",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "state"
+                  ],
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "off"
+                      ]
+                    },
+                    "since": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "last_seen": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "task": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "string"
+                  },
+                  "task": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
       }
     },
     "/board/v1/changes": {
@@ -6105,7 +6262,8 @@
                       "running",
                       "passed",
                       "rework",
-                      "failed"
+                      "failed",
+                      "none"
                     ]
                   },
                   "comment": {
@@ -6532,12 +6690,45 @@
                         "hints",
                         "pauses"
                       ]
+                    },
+                    "reviewer": {
+                      "type": "object",
+                      "required": [
+                        "state"
+                      ],
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "off"
+                          ]
+                        },
+                        "since": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "last_seen": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "version": {
+                          "type": "string"
+                        },
+                        "task": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
                     }
                   },
                   "required": [
                     "changes",
                     "control",
                     "projects",
+                    "reviewer",
                     "statuses"
                   ]
                 }
@@ -6550,6 +6741,133 @@
         },
         "deprecated": true,
         "description": "Abgekuendigter Alias von /board/v1; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link. Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
+      }
+    },
+    "/board/reviewer": {
+      "get": {
+        "summary": "Laeuft der automatische Reviewer? ``active`` oder ``off`` mit ``since`` (W3).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_reviewer_status",
+        "responses": {
+          "200": {
+            "description": "Erfolg",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "state"
+                  ],
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "off"
+                      ]
+                    },
+                    "since": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "last_seen": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "task": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/reviewer; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link. Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
+      }
+    },
+    "/board/reviewer/heartbeat": {
+      "post": {
+        "summary": "Lebenszeichen des Reviewers, etwa alle 60 s (nur Reviewer-Zugang). Body: version, task.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_reviewer_heartbeat",
+        "responses": {
+          "200": {
+            "description": "Erfolg",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "state"
+                  ],
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "off"
+                      ]
+                    },
+                    "since": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "last_seen": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "task": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/reviewer/heartbeat; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "string"
+                  },
+                  "task": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
       }
     },
     "/board/changes": {
@@ -10661,7 +10979,8 @@
                       "running",
                       "passed",
                       "rework",
-                      "failed"
+                      "failed",
+                      "none"
                     ]
                   },
                   "comment": {

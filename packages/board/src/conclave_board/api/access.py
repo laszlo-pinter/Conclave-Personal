@@ -50,12 +50,15 @@ _BOARD_HUMAN_ONLY_RELATIVE = frozenset({
     ("PUT", "/projects/<slug>/initiatives/<initiative>"),
     # Haengende Tickets (T5): anzeigen und freigeben
     ("GET", "/stuck"),
+    # Laeuft der Reviewer? (W3, fuer die UI)
+    ("GET", "/reviewer"),
     ("POST", "/projects/<slug>/tasks/<int:number>/release"),
 })
 
-# Nur der Reviewer-Zugang (P3); Agent und Mensch lehnt der BoardService ab
+# Nur der Reviewer-Zugang (P3, W3); Agent und Mensch lehnt der BoardService ab
 _BOARD_REVIEWER_ONLY_RELATIVE = frozenset({
     ("POST", "/projects/<slug>/tasks/<int:number>/review"),
+    ("POST", "/reviewer/heartbeat"),
 })
 
 # Was der Reviewer-MCP braucht: lesen, kommentieren, Review-Status
@@ -66,6 +69,8 @@ _BOARD_REVIEWER_ALLOWED_RELATIVE = _BOARD_REVIEWER_ONLY_RELATIVE | frozenset({
     ("GET", "/projects/<slug>/tasks/<int:number>/history"),
     ("POST", "/projects/<slug>/tasks/<int:number>/comments"),
     ("GET", "/projects/<slug>/initiatives/<initiative>/tasks/<int:number>"),
+    # Aenderungszaehler (W3): erst nach einer Aenderung die Spalte review lesen
+    ("GET", "/changes"),
 })
 
 

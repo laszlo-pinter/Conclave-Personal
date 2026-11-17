@@ -34,6 +34,12 @@ BOOLEAN = {"type": "boolean"}
 TIME = {"type": "string", "format": "date-time", "nullable": True}
 
 
+# Laeuft der Reviewer? (W3): active mit last_seen, version, task; off mit since (letzter Herzschlag oder null)
+REVIEWER = {"type": "object", "required": ["state"], "properties": {
+    "state": {"type": "string", "enum": ["active", "off"]},
+    "since": TIME, "last_seen": TIME, "version": STRING, "task": _nullable(STRING)}}
+
+
 def _object(properties: dict, required=None, *, closed: bool = False) -> dict:
     schema = {"type": "object", "properties": properties,
               "required": sorted(properties if required is None else required)}
@@ -101,7 +107,11 @@ def _q(name: str, schema: dict, description: str = "") -> dict:
 BOARD_SCHEMAS: dict[tuple[str, str], dict] = {
     ("GET", ""): {"response": _object({"statuses": {"type": "array", "items": STRING},
                                        "projects": {"type": "array", "items": PROJECT},
-                                       "changes": INTEGER, "control": CONTROL})},
+                                       "changes": INTEGER, "control": CONTROL, "reviewer": REVIEWER})},
+    ("GET", "/reviewer"): {"response": REVIEWER},
+    ("POST", "/reviewer/heartbeat"): {
+        "request": _object({"version": STRING, "task": _nullable(STRING)}, required=[], closed=True),
+        "response": REVIEWER},
     ("GET", "/changes"): {"response": _object({"changes": INTEGER})},
     ("POST", "/projects"): {"status": 201, "request": _object({"slug": STRING, "name": STRING}),
                             "response": PROJECT},
@@ -152,7 +162,7 @@ BOARD_SCHEMAS: dict[tuple[str, str], dict] = {
     ("GET", "/projects/<slug>/tasks/<int:number>/history"): {
         "response": _object({"history": {"type": "array", "items": EVENT}})},
     ("POST", "/projects/<slug>/tasks/<int:number>/review"): {
-        "request": _object({"state": {"type": "string", "enum": list(REVIEW_RESULTS)}, "comment": STRING,
+        "request": _object({"state": {"type": "string", "enum": [*REVIEW_RESULTS, "none"]}, "comment": STRING,
                             "blocking": INTEGER, "suggestions": INTEGER, "checked": STRING},
                            required=["state"], closed=True),
         "response": TASK},

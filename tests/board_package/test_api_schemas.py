@@ -90,6 +90,8 @@ def test_every_v1_route_answers_as_its_schema_says(api):
     taken = api("POST", "/next", AGENT, body={"project": "api"})
     assert taken["task"]["ref"] == "api#1"
     api("GET", "/stuck", query="?project=api&minutes=1")
+    api("GET", "/reviewer")
+    api("POST", "/reviewer/heartbeat", REVIEWER, body={"version": "w3", "task": None})
     released = api("POST", "/projects/{slug}/tasks/{number}/release", body={})
     assert released["status"] == "todo"
     taken = api("POST", "/next", AGENT, body={"project": "api"})

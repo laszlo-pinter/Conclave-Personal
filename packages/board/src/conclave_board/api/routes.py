@@ -133,7 +133,24 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
         b = _board()
         projects = [p for p in b.list_projects() if g.principal.sees(p.slug)]
         return jsonify({"statuses": list(b.flow.statuses), "projects": [project_to_dict(p) for p in projects],
-                        "changes": b.change_token_for(g.principal), "control": b.control_state(principal=g.principal)}), 200
+                        "changes": b.change_token_for(g.principal), "control": b.control_state(principal=g.principal),
+                        "reviewer": b.reviewer_status()}), 200
+
+    @bp.get("/reviewer")
+    def board_reviewer_status():
+        """Laeuft der automatische Reviewer? ``active`` oder ``off`` mit ``since`` (W3)."""
+        return jsonify(_board().reviewer_status()), 200
+
+    @bp.post("/reviewer/heartbeat")
+    def board_reviewer_heartbeat():
+        """Lebenszeichen des Reviewers, etwa alle 60 s (nur Reviewer-Zugang). Body: version, task."""
+        if not g.principal.is_reviewer:                    # vor jeder Pruefung des Body
+            raise BoardError("Den Herzschlag sendet nur der Reviewer-Zugang.", 403, "Forbidden")
+        body = _json_object()
+        unknown = set(body) - {"version", "task"}
+        if unknown:
+            raise BoardError(f"Unbekannte Felder: {', '.join(sorted(unknown))}.", 400, "ValidationError")
+        return jsonify(_board().reviewer_heartbeat(g.principal, body.get("version") or "", body.get("task"))), 200
 
     def _control(slug: str | None = None) -> dict:
         """Offene Pausen und unquittierte Hinweise des Menschen (P6), in jeder Board-Antwort."""

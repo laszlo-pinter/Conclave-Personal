@@ -57,8 +57,10 @@ def _enable(page):
     page.locator("#boardNotify[aria-pressed='true']").wait_for(timeout=10000)
 
 
-def _notes(page):
-    return page.evaluate("window.__notes")
+def _notes(page, *, reviewer_off: bool = False):
+    """Hinweise zu Review-Ergebnissen; mit ``reviewer_off`` nur die zu einem ausgefallenen Reviewer (W3)."""
+    notes = page.evaluate("window.__notes")
+    return [n for n in notes if (n["title"] == "Reviewer aus") == reviewer_off]
 
 
 @pytest.mark.parametrize("scheme", ["dark", "light"])
