@@ -87,7 +87,8 @@ def cfg(server, repo, tmp_path):
     return {"board": "conclave", "conclave_url": server, "conclave_mcp_exe": "conclave-mcp.exe",
             "reviewer_token_file": str(tmp_path / "rt"), "review_status": "review", "author": "CD · auto-review",
             "review_timeout_minutes": 1, "max_reviews_per_hour": 6, "projects": {"api": str(repo[0])},
-            "prompt_file": "reviewer-prompt-conclave.md"}
+            "prompt_file": "reviewer-prompt-conclave.md",
+            "claude_exe": "claude"}                 # wird nie aufgerufen; in der CI gibt es kein claude
 
 
 @pytest.fixture

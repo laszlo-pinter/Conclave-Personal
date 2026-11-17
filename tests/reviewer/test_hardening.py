@@ -77,8 +77,8 @@ def test_board_only_with_the_reviewer_token_and_git_isolated(tmp_path):
 
 
 def test_child_python_is_not_pythonw(monkeypatch):
-    monkeypatch.setattr(sys, "executable", r"C:\Python\pythonw.exe")
-    assert command.child_python().endswith("python.exe")
+    monkeypatch.setattr(sys, "executable", str(Path("/opt/py/pythonw.exe")))
+    assert Path(command.child_python()) == Path("/opt/py/python.exe")
     monkeypatch.setattr(sys, "executable", "/usr/bin/python3")
     assert Path(command.child_python()) == Path("/usr/bin/python3")
 
