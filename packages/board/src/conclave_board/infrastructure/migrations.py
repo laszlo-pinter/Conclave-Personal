@@ -37,6 +37,7 @@ beruehrt Tabellen der anderen.
 from __future__ import annotations
 
 import logging
+import re
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Callable
@@ -329,8 +330,13 @@ def _add_board_initiatives(connection, is_postgres: bool) -> None:
 
 # ── Runner ────────────────────────────────────────────────────────────────
 
+# Erweiterungen bringen eigene Reihen mit eigener Tracking-Tabelle (T4), z. B. board_team_migrations
+_EXTENSION_TABLE = re.compile(r"^[a-z][a-z0-9_]{0,40}_migrations$")
+
+
 def _table(table: str) -> str:
-    if table not in _TABLES:
+    """Nur bekannte oder als Erweiterung gueltige Namen landen in SQL-Texten."""
+    if table not in _TABLES and not _EXTENSION_TABLE.fullmatch(table):
         raise ValueError(f"Unbekannte Migrationstabelle: {table!r}")
     return table
 
@@ -520,6 +526,17 @@ def run_series(connection, is_postgres: bool, migrations: list[Migration], table
             _advisory_lock(connection, is_postgres, False)
         except Exception as unlock_error:  # noqa: BLE001 - Sperre faellt spaetestens mit der Verbindung
             logger.warning("Advisory-Sperre der Migrationen nicht freigegeben: %s", unlock_error)
+
+
+def run_extension_migrations(connection, is_postgres: bool, migrations: list[Migration], table: str) -> list[str]:
+    """Migrationsreihe einer Erweiterung mit eigener Tracking-Tabelle (``<name>_migrations``, T4).
+
+    Gleiches Verhalten wie die Board-Reihe (eine Transaktion je Migration, fail-closed,
+    Advisory-Sperre); keine Uebernahme alter IDs. Erst nach der Board-Reihe aufrufen, wenn
+    die Erweiterung Board-Tabellen referenziert."""
+    if table in _TABLES:
+        raise ValueError(f"{table} gehoert nicht zu einer Erweiterung.")
+    return run_series(connection, is_postgres, migrations, _table(table))
 
 
 def run_board_migrations(connection, is_postgres: bool = False,

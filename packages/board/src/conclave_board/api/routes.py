@@ -57,6 +57,23 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
     def _handle_board_error(e):
         return jsonify({"error": str(e), "type": e.type}), e.status
 
+    @bp.before_request
+    def _check_project_scope():
+        """Zugaenge mit eingeschraenkten Projekten (T4) sehen fremde Projekte nicht: 404."""
+        principal = g.get("principal")
+        if principal is None or principal.projects is None or board is None:
+            return
+        board.require_visible(principal, (request.view_args or {}).get("slug"))
+        board.require_visible(principal, request.args.get("project") or None)
+        if request.method == "POST" and request.path.endswith("/tasks"):
+            body = request.get_json(silent=True)
+            if isinstance(body, dict) and isinstance(body.get("project"), str):
+                board.require_visible(principal, body["project"])
+
+    def _visible(tasks):
+        principal = g.get("principal")
+        return [t for t in tasks if principal is None or principal.sees(t.project_slug)]
+
     @bp.after_request
     def _mark_alias(response):
         """Der Alias /board antwortet wie v1, mit Hinweis auf die Abkuendigung."""
@@ -109,7 +126,8 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
     def board_overview():
         """Spalten, Projekte und Aenderungszaehler des Boards."""
         b = _board()
-        return jsonify({"statuses": list(b.flow.statuses), "projects": [project_to_dict(p) for p in b.list_projects()],
+        projects = [p for p in b.list_projects() if g.principal.sees(p.slug)]
+        return jsonify({"statuses": list(b.flow.statuses), "projects": [project_to_dict(p) for p in projects],
                         "changes": b.change_token(), "control": b.control_state()}), 200
 
     def _control(slug: str | None = None) -> dict:
@@ -145,7 +163,7 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
         """Tickets in Board-Reihenfolge; Filter project, status (mehrfach), include_done."""
         statuses = request.args.getlist("status") or None
         slug = request.args.get("project") or None
-        tasks = _board().list_tasks(slug, statuses, include_done=_flag("include_done"))
+        tasks = _visible(_board().list_tasks(slug, statuses, include_done=_flag("include_done")))
         return jsonify({"tasks": [task_to_dict(t) for t in tasks], "control": _control(slug)}), 200
 
     @bp.post("/tasks")
@@ -167,7 +185,7 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
     def board_search():
         """Suche in Titel, Tags, Beschreibung und Kommentaren."""
         slug = request.args.get("project") or None
-        tasks = _board().search(request.args.get("q", ""), slug, include_done=_flag("include_done", True))
+        tasks = _visible(_board().search(request.args.get("q", ""), slug, include_done=_flag("include_done", True)))
         return jsonify({"tasks": [task_to_dict(t) for t in tasks], "control": _control(slug)}), 200
 
     @bp.post("/next")

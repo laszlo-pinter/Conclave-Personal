@@ -75,6 +75,13 @@ type = "forbidden"
 source_modules = ["conclave_board"]
 forbidden_modules = ["anthropic", "openai", "httpx", "mcp"]
 
+[[tool.importlinter.contracts]]
+name = "Kern und Personal importieren das Team-Paket nicht (Plan 2.3)"
+type = "forbidden"
+source_modules = ["conclave_board", "conclave"]
+forbidden_modules = ["conclave_board_team"]
+allow_indirect_imports = true
+
 [tool.pytest.ini_options]
 pythonpath = ["src", "packages/board/src"]
 testpaths = ["tests"]

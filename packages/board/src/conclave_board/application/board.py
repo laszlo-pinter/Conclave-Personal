@@ -95,8 +95,14 @@ class BoardService:
 
     @staticmethod
     def actor(principal: Principal) -> tuple[str, str]:
-        """(origin, actor_id); actor_id bereitet den Mehrbenutzerbetrieb vor."""
-        return principal.role, principal.role
+        """(origin, actor_id): Herkunft aus der Rolle, ``actor_id`` = Konto, sonst die Rolle (Personal)."""
+        return principal.role, principal.actor_id or principal.role
+
+    @staticmethod
+    def require_visible(principal: Principal, slug: str | None) -> None:
+        """Fremde Projekte gibt es fuer diesen Zugang nicht: 404 wie bei einem fehlenden (T4)."""
+        if slug is not None and not principal.sees(slug):
+            raise BoardError(f"Projekt '{slug}' nicht gefunden.", 404, "ProjectNotFound")
 
     @staticmethod
     def can_approve(principal: Principal, project: Project | None = None) -> bool:
@@ -520,8 +526,11 @@ class BoardService:
         if second == self.flow.last:
             self._require_approval(principal)
         origin, actor_id = self.actor(principal)
+        self.require_visible(principal, slug)
         if task is not None:
             ticket = self.get_task(task)                       # 400 bei ungueltiger, 404 bei fehlender Referenz
+            if not principal.sees(ticket.project_slug):
+                raise BoardError(f"Ticket '{task}' nicht gefunden.", 404, "TaskNotFound")
             if slug and ticket.project_slug != slug:
                 raise _invalid(f"Ticket '{task}' gehoert nicht zum Projekt '{slug}'.")
             if ticket.kind == "control":
@@ -532,7 +541,7 @@ class BoardService:
         # Nacharbeit aus dem Review zuerst, auch ueber Projekte hinweg; sonst Board-Reihenfolge
         candidates = sorted(self.list_tasks(slug, [first]), key=lambda t: t.review_state not in REWORK_STATES)
         for candidate in candidates:
-            if candidate.human or candidate.kind == "control":
+            if candidate.human or candidate.kind == "control" or not principal.sees(candidate.project_slug):
                 continue
             position = self._end_position(candidate.project_id, second)
             event = TaskEvent.create(candidate.id, "status", first, second, origin, actor_id=actor_id)

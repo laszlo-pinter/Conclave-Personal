@@ -38,6 +38,14 @@ def test_board_package_does_not_import_conclave():
     assert offending == []
 
 
+def test_core_and_personal_do_not_import_the_team_package():
+    """Plan 2.3: Das Team-Paket haengt vom Kern ab, nie umgekehrt; Personal kennt es nicht."""
+    personal = ROOT / "src" / "conclave"
+    offending = [(p.relative_to(ROOT).as_posix(), name) for p in [*_files(), *sorted(personal.rglob("*.py"))]
+                 for name in _imports(p) if name.split(".")[0] == "conclave_board_team"]
+    assert offending == []
+
+
 def test_board_package_does_not_import_provider_sdks():
     offending = [(p.relative_to(BOARD).as_posix(), name) for p in _files() for name in _imports(p)
                  if name.split(".")[0] in ("anthropic", "openai", "httpx", "mcp")]

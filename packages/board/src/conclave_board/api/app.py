@@ -63,8 +63,12 @@ def _limit_off(value: str | None) -> bool:
 
 def create_board_app(board, auth_service: Authenticator | None, *, allowed_hosts: str = "",
                      rate_limit: str = DEFAULT_RATE_LIMIT, agent_rate_limit: str = DEFAULT_AGENT_RATE_LIMIT,
-                     allow_unauthenticated: bool = False) -> Flask:
-    """Baut die Board-App. Ohne ``auth_service`` nur mit ``allow_unauthenticated=True`` (Tests)."""
+                     allow_unauthenticated: bool = False, blueprints=()) -> Flask:
+    """Baut die Board-App. Ohne ``auth_service`` nur mit ``allow_unauthenticated=True`` (Tests).
+
+    ``blueprints``: Erweiterungen (T4), z. B. Konten und Tokens. Ihre Routen laufen durch
+    dieselbe Anmeldung und Zugriffsschicht; fuer Agent und Reviewer stehen sie nicht auf der
+    Allowlist, sind also nur mit einem Mensch-Zugang erreichbar."""
     if auth_service is None and not allow_unauthenticated:
         raise ValueError("create_board_app braucht einen auth_service; ohne Anmeldung nur mit "
                          "allow_unauthenticated=True (Tests).")
@@ -187,4 +191,6 @@ def create_board_app(board, auth_service: Authenticator | None, *, allowed_hosts
         return jsonify({"role": g.principal.role}), 200
 
     register_board_api(app, board)
+    for blueprint in blueprints:
+        app.register_blueprint(blueprint)
     return app

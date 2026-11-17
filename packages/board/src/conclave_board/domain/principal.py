@@ -21,7 +21,21 @@ Role = Literal["human", "agent", "reviewer"]
 
 @dataclass(frozen=True)
 class Principal:
+    """Rolle und, wenn eine Erweiterung Konten kennt, Konto und erlaubte Projekte (T4).
+
+    - ``actor_id``: Konto, in dessen Namen die Anfrage laeuft (bei Agenten: der Mensch,
+      dem der Agent gehoert). ``None`` = ohne Konten wie in Personal; dann gilt die Rolle.
+    - ``projects``: Projekte, die dieser Zugang sieht. ``None`` = alle (Personal).
+    - ``name``: Anzeigename des Kontos fuer Meldungen, sonst leer.
+    """
     role: Role
+    actor_id: str | None = None
+    projects: frozenset[str] | None = None
+    name: str = ""
+
+    def sees(self, project_slug: str) -> bool:
+        """Darf dieser Zugang das Projekt sehen? Fremde Projekte gelten als nicht vorhanden."""
+        return self.projects is None or project_slug in self.projects
 
     @property
     def is_human(self) -> bool:
