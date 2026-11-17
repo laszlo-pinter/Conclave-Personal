@@ -1277,18 +1277,23 @@ def create_app(handler: CLIHandler, auth_service=None,
         if not workspace_root_path.is_dir():
             return jsonify({"files": [], "limits": limits}), 200
         files = []
+        def _inside(path: str):
+            """Dieselbe Regel wie beim Lesen: aufgeloest im Workspace, nicht geschuetzt (#95)."""
+            rel = os.path.relpath(path, WORKSPACE).replace("\\", "/")
+            return rel, resolve_workspace_path(rel, root=workspace_root_path)
+
         for root, dirs, fnames in os.walk(WORKSPACE):
-            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            # Verzeichnis-Links und Junctions nach draussen gar nicht erst betreten
+            dirs[:] = [d for d in dirs if not d.startswith(".") and _inside(os.path.join(root, d))[1] is not None]
             for f in fnames:
                 path = os.path.join(root, f)
                 if is_hidden_workspace_path(pathlib.Path(path), root=workspace_root_path):
                     continue
-                rel = os.path.relpath(path, WORKSPACE).replace("\\", "/")
-                # Wie beim Lesen: nur was im Workspace bleibt (Symlinks nach draussen fehlen hier, #95)
-                if os.path.islink(path) and resolve_workspace_path(rel, root=workspace_root_path) is None:
-                    continue
+                rel, resolved = _inside(path)
+                if resolved is None:
+                    continue                       # Link nach draussen oder geschuetzte Datei
                 try:
-                    info = os.stat(path)          # einmal; kaputte oder verschwundene Eintraege uebergehen
+                    info = os.stat(resolved.path)  # einmal; kaputte oder verschwundene Eintraege uebergehen
                 except OSError:
                     continue
                 if not stat.S_ISREG(info.st_mode):

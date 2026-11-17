@@ -137,3 +137,57 @@ def test_retry_after_in_the_body_has_the_same_bounds():
 
 def test_max_retry_after_is_finite_and_positive():
     assert math.isfinite(MAX_RETRY_AFTER_SECONDS) and MAX_RETRY_AFTER_SECONDS > 0
+
+
+# ── Review #95 V1: Verzeichnis-Links und geschuetzte Dateien ────────────────
+
+def _outside_dir(tmp_path):
+    outside = tmp_path / "draussen"
+    outside.mkdir()
+    (outside / "fremd.md").write_text("fremd", encoding="utf-8")
+    return outside
+
+
+def test_directory_symlink_out_of_the_workspace_is_not_listed(client, ws, tmp_path):
+    outside = _outside_dir(tmp_path)
+    try:
+        os.symlink(outside, ws / "linkdir", target_is_directory=True)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"Verzeichnis-Symlinks hier nicht moeglich: {exc}")
+    paths = [f["path"] for f in client.get("/workspace").get_json()["files"]]
+    assert paths == ["notiz.md"]
+    assert client.get("/workspace/linkdir/fremd.md").status_code == 403
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Junctions gibt es nur unter Windows")
+def test_junction_out_of_the_workspace_is_not_listed(client, ws, tmp_path):
+    import subprocess
+    outside = _outside_dir(tmp_path)
+    made = subprocess.run(["cmd", "/c", "mklink", "/J", str(ws / "junction"), str(outside)],
+                          capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if made.returncode != 0:
+        pytest.skip(f"Junction nicht angelegt: {made.stderr or made.stdout}")
+    paths = [f["path"] for f in client.get("/workspace").get_json()["files"]]
+    assert paths == ["notiz.md"]
+    assert client.get("/workspace/junction/fremd.md").status_code == 403
+
+
+def test_directory_link_inside_the_workspace_is_listed_like_reading(client, ws):
+    (ws / "unter").mkdir()
+    (ws / "unter" / "a.md").write_text("a", encoding="utf-8")
+    try:
+        os.symlink(ws / "unter", ws / "alias", target_is_directory=True)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"Verzeichnis-Symlinks hier nicht moeglich: {exc}")
+    paths = [f["path"] for f in client.get("/workspace").get_json()["files"]]
+    assert "unter/a.md" in paths                                  # das Ziel selbst; os.walk folgt Links nicht
+    assert client.get("/workspace/alias/a.md").status_code == 200
+
+
+def test_protected_files_in_the_workspace_are_not_listed(client, ws, monkeypatch):
+    secret = ws / "api.token"
+    secret.write_text("cvh_geheim", encoding="utf-8")
+    monkeypatch.setenv("CONCLAVE_API_TOKEN_FILE", str(secret))
+    paths = [f["path"] for f in client.get("/workspace").get_json()["files"]]
+    assert "api.token" not in paths and "notiz.md" in paths
+    assert client.get("/workspace/api.token").status_code == 403
