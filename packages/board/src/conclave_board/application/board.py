@@ -119,9 +119,11 @@ class BoardService:
 
     def create_project(self, principal: Principal, slug: str, name: str) -> Project:
         self._require_approval(principal)
+        if not isinstance(slug, str) or not isinstance(name, str):   # fehlt oder kein Text: 400 statt 500
+            raise _invalid("slug und name muessen Text sein.")
         try:
             project = Project.create(slug, name)
-        except ValueError as e:
+        except (ValueError, TypeError) as e:
             raise _invalid(str(e)) from None
         if self._repo.get_project(slug) is not None:
             raise BoardError(f"Projekt '{slug}' gibt es schon.", 409, "ProjectExists")
@@ -394,6 +396,8 @@ class BoardService:
             raise _forbidden(f"Agenten legen Tickets nur in '{self.flow.first}' an; "
                              "weiter geht es ueber next_task.")
         origin, actor_id = self.actor(principal)
+        if not isinstance(title, str):                  # fehlt oder kein Text: 400 statt 500 (T3-Review)
+            raise _invalid("title muss Text sein.")
         try:
             check_field_limits(title=title, text=description, tags=tags)
             task = Task.create(project, title, status, description=description or "", tags=tuple(tags or ()),
@@ -439,7 +443,7 @@ class BoardService:
             # Agenten uebernehmen ein Ticket sichtbar und atomar, statt "doing" zu ueberspringen (#51)
             if principal.is_agent and status != task.status and task.status == self.flow.first:
                 raise _forbidden(f"Erst uebernehmen: conclave_board_next(task=\"{task.ref}\") "
-                                 "bzw. POST /board/next mit task.")
+                                 "bzw. POST /board/v1/next mit task.")
         if human is not None:
             human = bool(human)
             if principal.is_agent and task.human and not human:

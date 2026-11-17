@@ -371,6 +371,18 @@ def path_param_types(path: str) -> dict[str, str]:
             for conv, name in re.findall(r'<(?:(\w+):)?(\w+)>', path)}
 
 
+def _schemas_for(r: dict) -> dict:
+    """Eintrag aus SCHEMAS, fuer Board-Routen ergaenzt um die Schemas des Board-Pakets (T3)."""
+    from conclave_board.api.schemas import VERSIONS_SCHEMA, schema_for
+    from conclave_board.api.versions import ALIAS_PREFIX, VERSIONS_PATH
+    entry = dict(SCHEMAS.get((r["method"], r["key_path"]), {}))
+    if r["path"] == VERSIONS_PATH:
+        entry.update(VERSIONS_SCHEMA)
+    elif r["v1"] or r["alias"]:
+        entry.update(schema_for(r["method"], r["key_path"][len(ALIAS_PREFIX):]))
+    return entry
+
+
 def build_spec(routes: list[dict], *, title: str = "Conclave API",
                description: str = "Host-gesteuertes Multi-Model-Konversationssystem") -> dict:
     from conclave_board.api.versions import ALIAS_SUNSET, V1_PREFIX
@@ -387,12 +399,13 @@ def build_spec(routes: list[dict], *, title: str = "Conclave API",
         tag = parts[0] if parts else "other"
         tags_set.add(tag)
 
-        # Response-Body aus SCHEMAS (falls vorhanden)
+        # Response-Body aus SCHEMAS bzw. den Schemas des Board-Pakets (falls vorhanden)
         schema_key = (r["method"], r["key_path"])
-        resp_200 = {"description": "Erfolg"}
-        if schema_key in SCHEMAS and "response" in SCHEMAS[schema_key]:
-            resp_schema = SCHEMAS[schema_key]["response"]
-            resp_200["content"] = {"application/json": {"schema": {"type": "object", **resp_schema}}}
+        entry = _schemas_for(r)
+        success = str(entry.get("status", 200))
+        resp_ok = {"description": "Erfolg, ohne Inhalt" if success == "204" else "Erfolg"}
+        if "response" in entry:
+            resp_ok["content"] = {"application/json": {"schema": {"type": "object", **entry["response"]}}}
 
         operation = {
             "summary": doc,
@@ -400,10 +413,10 @@ def build_spec(routes: list[dict], *, title: str = "Conclave API",
             # v1 eigene IDs; der Alias behaelt die bisherigen (unveraendert fuer bestehende Clients)
             "operationId": ("v1_" + r["func"]) if r["v1"] else r["func"],
             "responses": {
-                "200": resp_200,
+                success: resp_ok,
             },
         }
-        for code, text in SCHEMAS.get(schema_key, {}).get("errors", {}).items():
+        for code, text in entry.get("errors", {}).items():
             operation["responses"][code] = {"description": text}
         # Agent-Zugang (api/access.py): alles ausser der Allowlist ergibt 403 HumanOnly
         if r["alias"]:
@@ -423,10 +436,12 @@ def build_spec(routes: list[dict], *, title: str = "Conclave API",
                 {"name": p, "in": "path", "required": True, "schema": {"type": types.get(p, "string")}}
                 for p in params
             ]
+        if entry.get("query"):
+            operation.setdefault("parameters", []).extend(entry["query"])
 
         # Request-Body aus SCHEMAS
-        if schema_key in SCHEMAS and "request" in SCHEMAS[schema_key]:
-            req_schema = SCHEMAS[schema_key]["request"]
+        if "request" in entry:
+            req_schema = entry["request"]
             # required: True nur wenn das Schema mindestens ein required-Feld definiert
             # (sonst ist der Body optional).
             body_required = bool(req_schema.get("required"))

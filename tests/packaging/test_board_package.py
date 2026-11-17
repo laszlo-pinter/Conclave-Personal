@@ -1,6 +1,7 @@
 """T1: Board-Paket im Repo (packages/board): Version im Gleichschritt, Wheel-Pruefung, Lizenzpruefung."""
 
 import importlib.util
+import json
 import tomllib
 import zipfile
 from pathlib import Path
@@ -130,3 +131,30 @@ def test_copyleft_is_not_on_the_list():
 def test_installed_board_dependencies_pass():
     """In der Testumgebung sind alle Abhaengigkeiten des Board-Pakets installiert."""
     assert check_board_licenses.check(set()) == []
+
+
+# ── Selbsttest der API-Pruefung (scripts/release/board_api_breaking_variants.py) ──
+
+def test_breaking_variants_each_change_the_v1_contract(tmp_path):
+    variants = _load("board_api_breaking_variants")
+    source = BOARD / "openapi" / "board-v1.json"
+    assert variants.main([str(source), str(tmp_path)]) == 0
+    original = json.loads(source.read_text(encoding="utf-8"))
+    files = sorted(tmp_path.glob("*.json"))
+    assert [f.stem for f in files] == sorted(variants.VARIANTS)
+    for path in files:
+        changed = json.loads(path.read_text(encoding="utf-8"))
+        assert changed != original, path.name
+    task_get = "/board/v1/projects/{slug}/tasks/{number}"
+    removed = json.loads((tmp_path / "removed-response-field.json").read_text(encoding="utf-8"))
+    schema = removed["paths"][task_get]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+    assert "ref" not in schema["properties"] and "ref" not in schema["required"]
+    required = json.loads((tmp_path / "new-required-request-field.json").read_text(encoding="utf-8"))
+    body = required["paths"]["/board/v1/tasks"]["post"]["requestBody"]["content"]["application/json"]["schema"]
+    assert "priority" in body["required"]
+
+
+def test_ci_script_runs_the_self_test_before_the_comparison():
+    script = (ROOT / "scripts" / "release" / "check_board_api.sh").read_text(encoding="utf-8")
+    assert script.index("board_api_breaking_variants.py") < script.index('git describe --tags')
+    assert '"$WORK/oasdiff" breaking "$SPEC" "$SPEC" --fail-on ERR' in script

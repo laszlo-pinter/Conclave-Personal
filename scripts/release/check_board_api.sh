@@ -5,6 +5,9 @@
 # Datei dort noch nicht (erstes Release mit v1), der Stand auf origin/main. Fehlt sie
 # ueberall, fuehrt dieser Stand v1 ein und es gibt nichts zu vergleichen.
 #
+# Vorher ein Selbsttest unabhaengig von Tag und main: absichtlich brechende Varianten
+# (scripts/release/board_api_breaking_variants.py) muessen scheitern.
+#
 # oasdiff wird als Release-Archiv geladen und gegen die veroeffentlichte Pruefsumme
 # geprueft (Version und SHA-256 hier fest, wie die Actions per Commit gepinnt sind).
 set -euo pipefail
@@ -14,6 +17,25 @@ OASDIFF_SHA256="a8023002fcb2eaa7f5758148a9303cb63d33b939886df312268bc0fc7b939140
 SPEC="packages/board/openapi/board-v1.json"
 WORK="${RUNNER_TEMP:-$(mktemp -d)}/board-api"
 mkdir -p "$WORK"
+
+archive="oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz"
+curl -fsSL -o "$WORK/$archive" \
+  "https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/${archive}"
+echo "${OASDIFF_SHA256}  $WORK/$archive" | sha256sum --check --strict
+tar -xzf "$WORK/$archive" -C "$WORK" oasdiff
+
+# Selbsttest: Jede absichtlich brechende Variante muss scheitern, der unveraenderte Vertrag nicht
+"$WORK/oasdiff" breaking "$SPEC" "$SPEC" --fail-on ERR
+python3 scripts/release/board_api_breaking_variants.py "$SPEC" "$WORK/variants"
+for variant in "$WORK"/variants/*.json; do
+  if "$WORK/oasdiff" breaking "$SPEC" "$variant" --fail-on ERR > "$WORK/variant.log" 2>&1; then
+    echo "::error::oasdiff meldet keinen Bruch fuer $(basename "$variant")"
+    cat "$WORK/variant.log"
+    exit 1
+  fi
+  echo "Selbsttest ok: $(basename "$variant") wird als Bruch erkannt:"
+  sed 's/^/    /' "$WORK/variant.log"
+done
 
 base=""
 tag="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
@@ -28,11 +50,5 @@ if [ -z "$base" ]; then
 fi
 git show "$base:$SPEC" > "$WORK/base.json"
 echo "Vergleich gegen $base"
-
-archive="oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz"
-curl -fsSL -o "$WORK/$archive" \
-  "https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/${archive}"
-echo "${OASDIFF_SHA256}  $WORK/$archive" | sha256sum --check --strict
-tar -xzf "$WORK/$archive" -C "$WORK" oasdiff
 
 "$WORK/oasdiff" breaking "$WORK/base.json" "$SPEC" --fail-on ERR

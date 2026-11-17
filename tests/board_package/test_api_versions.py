@@ -113,3 +113,13 @@ def test_personal_spec_marks_the_alias_as_deprecated():
     assert alias and all(op["deprecated"] is True for op in alias)
     v1 = [op for p, item in spec["paths"].items() if p.startswith("/board/v1") for op in item.values()]
     assert len(v1) == len(alias) and not any(op.get("deprecated") for op in v1)
+
+
+def test_alias_headers_on_401_and_403(client):
+    """Review T3: Auch Antworten der Zugriffsschicht (vor dem Blueprint) tragen die Abkuendigung."""
+    unauthenticated = client.get("/board/tasks")
+    forbidden = client.get("/board", headers=_h(AGENT))
+    assert unauthenticated.status_code == 401 and forbidden.status_code == 403
+    for resp in (unauthenticated, forbidden):
+        assert resp.headers["Deprecation"] == ALIAS_DEPRECATION and resp.headers["Sunset"] == ALIAS_SUNSET
+    assert "Deprecation" not in client.get("/board/v1/tasks").headers

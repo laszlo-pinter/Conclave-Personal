@@ -57,7 +57,7 @@ Wer schreibt, ergibt sich aus dem Token, nicht aus einem Feld der Anfrage:
   stehen ebenfalls im Verlauf. Jedes Ticket zeigt, wer es angelegt hat
   (`created_by`); Agenten legen Tickets nur in der ersten Spalte an.
 - **Projekt-Verlauf:** Anlegen, Umbenennen und gelöschte Tickets eines Projekts
-  (`GET /board/projects/<slug>/history`).
+  (`GET /board/v1/projects/<slug>/history`).
 - **Gleichzeitig ändern:** Wer beim Ändern die gelesene `version` mitgibt,
   überschreibt keine Änderung, die inzwischen ein anderer gemacht hat (`409`).
 - Löschen, Projekte verwalten und der Import sind dem Menschen vorbehalten.
@@ -80,7 +80,7 @@ gilt auch hier: Ein Agent, der `api.token` lesen kann, hat den Mensch-Zugang.
 3. **Projekt anlegen** (Mensch-Token), z. B.:
 
    ```bash
-   curl -X POST http://localhost:8000/board/projects \
+   curl -X POST http://localhost:8000/board/v1/projects \
      -H "Authorization: Bearer <Mensch-Token>" -H "Content-Type: application/json" \
      -d '{"slug": "api", "name": "API"}'
    ```
@@ -241,7 +241,7 @@ Ein Kanzo-Board lässt sich übernehmen. Kanzo exportiert, Conclave importiert
 
 ```bash
 kanzo export -f json -o board.json            # optional -p <projekt>
-curl -X POST http://localhost:8000/board/import \
+curl -X POST http://localhost:8000/board/v1/import \
   -H "Authorization: Bearer <Mensch-Token>" -H "Content-Type: application/json" \
   --data-binary @board.json
 ```
@@ -249,7 +249,7 @@ curl -X POST http://localhost:8000/board/import \
 In PowerShell:
 
 ```powershell
-Invoke-RestMethod -Method Post http://localhost:8000/board/import `
+Invoke-RestMethod -Method Post http://localhost:8000/board/v1/import `
   -Headers @{Authorization = "Bearer <Mensch-Token>"} -ContentType "application/json" `
   -InFile board.json
 ```

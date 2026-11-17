@@ -103,7 +103,7 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `GET` | `/workspace/<path:filepath>` | Liest eine Datei aus dem Workspace. |
 | `POST` | `/workspace/<path:filepath>` | Schreibt eine Datei in den Workspace (`content` als Text). Agenten: nur neue Dateien oder unter `agents/`, sonst `403`. |
 | `DELETE` | `/workspace/<path:filepath>` | Löscht eine Datei aus dem Workspace. |
-| `GET` | `/board/v1/v1` | Spalten, Projekte und Änderungszähler (nur Mensch). |
+| `GET` | `/board/v1` | Spalten, Projekte und Änderungszähler (nur Mensch). |
 | `GET` | `/board/v1/changes` | Änderungszähler; die UI lädt neu, wenn er steigt (nur Mensch). |
 | `POST` | `/board/v1/projects` | Projekt anlegen (nur Mensch). |
 | `PUT` | `/board/v1/projects/<slug>` | Projekt umbenennen (nur Mensch). |
@@ -151,7 +151,7 @@ parallel. Die CI vergleicht `board-v1.json` mit dem letzten Release-Stand
 (`oasdiff breaking`); eine brechende Änderung lässt sie scheitern. Die Datei
 entsteht mit `python scripts/gen-openapi.py` aus den registrierten Routen.
 
-*Stand: v0.6.0 (2026-10-29), abgeglichen mit `openapi.json`*
+*Stand: nach v0.7.0 (Board-API v1, 2026-11-17), abgeglichen mit `openapi.json` und `board-v1.json`*
 
 ## Kontext-Reports
 
