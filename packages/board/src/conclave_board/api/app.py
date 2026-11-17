@@ -71,7 +71,8 @@ def _limit_off(value: str | None) -> bool:
 def create_board_app(board, auth_service: Authenticator | None, *, allowed_hosts: str = "",
                      rate_limit: str = DEFAULT_RATE_LIMIT, agent_rate_limit: str = DEFAULT_AGENT_RATE_LIMIT,
                      allow_unauthenticated: bool = False, blueprints=(), trusted_proxies: str = "",
-                     auth_failure_limit: str = DEFAULT_AUTH_FAILURE_LIMIT, account_rate_limit: str = "") -> Flask:
+                     auth_failure_limit: str = DEFAULT_AUTH_FAILURE_LIMIT, account_rate_limit: str = "",
+                     proxy_only: bool = False) -> Flask:
     """Baut die Board-App. Ohne ``auth_service`` nur mit ``allow_unauthenticated=True`` (Tests).
 
     ``blueprints``: Erweiterungen (T4), z. B. Konten und Tokens. Ihre Routen laufen durch
@@ -81,7 +82,8 @@ def create_board_app(board, auth_service: Authenticator | None, *, allowed_hosts
     T7: ``trusted_proxies`` (IPs oder Netze, Komma-getrennt): nur von dort gelten ``X-Forwarded-For``
     und ``-Proto``. ``auth_failure_limit``: so viele fehlgeschlagene Anmeldungen je IP, danach 429
     bis zum Ende des Fensters. ``account_rate_limit``: Anfragen je Konto (``actor_id``), ueber alle
-    seine Tokens; leer = aus."""
+    seine Tokens; leer = aus. ``proxy_only``: Verbindungen nur vom Proxy oder von Loopback annehmen
+    (sonst 403), damit Tokens nicht unverschluesselt an TLS vorbei durchs Netz gehen."""
     if auth_service is None and not allow_unauthenticated:
         raise ValueError("create_board_app braucht einen auth_service; ohne Anmeldung nur mit "
                          "allow_unauthenticated=True (Tests).")
@@ -89,14 +91,22 @@ def create_board_app(board, auth_service: Authenticator | None, *, allowed_hosts
     app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
     hosts = parse_allowed_hosts(allowed_hosts)
     proxies = parse_networks(trusted_proxies)
+    if proxy_only and not proxies:
+        raise ValueError("proxy_only braucht trusted_proxies.")
     if proxies:
-        app.wsgi_app = TrustedProxyMiddleware(app.wsgi_app, proxies)
+        app.wsgi_app = TrustedProxyMiddleware(app.wsgi_app, proxies, proxy_only=proxy_only)
     failure_limit, account_limit = parse_limit(auth_failure_limit), parse_limit(account_rate_limit)
     failures = WindowCounter(failure_limit) if failure_limit else None
     per_account = WindowCounter(account_limit) if account_limit else None
 
+    def _blocked() -> bool:
+        return failures is not None and failures.over(f"ip:{request.remote_addr or ''}")
+
     def _principal() -> Principal | None:
-        """Einmal je Anfrage pruefen (Rate-Limit und Anmeldung fragen beide)."""
+        """Einmal je Anfrage pruefen (Rate-Limit und Anmeldung fragen beide). Eine gesperrte Adresse
+        loest gar keine Token-Pruefung aus (kein DB-Zugriff, kein Audit-Eintrag)."""
+        if "auth" not in g and _blocked():
+            g.auth = None
         if "auth" not in g:
             g.auth = HUMAN_PRINCIPAL if auth_service is None else                 auth_service.authenticate(request_token(request.headers))
         return g.auth
@@ -150,7 +160,7 @@ def create_board_app(board, auth_service: Authenticator | None, *, allowed_hosts
         if request.method in ("GET", "HEAD") and request.path in PUBLIC_GET_PATHS:
             return
         address = f"ip:{request.remote_addr or ''}"
-        if failures is not None and failures.over(address):
+        if _blocked():
             return _too_many(failures, "Zu viele fehlgeschlagene Anmeldungen von dieser Adresse.")
         principal = _principal()
         if principal is None:

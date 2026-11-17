@@ -74,6 +74,14 @@ def _in_networks(address: str, networks) -> bool:
     return any(ip in net for net in networks)
 
 
+def _is_loopback(address: str) -> bool:
+    import ipaddress
+    try:
+        return ipaddress.ip_address(address.strip().strip("[]")).is_loopback
+    except ValueError:
+        return False
+
+
 FORWARDED_HEADERS = ("HTTP_X_FORWARDED_FOR", "HTTP_X_FORWARDED_PROTO", "HTTP_X_FORWARDED_HOST",
                      "HTTP_X_FORWARDED_PORT", "HTTP_X_FORWARDED_PREFIX", "HTTP_FORWARDED", "HTTP_X_REAL_IP")
 
@@ -86,13 +94,20 @@ class TrustedProxyMiddleware:
     Forwarded-Header entfernt, bevor die App sie sehen kann.
     """
 
-    def __init__(self, app, networks) -> None:
+    def __init__(self, app, networks, *, proxy_only: bool = False) -> None:
         self.app = app
         self.networks = tuple(networks)
+        self.proxy_only = proxy_only
 
     def __call__(self, environ, start_response):
         peer = environ.get("REMOTE_ADDR", "")
-        if self.networks and _in_networks(peer, self.networks):
+        from_proxy = bool(self.networks) and _in_networks(peer, self.networks)
+        if self.proxy_only and not from_proxy and not _is_loopback(peer):
+            body = b'{"error": "Nur ueber den TLS-Proxy erreichbar.", "type": "ProxyRequired"}'
+            start_response("403 Forbidden", [("Content-Type", "application/json"),
+                                             ("Content-Length", str(len(body)))])
+            return [body]
+        if from_proxy:
             hops = [h.strip() for h in environ.get("HTTP_X_FORWARDED_FOR", "").split(",") if h.strip()]
             for hop in reversed(hops):
                 if not _in_networks(hop, self.networks):
@@ -149,10 +164,19 @@ class WindowCounter:
             now = self._window()
             window, n = self._windows.get(key, (now, 0))
             n = n + 1 if window == now else 1
-            if len(self._windows) >= self.MAX_KEYS and key not in self._windows:
-                self._windows = {k: v for k, v in self._windows.items() if v[0] == now}
+            if key not in self._windows and len(self._windows) >= self.MAX_KEYS:
+                self._evict(now)
             self._windows[key] = (now, n)
             return n > self.count
+
+    def _evict(self, now: int) -> None:
+        """Speicher hart begrenzt: alte Fenster weg; reicht das nicht, das aelteste Zehntel (Einfuegereihenfolge)."""
+        stale = [k for k, (window, _n) in self._windows.items() if window != now]
+        for k in stale:
+            del self._windows[k]
+        if len(self._windows) >= self.MAX_KEYS:
+            for k in list(self._windows)[: max(1, self.MAX_KEYS // 10)]:
+                del self._windows[k]
 
     def retry_after(self) -> int:
         return int(self.period - (self._clock() % self.period)) + 1

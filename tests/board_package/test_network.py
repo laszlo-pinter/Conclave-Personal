@@ -145,3 +145,46 @@ def test_window_counter_resets_with_the_next_window():
     assert [counter.hit("a") for _ in range(3)] == [False, False, True] and counter.over("a")
     now[0] = 61
     assert not counter.over("a") and counter.hit("a") is False
+
+
+# ── Review T7 ────────────────────────────────────────────────────────────
+
+class _CountingAuth:
+    def __init__(self):
+        self.calls = 0
+
+    def authenticate(self, token):
+        self.calls += 1
+        return Principal("human", actor_id="anna") if token == HUMAN else None
+
+
+def test_a_blocked_address_does_not_trigger_token_checks(tmp_path):
+    """V1: nach der Sperre keine Token-Pruefung mehr (kein DB-Zugriff, kein Audit)."""
+    auth = _CountingAuth()
+    client = _app(tmp_path, auth=auth, auth_failure_limit="2 per minute").test_client()
+    for _ in range(2):
+        _get(client, token="cvh_falsch")
+    calls = auth.calls
+    for token in ("cvh_falsch", HUMAN):
+        assert _get(client, token=token).status_code == 429
+    assert auth.calls == calls
+
+
+def test_proxy_only_refuses_direct_connections(tmp_path):
+    """V3: im Netzbetrieb nur ueber den Proxy (oder von Loopback), nie direkt per HTTP."""
+    client = _app(tmp_path, trusted_proxies=PROXY, proxy_only=True).test_client()
+    direct = _get(client, peer="10.0.0.99")
+    assert direct.status_code == 403 and direct.get_json()["type"] == "ProxyRequired"
+    assert _get(client, peer=PROXY, headers={"X-Forwarded-For": "198.51.100.7"}).status_code == 200
+    assert _get(client, peer="127.0.0.1").status_code == 200
+    with pytest.raises(ValueError, match="trusted_proxies"):
+        _app(tmp_path, proxy_only=True)
+
+
+def test_window_counter_memory_stays_bounded(monkeypatch):
+    """V5: auch wenn alle Schluessel im aktuellen Fenster liegen."""
+    monkeypatch.setattr(WindowCounter, "MAX_KEYS", 50)
+    counter = WindowCounter((5, 60), clock=lambda: 0.0)
+    for n in range(500):
+        counter.hit(f"k{n}")
+    assert len(counter._windows) <= 50 and counter.over("k499") is False and "k499" in counter._windows
