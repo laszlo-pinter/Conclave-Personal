@@ -7,8 +7,9 @@ Ohne Oberflaeche, nur REST. Die Daten liegen in SQLite (Standard) oder PostgreSQ
 (``--dsn`` bzw. ``CONCLAVE_BOARD_DSN``). Im Konfigurationsordner liegen
 ``secret.key`` und die drei Token-Dateien (``api.token``, ``agent.token``,
 ``reviewer.token``); sie entstehen beim ersten Start, nur fuer den Benutzer lesbar.
-Konten und Tokens pro Person (T4), die CLI fuer Menschen (T6) und der Netzbetrieb
-hinter einem Proxy (T7) folgen.
+Hinter einem Proxy gelten ``X-Forwarded-*`` nur von den Adressen in
+``CONCLAVE_BOARD_TRUSTED_PROXIES`` (T7). Konten, Tokens pro Person und die Startpruefung
+fuer den Netzbetrieb bringt das Team-Paket mit.
 """
 
 from __future__ import annotations
@@ -86,12 +87,13 @@ def load_auth(config_dir: Path):
 
 
 def build_app(*, db_path: Path | None = None, dsn: str = "", config_dir: Path | None = None,
-              allowed_hosts: str = ""):
+              allowed_hosts: str = "", trusted_proxies: str = ""):
     from conclave_board.api.app import create_board_app
 
     config_dir = config_dir or default_config_dir()
     board, _connection = open_board(db_path=db_path, dsn=dsn, config_dir=config_dir)
-    return create_board_app(board, load_auth(config_dir), allowed_hosts=allowed_hosts)
+    return create_board_app(board, load_auth(config_dir), allowed_hosts=allowed_hosts,
+                            trusted_proxies=trusted_proxies)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -115,7 +117,8 @@ def main(argv: list[str] | None = None) -> int:
         from conclave_board.infrastructure.log import configure_logging
         configure_logging("INFO")
         app = build_app(db_path=args.db, dsn=args.dsn, config_dir=args.config_dir,
-                        allowed_hosts=os.environ.get("CONCLAVE_BOARD_ALLOWED_HOSTS", ""))
+                        allowed_hosts=os.environ.get("CONCLAVE_BOARD_ALLOWED_HOSTS", ""),
+                        trusted_proxies=os.environ.get("CONCLAVE_BOARD_TRUSTED_PROXIES", ""))
         from waitress import serve
         print(f"conclave-board-server {__version__} auf http://{args.host}:{args.port}", file=sys.stderr)
         serve(app, host=args.host, port=args.port)

@@ -18,6 +18,14 @@ The server binds to `127.0.0.1` by default. Additional allowed `Host` headers
 (comma-separated, optionally with port) go into `CONCLAVE_BOARD_ALLOWED_HOSTS`;
 `localhost`, `127.0.0.1` and `[::1]` are always allowed.
 
+Behind a proxy (T7): `X-Forwarded-For` and `X-Forwarded-Proto` count only on
+connections from the addresses or networks in `CONCLAVE_BOARD_TRUSTED_PROXIES`
+(comma-separated); from any other source they are dropped. The rate limit counts
+per token (without a valid token per address); after 10 failed logins per minute
+an address gets 429 until the minute ends. `create_board_app` takes
+`trusted_proxies`, `auth_failure_limit` and `account_rate_limit` (requests per
+`actor_id` across all its tokens, off by default).
+
 ## Extension points
 
 Extensions (such as an internal team package) plug into the board without

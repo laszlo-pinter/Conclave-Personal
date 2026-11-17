@@ -47,3 +47,112 @@ def request_token(headers) -> str | None:
     if auth_header.startswith("Bearer "):
         return auth_header[7:]
     return headers.get("X-API-Key")
+
+
+# ── Netzbetrieb hinter einem Proxy (T7) ─────────────────────────────────
+
+def parse_networks(raw: str) -> tuple:
+    """``"10.0.0.5, 10.1.0.0/16"`` -> Netze; leer = keiner. Ungueltige Eintraege sind ein Fehler."""
+    import ipaddress
+    networks = []
+    for entry in (raw or "").split(","):
+        entry = entry.strip()
+        if entry:
+            try:
+                networks.append(ipaddress.ip_network(entry, strict=False))
+            except ValueError:
+                raise ValueError(f"Kein gueltiger Proxy-Eintrag: {entry!r} (IP-Adresse oder Netz wie 10.0.0.0/24).") from None
+    return tuple(networks)
+
+
+def _in_networks(address: str, networks) -> bool:
+    import ipaddress
+    try:
+        ip = ipaddress.ip_address(address.strip().strip("[]"))
+    except ValueError:
+        return False
+    return any(ip in net for net in networks)
+
+
+FORWARDED_HEADERS = ("HTTP_X_FORWARDED_FOR", "HTTP_X_FORWARDED_PROTO", "HTTP_X_FORWARDED_HOST",
+                     "HTTP_X_FORWARDED_PORT", "HTTP_X_FORWARDED_PREFIX", "HTTP_FORWARDED", "HTTP_X_REAL_IP")
+
+
+class TrustedProxyMiddleware:
+    """``X-Forwarded-For`` und ``-Proto`` gelten nur, wenn die Verbindung von einem konfigurierten Proxy kommt.
+
+    Dann ist die Client-Adresse der rechteste Eintrag in ``X-Forwarded-For``, der kein Proxy ist,
+    und ``X-Forwarded-Proto`` (letzter Wert) das Schema. Von jeder anderen Quelle werden alle
+    Forwarded-Header entfernt, bevor die App sie sehen kann.
+    """
+
+    def __init__(self, app, networks) -> None:
+        self.app = app
+        self.networks = tuple(networks)
+
+    def __call__(self, environ, start_response):
+        peer = environ.get("REMOTE_ADDR", "")
+        if self.networks and _in_networks(peer, self.networks):
+            hops = [h.strip() for h in environ.get("HTTP_X_FORWARDED_FOR", "").split(",") if h.strip()]
+            for hop in reversed(hops):
+                if not _in_networks(hop, self.networks):
+                    environ["REMOTE_ADDR"] = hop
+                    break
+            proto = environ.get("HTTP_X_FORWARDED_PROTO", "").split(",")[-1].strip().lower()
+            if proto in ("http", "https"):
+                environ["wsgi.url_scheme"] = proto
+        for name in FORWARDED_HEADERS:
+            environ.pop(name, None)                           # die App liest sie nie selbst
+        return self.app(environ, start_response)
+
+
+# ── Zaehler je Zeitfenster (T7: Fehlversuche je IP, Anfragen je Konto) ────
+
+_PERIODS = {"second": 1, "minute": 60, "hour": 3600}
+
+
+def parse_limit(value: str) -> tuple[int, int] | None:
+    """``"10 per minute"`` -> (10, 60); leer, ``off``, ``none`` oder ``0`` -> ``None`` (aus)."""
+    value = (value or "").strip().lower()
+    if value in ("", "off", "none", "0"):
+        return None
+    parts = value.replace("/", " per ").split()
+    if len(parts) != 3 or parts[1] != "per" or not parts[0].isdigit() or parts[2].rstrip("s") not in _PERIODS:
+        raise ValueError(f"Limit wie '10 per minute' erwartet, nicht {value!r}.")
+    return int(parts[0]), _PERIODS[parts[2].rstrip("s")]
+
+
+class WindowCounter:
+    """Feste Zeitfenster je Schluessel, im Speicher, threadsicher. ``hit`` zaehlt und sagt, ob das
+    Limit ueberschritten ist; ``over`` prueft nur. Der Speicher bleibt begrenzt."""
+
+    MAX_KEYS = 100_000
+
+    def __init__(self, limit: tuple[int, int], clock=None) -> None:
+        import threading
+        import time
+        self.count, self.period = limit
+        self._clock = clock or time.monotonic
+        self._lock = threading.Lock()
+        self._windows: dict[str, tuple[int, int]] = {}
+
+    def _window(self) -> int:
+        return int(self._clock() // self.period)
+
+    def over(self, key: str) -> bool:
+        with self._lock:
+            window, n = self._windows.get(key, (-1, 0))
+            return window == self._window() and n >= self.count
+
+    def hit(self, key: str) -> bool:
+        with self._lock:
+            now = self._window()
+            window, n = self._windows.get(key, (now, 0))
+            n = n + 1 if window == now else 1
+            if len(self._windows) >= self.MAX_KEYS and key not in self._windows:
+                self._windows = {k: v for k, v in self._windows.items() if v[0] == now}
+            self._windows[key] = (now, n)
+            return n > self.count
+
+    def retry_after(self) -> int:
+        return int(self.period - (self._clock() % self.period)) + 1

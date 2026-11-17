@@ -9,7 +9,9 @@ Dieselben Schutzregeln wie in Personal, beschraenkt auf die Board-Routen:
 - POST nur mit JSON oder eigenem Client-Header (B3)
 - Anmeldung fuer jede Route ausser ``/health`` (B12); die Rolle kommt allein aus dem Token
 - Agent und Reviewer nur auf ihren Allowlists (Default deny, Z2, P3)
-- Rate-Limit je Zugang und IP, eigenes Limit fuer Agenten (R11)
+- Rate-Limit je Token (ohne Token je IP), eigenes Limit fuer Agenten (R11, T7)
+- Sperre nach Fehlversuchen je IP vor der Anmeldung, Limit je Konto danach (T7)
+- Proxy-Header nur vom konfigurierten Proxy (T7, ``trusted_proxies``)
 - Groessenlimit je Anfrage, eigene Grenze fuer den Import (R6)
 - Sicherheits-Header; Fehlertexte ohne Keys und URLs
 
@@ -20,6 +22,7 @@ ein; Konten und Tokens pro Person folgen in T4.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 from typing import Protocol
@@ -33,7 +36,10 @@ from conclave_board.api.access import (
 )
 from conclave_board.api.routes import register_board_api
 from conclave_board.api.versions import VERSIONS_PATH, board_versions
-from conclave_board.api.security import CLIENT_HEADER, MAX_REQUEST_BYTES, is_host_allowed, parse_allowed_hosts, request_token
+from conclave_board.api.security import (
+    CLIENT_HEADER, MAX_REQUEST_BYTES, TrustedProxyMiddleware, WindowCounter, is_host_allowed, parse_allowed_hosts,
+    parse_limit, parse_networks, request_token,
+)
 from conclave_board.domain.errors import AuthenticationError, public_message
 from conclave_board.domain.principal import HUMAN_PRINCIPAL, Principal
 from conclave_board.infrastructure.log import get_logger
@@ -46,6 +52,7 @@ REVIEWER_ALLOWED = BOARD_REVIEWER_ALLOWED | WHOAMI
 
 DEFAULT_RATE_LIMIT = "300 per minute"
 DEFAULT_AGENT_RATE_LIMIT = "60 per minute"
+DEFAULT_AUTH_FAILURE_LIMIT = "10 per minute"     # danach ist die IP fuer den Rest des Fensters gesperrt (T7)
 
 # Nur JSON, kein Browser-Inhalt: nichts laden, nicht einbetten
 CONTENT_SECURITY_POLICY = "default-src 'none'; frame-ancestors 'none'"
@@ -63,23 +70,36 @@ def _limit_off(value: str | None) -> bool:
 
 def create_board_app(board, auth_service: Authenticator | None, *, allowed_hosts: str = "",
                      rate_limit: str = DEFAULT_RATE_LIMIT, agent_rate_limit: str = DEFAULT_AGENT_RATE_LIMIT,
-                     allow_unauthenticated: bool = False, blueprints=()) -> Flask:
+                     allow_unauthenticated: bool = False, blueprints=(), trusted_proxies: str = "",
+                     auth_failure_limit: str = DEFAULT_AUTH_FAILURE_LIMIT, account_rate_limit: str = "") -> Flask:
     """Baut die Board-App. Ohne ``auth_service`` nur mit ``allow_unauthenticated=True`` (Tests).
 
     ``blueprints``: Erweiterungen (T4), z. B. Konten und Tokens. Ihre Routen laufen durch
     dieselbe Anmeldung und Zugriffsschicht; fuer Agent und Reviewer stehen sie nicht auf der
-    Allowlist, sind also nur mit einem Mensch-Zugang erreichbar."""
+    Allowlist, sind also nur mit einem Mensch-Zugang erreichbar.
+
+    T7: ``trusted_proxies`` (IPs oder Netze, Komma-getrennt): nur von dort gelten ``X-Forwarded-For``
+    und ``-Proto``. ``auth_failure_limit``: so viele fehlgeschlagene Anmeldungen je IP, danach 429
+    bis zum Ende des Fensters. ``account_rate_limit``: Anfragen je Konto (``actor_id``), ueber alle
+    seine Tokens; leer = aus."""
     if auth_service is None and not allow_unauthenticated:
         raise ValueError("create_board_app braucht einen auth_service; ohne Anmeldung nur mit "
                          "allow_unauthenticated=True (Tests).")
     app = Flask(__name__, static_folder=None)
     app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
     hosts = parse_allowed_hosts(allowed_hosts)
+    proxies = parse_networks(trusted_proxies)
+    if proxies:
+        app.wsgi_app = TrustedProxyMiddleware(app.wsgi_app, proxies)
+    failure_limit, account_limit = parse_limit(auth_failure_limit), parse_limit(account_rate_limit)
+    failures = WindowCounter(failure_limit) if failure_limit else None
+    per_account = WindowCounter(account_limit) if account_limit else None
 
     def _principal() -> Principal | None:
-        if auth_service is None:
-            return HUMAN_PRINCIPAL
-        return auth_service.authenticate(request_token(request.headers))
+        """Einmal je Anfrage pruefen (Rate-Limit und Anmeldung fragen beide)."""
+        if "auth" not in g:
+            g.auth = HUMAN_PRINCIPAL if auth_service is None else                 auth_service.authenticate(request_token(request.headers))
+        return g.auth
 
     def _role() -> str:
         principal = _principal()
@@ -101,7 +121,14 @@ def create_board_app(board, auth_service: Authenticator | None, *, allowed_hosts
             return False
         return _limit_off(rate_limit)
 
-    Limiter(lambda: f"{_role()}:{get_remote_address()}", app=app, default_limits=[_current_limit],
+    def _limit_key() -> str:
+        """Je Token (als Fingerabdruck, nie im Klartext); ohne gueltiges Token je IP."""
+        token = request_token(request.headers)
+        if _principal() is not None and token:
+            return f"{_role()}:token:{hashlib.sha256(token.encode('utf-8')).hexdigest()[:24]}"
+        return f"anonymous:{get_remote_address()}"
+
+    Limiter(_limit_key, app=app, default_limits=[_current_limit],
             default_limits_exempt_when=_exempt, storage_uri="memory://")
 
     @app.before_request
@@ -122,10 +149,22 @@ def create_board_app(board, auth_service: Authenticator | None, *, allowed_hosts
     def _authenticate():
         if request.method in ("GET", "HEAD") and request.path in PUBLIC_GET_PATHS:
             return
+        address = f"ip:{request.remote_addr or ''}"
+        if failures is not None and failures.over(address):
+            return _too_many(failures, "Zu viele fehlgeschlagene Anmeldungen von dieser Adresse.")
         principal = _principal()
         if principal is None:
+            if failures is not None:
+                failures.hit(address)
             raise AuthenticationError()
+        if per_account is not None and principal.actor_id and per_account.hit(f"account:{principal.actor_id}"):
+            return _too_many(per_account, "Zu viele Anfragen fuer dieses Konto.")
         g.principal = principal
+
+    def _too_many(counter, message: str):
+        response = jsonify({"error": message, "type": "RateLimitExceeded"})
+        response.headers["Retry-After"] = str(counter.retry_after())
+        return response, 429
 
     @app.before_request
     def _check_agent_access():
