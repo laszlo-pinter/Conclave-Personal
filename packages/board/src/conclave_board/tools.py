@@ -114,9 +114,20 @@ class BoardTools:
             return None
         return {**self.comment(c, "Review"), "at": c.get("created_at")}
 
-    def _described(self, t: dict) -> dict:
-        return {"description": t.get("description", ""),
-                "description_from": f"Beschreibung von: {who(t.get('origin'), t.get('created_by'), t.get('actor_name'))}"}
+    @staticmethod
+    def _described(t: dict, history: list[dict]) -> dict:
+        """Wer Titel und Beschreibung zuletzt geschrieben hat: die letzte Aenderung im Verlauf, sonst wer
+        das Ticket angelegt hat. Im Team duerfen auch andere (und deren Agenten) fremde Tickets aendern."""
+        creator = who(t.get("origin"), t.get("created_by"), t.get("actor_name"))
+
+        def last(field: str) -> str:
+            for h in reversed(history):
+                if h.get("field") == field:
+                    return who(h.get("origin"), h.get("actor_id"), h.get("actor_name"))
+            return creator
+
+        return {"title_from": f"Titel von: {last('title')}", "description": t.get("description", ""),
+                "description_from": f"Beschreibung von: {last('description')}"}
 
     # ── Tools ───────────────────────────────────────────────────────────
 
@@ -147,7 +158,7 @@ class BoardTools:
         t = self._get(path)
         history = self._get(path + "/history").get("history", [])
         return {
-            **self.brief(t), "version": t["version"], "note": BOARD_DATA_NOTE, **self._described(t),
+            **self.brief(t), "version": t["version"], "note": BOARD_DATA_NOTE, **self._described(t, history),
             "review": t.get("review"), "last_review": self.review_note(t.get("last_review")),
             "control": self.control(t),
             "comments": [self.comment(c) for c in t.get("comments", [])],
@@ -175,7 +186,8 @@ class BoardTools:
         taken = data.get("task")
         if taken is None:
             return {"task": None, "message": "Kein freies Ticket.", "control": self.control(data)}
-        return {**self.brief(taken), "note": BOARD_DATA_NOTE, **self._described(taken),
+        history = self._get(self.task_path(taken["ref"]) + "/history").get("history", [])
+        return {**self.brief(taken), "note": BOARD_DATA_NOTE, **self._described(taken, history),
                 "last_review": self.review_note(data.get("last_review")), "control": self.control(data)}
 
     def create(self, project: str, title: str, description: str = "", tags=None, human_only: bool = False,

@@ -117,3 +117,23 @@ def test_tools_reject_bad_references_and_empty_updates(setup):
         tools.seg("a/b")
     with pytest.raises(Failure, match="Nichts zu aendern"):
         tools.update("api#1")
+
+
+def test_title_and_description_name_who_wrote_them_last(setup):
+    """#76-Review B1: nicht der Ersteller, sondern wer Titel bzw. Beschreibung zuletzt geschrieben hat."""
+    board, client = setup
+    client.post("/board/v1/tasks", json={"project": "api", "title": "T", "description": "vom Menschen"},
+                headers=_h(HUMAN))
+    board.policy = Named()
+    agent = _tools(client, AGENT)
+    fresh = agent.get("api#1")
+    assert (fresh["title_from"], fresh["description_from"]) == ("Titel von: Mensch Laszlo",
+                                                                "Beschreibung von: Mensch Laszlo")
+    agent.update("api#1", description="vom Agenten")
+    changed = agent.get("api#1")
+    assert changed["description_from"] == "Beschreibung von: Agent von Laszlo"
+    assert changed["title_from"] == "Titel von: Mensch Laszlo"                     # Titel unveraendert
+    agent.update("api#1", title="neu")
+    taken = agent.next(task="api#1")                                              # auch in next
+    assert taken["title_from"] == "Titel von: Agent von Laszlo"
+    assert taken["description_from"] == "Beschreibung von: Agent von Laszlo"
