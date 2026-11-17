@@ -125,11 +125,14 @@ def _open_conversation(chromium, server):
     page.on("pageerror", lambda e: errors.append(str(e)))
     # Eine Nachfrage beim Token heisst: die Seite hat das Token nicht uebernommen (#96)
     page.on("dialog", lambda d: (errors.append(f"dialog: {d.message}"), d.dismiss()))
+    # Warnungen der Rollenpruefung (whoami-Versuche) als Beleg, falls das Token nicht uebernommen wird
+    warnings = []
+    page.on("console", lambda m: warnings.append(m.text) if m.type == "warning" else None)
     page.goto(f"{server.url}/#token={server.token}")
     try:
         page.wait_for_function("() => !!sessionStorage.getItem('conclave_api_key')", timeout=10000)
     except Exception as exc:  # noqa: BLE001 - mit Beleg statt 401-Folgefehlern
-        raise AssertionError(f"Token aus dem Fragment nicht uebernommen: {errors}") from exc
+        raise AssertionError(f"Token aus dem Fragment nicht uebernommen: {errors}; Konsole: {warnings}") from exc
     page.click(f"[data-action='select-conversation'][data-conversation-id='{server.conv_id}']")
     return page, errors
 

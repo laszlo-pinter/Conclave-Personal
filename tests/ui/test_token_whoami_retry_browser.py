@@ -58,3 +58,22 @@ def test_real_rejection_still_asks(chromium, live_server):
         assert seen["whoami"] == 1                       # keine Wiederholung bei 401
     finally:
         page.close()
+
+
+
+def test_unreachable_server_says_not_verifiable_and_logs_each_attempt(chromium, live_server):
+    """#96-Review: nach allen Wiederholungen "nicht pruefbar" statt "ungueltig"; jeder Versuch in der Konsole."""
+    page = chromium.new_page()
+    dialogs, warnings = [], []
+    page.route("**/auth/whoami", lambda r: r.abort("connectionreset"))
+    page.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+    page.on("console", lambda m: warnings.append(m.text) if m.type == "warning" else None)
+    try:
+        page.goto(f"{live_server.url}/#token={live_server.token}")
+        page.wait_for_function("() => true", timeout=1000)
+        page.wait_for_timeout(4000)                        # 250 + 750 + 1500 ms Wartezeit
+        assert len(dialogs) == 1 and "nicht prüfbar" in dialogs[0] and "ungültig" not in dialogs[0]
+        attempts = [w for w in warnings if w.startswith("whoami:")]
+        assert len(attempts) == 4 and all(live_server.token not in w for w in warnings)
+    finally:
+        page.close()
