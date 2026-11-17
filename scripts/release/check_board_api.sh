@@ -2,7 +2,8 @@
 # Prueft, ob die Board-API v1 gegenueber dem letzten Release-Stand bricht (T3, CI).
 #
 # Vergleichsstand: packages/board/openapi/board-v1.json im letzten Tag v*; gibt es die
-# Datei dort noch nicht (erstes Release mit v1), der Stand auf origin/main. Fehlt sie
+# Datei dort noch nicht (erstes Release mit v1), der Zielbranch eines Pull Requests, sonst
+# origin/main. Fehlt sie
 # ueberall, fuehrt dieser Stand v1 ein und es gibt nichts zu vergleichen.
 #
 # Vorher ein Selbsttest unabhaengig von Tag und main: absichtlich brechende Varianten
@@ -41,6 +42,8 @@ base=""
 tag="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
 if [ -n "$tag" ] && git cat-file -e "$tag:$SPEC" 2>/dev/null; then
   base="$tag"
+elif [ -n "${GITHUB_BASE_REF:-}" ] && git cat-file -e "origin/$GITHUB_BASE_REF:$SPEC" 2>/dev/null; then
+  base="origin/$GITHUB_BASE_REF"                  # Pull Request: gegen den Zielbranch
 elif git cat-file -e "origin/main:$SPEC" 2>/dev/null; then
   base="origin/main"
 fi
