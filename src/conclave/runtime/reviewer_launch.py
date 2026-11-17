@@ -51,7 +51,18 @@ def already_running(cfg: dict) -> str | None:
 
 
 def start_reviewer(log) -> subprocess.Popen | None:
-    """Startet ``conclave-reviewer run`` als Kindprozess, wenn konfiguriert und nicht schon laufend."""
+    """Startet ``conclave-reviewer run`` als Kindprozess, wenn konfiguriert und nicht schon laufend.
+
+    Der Reviewer ist optional: Jeder Fehler hier wird nur protokolliert, der Desktop startet trotzdem.
+    """
+    try:
+        return _start(log)
+    except Exception as e:                                           # noqa: BLE001 - optional, nie fatal
+        log(f"Reviewer nicht gestartet: {type(e).__name__}: {e}")
+        return None
+
+
+def _start(log) -> subprocess.Popen | None:
     ok, reason, cfg = reviewer_configured()
     if not ok:
         log(f"Reviewer nicht gestartet: {reason}")
@@ -63,11 +74,10 @@ def start_reviewer(log) -> subprocess.Popen | None:
     from conclave.reviewer.config import data_dir
     folder = data_dir()
     folder.mkdir(parents=True, exist_ok=True)
-    errors = (folder / "reviewer-start.log").open("ab")          # nur Startfehler; das eigentliche Log fuehrt er selbst
     cmd = [sys.executable, "-m", "conclave.reviewer", "run", "--parent-pid", str(os.getpid())]
-    proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=errors,
-                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), close_fds=True)
-    errors.close()
+    with (folder / "reviewer-start.log").open("ab") as errors:   # nur Startfehler; das Log fuehrt er selbst
+        proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=errors,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), close_fds=True)
     log(f"Reviewer gestartet (PID {proc.pid})")
     return proc
 

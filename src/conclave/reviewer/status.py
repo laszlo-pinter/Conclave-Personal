@@ -110,11 +110,44 @@ def process_alive(pid: int) -> bool:
     return True
 
 
+def _wait_for_exit_nt(pid: int) -> None:
+    """Wartet auf das Ende von ``pid`` ueber ein einmal geoeffnetes Handle.
+
+    Das Handle haelt den Prozess fest: Eine spaeter neu vergebene PID taeuscht nicht vor, er laufe
+    noch. Laesst er sich gar nicht oeffnen, gilt er als beendet.
+    """
+    import ctypes
+    from ctypes import wintypes
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel32.OpenProcess(0x00100000, False, pid)              # SYNCHRONIZE
+    if not handle:
+        return
+    try:
+        kernel32.WaitForSingleObject(handle, 0xFFFFFFFF)               # INFINITE
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def watch_parent(pid: int, on_gone, every: float = 2.0) -> threading.Thread:
-    """Ruft ``on_gone()``, sobald der Prozess ``pid`` nicht mehr laeuft."""
+    """Ruft ``on_gone()``, sobald der Prozess ``pid`` nicht mehr laeuft.
+
+    Windows: Warten auf das Handle. POSIX: Ist ``pid`` der eigene Elternprozess, zaehlt der Wechsel
+    von ``getppid()`` (keine Verwechslung mit einer neu vergebenen PID), sonst die Abfrage der PID.
+    """
     def watch():
-        while process_alive(pid):
-            time.sleep(every)
+        if os.name == "nt":
+            _wait_for_exit_nt(pid)
+        elif os.getppid() == pid:
+            while os.getppid() == pid:
+                time.sleep(every)
+        else:
+            while process_alive(pid):
+                time.sleep(every)
         on_gone()
 
     thread = threading.Thread(target=watch, name="reviewer-parent", daemon=True)

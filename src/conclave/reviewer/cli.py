@@ -57,6 +57,15 @@ def _ask(text: str) -> bool:
         return False
 
 
+def _shutdown(reviewer) -> None:
+    """Ende mitten im Lauf: erst claude, dann die Worktrees des laufenden Reviews."""
+    reviewer.stop_claude()
+    try:
+        reviewer.drop_worktrees()
+    except Exception as e:                              # noqa: BLE001 - der naechste Start raeumt sonst auf
+        reviewer.log(f"worktrees not removed on exit: {e}")
+
+
 def _import(args) -> int:
     target = args.target or reviewer_config.conclave_config_path()
     confirm = (lambda text: (print(text), True)[1]) if args.yes else _ask
@@ -85,18 +94,20 @@ def _run(args) -> int:
 
         def gone():
             reviewer.log(f"conclave desktop (PID {args.parent_pid}) beendet, Reviewer endet")
-            reviewer.stop_claude()                      # claude ueberlebt den Reviewer nicht
+            _shutdown(reviewer)                         # claude ueberlebt den Reviewer nicht
             os._exit(0)                                 # das abgebrochene Review gibt der naechste Start frei (W3)
         watch_parent(args.parent_pid, gone)
     if os.name != "nt":                                 # SIGTERM (stop_reviewer): erst claude, dann Ende
         import signal
 
         def terminated(_sig, _frame):
-            reviewer.stop_claude()
+            _shutdown(reviewer)
             os._exit(0)
         signal.signal(signal.SIGTERM, terminated)
     with ProcessLock(reviewer.lock_file, legacy=locks):
         reviewer.mark_started(args.dry_run)
+        if not args.dry_run:
+            reviewer.clean_orphans()                    # Reste eines Endes mitten im Review (#98-Review V3)
         reviewer.loop(dry_run=args.dry_run, once=args.once)
     return 0
 

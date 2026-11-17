@@ -63,6 +63,7 @@ class Reviewer:
         self.worktrees = data_dir / "worktrees"
         self.state_file = data_dir / "state.json"
         self.status_file = data_dir / "status.json"      # fuer conclave-reviewer status (W4)
+        self.active_worktrees: list = []                 # (Repo, Pfad) des laufenden Reviews
 
     def prepare(self) -> None:
         """Datenordner nur fuer den Benutzer (R13); neue Dateien darin erben das unter Windows."""
@@ -175,6 +176,20 @@ class Reviewer:
         finally:
             self.claude_proc = None
 
+    def drop_worktrees(self) -> None:
+        """Worktrees des laufenden Reviews entfernen, innere zuerst (auch beim Ende mitten im Review)."""
+        added, self.active_worktrees = self.active_worktrees, []
+        for r, path in reversed(added):
+            worktrees.remove_worktree(r, path)
+
+    def clean_orphans(self) -> None:
+        """Beim Start: Worktrees, die ein abgebrochener Lauf liegen liess (#98-Review V3)."""
+        repos = dict.fromkeys(r for project in (self.cfg.get("projects") or {})
+                              for r in refs.repos_for(self.cfg, project))
+        removed = worktrees.remove_orphans(self.worktrees, list(repos))
+        if removed:
+            self.log(f"removed leftover worktrees: {', '.join(removed)}")
+
     def stop_claude(self) -> None:
         """Beim Ende mit dem Desktop: den laufenden claude samt Kindprozessen beenden."""
         command.kill_claude(self.claude_proc)
@@ -220,6 +235,7 @@ class Reviewer:
         first_repo, first_commit, _ = found[0]
         worktree = worktrees.add_worktree(self.worktrees, first_repo, key, first_commit)
         added = [(first_repo, worktree)]
+        self.active_worktrees = added
         try:
             extra = []
             for index, (r, commit, _b) in enumerate(found[1:], start=1):
@@ -238,8 +254,7 @@ class Reviewer:
                 self.write_status(current_task=None, last_result={
                     "task": key, "outcome": outcome, "at": datetime.now().isoformat(timespec="seconds")})
             self.current_task = None
-            for r, path in reversed(added):             # innere Worktrees zuerst
-                worktrees.remove_worktree(r, path)
+            self.drop_worktrees()
         after = self.get_json(self.task_url(key))
         if after.get("status") == self.cfg["review_status"] and (after.get("review") or {}).get("state") == "running":
             reason = {"timeout": f"nach {self.cfg['review_timeout_minutes']} Minuten abgebrochen",

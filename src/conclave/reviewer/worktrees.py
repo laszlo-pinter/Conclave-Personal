@@ -28,6 +28,27 @@ def add_worktree(worktrees: Path, repo: str, key: str, commit: str, inside: Path
     return path
 
 
+def remove_orphans(worktrees: Path, repos) -> list[str]:
+    """Reste abgebrochener Reviews (Ende mitten im Review, Absturz): alles unter ``worktrees``.
+
+    Nur beim Start aufrufen, wenn kein Review laeuft (der Reviewer haelt seine Sperre).
+    """
+    if not worktrees.is_dir():
+        return []
+    removed = []
+    for path in sorted(worktrees.iterdir()):
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+            removed.append(path.name)
+    if removed:
+        for repo in repos:
+            try:
+                git(repo, "worktree", "prune")
+            except (RuntimeError, OSError):
+                pass
+    return removed
+
+
 def remove_worktree(repo: str, path: Path) -> None:
     try:
         git(repo, "worktree", "remove", "--force", str(path))
