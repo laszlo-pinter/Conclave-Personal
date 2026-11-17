@@ -118,6 +118,46 @@ def test_pool_gives_up_after_the_timeout():
     pool.release(pool.acquire())                     # danach wieder verfuegbar
 
 
+class BreaksOnTransaction(FakeConn):
+    """Verbindung, die beim Wechsel aus dem Autocommit abbricht (Review V2)."""
+
+    def __init__(self, dsn):
+        super().__init__(dsn)
+        self.armed = True
+
+    def __setattr__(self, name, value):
+        if name == "autocommit" and value is False and getattr(self, "armed", False):
+            self.closed = 1
+            raise RuntimeError("Verbindung abgebrochen")
+        super().__setattr__(name, value)
+
+
+def test_a_connection_failing_at_begin_does_not_cost_a_pool_slot():
+    pool = ConnectionPool("dsn", size=1, timeout=0.5, connect=BreaksOnTransaction)
+    conn = PooledConnection(pool)
+    with pytest.raises(RuntimeError, match="abgebrochen"):
+        with conn.transaction():
+            pass
+    assert not conn.in_transaction
+    pool.release(pool.acquire())                     # der einzige Platz ist wieder frei (sonst PoolTimeout)
+
+
+def test_a_connection_failing_at_checkout_is_discarded():
+    calls = []
+
+    class FailsOnce(FakeConn):
+        def __setattr__(self, name, value):
+            if name == "autocommit" and value is True and not calls:
+                calls.append(self)
+                raise RuntimeError("kaputt")
+            super().__setattr__(name, value)
+
+    pool = ConnectionPool("dsn", size=1, timeout=0.5, connect=FailsOnce)
+    connection = pool.acquire()
+    assert connection is not calls[0] and calls[0].closed
+    pool.release(connection)
+
+
 def test_broken_connections_are_replaced():
     pool = _pool(size=1)
     first = pool.acquire()

@@ -58,6 +58,13 @@ def _connect_psycopg2(dsn: str):
     return psycopg2.connect(dsn)
 
 
+def _close_quietly(connection) -> None:
+    try:
+        connection.close()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _usable(connection) -> bool:
     return not getattr(connection, "closed", 0)
 
@@ -95,7 +102,11 @@ class ConnectionPool:
                 if connection is None:
                     connection = self._connect(self._dsn)
                 if _usable(connection):
-                    connection.autocommit = True
+                    try:
+                        connection.autocommit = True
+                    except Exception:  # noqa: BLE001 - unbrauchbar: verwerfen, naechste nehmen
+                        _close_quietly(connection)
+                        continue
                     return connection
         except BaseException:
             self._slots.release()
@@ -218,20 +229,25 @@ class PooledConnection:
             return
         connection = self._pool.acquire()
         broken = False
-        connection.autocommit = False
-        self._local.connection = connection
         try:
-            yield connection
-            connection.commit()
-        except BaseException:
             try:
-                connection.rollback()
-            except Exception:  # noqa: BLE001 - Verbindung verwerfen, die Ursache bleibt die Meldung
+                connection.autocommit = False      # scheitert z. B. bei einer gerade abgebrochenen Verbindung
+            except Exception:
                 broken = True
-            raise
+                raise
+            self._local.connection = connection
+            try:
+                yield connection
+                connection.commit()
+            except BaseException:
+                try:
+                    connection.rollback()
+                except Exception:  # noqa: BLE001 - Verbindung verwerfen, die Ursache bleibt die Meldung
+                    broken = True
+                raise
         finally:
             self._local.connection = None
-            self._pool.release(connection, broken=broken)
+            self._pool.release(connection, broken=broken)   # der Platz im Pool geht nie verloren
 
     def commit(self) -> None:
         """Ausserhalb einer Transaktion ohne Wirkung (Autocommit), innerhalb macht transaction() den Commit."""
