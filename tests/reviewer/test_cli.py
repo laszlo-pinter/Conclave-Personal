@@ -44,13 +44,35 @@ def test_run_once_in_dry_run_mode(cfg, server, repo, tmp_path, capsys):
     path, head = repo
     config = _config(tmp_path, cfg)
     data = tmp_path / "rdata"
-    assert main(["run", "--config", str(config), "--data-dir", str(data), "--dry-run", "--once"]) == 0
-    assert "first run" in (data / "reviewer.log").read_text(encoding="utf-8")       # Board gemerkt
     _ticket_in_review(server, head)
     assert main(["run", "--config", str(config), "--data-dir", str(data), "--dry-run", "--once"]) == 0
     log = (data / "reviewer.log").read_text(encoding="utf-8")
     assert "api#1: moved to review" in log and "dry run, command" in log
     assert _task(server)["review"]["state"] == "none"
+
+
+def test_dry_run_writes_no_state(rv, cfg, server, repo):
+    """#89-Review B2: ein Probelauf veraendert den Zustand nicht (weder anlegen noch aendern)."""
+    path, head = repo
+    _ticket_in_review(server, head)
+    rv.poll_once(None, dry_run=True)
+    assert not rv.state_file.exists()
+    saved = {"statuses": {"api#1": "doing"}, "pending": [], "reviews": []}
+    rv.save_state(saved)
+    before = rv.state_file.read_text(encoding="utf-8")
+    rv.poll_once(rv.load_state(), dry_run=True)
+    assert rv.state_file.read_text(encoding="utf-8") == before
+    assert _task(server)["review"]["state"] == "none"
+
+
+def test_default_data_dir_is_not_the_old_watchers_folder(tmp_path, monkeypatch):
+    """#89-Review B2: ohne --data-dir nie der Ordner der alten config.toml."""
+    from conclave.reviewer.watch import default_data_dir
+    monkeypatch.delenv("CONCLAVE_REVIEWER_DATA_DIR", raising=False)
+    config = tmp_path / "kanzo-reviewer" / "config.toml"
+    assert default_data_dir(config) != config.parent and default_data_dir(config).name == "reviewer"
+    monkeypatch.setenv("CONCLAVE_REVIEWER_DATA_DIR", str(tmp_path / "eigen"))
+    assert default_data_dir(config) == tmp_path / "eigen"
 
 
 def test_does_not_start_next_to_the_old_watcher(cfg, tmp_path, capsys):

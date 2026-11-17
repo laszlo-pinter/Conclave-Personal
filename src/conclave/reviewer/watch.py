@@ -204,7 +204,14 @@ class Reviewer:
     # ── Die Schleife ──────────────────────────────────────────────────────
 
     def check(self, state: dict | None, tasks: dict, dry_run: bool) -> dict:
+        """Neu nach review geschobene Tickets pruefen. Ein Probelauf schreibt keinen Zustand: Er soll den
+        naechsten echten Lauf nicht beeinflussen (gesehene Tickets, Zaehler je Stunde)."""
+        save = (lambda _s: None) if dry_run else self.save_state
         statuses = {k: t["status"] for k, t in tasks.items()}
+        if state is None and dry_run:
+            # Probelauf ohne gemerkten Stand: alles in review zeigen, als waere es neu (es wird nichts gespeichert)
+            self.log(f"dry run without saved state: showing all {len(statuses)} tickets in review")
+            state = {"statuses": {}, "pending": [], "reviews": []}
         if state is None:
             # Erster Lauf: das Board merken; Tickets, die schon in review stehen, werden nicht geprueft.
             already = [k for k, s in statuses.items() if s == self.cfg["review_status"]]
@@ -218,7 +225,7 @@ class Reviewer:
                 pending.append(k)
         state = {"statuses": statuses, "pending": pending, "reviews": state["reviews"]}
         # Vor dem Review speichern: Ein Absturz mitten im Review verliert es, statt es doppelt zu bezahlen.
-        self.save_state(state)
+        save(state)
 
         while state["pending"]:
             key = state["pending"][0]
@@ -239,12 +246,12 @@ class Reviewer:
                 self.log(f"{key}: no local checkout for project {task['project']!r} in config.toml, not reviewed")
             else:
                 state["reviews"].append(time.time())
-                self.save_state(state)
+                save(state)
                 try:
                     self.run_review(task, key, repos if len(repos) > 1 else repos[0], dry_run)
                 except (urllib.error.URLError, OSError, ValueError, KeyError, RuntimeError) as e:
                     self.log(f"{key}: review not run: {e}")
-            self.save_state(state)
+            save(state)
         return state
 
     def changed(self, state: dict | None, tasks: dict) -> bool:
@@ -256,7 +263,8 @@ class Reviewer:
         tasks = self.fetch_tasks()                     # nur die Spalte review; mit dem letzten Stand vergleichen
         if self.changed(state, tasks):
             state = self.check(state, tasks, dry_run)
-            self.save_state(state)
+            if not dry_run:
+                self.save_state(state)
         return state
 
     def loop(self, dry_run: bool = False, once: bool = False) -> None:
@@ -287,4 +295,9 @@ def legacy_locks(cfg: dict, config_path: Path) -> tuple[Path, ...]:
 
 
 def default_data_dir(config_path: Path) -> Path:
-    return Path(os.environ.get("CONCLAVE_REVIEWER_DATA_DIR") or config_path.parent)
+    """Eigener Datenordner (``<Conclave-Datenordner>/reviewer``), nie der des alten Watchers: dessen Log,
+    Zustand und Worktrees bleiben unberuehrt (bis W5 ist er massgeblich)."""
+    if os.environ.get("CONCLAVE_REVIEWER_DATA_DIR"):
+        return Path(os.environ["CONCLAVE_REVIEWER_DATA_DIR"])
+    from conclave.runtime.paths import get_runtime_paths
+    return get_runtime_paths().data_dir / "reviewer"

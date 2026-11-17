@@ -3,8 +3,9 @@
     conclave-reviewer run --config <config.toml> [--data-dir <ordner>] [--dry-run] [--once]
 
 Bis W2 liest der Reviewer die ``config.toml`` des alten Watchers. Log, Zustand, Sperre,
-MCP-Konfiguration und Worktrees liegen im Datenordner (Standard: der Ordner der config.toml bzw.
-``CONCLAVE_REVIEWER_DATA_DIR``). Laeuft der alte Watcher noch, startet der Reviewer nicht.
+MCP-Konfiguration und Worktrees liegen im Datenordner (Standard: ``<Conclave-Datenordner>/reviewer``
+bzw. ``CONCLAVE_REVIEWER_DATA_DIR``, nie der Ordner des alten Watchers). Laeuft der alte Watcher noch,
+startet der Reviewer nicht. Ein Probelauf schreibt keinen Zustand.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ def _parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="Spalte review beobachten und Reviews starten")
     run.add_argument("--config", type=Path, required=True, help="config.toml (bis W2 die des alten Watchers)")
     run.add_argument("--data-dir", type=Path, default=None,
-                     help="Ordner fuer Log, Zustand, Sperre und Worktrees (Standard: Ordner der config.toml)")
+                     help="Ordner fuer Log, Zustand, Sperre und Worktrees (Standard: <Conclave-Daten>/reviewer)")
     run.add_argument("--dry-run", action="store_true",
                      help="nur protokollieren, was liefe (mit Aufruf und MCP-Konfiguration); kein Review")
     run.add_argument("--once", action="store_true", help="einmal abfragen und beenden")
