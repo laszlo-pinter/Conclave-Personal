@@ -118,8 +118,8 @@ class Waiter:
                 current = self._changes()
                 if current == last:
                     continue
-                last = current
                 found = check()
+                last = current                 # erst nach erfolgreichem Nachlesen: sonst beim naechsten Takt erneut
             except httpx.HTTPError:
                 continue
         return found
@@ -187,7 +187,8 @@ def run(args, *, reader: BoardReader | None = None, sleep: Callable[[float], Non
     except httpx.HTTPError as exc:
         print(f"FEHLER: Board nicht erreichbar ({exc.__class__.__name__}).", file=sys.stderr)
         return EXIT_ERROR
-    print(json.dumps(result, ensure_ascii=False), file=out, flush=True)
+    # ASCII-JSON (Umlaute als Escapes): die Zeile kommt in jeder Konsolen-Codierung heil an
+    print(json.dumps(result), file=out, flush=True)
     if result["event"] == "timeout":
         print(f"Zeit abgelaufen ({args.timeout:g} Minuten).", file=sys.stderr)
         return EXIT_TIMEOUT

@@ -598,9 +598,9 @@ async function checkBoardNotifications() {
   if (!boardNotifyEnabled()) return;
   const {changes} = await req('GET', BOARD_API + '/changes');
   if (changes === _notify.changes) return;
-  _notify.changes = changes;
   const seen = _store(NOTIFY_SEEN_KEY) || '';
   const data = await req('GET', BOARD_API + '/tasks?include_done=true');
+  _notify.changes = changes;                 // erst nach erfolgreichem Laden (sonst beim naechsten Takt erneut)
   const fresh = (data.tasks || []).filter(task => NOTIFY_STATES.includes((task.review || {}).state)
                                             && (task.review.at || '') > seen);
   if (!fresh.length) return;

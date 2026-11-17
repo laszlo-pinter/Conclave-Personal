@@ -159,3 +159,40 @@ def test_cli_offers_the_wait_command():
     from conclave.cli.main import build_parser
     args = build_parser().parse_args(["board", "wait", "conclave#12", "--timeout", "5"])
     assert (args.board_command, args.ref, args.timeout, args.interval) == ("wait", "conclave#12", 5.0, 5.0)
+
+
+def test_a_failed_read_after_a_change_is_retried(app):
+    """P8-Review V1: Scheitert das Nachlesen einmal, weckt das Ergebnis beim naechsten Takt (nicht erst
+    bei der naechsten Aenderung oder nach dem Timeout)."""
+    reader = _reader(app)
+    original = reader.get
+    state = {"fail": False, "failed": 0}
+
+    def flaky(path, params=None):
+        if state["fail"] and path.endswith("/tasks/1"):
+            state["fail"] = False
+            state["failed"] += 1
+            raise httpx.ConnectError("kurz weg")
+        return original(path, params)
+
+    reader.get = flaky
+
+    def result_then_outage():
+        _review(app, 1, "passed")
+        state["fail"] = True
+
+    script = Script({1: result_then_outage})
+    out = io.StringIO()
+    code = board_wait.run(_args(ref="api#1", timeout=1), reader=reader, sleep=script.sleep, clock=script.clock,
+                          out=out)
+    assert code == 0 and json.loads(out.getvalue())["state"] == "passed"
+    assert state["failed"] == 1 and script.calls == 2
+
+
+def test_output_is_ascii_json(app):
+    app.test_client().patch(f"{TASKS}/1", json={"title": "Prüfung – grün"}, headers=_h(HUMAN))
+    script = Script({1: lambda: _review(app, 1, "passed")})
+    out = io.StringIO()
+    board_wait.run(_args(ref="api#1"), reader=_reader(app), sleep=script.sleep, clock=script.clock, out=out)
+    line = out.getvalue().strip()
+    assert line.isascii() and json.loads(line)["title"] == "Prüfung – grün"
