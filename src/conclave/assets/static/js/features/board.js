@@ -635,6 +635,12 @@ function renderBoardReviewer(status) {
                      _boardEl('span', '', text));
 }
 
+// Wie der Server (StatusFlow.review): "review", wenn es die Spalte gibt, sonst die vorletzte
+function _reviewColumn(columns) {
+  if (!columns || !columns.length || columns.includes('review')) return 'review';
+  return columns[Math.max(0, columns.length - 2)];
+}
+
 // Liegen Tickets in review und der Reviewer ist aus, meldet das ein Desktop-Hinweis: einmal je Ausfall
 // (gemerkt wird der Zeitpunkt des letzten Herzschlags, "nie" fuer einen Reviewer, der nie lief).
 async function checkReviewerOff() {
@@ -644,7 +650,7 @@ async function checkReviewerOff() {
   if (status.state === 'active') { _store(NOTIFY_REVIEWER_OFF_KEY, null); return; }
   const period = status.since || 'nie';
   if (_store(NOTIFY_REVIEWER_OFF_KEY) === period) return;
-  const review = _board.statuses.length ? _board.statuses[_board.statuses.length - 2] : 'review';
+  const review = _reviewColumn(_board.statuses);
   const data = await req('GET', BOARD_API + '/tasks?status=' + encodeURIComponent(review));
   const waiting = (data.tasks || []).filter(task => task.status === review);
   if (!waiting.length) return;

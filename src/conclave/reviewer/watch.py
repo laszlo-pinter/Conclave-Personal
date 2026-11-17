@@ -211,7 +211,8 @@ class Reviewer:
             reason = {"timeout": f"nach {self.cfg['review_timeout_minutes']} Minuten abgebrochen",
                       "failed": "mit einem Fehler beendet"}.get(outcome, "ohne Ergebnis beendet")
             self.note(key, f"Review {reason}. Der Status bleibt „läuft“; das Ergebnis zählt nicht als rot. "
-                           "Neu starten: Ticket aus review und wieder hinein schieben.")
+                           "Neu prüfen: den Reviewer neu starten (er gibt hängende Reviews frei und prüft sie "
+                           "neu) oder das Ticket aus review und wieder hinein schieben.")
             self.log(f"{key}: review {outcome} without a result, state left at running")
 
     def _log_planned(self, task: dict, key: str, found, checked: str, missing) -> None:

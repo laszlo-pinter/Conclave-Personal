@@ -60,3 +60,16 @@ def test_no_off_notice_without_tickets_in_review(chromium, board_server):
         assert _notes(page, reviewer_off=True) == []
     finally:
         context.close()
+
+
+def test_review_column_follows_the_server_rule(chromium, board_server):
+    """#91-Review V1: "review", wenn vorhanden, sonst die vorletzte Spalte (wie StatusFlow.review)."""
+    context, page, _errors = _open(chromium, board_server)
+    try:
+        cases = {"todo,doing,review,done": "review", "todo,review,test,done": "review",
+                 "offen,arbeit,pruefung,fertig": "pruefung", "": "review"}
+        for columns, expected in cases.items():
+            got = page.evaluate("c => _reviewColumn(c ? c.split(',') : [])", columns)
+            assert got == expected, columns
+    finally:
+        context.close()
