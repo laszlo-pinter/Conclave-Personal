@@ -237,6 +237,42 @@ Tickets, wo sie sind.
 Das Board braucht SQLite ab Version 3.35 (bei Python 3.11 und 3.12 üblich)
 oder PostgreSQL.
 
+## Reviewer
+
+Der automatische Reviewer `conclave-reviewer` (siehe
+[Mit dem Board arbeiten](../mit-dem-board-arbeiten.md)). Steht der Abschnitt
+`[reviewer]` in der `config.toml`, startet `conclave desktop` den Reviewer und
+beendet ihn mit sich selbst. `conclave server` startet keinen.
+
+```toml
+[reviewer]
+poll_seconds = 30
+[reviewer.projects]
+conclave = ["C:\\...\\Conclave_original", "C:\\...\\conclave-board-team"]
+```
+
+| Schlüssel | Default | Bedeutung |
+|---|---|---|
+| `enabled` | `true` | `false`: kein Start, auch nicht von Hand |
+| `projects` | – (Pflicht) | Unterabschnitt `[reviewer.projects]`: Kurzname des Board-Projekts = Pfad des Checkouts oder Liste von Pfaden. Bei mehreren Checkouts wird der genannte Commit in allen gesucht |
+| `poll_seconds` | `30` | Abstand der Abfragen des Änderungszählers; die Review-Spalte liest er nur nach einer Änderung |
+| `max_reviews_per_hour` | `6` | Höchstens so viele Reviews je Stunde, weitere warten |
+| `review_timeout_minutes` | `30` | Danach wird `claude` samt Kindprozessen beendet; das Review bleibt `running`, mit einem Hinweis am Ticket |
+| `claude_exe` | leer | Pfad zu `claude`; leer: die VS-Code-Erweiterung, sonst `PATH` |
+| `prompt_file` | leer | Eigene Fassung des Review-Auftrags, relativ zum Ordner der `config.toml`; leer: die mitgelieferte Fassung. Ohne die Platzhalter `{get}`, `{comment}` und `{board}` startet er nicht |
+| `author` | `CD · auto-review` | Name im Review-Kommentar |
+| `review_status` | `review` | Spalte, die er beobachtet |
+| `conclave_url` | `CONCLAVE_API_URL` bzw. `http://127.0.0.1:8000` | Adresse des Servers |
+| `conclave_mcp_exe` | `conclave-mcp` derselben Installation, sonst `PATH` | MCP-Server für das Review (mit `--reviewer`) |
+| `reviewer_token_file` | wie `CONCLAVE_REVIEWER_TOKEN_FILE` | Das Token liest nur der MCP-Server; der Start prüft nur, ob die Datei da ist |
+| `legacy_lock_file` | leer | Sperrdatei des früheren, getrennten Watchers: Hält er sie, startet der Reviewer nicht |
+
+Die Daten liegen in `<Konfigurationsordner>/reviewer` (Windows
+`%APPDATA%\Conclave\reviewer`, nur für den Benutzer lesbar): `reviewer.log`,
+`state.json`, `status.json`, `reviewer.lock` und die Worktrees während eines
+Reviews. `CONCLAVE_REVIEWER_DATA_DIR` legt einen anderen Ordner fest,
+`CONCLAVE_CONFIG_FILE` eine andere `config.toml`.
+
 ## Grenzen für Agenten
 
 `[limits]` begrenzt, was Agenten (Agent-Token) über Conclave an Modellen

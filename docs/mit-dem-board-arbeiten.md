@@ -176,10 +176,37 @@ Priorität ändert.
 5. **Abschluss:** Der Mensch liest Kommentare und Reviews, gibt frei und schiebt
    nach `done`. Korrekturen aus einem Review werden neue Tickets.
 
-Ein automatischer Reviewer lässt sich anschließen: ein eigener Prozess, der
-das Board beobachtet und bei jedem Ticket in `review` einen Review-Agenten
-startet. Er gehört nicht zu Conclave. Gib ihm das Reviewer-Token
-(`conclave token show --reviewer`), den MCP-Server `conclave-mcp --reviewer`,
+**Automatischer Reviewer:** `conclave-reviewer` beobachtet das Board und
+startet für jedes Ticket, das nach `review` kommt, ein Review mit Claude Code
+(`claude -p`). Er bekommt nur das Reviewer-Token, den MCP-Server
+`conclave-mcp --reviewer`, Lesezugriff auf den genannten Commit und keine Shell.
+
+- **Einrichten:** Der Abschnitt `[reviewer]` in Conclaves `config.toml` nennt
+  die Projekte und ihre Checkouts (siehe
+  [Konfiguration](referenz/konfiguration.md#reviewer)). Eine Konfiguration des
+  früheren, getrennten Watchers übernimmt
+  `conclave-reviewer import-config <alte config.toml>`; vor dem Schreiben zeigt
+  es das Ergebnis.
+- **Start und Ende:** `conclave desktop` startet den Reviewer im Hintergrund,
+  wenn `[reviewer]` vorhanden ist, `enabled` nicht `false` ist und
+  `reviewer.token` existiert. Er endet mit dem Desktop, auch nach einem Absturz,
+  und nimmt laufende Claude-Prozesse mit. `conclave server` startet keinen.
+  Läuft schon ein Reviewer oder der frühere Watcher (`legacy_lock_file`),
+  startet kein zweiter.
+- **Geprüfter Stand:** Den Commit nimmt der Reviewer aus dem jüngsten
+  Agent-Kommentar, der einen nennt (Hashes in Backticks, z. B.
+  `` **Branch:** `x` · **Commit:** `abc1234` ``). Deshalb gehören nur Commits,
+  die geprüft werden sollen, in Backticks. Hat ein Projekt mehrere Checkouts, sucht er in allen und prüft
+  jeden in einem eigenen Worktree. Die Worktrees entfernt er danach wieder.
+- **Zustand:** Das Board zeigt „Reviewer aktiv“ (mit dem Ticket, das er gerade
+  prüft) oder „Reviewer aus“. `conclave-reviewer status` zeigt, ob er läuft,
+  das laufende Ticket, das letzte Ergebnis, die Reviews der letzten Stunde und
+  die Version von `claude`.
+- **Nach einem Abbruch:** Beim nächsten Start gibt er hängende Reviews
+  (`running`) frei, prüft sie neu und räumt liegen gebliebene Worktrees auf.
+
+Einen anderen Reviewer kann man genauso anschließen: Er braucht das
+Reviewer-Token (`conclave token show --reviewer`), `conclave-mcp --reviewer`,
 Lesezugriff auf den Code und keine Shell.
 
 **Review-Ablauf:**

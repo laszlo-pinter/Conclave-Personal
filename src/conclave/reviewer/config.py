@@ -17,7 +17,7 @@ Weitere Schluessel mit Standard: ``conclave_url`` (``CONCLAVE_API_URL`` bzw. htt
 Der Datenordner ist ``<Konfigurationsordner von Conclave>/reviewer`` (Windows
 ``%APPDATA%\\Conclave\\reviewer``), nur fuer den Benutzer (R13).
 
-Wichtig bis W5 (E-W3): Ein Abschnitt ``[reviewer]`` laesst ``conclave desktop`` den Reviewer starten.
+Ein Abschnitt ``[reviewer]`` laesst ``conclave desktop`` den Reviewer starten (W4, E-W3).
 """
 
 from __future__ import annotations

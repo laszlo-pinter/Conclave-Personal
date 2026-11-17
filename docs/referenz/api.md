@@ -39,9 +39,10 @@ Mit dem Agent-Token sind nur die Routen erlaubt, die die MCP-Tools brauchen:
   Regeln prüft das Board selbst, siehe [Board](#board))
 
 Der Reviewer-Zugang (`reviewer.token`) hat eine engere Liste: `GET /auth/whoami`,
-`GET /board/v1/tasks`, `GET /board/v1/search`, `GET /board/v1/projects/<slug>/tasks/<n>`
-samt `/history`, `POST .../comments` und als einziger
-`POST /board/v1/projects/<slug>/tasks/<n>/review` (jeweils auch über den Alias `/board`).
+`GET /board/v1/tasks`, `GET /board/v1/changes`, `GET /board/v1/search`,
+`GET /board/v1/projects/<slug>/tasks/<n>` samt `/history`, `POST .../comments` und als
+einziger `POST /board/v1/projects/<slug>/tasks/<n>/review` und
+`POST /board/v1/reviewer/heartbeat` (jeweils auch über den Alias `/board`).
 
 Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 `{"type": "HumanOnly", "error": "Nur für den Menschen-Zugang."}`.
@@ -103,8 +104,10 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `GET` | `/workspace/<path:filepath>` | Liest eine Datei aus dem Workspace. |
 | `POST` | `/workspace/<path:filepath>` | Schreibt eine Datei in den Workspace (`content` als Text). Agenten: nur neue Dateien oder unter `agents/`, sonst `403`. |
 | `DELETE` | `/workspace/<path:filepath>` | Löscht eine Datei aus dem Workspace. |
-| `GET` | `/board/v1` | Spalten, Projekte und Änderungszähler (nur Mensch). |
-| `GET` | `/board/v1/changes` | Änderungszähler; die UI lädt neu, wenn er steigt (nur Mensch). |
+| `GET` | `/board/v1` | Spalten, Projekte, Änderungszähler und `reviewer` (Zustand wie `GET /board/v1/reviewer`; nur Mensch). |
+| `GET` | `/board/v1/changes` | Änderungszähler; die UI und der Reviewer laden neu, wenn er steigt (Mensch und Reviewer-Zugang). |
+| `GET` | `/board/v1/reviewer` | Läuft der automatische Reviewer? `{"state": "active", "last_seen", "version", "task"}` oder `{"state": "off", "since"}` (nur Mensch). |
+| `POST` | `/board/v1/reviewer/heartbeat` | Lebenszeichen des Reviewers, etwa alle 60 s: `version` (höchstens 50 Zeichen), `task` (laufendes Ticket oder `null`). Ohne Herzschlag seit 180 s gilt er als aus. Nur im Speicher des Servers (nur Reviewer-Zugang). |
 | `POST` | `/board/v1/projects` | Projekt anlegen (nur Mensch). |
 | `PUT` | `/board/v1/projects/<slug>` | Projekt umbenennen (nur Mensch). |
 | `DELETE` | `/board/v1/projects/<slug>` | Projekt samt Tickets löschen (nur Mensch). |
@@ -319,10 +322,11 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
   Löschen: alt → `null`). Gelöschte Kommentare verschwinden aus der Liste, ihr
   Inhalt bleibt im Verlauf.
 - **Review** `POST .../review` (nur Reviewer-Zugang, Agent und Mensch `403`):
-  `{"state": "running"|"passed"|"rework"|"failed", "comment": "...",
+  `{"state": "running"|"passed"|"rework"|"failed"|"none", "comment": "...",
   "blocking": 0, "suggestions": 3, "checked": "branch @ abc..def"}`. Nur für
   Tickets in der Review-Spalte (sonst `409 NotInReview`); außer bei `running`
-  ist `comment` Pflicht. Ergebnis, Kommentar (Herkunft `reviewer`) und Folgen
+  und `none` ist `comment` Pflicht. `none` gibt ein hängendes Review frei und
+  geht nur von `running` aus (sonst `409 ReviewNotRunning`). Ergebnis, Kommentar (Herkunft `reviewer`) und Folgen
   werden zusammen gespeichert:
   - `passed` (grün): bleibt in `review`, der Zähler roter Reviews wird 0.
   - `rework` (gelb) und `failed` (rot): zurück in die erste Spalte, dort vor
