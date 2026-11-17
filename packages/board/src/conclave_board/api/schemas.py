@@ -77,7 +77,8 @@ CONTROL = _object({"pauses": {"type": "array", "items": CONTROL_ENTRY},
 TASK_LIST = _object({"tasks": {"type": "array", "items": TASK}, "control": CONTROL})
 TASK_WITH_CONTROL = _object({**TASK_FIELDS, "control": CONTROL})
 TASK_DETAIL = _object({**TASK_FIELDS, "comments": {"type": "array", "items": COMMENT},
-                       "last_review": _nullable(COMMENT), "control": CONTROL})
+                       "last_review": _nullable(COMMENT), "status_since": TIME, "control": CONTROL})
+STUCK_TASK = _object({**TASK_FIELDS, "status_since": TIME})
 
 VERSIONS = _object({
     "current": STRING,
@@ -114,7 +115,7 @@ BOARD_SCHEMAS: dict[tuple[str, str], dict] = {
         "request": _object({"project": STRING, "title": STRING, "description": STRING, "tags": TAGS,
                             "status": STRING, "human": BOOLEAN, "kind": {"type": "string", "enum": ["task", "control"]},
                             "control": {"type": "string", "enum": ["pause", "hint"]},
-                            "scope": {"type": "string", "enum": ["project", "all"]}, "initiative": STRING},
+                            "scope": {"type": "string", "enum": ["project", "all", "mine"]}, "initiative": STRING},
                            required=["project", "title"], closed=True),
         "response": TASK_WITH_CONTROL},
     ("GET", "/search"): {"response": TASK_LIST,
@@ -138,6 +139,10 @@ BOARD_SCHEMAS: dict[tuple[str, str], dict] = {
                            required=[], closed=True),
         "response": TASK_WITH_CONTROL},
     ("DELETE", "/projects/<slug>/tasks/<int:number>"): {"status": 204},
+    ("POST", "/projects/<slug>/tasks/<int:number>/release"): {"request": {"type": "object"},
+                                                             "response": TASK_WITH_CONTROL},
+    ("GET", "/stuck"): {"response": _object({"tasks": {"type": "array", "items": STUCK_TASK}, "control": CONTROL}),
+                        "query": [_q("project", STRING), _q("minutes", STRING, "Standard 60")]},
     ("GET", "/projects/<slug>/tasks/<int:number>/comments"): {
         "response": _object({"comments": {"type": "array", "items": COMMENT}})},
     ("POST", "/projects/<slug>/tasks/<int:number>/comments"): {

@@ -38,11 +38,12 @@ RED_LIMIT = 3                                                   # E-R3: so viele
 # Steuertickets (P6): nur der Mensch legt sie an; Pause haelt next an, Hinweis wartet auf Quittung
 KINDS = ("task", "control")
 CONTROL_TYPES = ("pause", "hint")
-CONTROL_SCOPES = ("project", "all")
+CONTROL_SCOPES = ("project", "all", "mine")   # mine: nur die Agenten des anlegenden Menschen (T5)
 # Verlaufseintraege fuer diese Felder (Plan 2, "Ticket-Verlauf"); "created" ist das Anlegen,
 # "comment" Bearbeiten/Loeschen eines Kommentars (alt -> neu bzw. -> None), R9
 TRACKED_FIELDS = ("created", "status", "title", "description", "human", "rank", "tags", "position", "comment",
-                  "review_state", "control_ack", "review_red_count", "initiative")
+                  "review_state", "control_ack", "review_red_count", "initiative",
+                  "assignee")                                 # Zustaendigkeit (T5)
 # Verlauf eines Projekts: Anlegen, Umbenennen, geloeschte Tickets (Tombstone), R9
 PROJECT_FIELDS = ("created", "name", "task_deleted", "initiative")
 POSITION_STEP = 1024.0      # Abstand der Karten nach dem Neunummerieren

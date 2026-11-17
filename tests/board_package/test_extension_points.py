@@ -189,6 +189,7 @@ NO_SLUG = {
     ("GET", ""): "filtert", ("GET", "/changes"): "nur Zaehler", ("POST", "/projects"): 403,
     ("GET", "/tasks"): "filtert", ("POST", "/tasks"): 404, ("GET", "/search"): "filtert", ("POST", "/next"): 404,
     ("PUT", "/comments/<comment_id>"): 404, ("DELETE", "/comments/<comment_id>"): 404, ("POST", "/import"): 403,
+    ("GET", "/stuck"): "filtert",
 }
 
 

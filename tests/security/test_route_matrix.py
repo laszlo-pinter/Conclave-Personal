@@ -108,6 +108,10 @@ EXPECTED = {
     ("POST", "/workspace/<path:filepath>"): "agent",
 }
 
+# T5: haengende Tickets anzeigen und freigeben (nur Mensch)
+EXPECTED[("GET", "/board/stuck")] = "human"
+EXPECTED[("POST", "/board/projects/<slug>/tasks/<int:number>/release")] = "human"
+
 # T3: Jede Board-Route gibt es auch unter /board/v1 mit derselben Rolle; /board bleibt als Alias.
 EXPECTED.update({(method, "/board/v1" + rule[len("/board"):]): role for (method, rule), role in list(EXPECTED.items())
                  if rule == "/board" or rule.startswith("/board/")})

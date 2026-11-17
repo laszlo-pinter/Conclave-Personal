@@ -35,9 +35,11 @@ geaendert, gilt die Pruefung nicht mehr fuer den neuen Stand -> 409 statt Uebers
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from contextlib import nullcontext
+from datetime import UTC, datetime, timedelta
 from typing import Callable
 
+from conclave_board.application.policy import BoardPolicy, PersonalPolicy
 from conclave_board.application.ports import BoardRepository
 from conclave_board.domain.board import (
     CONTROL_SCOPES,
@@ -86,10 +88,12 @@ def _invalid(message: str) -> BoardError:
 
 class BoardService:
     def __init__(self, repository: BoardRepository, flow: StatusFlow | None = None,
-                 now: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
+                 now: Callable[[], datetime] = lambda: datetime.now(UTC), policy: BoardPolicy | None = None) -> None:
         self._repo = repository
         self.flow = flow or StatusFlow()
         self._now = now
+        # Rechte und Regeln je Einsatz (T5); Standard sind die Regeln von Personal
+        self.policy = policy or PersonalPolicy()
 
     # ── Wer handelt ──────────────────────────────────────────────────────
 
@@ -110,13 +114,25 @@ class BoardService:
         if slug is not None and not principal.sees(slug):
             raise BoardError(f"Projekt '{slug}' nicht gefunden.", 404, "ProjectNotFound")
 
-    @staticmethod
-    def can_approve(principal: Principal, project: Project | None = None) -> bool:
-        return principal.is_human
+    def can_approve(self, principal: Principal, project: "Project | str | None" = None) -> bool:
+        """Freigabe-Recht im Projekt; entscheidet die Policy (Personal: der Mensch)."""
+        slug = project.slug if isinstance(project, Project) else project
+        return self.policy.can(principal, "approve", slug)
 
-    def _require_approval(self, principal: Principal, project: Project | None = None) -> None:
+    def _require_approval(self, principal: Principal, project: "Project | str | None" = None) -> None:
         if not self.can_approve(principal, project):
-            raise _forbidden("Nur mit Freigabe-Recht (heute: Mensch).")
+            raise _forbidden("Nur mit Freigabe-Recht.")
+
+    def _require(self, principal: Principal, action: str, slug: str | None, task: Task | None = None,
+                 message: str = "Keine Berechtigung in diesem Projekt.") -> None:
+        if not self.policy.can(principal, action, slug, task):
+            raise _forbidden(message)
+
+    def change_token_for(self, principal: Principal) -> int:
+        """Aenderungszaehler; fuer eingeschraenkte Zugaenge nur ueber die sichtbaren Projekte (T5)."""
+        if principal.projects is None:
+            return self._repo.change_token()
+        return self._repo.change_token_for(sorted(principal.projects))
 
     # ── Projekte ─────────────────────────────────────────────────────────
 
@@ -183,7 +199,7 @@ class BoardService:
     def create_initiative(self, principal: Principal, project_slug: str, slug: str, title: str,
                           rank: float | None = None) -> Initiative:
         """Nur der Mensch legt Vorhaben an (Agenten lesen sie)."""
-        self._require_approval(principal)
+        self._require_approval(principal, project_slug)
         project = self._project(project_slug)
         if rank is not None:
             rank = self._check_rank(rank)
@@ -204,7 +220,7 @@ class BoardService:
     def update_initiative(self, principal: Principal, project_slug: str, slug: str, *, title: str | None = None,
                           rank: float | None = None) -> Initiative:
         """Titel und Rang aendert nur der Mensch; der Rang ordnet next_task (P2)."""
-        self._require_approval(principal)
+        self._require_approval(principal, project_slug)
         initiative = self._initiative(project_slug, slug)
         old = f"{initiative.slug}: {initiative.title} (rank {initiative.rank:g})"
         if title is not None:
@@ -227,8 +243,8 @@ class BoardService:
     def assign_initiative(self, principal: Principal, ref: str, slug: str | None) -> Task:
         """Ordnet ein Ticket einem Vorhaben zu (naechste Nummer dort) oder mit None keinem.
         Nur der Mensch: Das bestimmt die Reihenfolge mit (P1, P2)."""
-        self._require_approval(principal)
         task = self.get_task(ref)
+        self._require_approval(principal, task.project_slug)
         initiative = self._initiative(task.project_slug, slug) if slug else None
         if (initiative.id if initiative else None) == task.initiative_id:
             return task
@@ -398,10 +414,13 @@ class BoardService:
                 raise _invalid(f"control muss einer von {CONTROL_TYPES} sein.")
             if scope not in CONTROL_SCOPES:
                 raise _invalid(f"scope muss einer von {CONTROL_SCOPES} sein.")
+            self._require(principal, f"control:{scope}", slug,
+                          message=f"Steuertickets mit Geltung '{scope}' nur mit dem passenden Recht.")
             status = None                               # offen = erste Spalte; geschlossen wird nach "erledigt"
         elif control is not None:
             raise _invalid("control gibt es nur bei kind=control.")
         project = self._project(slug)
+        self._require(principal, "write", project.slug, message="Nur lesen: keine Schreibrechte in diesem Projekt.")
         # Vorhaben: Agenten duerfen ein vorhandenes angeben (anlegen nur der Mensch)
         chosen = self._initiative(slug, initiative) if initiative else None
         status = self.flow_check(status) if status is not None else self.flow.first
@@ -424,7 +443,11 @@ class BoardService:
         if chosen is not None:
             task.initiative_id, task.initiative_slug, task.initiative_rank = chosen.id, chosen.slug, chosen.rank
         event = TaskEvent.create(task.id, "created", None, status, origin, actor_id=actor_id)
-        return self._repo.create_task(task, event)
+        created = self._repo.create_task(task, event)
+        if kind == "control":
+            self.policy.record(principal, "control", created.project_slug, created.ref,
+                               {"type": control, "scope": scope})
+        return created
 
     def update_task(self, principal: Principal, ref: str, *, title: str | None = None,
                     description: str | None = None, tags=None, status: str | None = None,
@@ -441,6 +464,8 @@ class BoardService:
             raise BoardError(f"Ticket '{ref}' hat inzwischen Version {task.version} (erwartet {version}); "
                              "bitte neu laden.", 409, "Conflict")
         self._guard_edit(principal, task)
+        self._require(principal, "write", task.project_slug, task,
+                      message="Nur lesen: keine Schreibrechte in diesem Projekt.")
         if principal.is_agent and (index is not None or rank is not None):
             raise _forbidden("Die Prioritaet setzt nur der Mensch (bzw. der Plan); Agenten sortieren nicht um.")
         if rank is not None and (isinstance(rank, bool) or not isinstance(rank, (int, float))
@@ -451,7 +476,8 @@ class BoardService:
 
         if status is not None:
             status = self.flow_check(status)
-            if principal.is_agent and status != task.status and self.flow.last in (status, task.status):
+            if status != task.status and self.flow.last in (status, task.status) and (
+                    principal.is_agent or not self.can_approve(principal, task.project_slug)):
                 raise _forbidden("Nach und aus der letzten Spalte schiebt nur, wer das Freigabe-Recht hat.")
             # Agenten uebernehmen ein Ticket sichtbar und atomar, statt "doing" zu ueberspringen (#51)
             if principal.is_agent and status != task.status and task.status == self.flow.first:
@@ -461,6 +487,8 @@ class BoardService:
             human = bool(human)
             if principal.is_agent and task.human and not human:
                 raise _forbidden("Agenten duerfen die Markierung 'nur fuer Menschen' nicht entfernen.")
+            if task.human and not human and not self.can_approve(principal, task.project_slug):
+                raise _forbidden("Die Markierung 'nur fuer Menschen' entfernt nur, wer das Freigabe-Recht hat.")
             # Gibt der Mensch ein Ticket frei (z. B. nach drei roten Reviews), zaehlt Rot neu (E-R3)
             if task.human and not human and task.review_red_count:
                 events.append(TaskEvent.create(task.id, "review_red_count", task.review_red_count, 0, origin,
@@ -498,22 +526,35 @@ class BoardService:
         if moved_column and not (index is not None and task.status != self.flow.first):
             task.position = self._end_position(task.project_id, task.status)
         if new_rank is not None and new_rank != task.rank:
+            if not self.can_approve(principal, task.project_slug):
+                raise _forbidden("Den Rang setzt nur, wer das Freigabe-Recht hat.")
             events.append(TaskEvent.create(task.id, "rank", task.rank, new_rank, origin, actor_id=actor_id))
             task.rank = new_rank
         if moved_column and task.status == self.flow.review:
             self._reset_review(task, events)            # neue Runde: Ergebnis der letzten gilt nicht mehr
         task.updated_at = self._now()
-        # Ticket und Verlauf zusammen, nur wenn seit dem Lesen niemand geaendert hat
-        if not self._repo.update_task(task, events):
-            if self._repo.get_task_by_id(task.id) is None:
-                raise BoardError(f"Ticket '{ref}' nicht gefunden.", 404, "TaskNotFound")
-            raise BoardError(f"Ticket '{ref}' wurde inzwischen geaendert; bitte neu laden.", 409, "Conflict")
+        old_status = next((e.old_value for e in events if e.field_name == "status"), None)
+        key = self.policy.lock_key(principal, task, task.status) if moved_column else None
+        # Regeln der Policy und Schreiben unter einer Sperre: "pruefen, dann schreiben" (T2/T5)
+        with (self._repo.locked_key(key) if key else nullcontext()):
+            if moved_column:
+                self.policy.check_status_change(self, principal, task, task.status)
+            # Ticket und Verlauf zusammen, nur wenn seit dem Lesen niemand geaendert hat
+            if not self._repo.update_task(task, events):
+                if self._repo.get_task_by_id(task.id) is None:
+                    raise BoardError(f"Ticket '{ref}' nicht gefunden.", 404, "TaskNotFound")
+                raise BoardError(f"Ticket '{ref}' wurde inzwischen geaendert; bitte neu laden.", 409, "Conflict")
+        if moved_column and self.flow.last in (task.status, old_status):
+            self.policy.record(principal, "approval", task.project_slug, task.ref,
+                               {"from": old_status, "to": task.status})
+        if any(e.field_name == "rank" for e in events):
+            self.policy.record(principal, "rank", task.project_slug, task.ref, {"rank": task.rank})
         return task
 
     def delete_task(self, principal: Principal, ref: str) -> None:
         """Loescht Ticket samt Kommentaren und Verlauf; im Projekt-Verlauf bleibt ein Eintrag."""
-        self._require_approval(principal)
         task = self.get_task(ref)
+        self._require_approval(principal, task.project_slug)
         origin, actor_id = self.actor(principal)
         tombstone = ProjectEvent.create(task.project_id, "task_deleted", f"{task.ref}: {task.title} ({task.status})",
                                         None, origin, actor_id=actor_id)
@@ -531,7 +572,7 @@ class BoardService:
         self._no_reviewer(principal, "Tickets uebernehmen")
         first, second = self.flow.first, self.flow.second
         if second == self.flow.last:
-            self._require_approval(principal)
+            self._require_approval(principal, slug)
         origin, actor_id = self.actor(principal)
         self.require_visible(principal, slug)
         if task is not None:
@@ -542,21 +583,44 @@ class BoardService:
                 raise _invalid(f"Ticket '{task}' gehoert nicht zum Projekt '{slug}'.")
             if ticket.kind == "control":
                 raise _forbidden(f"'{task}' ist ein Steuerticket des Menschen und wird nicht uebernommen.")
+            self._require(principal, "write", ticket.project_slug, ticket,
+                          message="Nur lesen: keine Schreibrechte in diesem Projekt.")
+            if not self.policy.claimable(principal, ticket):
+                raise _forbidden(f"Ticket '{task}' ist jemand anderem zugeordnet.")
             self._raise_if_paused(ticket.project_slug, principal)
-            return self._claim(task, origin, actor_id)
+            return self._claim(task, origin, actor_id, principal)
         self._raise_if_paused(slug, principal)
         # Nacharbeit aus dem Review zuerst, auch ueber Projekte hinweg; sonst Board-Reihenfolge
         candidates = sorted(self.list_tasks(slug, [first]), key=lambda t: t.review_state not in REWORK_STATES)
         for candidate in candidates:
             if candidate.human or candidate.kind == "control" or not principal.sees(candidate.project_slug):
                 continue
+            if (not self.policy.can(principal, "write", candidate.project_slug, candidate)
+                    or not self.policy.claimable(principal, candidate)):
+                continue
             position = self._end_position(candidate.project_id, second)
             event = TaskEvent.create(candidate.id, "status", first, second, origin, actor_id=actor_id)
-            if self._repo.claim_task(candidate.id, first, second, position, self._now(), event):
+            if self._claim_with_assignee(candidate, first, second, position, event, principal):
                 return self._repo.get_task_by_id(candidate.id)
         return None
 
-    def _claim(self, ref: str, origin, actor_id) -> Task:
+    def _claim_with_assignee(self, task: Task, first: str, second: str, position: float, event: TaskEvent,
+                             principal: Principal) -> bool:
+        """Uebernehmen und Zustaendigkeit setzen (Policy), zusammen in einer Transaktion."""
+        assignee = self.policy.assignee_for(principal)
+        with self._repo.locked_task(task.id):
+            if not self._repo.claim_task(task.id, first, second, position, self._now(), event):
+                return False
+            if assignee is not None and assignee != task.assignee:
+                claimed = self._repo.get_task_by_id(task.id)
+                origin, actor_id = self.actor(principal)
+                change = TaskEvent.create(task.id, "assignee", claimed.assignee, assignee, origin, actor_id=actor_id)
+                claimed.assignee = assignee
+                if not self._repo.update_task(claimed, [change]):
+                    raise BoardError(f"Ticket '{task.ref}' wurde inzwischen geaendert.", 409, "Conflict")
+        return True
+
+    def _claim(self, ref: str, origin, actor_id, principal: Principal | None = None) -> Task:
         """Ein bestimmtes Ticket atomar uebernehmen; sonst klarer Fehler, ohne Aenderung."""
         first, second = self.flow.first, self.flow.second
         task = self.get_task(ref)
@@ -568,13 +632,59 @@ class BoardService:
             raise BoardError(f"Ticket '{ref}' steht nicht in '{first}' (sondern in '{task.status}'), "
                              "ist also schon uebernommen oder weiter.", 409, "NotClaimable")
         event = TaskEvent.create(task.id, "status", first, second, origin, actor_id=actor_id)
-        if self._repo.claim_task(task.id, first, second, self._end_position(task.project_id, second),
-                                 self._now(), event):
+        claimed = (self._claim_with_assignee(task, first, second, self._end_position(task.project_id, second), event,
+                                             principal) if principal is not None else
+                   self._repo.claim_task(task.id, first, second, self._end_position(task.project_id, second),
+                                         self._now(), event))
+        if claimed:
             return self._repo.get_task_by_id(task.id)
         current = self.get_task(ref)
         if current.human:
             raise _forbidden(f"Ticket '{ref}' ist nur fuer Menschen und wird nicht uebernommen.")
         raise BoardError(f"Ticket '{ref}' wurde inzwischen uebernommen.", 409, "NotClaimable")
+
+    # ── Haengende Tickets (T5) ──────────────────────────────────────────
+
+    def status_since(self, task: Task) -> datetime | None:
+        """Seit wann das Ticket in seiner Spalte steht (letzter Statuswechsel, sonst angelegt)."""
+        changes = [e.created_at for e in self._repo.list_events(task.id) if e.field_name == "status"]
+        return max(changes) if changes else task.created_at
+
+    def stuck(self, principal: Principal, slug: str | None = None, older_than: timedelta = timedelta(hours=1)
+              ) -> list[tuple[Task, datetime]]:
+        """Uebernommene Tickets (zweite Spalte), die laenger als ``older_than`` dort stehen."""
+        self.require_visible(principal, slug)
+        limit = self._now() - older_than
+        found = []
+        for task in self.list_tasks(slug, [self.flow.second]):
+            if not principal.sees(task.project_slug) or task.kind == "control":
+                continue
+            since = self.status_since(task)
+            if since is not None and since <= limit:
+                found.append((task, since))
+        return sorted(found, key=lambda pair: pair[1])
+
+    def release_task(self, principal: Principal, ref: str) -> Task:
+        """Uebernommenes Ticket zurueck in die erste Spalte, Zustaendigkeit leer (eigener Mensch oder Freigabe)."""
+        task = self.get_task(ref)
+        self.require_visible(principal, task.project_slug)
+        if principal.is_agent:
+            raise _forbidden("Freigeben haengender Tickets ist Sache des Menschen.")
+        if task.status != self.flow.second:
+            raise BoardError(f"Ticket '{ref}' steht nicht in '{self.flow.second}'.", 409, "NotReleasable")
+        self._require(principal, "release", task.project_slug, task,
+                      message="Freigeben darf der eigene Mensch oder wer das Freigabe-Recht hat.")
+        origin, actor_id = self.actor(principal)
+        events = [TaskEvent.create(task.id, "status", task.status, self.flow.first, origin, actor_id=actor_id)]
+        if task.assignee is not None:
+            events.append(TaskEvent.create(task.id, "assignee", task.assignee, None, origin, actor_id=actor_id))
+        task.status, task.assignee = self.flow.first, None
+        task.position = self._end_position(task.project_id, task.status)
+        task.updated_at = self._now()
+        if not self._repo.update_task(task, events):
+            raise BoardError(f"Ticket '{ref}' wurde inzwischen geaendert; bitte neu laden.", 409, "Conflict")
+        self.policy.record(principal, "release", task.project_slug, task.ref, {})
+        return task
 
     # ── Review (P3) ──────────────────────────────────────────────────────
 
@@ -651,6 +761,8 @@ class BoardService:
     def add_comment(self, principal: Principal, ref: str, body: str, author_name: str = "") -> TaskComment:
         task = self.get_task(ref)
         self._guard_write(principal, task)
+        self._require(principal, "comment", task.project_slug, task,
+                      message="Nur lesen: keine Kommentare in diesem Projekt.")
         origin, actor_id = self.actor(principal)
         if (principal.is_agent and task.kind == "control" and task.control == "hint" and not task.control_ack_by
                 and task.status != self.flow.last):
@@ -689,16 +801,22 @@ class BoardService:
         for task in self._repo.list_tasks(None, open_statuses, kind="control"):
             if task.kind != "control" or task.origin != "human":
                 continue
-            if principal is not None and task.control_scope != "all" and not principal.sees(task.project_slug):
+            # "mine": gilt projektuebergreifend, aber nur fuer den anlegenden Menschen und seine Agenten
+            # (ohne Konten, also in Personal: fuer alle)
+            if (task.control_scope == "mine" and principal is not None and principal.actor_id is not None
+                    and principal.actor_id != task.actor_id):
                 continue
-            if slug is None or task.control_scope == "all" or task.project_slug == slug:
+            if (principal is not None and task.control_scope not in ("all", "mine")
+                    and not principal.sees(task.project_slug)):
+                continue
+            if slug is None or task.control_scope in ("all", "mine") or task.project_slug == slug:
                 found.append(task)
         return sorted(found, key=lambda t: (t.created_at, t.project_slug, t.number))
 
     @staticmethod
     def _control_entry(task: Task) -> dict:
         return {"task": task.ref, "type": task.control,
-                "scope": "all" if task.control_scope == "all" else task.project_slug,
+                "scope": task.control_scope if task.control_scope in ("all", "mine") else task.project_slug,
                 "reason": task.title, "text": task.description, "by": task.created_by or "human",
                 "at": _iso(task.created_at)}
 

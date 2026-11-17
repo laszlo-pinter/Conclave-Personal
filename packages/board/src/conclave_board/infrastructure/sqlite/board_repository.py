@@ -118,6 +118,32 @@ class SQLiteBoardRepository:
             self._connection.commit()
 
     @contextmanager
+    def locked_key(self, key: str):
+        """Transaktion unter einer benannten Sperre (T5), z. B. je Zustaendigem.
+
+        SQLite sperrt die ganze Datenbank (``BEGIN IMMEDIATE``); das schliesst jeden Schluessel ein."""
+        with self._tx():
+            if self._autocommit and not self._connection.in_transaction:
+                self._connection.execute("BEGIN IMMEDIATE")
+            yield
+
+    def change_token_for(self, project_slugs: list[str]) -> int:
+        """Aenderungszaehler nur ueber diese Projekte: hoechste Folgenummer ihrer Eintraege (T5)."""
+        if not project_slugs:
+            return 0
+        marks = ", ".join("?" for _ in project_slugs)
+        queries = (
+            f"SELECT MAX(e.seq) FROM board_events e JOIN board_tasks t ON t.id = e.task_id "      # nosec B608
+            f"JOIN board_projects p ON p.id = t.project_id WHERE p.slug IN ({marks})",
+            f"SELECT MAX(c.seq) FROM board_comments c JOIN board_tasks t ON t.id = c.task_id "    # nosec B608
+            f"JOIN board_projects p ON p.id = t.project_id WHERE p.slug IN ({marks})",
+            f"SELECT MAX(e.seq) FROM board_project_events e JOIN board_projects p ON p.id = e.project_id "  # nosec B608
+            f"WHERE p.slug IN ({marks})",
+        )
+        values = [self._one(q, tuple(project_slugs))[0] for q in queries]
+        return int(max((v for v in values if v is not None), default=0))
+
+    @contextmanager
     def locked_task(self, task_id: str):
         """Transaktion, in der niemand sonst schreibt; ``True``, wenn das Ticket existiert.
 

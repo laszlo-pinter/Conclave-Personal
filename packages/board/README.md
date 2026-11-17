@@ -31,6 +31,14 @@ changes to its rules:
 - **Routes:** `create_board_app(..., blueprints=[...])` adds Flask blueprints. They
   pass the same authentication and access layer; agent and reviewer tokens are
   not allowed on them (default deny).
+- **Rules:** `BoardService(..., policy=...)` takes a `BoardPolicy`. It decides who
+  may write, comment, approve (done, rank, delete, initiatives, removing "humans
+  only"), release stuck tickets and create control tickets per scope (`mine`,
+  `project`, `all`), which tickets `next` may hand out and whom it assigns, extra
+  checks on status changes under a named lock (`locked_key`), and receives
+  events (approval, rank, control, release) for an audit log. The default
+  `PersonalPolicy` keeps the rules of Conclave Personal. The fixed rules for
+  agents and the reviewer always apply.
 - **Migrations:** `run_extension_migrations(conn, is_postgres, migrations,
   "<name>_migrations")` runs an extension's own series with its own tracking
   table, with the same transaction and lock rules as the board series.

@@ -82,6 +82,13 @@ class PostgresBoardRepository(SQLiteBoardRepository):
             yield
 
     @contextmanager
+    def locked_key(self, key: str):
+        """Transaktion unter ``pg_advisory_xact_lock(hashtext(key))`` (T5); faellt mit Commit oder Rollback."""
+        with self._tx():
+            self._execute("SELECT pg_advisory_xact_lock(hashtext(?))", ("board:" + key,))
+            yield
+
+    @contextmanager
     def locked_task(self, task_id: str):
         """Transaktion mit Zeilensperre auf das Ticket (``FOR UPDATE``); ``True``, wenn es existiert.
 

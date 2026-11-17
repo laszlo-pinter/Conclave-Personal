@@ -47,6 +47,9 @@ _BOARD_HUMAN_ONLY_RELATIVE = frozenset({
     ("POST", "/import"),
     ("POST", "/projects/<slug>/initiatives"),
     ("PUT", "/projects/<slug>/initiatives/<initiative>"),
+    # Haengende Tickets (T5): anzeigen und freigeben
+    ("GET", "/stuck"),
+    ("POST", "/projects/<slug>/tasks/<int:number>/release"),
 })
 
 # Nur der Reviewer-Zugang (P3); Agent und Mensch lehnt der BoardService ab

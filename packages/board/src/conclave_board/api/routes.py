@@ -20,6 +20,7 @@ setzt die App; die Regeln je Ticket prueft der BoardService.
 """
 
 import json as _json
+from datetime import timedelta
 from typing import Callable
 
 from flask import Blueprint, Flask, g, jsonify, request
@@ -32,6 +33,10 @@ from conclave_board.application.board import (
     BoardError, comment_to_dict, event_to_dict, initiative_to_dict, project_event_to_dict, project_to_dict,
     task_to_dict,
 )
+
+def _iso(value):
+    return value.isoformat() if value is not None else None
+
 
 def register_board_api(app: Flask, board, *, import_max_bytes: Callable[[], int] | None = None) -> None:
     """Board-Routen unter ``/board/v1`` und als abgekuendigten Alias unter ``/board``, dazu die Versionen."""
@@ -128,7 +133,7 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
         b = _board()
         projects = [p for p in b.list_projects() if g.principal.sees(p.slug)]
         return jsonify({"statuses": list(b.flow.statuses), "projects": [project_to_dict(p) for p in projects],
-                        "changes": b.change_token(), "control": b.control_state(principal=g.principal)}), 200
+                        "changes": b.change_token_for(g.principal), "control": b.control_state(principal=g.principal)}), 200
 
     def _control(slug: str | None = None) -> dict:
         """Offene Pausen und unquittierte Hinweise des Menschen (P6), in jeder Board-Antwort."""
@@ -137,7 +142,7 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
     @bp.get("/changes")
     def board_changes():
         """Aenderungszaehler; die UI laedt neu, wenn er steigt."""
-        return jsonify({"changes": _board().change_token()}), 200
+        return jsonify({"changes": _board().change_token_for(g.principal)}), 200
 
     @bp.post("/projects")
     def board_create_project():
@@ -223,7 +228,25 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
         b = _board()
         task = b.get_task(_ref(slug, number))
         return jsonify({**task_to_dict(task), "comments": [comment_to_dict(c) for c in b.comments(task.ref)],
-                        "last_review": _last_review(b, task.ref), "control": _control(slug)}), 200
+                        "last_review": _last_review(b, task.ref), "status_since": _iso(b.status_since(task)),
+                        "control": _control(slug)}), 200
+
+    @bp.post("/projects/<slug>/tasks/<int:number>/release")
+    def board_release_task(slug: str, number: int):
+        """Haengendes Ticket freigeben: zurueck in die erste Spalte, Zustaendigkeit leer (Mensch, T5)."""
+        task = _board().release_task(g.principal, _ref(slug, number))
+        return jsonify({**task_to_dict(task), "control": _control(slug)}), 200
+
+    @bp.get("/stuck")
+    def board_stuck():
+        """Uebernommene Tickets, die laenger als ``minutes`` (Standard 60) in Arbeit stehen (Mensch, T5)."""
+        raw = request.args.get("minutes", "60")
+        if not raw.isdigit() or not 1 <= int(raw) <= 525600:
+            raise BoardError("minutes muss eine ganze Zahl von 1 bis 525600 sein.", 400, "ValidationError")
+        slug = request.args.get("project") or None
+        found = _board().stuck(g.principal, slug, timedelta(minutes=int(raw)))
+        return jsonify({"tasks": [{**task_to_dict(t), "status_since": _iso(since)} for t, since in found],
+                        "control": _control(slug)}), 200
 
     @bp.get("/projects/<slug>/initiatives/<initiative>/tasks/<int:number>")
     def board_get_task_in_initiative(slug: str, initiative: str, number: int):
@@ -276,7 +299,7 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
         _check_task_fields(body, {"title", "description", "tags", "status", "human", "index", "rank", "version",
                                   "initiative"})
         b = _board()
-        if "initiative" in body and not b.can_approve(g.principal):
+        if "initiative" in body and not b.can_approve(g.principal, slug):
             raise BoardError("Vorhaben ordnet nur der Mensch zu.", 403, "HumanOnly")
         ref = _ref(slug, number)
         fields = {k: v for k, v in body.items() if k != "initiative"}
