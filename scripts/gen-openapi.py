@@ -1,22 +1,34 @@
 #!/usr/bin/env python3
-"""Generiert die OpenAPI-Spec aus den Flask-Routes in app.py und im Board-Blueprint.
+"""Generiert die OpenAPI-Spezifikationen aus den registrierten Flask-Routen (T3).
 
-Die Board-Routen (conclave_board/api/routes.py) stehen in der Spec an der Stelle,
-an der app.py den Blueprint einbindet; die Reihenfolge bleibt wie vor dem Schnitt (T1).
+Statt den Quelltext per Regex zu lesen, baut das Skript die Apps und liest ihre
+``url_map``: Personal (``conclave.api.app``) und die Board-App
+(``conclave_board.api.app``). Ausgaben:
+
+- ``static/openapi.json`` und ``src/conclave/assets/static/openapi.json``: alle Routen
+  von Personal; der Alias ``/board/...`` ist als ``deprecated`` markiert.
+- ``packages/board/openapi/board-v1.json``: der Vertrag der Board-API v1
+  (``/board/v1/...`` und ``/board/versions``). Gegen ihn prueft die CI mit
+  ``oasdiff breaking``, ob eine Aenderung innerhalb von v1 bricht.
+
+Aufruf: python scripts/gen-openapi.py
 """
 
 import json
 import re
+import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 
-APP_PY = Path(__file__).parent.parent / "src" / "conclave" / "api" / "app.py"
-ROOT = Path(__file__).parent.parent
-BOARD_ROUTES_PY = ROOT / "packages" / "board" / "src" / "conclave_board" / "api" / "routes.py"
-BLUEPRINT_LINE = "app.register_blueprint(create_board_blueprint("
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "packages" / "board" / "src"))
+sys.path.insert(0, str(ROOT / "src"))
+
 OUTS = (
     ROOT / "static" / "openapi.json",
     ROOT / "src" / "conclave" / "assets" / "static" / "openapi.json",
 )
+BOARD_V1_OUT = ROOT / "packages" / "board" / "openapi" / "board-v1.json"
 
 # Bekannte Request/Response-Schemas pro Endpoint-Pattern.
 # Wer einen Client gegen Conclave baut, sollte sich an die hier gelisteten
@@ -305,9 +317,6 @@ SCHEMAS = {
 
 
 def _human_only() -> frozenset:
-    import sys
-    sys.path.insert(0, str(ROOT / "packages" / "board" / "src"))
-    sys.path.insert(0, str(ROOT / "src"))
     from conclave.api.access import HUMAN_ONLY as routes
     return routes
 
@@ -320,21 +329,35 @@ def _project_version() -> str:
     data = tomllib.loads((Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8"))
     return data["project"]["version"]
 
-def extract_routes(source: str) -> list[dict]:
-    pattern = re.compile(
-        r'@(?:app|bp)\.(get|post|put|patch|delete)\(["\']([^"\']+)["\']\)\s*\n'
-        r'\s*def\s+(\w+)\(.*?\):\s*\n'
-        r'(?:\s*"""(.*?)""")?',
-        re.DOTALL,
-    )
+def routes_from_app(app) -> list[dict]:
+    """Routen in Registrierungsreihenfolge: Methode, Flask-Pfad, View-Name, erste Doc-Zeile."""
+    from conclave_board.api.versions import ALIAS_PREFIX, V1_PREFIX
     routes = []
-    for m in pattern.finditer(source):
-        method = m.group(1).upper()
-        path = m.group(2)
-        func = m.group(3)
-        doc = (m.group(4) or "").strip().split("\n")[0]
-        routes.append({"method": method, "path": path, "func": func, "doc": doc})
+    for rule in app.url_map.iter_rules():
+        if rule.endpoint == "static":
+            continue
+        view = app.view_functions[rule.endpoint]
+        doc = (view.__doc__ or "").strip().split("\n")[0]
+        blueprint = rule.endpoint.rsplit(".", 1)[0] if "." in rule.endpoint else ""
+        for method in sorted(m for m in rule.methods if m not in ("HEAD", "OPTIONS")):
+            routes.append({
+                "method": method, "path": rule.rule, "func": view.__name__, "doc": doc,
+                "v1": blueprint == "board_v1",
+                "alias": blueprint == "board",
+                # Schemas und Zugriffsliste sind fuer beide Praefixe gleich; Schluessel ist der Alias-Pfad
+                "key_path": ALIAS_PREFIX + rule.rule[len(V1_PREFIX):] if blueprint == "board_v1" else rule.rule,
+            })
     return routes
+
+
+def personal_app():
+    from conclave.api.app import create_app
+    return create_app(MagicMock(), allow_unauthenticated=True)
+
+
+def board_app():
+    from conclave_board.api.app import create_board_app
+    return create_board_app(None, None, allow_unauthenticated=True)
 
 
 def flask_to_openapi_path(path: str) -> str:
@@ -348,7 +371,9 @@ def path_param_types(path: str) -> dict[str, str]:
             for conv, name in re.findall(r'<(?:(\w+):)?(\w+)>', path)}
 
 
-def build_spec(routes: list[dict]) -> dict:
+def build_spec(routes: list[dict], *, title: str = "Conclave API",
+               description: str = "Host-gesteuertes Multi-Model-Konversationssystem") -> dict:
+    from conclave_board.api.versions import ALIAS_SUNSET, V1_PREFIX
     paths = {}
     tags_set = set()
 
@@ -363,7 +388,7 @@ def build_spec(routes: list[dict]) -> dict:
         tags_set.add(tag)
 
         # Response-Body aus SCHEMAS (falls vorhanden)
-        schema_key = (r["method"], r["path"])
+        schema_key = (r["method"], r["key_path"])
         resp_200 = {"description": "Erfolg"}
         if schema_key in SCHEMAS and "response" in SCHEMAS[schema_key]:
             resp_schema = SCHEMAS[schema_key]["response"]
@@ -372,7 +397,8 @@ def build_spec(routes: list[dict]) -> dict:
         operation = {
             "summary": doc,
             "tags": [tag],
-            "operationId": r["func"],
+            # v1 eigene IDs; der Alias behaelt die bisherigen (unveraendert fuer bestehende Clients)
+            "operationId": ("v1_" + r["func"]) if r["v1"] else r["func"],
             "responses": {
                 "200": resp_200,
             },
@@ -380,8 +406,13 @@ def build_spec(routes: list[dict]) -> dict:
         for code, text in SCHEMAS.get(schema_key, {}).get("errors", {}).items():
             operation["responses"][code] = {"description": text}
         # Agent-Zugang (api/access.py): alles ausser der Allowlist ergibt 403 HumanOnly
-        if (r["method"], r["path"]) in HUMAN_ONLY:
-            operation["description"] = "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
+        if r["alias"]:
+            operation["deprecated"] = True
+            operation["description"] = (f"Abgekuendigter Alias von {V1_PREFIX}{r['path'][len('/board'):]}; "
+                                        f"Antworten tragen Deprecation, Sunset ({ALIAS_SUNSET}) und Link.")
+        if (r["method"], r["key_path"]) in HUMAN_ONLY:
+            note = "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
+            operation["description"] = (operation.get("description", "") + " " + note).strip()
             operation["responses"].setdefault("403", {"description": "HumanOnly: nur fuer den Menschen-Zugang"})
 
         # Path-Parameter extrahieren
@@ -415,8 +446,8 @@ def build_spec(routes: list[dict]) -> dict:
     return {
         "openapi": "3.0.3",
         "info": {
-            "title": "Conclave API",
-            "description": "Host-gesteuertes Multi-Model-Konversationssystem",
+            "title": title,
+            "description": description,
             "version": _project_version(),
         },
         "servers": [
@@ -434,24 +465,35 @@ def build_spec(routes: list[dict]) -> dict:
     }
 
 
-def combined_source() -> str:
-    """app.py mit den Board-Routen an der Stelle, an der der Blueprint eingebunden wird."""
-    source = APP_PY.read_text(encoding="utf-8")
-    if BLUEPRINT_LINE not in source:
-        raise SystemExit(f"{APP_PY}: Einbindung des Board-Blueprints nicht gefunden")
-    at = source.index(BLUEPRINT_LINE)
-    return source[:at] + BOARD_ROUTES_PY.read_text(encoding="utf-8") + source[at:]
+def board_v1_spec() -> dict:
+    """Vertrag der Board-API v1 aus der Board-App: nur /board/v1/... und /board/versions."""
+    from conclave_board.api.versions import V1_PREFIX, VERSIONS_PATH
+    routes = [r for r in routes_from_app(board_app())
+              if r["path"] == V1_PREFIX or r["path"].startswith(V1_PREFIX + "/") or r["path"] == VERSIONS_PATH]
+    spec = build_spec(routes, title="Conclave Board API v1",
+                      description="Board-API v1 (Tickets, Review, Vorhaben, Steuertickets). Innerhalb von v1 nur "
+                                  "Ergaenzungen; Clients ignorieren unbekannte Felder.")
+    spec["servers"] = [{"url": "http://127.0.0.1:8200", "description": "Board-Server lokal"}]
+    return spec
+
+
+def personal_spec() -> dict:
+    return build_spec(routes_from_app(personal_app()))
+
+
+def _write(path: Path, spec: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(spec, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def main():
-    source = combined_source()
-    routes = extract_routes(source)
-    spec = build_spec(routes)
-    payload = json.dumps(spec, indent=2, ensure_ascii=False)
+    spec = personal_spec()
     for out in OUTS:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(payload, encoding="utf-8")
-    print(f"{len(routes)} Routes -> {', '.join(str(out) for out in OUTS)}")
+        _write(out, spec)
+    board = board_v1_spec()
+    _write(BOARD_V1_OUT, board)
+    print(f"{sum(len(v) for v in spec['paths'].values())} Operationen -> {', '.join(str(o) for o in OUTS)}")
+    print(f"{sum(len(v) for v in board['paths'].values())} Operationen (Board v1) -> {BOARD_V1_OUT}")
 
 
 if __name__ == "__main__":

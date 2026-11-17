@@ -195,7 +195,7 @@ def test_review_tool_posts_state_and_comment_in_one_call(monkeypatch):
     monkeypatch.setattr(server.httpx, "request", fake_request)
     out = server.conclave_board_review("api#1", "rework", "Urteil: gelb", blocking=1, suggestions=2,
                                        checked="b @ 1..2")
-    assert sent == [("POST", "/board/projects/api/tasks/1/review",
+    assert sent == [("POST", "/board/v1/projects/api/tasks/1/review",
                      {"state": "rework", "comment": "Urteil: gelb", "blocking": 1, "suggestions": 2,
                       "checked": "b @ 1..2"})]
     assert out["review_state"] == "rework"

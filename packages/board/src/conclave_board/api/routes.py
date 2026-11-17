@@ -1,23 +1,48 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Laszlo Pinter
 
-"""REST-Routen des Boards als Flask-Blueprint (Plan board.md, B3; T1).
+"""REST-Routen des Boards als Flask-Blueprint (Plan board.md, B3; T1, T3).
+
+Versionierung (T3, Plan board-team.md Abschnitt 7, E9):
+
+- ``/board/v1/...`` ist die stabile API. Innerhalb von v1 gibt es nur Ergaenzungen
+  (neue Routen, neue optionale Felder in Anfragen, neue Felder in Antworten).
+  Brechend und damit nur in einer neuen Version: Felder entfernen oder umbenennen,
+  Typ oder Bedeutung aendern, neue Pflichtfelder, strengere Pruefung, andere
+  Statuscodes oder Fehlerformate, Rechte zum Nachteil bestehender Clients.
+- ``/board/...`` (unversioniert, bis v0.7.0) bleibt als Alias mit denselben
+  Antworten und den Headern ``Deprecation``, ``Sunset`` und ``Link`` auf den Nachfolger.
+- ``GET /board/versions`` nennt die Versionen; ``/health`` nennt sie ebenfalls.
 
 Board-App (``conclave_board.api.app``) und Personal (``conclave.api.app``) binden
-denselben Blueprint ein. Anmeldung, Zugriffslisten und Grenzen setzt die App;
-die Regeln je Ticket prueft der BoardService.
+die Routen mit ``register_board_api`` ein. Anmeldung, Zugriffslisten und Grenzen
+setzt die App; die Regeln je Ticket prueft der BoardService.
 """
 
 import json as _json
 from typing import Callable
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, Flask, g, jsonify, request
 
 from conclave_board.api.security import BOARD_IMPORT_MAX_BYTES
+from conclave_board.api.versions import (  # noqa: F401  (Namen auch hier erreichbar)
+    ALIAS_DEPRECATION, ALIAS_PREFIX, ALIAS_SUNSET, PREFIXES, V1_PREFIX, VERSIONS_PATH, board_versions,
+)
 from conclave_board.application.board import (
     BoardError, comment_to_dict, event_to_dict, initiative_to_dict, project_event_to_dict, project_to_dict,
     task_to_dict,
 )
+
+def register_board_api(app: Flask, board, *, import_max_bytes: Callable[[], int] | None = None) -> None:
+    """Board-Routen unter ``/board/v1`` und als abgekuendigten Alias unter ``/board``, dazu die Versionen."""
+    blueprint = create_board_blueprint(board, import_max_bytes=import_max_bytes)
+    app.register_blueprint(blueprint, url_prefix=V1_PREFIX, name="board_v1")
+    app.register_blueprint(blueprint, url_prefix=ALIAS_PREFIX, name="board")
+
+    @app.get(VERSIONS_PATH)
+    def board_api_versions():
+        """Versionen der Board-API (ohne Token)."""
+        return jsonify(board_versions()), 200
 
 
 def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None = None) -> Blueprint:
@@ -31,6 +56,16 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
     @bp.app_errorhandler(BoardError)
     def _handle_board_error(e):
         return jsonify({"error": str(e), "type": e.type}), e.status
+
+    @bp.after_request
+    def _mark_alias(response):
+        """Der Alias /board antwortet wie v1, mit Hinweis auf die Abkuendigung."""
+        if request.blueprint == "board":
+            response.headers["Deprecation"] = ALIAS_DEPRECATION
+            response.headers["Sunset"] = ALIAS_SUNSET
+            successor = V1_PREFIX + request.path[len(ALIAS_PREFIX):]
+            response.headers["Link"] = f'<{successor}>; rel="successor-version"'
+        return response
 
     # ── Board (Plan board.md, B3) ───────────────────────────────────────
     def _board():
@@ -70,7 +105,7 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
     def _flag(name: str, default: bool = False) -> bool:
         return request.args.get(name, "true" if default else "false").lower() in ("1", "true", "yes")
 
-    @bp.get("/board")
+    @bp.get("")
     def board_overview():
         """Spalten, Projekte und Aenderungszaehler des Boards."""
         b = _board()
@@ -81,31 +116,31 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
         """Offene Pausen und unquittierte Hinweise des Menschen (P6), in jeder Board-Antwort."""
         return _board().control_state(slug)
 
-    @bp.get("/board/changes")
+    @bp.get("/changes")
     def board_changes():
         """Aenderungszaehler; die UI laedt neu, wenn er steigt."""
         return jsonify({"changes": _board().change_token()}), 200
 
-    @bp.post("/board/projects")
+    @bp.post("/projects")
     def board_create_project():
         """Projekt anlegen (Freigabe-Recht)."""
         body = _json_object()
         project = _board().create_project(g.principal, body.get("slug"), body.get("name"))
         return jsonify(project_to_dict(project)), 201
 
-    @bp.put("/board/projects/<slug>")
+    @bp.put("/projects/<slug>")
     def board_rename_project(slug: str):
         """Projekt umbenennen (Freigabe-Recht)."""
         project = _board().rename_project(g.principal, slug, _json_object().get("name"))
         return jsonify(project_to_dict(project)), 200
 
-    @bp.delete("/board/projects/<slug>")
+    @bp.delete("/projects/<slug>")
     def board_delete_project(slug: str):
         """Projekt samt Tickets loeschen (Freigabe-Recht)."""
         _board().delete_project(g.principal, slug)
         return "", 204
 
-    @bp.get("/board/tasks")
+    @bp.get("/tasks")
     def board_list_tasks():
         """Tickets in Board-Reihenfolge; Filter project, status (mehrfach), include_done."""
         statuses = request.args.getlist("status") or None
@@ -113,7 +148,7 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
         tasks = _board().list_tasks(slug, statuses, include_done=_flag("include_done"))
         return jsonify({"tasks": [task_to_dict(t) for t in tasks], "control": _control(slug)}), 200
 
-    @bp.post("/board/tasks")
+    @bp.post("/tasks")
     def board_create_task():
         """Ticket anlegen; neue Tickets landen in der ersten Spalte.
 
@@ -128,14 +163,14 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
                                     scope=body.get("scope") or "project", initiative=body.get("initiative") or None)
         return jsonify({**task_to_dict(task), "control": _control(task.project_slug)}), 201
 
-    @bp.get("/board/search")
+    @bp.get("/search")
     def board_search():
         """Suche in Titel, Tags, Beschreibung und Kommentaren."""
         slug = request.args.get("project") or None
         tasks = _board().search(request.args.get("q", ""), slug, include_done=_flag("include_done", True))
         return jsonify({"tasks": [task_to_dict(t) for t in tasks], "control": _control(slug)}), 200
 
-    @bp.post("/board/next")
+    @bp.post("/next")
     def board_next_task():
         """Oberstes freies Ticket der ersten Spalte uebernehmen (atomar); mit ``task`` genau dieses."""
         body = request.get_json(silent=True) or {}
@@ -164,7 +199,7 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
     def _ref(slug: str, number: int) -> str:
         return f"{slug}#{number}"
 
-    @bp.get("/board/projects/<slug>/tasks/<int:number>")
+    @bp.get("/projects/<slug>/tasks/<int:number>")
     def board_get_task(slug: str, number: int):
         """Ein Ticket mit Kommentaren."""
         b = _board()
@@ -172,18 +207,18 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
         return jsonify({**task_to_dict(task), "comments": [comment_to_dict(c) for c in b.comments(task.ref)],
                         "last_review": _last_review(b, task.ref), "control": _control(slug)}), 200
 
-    @bp.get("/board/projects/<slug>/initiatives/<initiative>/tasks/<int:number>")
+    @bp.get("/projects/<slug>/initiatives/<initiative>/tasks/<int:number>")
     def board_get_task_in_initiative(slug: str, initiative: str, number: int):
         """Ein Ticket ueber seine Vorhaben-Nummer (``projekt/vorhaben-n``, P2); wie das Ticket selbst."""
         task = _board().get_task(f"{slug}/{initiative}-{number}")
         return board_get_task(slug, task.number)
 
-    @bp.get("/board/projects/<slug>/initiatives")
+    @bp.get("/projects/<slug>/initiatives")
     def board_list_initiatives(slug: str):
         """Vorhaben des Projekts nach Rang (P2)."""
         return jsonify({"initiatives": [initiative_to_dict(i) for i in _board().list_initiatives(slug)]}), 200
 
-    @bp.post("/board/projects/<slug>/initiatives")
+    @bp.post("/projects/<slug>/initiatives")
     def board_create_initiative(slug: str):
         """Vorhaben anlegen: slug, title, optional rank (Freigabe-Recht)."""
         body = _json_object()
@@ -192,7 +227,7 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
                                                 rank=body.get("rank"))
         return jsonify(initiative_to_dict(initiative)), 201
 
-    @bp.put("/board/projects/<slug>/initiatives/<initiative>")
+    @bp.put("/projects/<slug>/initiatives/<initiative>")
     def board_update_initiative(slug: str, initiative: str):
         """Vorhaben umbenennen oder ranken: title, rank (Freigabe-Recht)."""
         body = _json_object()
@@ -212,7 +247,7 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
         if rank is not None and (isinstance(rank, bool) or not isinstance(rank, (int, float))):
             raise BoardError("rank muss eine Zahl sein.", 400, "ValidationError")
 
-    @bp.patch("/board/projects/<slug>/tasks/<int:number>")
+    @bp.patch("/projects/<slug>/tasks/<int:number>")
     def board_update_task(slug: str, number: int):
         """Ticket aendern: title, description, tags, status, human, index, rank, version, initiative.
 
@@ -241,18 +276,18 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
             task = b.assign_initiative(g.principal, ref, body.get("initiative") or None)
         return jsonify({**task_to_dict(task), "control": _control(slug)}), 200
 
-    @bp.delete("/board/projects/<slug>/tasks/<int:number>")
+    @bp.delete("/projects/<slug>/tasks/<int:number>")
     def board_delete_task(slug: str, number: int):
         """Ticket loeschen (Freigabe-Recht)."""
         _board().delete_task(g.principal, _ref(slug, number))
         return "", 204
 
-    @bp.get("/board/projects/<slug>/tasks/<int:number>/comments")
+    @bp.get("/projects/<slug>/tasks/<int:number>/comments")
     def board_list_comments(slug: str, number: int):
         """Kommentare eines Tickets mit Herkunft."""
         return jsonify({"comments": [comment_to_dict(c) for c in _board().comments(_ref(slug, number))]}), 200
 
-    @bp.post("/board/projects/<slug>/tasks/<int:number>/comments")
+    @bp.post("/projects/<slug>/tasks/<int:number>/comments")
     def board_add_comment(slug: str, number: int):
         """Kommentar schreiben; die Herkunft kommt aus dem Token."""
         body = _json_object()
@@ -260,12 +295,12 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
                                        author_name=body.get("author_name") or "")
         return jsonify({**comment_to_dict(comment), "control": _control(slug)}), 201
 
-    @bp.get("/board/projects/<slug>/tasks/<int:number>/history")
+    @bp.get("/projects/<slug>/tasks/<int:number>/history")
     def board_history(slug: str, number: int):
         """Verlauf eines Tickets: Anlegen und jede Aenderung mit Herkunft."""
         return jsonify({"history": [event_to_dict(e) for e in _board().history(_ref(slug, number))]}), 200
 
-    @bp.post("/board/projects/<slug>/tasks/<int:number>/review")
+    @bp.post("/projects/<slug>/tasks/<int:number>/review")
     def board_review_task(slug: str, number: int):
         """Review-Status setzen (nur Reviewer-Zugang).
 
@@ -280,24 +315,24 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
                                checked=body.get("checked"))
         return jsonify(task_to_dict(task)), 200
 
-    @bp.get("/board/projects/<slug>/history")
+    @bp.get("/projects/<slug>/history")
     def board_project_history(slug: str):
         """Verlauf eines Projekts: Anlegen, Umbenennen, geloeschte Tickets (nur Mensch)."""
         return jsonify({"history": [project_event_to_dict(e) for e in _board().project_history(slug)]}), 200
 
-    @bp.put("/board/comments/<comment_id>")
+    @bp.put("/comments/<comment_id>")
     def board_edit_comment(comment_id: str):
         """Eigenen Kommentar aendern (nur Mensch)."""
         comment = _board().edit_comment(g.principal, comment_id, _json_object().get("body"))
         return jsonify(comment_to_dict(comment)), 200
 
-    @bp.delete("/board/comments/<comment_id>")
+    @bp.delete("/comments/<comment_id>")
     def board_delete_comment(comment_id: str):
         """Eigenen Kommentar loeschen (nur Mensch)."""
         _board().delete_comment(g.principal, comment_id)
         return "", 204
 
-    @bp.post("/board/import")
+    @bp.post("/import")
     def board_import():
         """JSON-Export eines Boards uebernehmen (Freigabe-Recht, idempotent)."""
         limit = import_limit()

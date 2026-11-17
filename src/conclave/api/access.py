@@ -14,6 +14,7 @@ Die Board-Routen und ihre Zuordnung kommen aus dem Board-Paket (T1).
 from conclave_board.api.access import (  # noqa: F401
     BOARD_AGENT_ALLOWED,
     BOARD_HUMAN_ONLY,
+    BOARD_PUBLIC,
     BOARD_REVIEWER_ALLOWED,
     BOARD_REVIEWER_ONLY,
     HUMAN_ONLY_ERROR,
@@ -93,7 +94,7 @@ PUBLIC = frozenset({
     ("GET", "/api-docs"),
     ("GET", "/openapi.json"),
     ("GET", "/static/<path:filename>"),
-})
+}) | BOARD_PUBLIC
 
 # Nur der Reviewer-Zugang (P3); Agent und Mensch lehnt der BoardService ab
 REVIEWER_ONLY = BOARD_REVIEWER_ONLY

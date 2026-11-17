@@ -196,7 +196,10 @@ def test_every_mcp_tool_route_works_with_agent_token(app, mcp_via_app):
     used = {(m, r) for m, r, _ in hits}
     # Die Allowlist ist genau das, was die Tools brauchen, plus whoami (Z5) - auch fuers Board (B4) -
     # und die lesbaren Kontextdaten aus E-S5 (a).
-    assert used | {("GET", "/auth/whoami")} | AGENT_CONTEXT_READ == AGENT_ALLOWED
+    # Die Tools nutzen /board/v1 (T3); der Alias /board steht fuer aeltere Clients mit derselben Rolle darin.
+    alias = {(m, r) for m, r in AGENT_ALLOWED if r == "/board" or (r.startswith("/board/") and not r.startswith("/board/v1"))}
+    assert alias == {(m, "/board" + r[len("/board/v1"):]) for m, r in used if r.startswith("/board/v1")}
+    assert used | {("GET", "/auth/whoami")} | AGENT_CONTEXT_READ | alias == AGENT_ALLOWED
 
 
 def test_delete_routes_are_refused_for_agents(app):

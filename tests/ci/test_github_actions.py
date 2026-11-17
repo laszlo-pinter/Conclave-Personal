@@ -124,3 +124,16 @@ def test_ci_runs_postgres_tests_against_pinned_image():
     assert "pg_isready" in job                                   # erst testen, wenn Postgres bereit ist
     assert "CONCLAVE_TEST_POSTGRES_DSN:" in job
     assert "python -m pytest tests/persistence" in job
+
+
+def test_ci_checks_the_board_api_for_breaking_changes():
+    """T3: oasdiff breaking gegen den letzten Release-Stand, Download gegen feste Pruefsumme."""
+    text = _workflow_text()
+    job = text.split("  board-api:", 1)[1]
+    assert "fetch-depth: 0" in job
+    assert "bash scripts/release/check_board_api.sh" in job
+    script = (ROOT / "scripts" / "release" / "check_board_api.sh").read_text(encoding="utf-8")
+    assert 'OASDIFF_VERSION="1.35.0"' in script
+    assert "sha256sum --check --strict" in script
+    assert "breaking" in script and "--fail-on ERR" in script
+    assert "packages/board/openapi/board-v1.json" in script

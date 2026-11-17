@@ -44,7 +44,8 @@ from conclave.domain.ids import ID_RULE_ERROR, valid_id
 from conclave.domain.principal import HUMAN_PRINCIPAL
 from conclave.api.access import HUMAN_ONLY_ERROR, agent_may, reviewer_may
 from conclave.application.consultations import ConsultationRequestError
-from conclave_board.api.routes import create_board_blueprint
+from conclave_board.api.routes import register_board_api
+from conclave_board.api.versions import VERSIONS_PATH, board_versions
 from conclave_board.api.security import (  # noqa: F401  (alte Namen bleiben hier erreichbar)
     BOARD_IMPORT_MAX_BYTES,
     CLIENT_HEADER,
@@ -108,7 +109,7 @@ CONTENT_SECURITY_POLICY = "; ".join([
 PERMISSIONS_POLICY = "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
 
 # Ohne Token erreichbar (B12): UI-Seite, statische Dateien, Healthcheck, API-Doku.
-PUBLIC_GET_PATHS = frozenset({"/", "/health", "/api-docs", "/openapi.json"})
+PUBLIC_GET_PATHS = frozenset({"/", "/health", "/api-docs", "/openapi.json", VERSIONS_PATH})
 
 # Groessen, CLIENT_HEADER und Host-Allowlist (B2) kommen aus conclave_board.api.security (T1).
 
@@ -410,7 +411,7 @@ def create_app(handler: CLIHandler, auth_service=None,
     @app.get("/health")
     def health():
         """Healthcheck fuer lokale Runtime und Integrationen."""
-        return jsonify({"status": "ok", "product": "conclave-personal"}), 200
+        return jsonify({"status": "ok", "product": "conclave-personal", "board_api": board_versions()}), 200
 
     @app.get("/auth/whoami")
     def whoami():
@@ -987,9 +988,9 @@ def create_app(handler: CLIHandler, auth_service=None,
         result = _consultations().retry(consultation_id, g.principal, rerun=rerun)
         return jsonify(result), 202
 
-    # ── Board (Plan board.md, B3): Routen aus dem Board-Paket (T1) ──────
+    # ── Board (Plan board.md, B3): /board/v1 und Alias /board aus dem Board-Paket (T1, T3) ──
     # Importgrenze je Anfrage aus diesem Modul gelesen (in Tests anpassbar)
-    app.register_blueprint(create_board_blueprint(board, import_max_bytes=lambda: BOARD_IMPORT_MAX_BYTES))
+    register_board_api(app, board, import_max_bytes=lambda: BOARD_IMPORT_MAX_BYTES)
 
     # ── Personal Export ─────────────────────────────────────────────────
 

@@ -270,3 +270,19 @@ jobs:
         with:
           name: conclave-board-wheel
           path: dist-board/*
+
+  board-api:
+    name: Board API v1 without breaking changes (oasdiff)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with tags and main for the comparison)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Fetch main for the comparison
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main || true
+
+      - name: Compare board-v1.json with the last release (oasdiff breaking)
+        run: bash scripts/release/check_board_api.sh

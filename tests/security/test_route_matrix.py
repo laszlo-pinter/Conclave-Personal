@@ -108,6 +108,11 @@ EXPECTED = {
     ("POST", "/workspace/<path:filepath>"): "agent",
 }
 
+# T3: Jede Board-Route gibt es auch unter /board/v1 mit derselben Rolle; /board bleibt als Alias.
+EXPECTED.update({(method, "/board/v1" + rule[len("/board"):]): role for (method, rule), role in list(EXPECTED.items())
+                 if rule == "/board" or rule.startswith("/board/")})
+EXPECTED[("GET", "/board/versions")] = "public"
+
 ALLOWED = {
     "public": {"none", "human", "agent", "reviewer"},
     "human": {"human"},

@@ -35,6 +35,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from conclave.runtime.api_token import read_agent_token, read_reviewer_token
+from conclave_board.api.versions import V1_PREFIX as BOARD_API   # versionierte Board-API (T3)
 
 # ── Config ────────────────────────────────────────────────────────────────
 
@@ -413,13 +414,13 @@ def _parse_task(task: str) -> tuple[str, str | None, int]:
 
 
 def _task_path(task: str) -> str:
-    """'projekt#12' -> '/board/projects/projekt/tasks/12'. 'projekt/vorhaben-3' (P2) wird ueber
+    """'projekt#12' -> '/board/v1/projects/projekt/tasks/12'. 'projekt/vorhaben-3' (P2) wird ueber
     das Vorhaben auf die Projektnummer aufgeloest; alles andere ist ein Fehler."""
     slug, initiative, number = _parse_task(task)
     if initiative is not None:
-        found = _get(f"/board/projects/{_seg(slug)}/initiatives/{_seg(initiative)}/tasks/{int(number)}")
+        found = _get(f"{BOARD_API}/projects/{_seg(slug)}/initiatives/{_seg(initiative)}/tasks/{int(number)}")
         number = found["number"]
-    return f"/board/projects/{_seg(slug)}/tasks/{int(number)}"
+    return f"{BOARD_API}/projects/{_seg(slug)}/tasks/{int(number)}"
 
 
 def _brief(t: dict) -> dict:
@@ -460,19 +461,19 @@ def conclave_board_list(project: str = "", status: str = "", query: str = "", in
         params["project"] = project
     if query:
         params["q"] = query
-        data = _get("/board/search", params)
+        data = _get(f"{BOARD_API}/search", params)
         tasks = data.get("tasks", [])
         if status:
             tasks = [t for t in tasks if t["status"] == status]
     else:
         if status:
             params["status"] = status
-        data = _get("/board/tasks", params)
+        data = _get(f"{BOARD_API}/tasks", params)
         tasks = data.get("tasks", [])
     result = {"note": BOARD_DATA_NOTE, "tasks": [_brief(t) for t in tasks], "control": _control(data)}
     if project:                                   # Vorhaben des Projekts nach Rang (P2); anlegen nur der Mensch
         result["initiatives"] = [{"initiative": i["slug"], "title": i["title"]} for i in
-                                 _get(f"/board/projects/{_seg(project)}/initiatives").get("initiatives", [])]
+                                 _get(f"{BOARD_API}/projects/{_seg(project)}/initiatives").get("initiatives", [])]
     return result
 
 
@@ -513,7 +514,7 @@ def conclave_board_next(project: str = "", task: str = "") -> dict:
     if task:
         _parse_task(task)
         body["task"] = task
-    data = _post("/board/next", body)
+    data = _post(f"{BOARD_API}/next", body)
     if data.get("paused"):
         pause = data.get("pause") or {}
         return {"paused": True, "by": pause.get("by"), "task": pause.get("task"), "reason": pause.get("reason"),
@@ -544,7 +545,7 @@ def conclave_board_create(project: str, title: str, description: str = "", tags:
             "human": human_only}
     if initiative:
         body["initiative"] = initiative
-    t = _post("/board/tasks", body)
+    t = _post(f"{BOARD_API}/tasks", body)
     return {**_brief(t), "control": _control(t)}
 
 

@@ -31,7 +31,8 @@ from conclave_board import __version__
 from conclave_board.api.access import (
     BOARD_AGENT_ALLOWED, BOARD_REVIEWER_ALLOWED, HUMAN_ONLY_ERROR, WHOAMI, may,
 )
-from conclave_board.api.routes import create_board_blueprint
+from conclave_board.api.routes import register_board_api
+from conclave_board.api.versions import VERSIONS_PATH, board_versions
 from conclave_board.api.security import CLIENT_HEADER, MAX_REQUEST_BYTES, is_host_allowed, parse_allowed_hosts, request_token
 from conclave_board.domain.errors import AuthenticationError, public_message
 from conclave_board.domain.principal import HUMAN_PRINCIPAL, Principal
@@ -39,7 +40,7 @@ from conclave_board.infrastructure.log import get_logger
 
 logger = get_logger("board.api")
 
-PUBLIC_GET_PATHS = frozenset({"/health"})
+PUBLIC_GET_PATHS = frozenset({"/health", VERSIONS_PATH})
 AGENT_ALLOWED = BOARD_AGENT_ALLOWED | WHOAMI
 REVIEWER_ALLOWED = BOARD_REVIEWER_ALLOWED | WHOAMI
 
@@ -178,11 +179,12 @@ def create_board_app(board, auth_service: Authenticator | None, *, allowed_hosts
 
     @app.get("/health")
     def health():
-        return jsonify({"status": "ok", "product": "conclave-board", "version": __version__}), 200
+        return jsonify({"status": "ok", "product": "conclave-board", "version": __version__,
+                        "board_api": board_versions()}), 200
 
     @app.get("/auth/whoami")
     def whoami():
         return jsonify({"role": g.principal.role}), 200
 
-    app.register_blueprint(create_board_blueprint(board))
+    register_board_api(app, board)
     return app

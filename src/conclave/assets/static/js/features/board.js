@@ -6,6 +6,8 @@
 let _board = {statuses: [], projects: [], tasks: [], changes: null, open: null, query: '',
               control: {pauses: [], hints: []}, role: '', approvalsOnly: false, stuck: ''};
 let _boardTimer = null;
+// Versionierte Board-API (T3); /board ohne Version ist ein abgekuendigter Alias
+const BOARD_API = '/board/v1';
 const BOARD_POLL_MS = 5000;
 const REVIEW_STUCK_MS = 30 * 60 * 1000;     // "laeuft" laenger als 30 Minuten: haengt (P4)
 const REVIEW_RED_LIMIT = 3;                 // E-R3: nach drei roten uebernimmt der Mensch
@@ -19,7 +21,7 @@ function _boardEl(tag, cls, text) {
 
 function _taskPath(ref) {
   const i = ref.lastIndexOf('#');
-  return `/board/projects/${encodeURIComponent(ref.slice(0, i))}/tasks/${Number(ref.slice(i + 1))}`;
+  return `${BOARD_API}/projects/${encodeURIComponent(ref.slice(0, i))}/tasks/${Number(ref.slice(i + 1))}`;
 }
 
 function _boardProject() { return document.getElementById('boardProject').value; }
@@ -54,7 +56,7 @@ async function loadBoard() {
 
 // Uebersicht (Spalten, Projekte, Zaehler), Tickets und ein offenes Ticket neu laden
 async function _reloadBoard() {
-  const data = await req('GET', '/board');
+  const data = await req('GET', BOARD_API);
   _board.statuses = data.statuses || [];
   _board.projects = data.projects || [];
   _board.changes = data.changes;
@@ -74,9 +76,9 @@ async function _loadBoardTasks() {
   let data;
   if (_board.query) {
     params.set('q', _board.query);
-    data = await req('GET', '/board/search?' + params);
+    data = await req('GET', BOARD_API + '/search?' + params);
   } else {
-    data = await req('GET', '/board/tasks?' + params);
+    data = await req('GET', BOARD_API + '/tasks?' + params);
   }
   _board.tasks = data.tasks || [];
   renderBoard();
@@ -410,7 +412,7 @@ async function createBoardTask() {
   if (!title) { toast(t('board.titleRequired'), 'err'); return; }
   const tags = document.getElementById('boardNewTags').value.split(',').map(s => s.trim()).filter(Boolean);
   try {
-    await req('POST', '/board/tasks', {
+    await req('POST', BOARD_API + '/tasks', {
       project: document.getElementById('boardNewProject').value, title,
       description: document.getElementById('boardNewDesc').value, tags,
       human: document.getElementById('boardNewHuman').checked,
@@ -471,7 +473,7 @@ async function pauseBoardAgents() {
   const slug = _boardProject() || _board.projects[0]?.slug;
   if (!slug) { toast(t('board.noProjects'), 'err'); return; }
   try {
-    await req('POST', '/board/tasks', {project: slug, title: t('board.pauseTitle'), kind: 'control',
+    await req('POST', BOARD_API + '/tasks', {project: slug, title: t('board.pauseTitle'), kind: 'control',
                                        control: 'pause', scope: 'all'});
     toast(t('board.paused'), 'ok');
   } catch (e) {
@@ -510,7 +512,7 @@ function _startBoardPolling() {
     if (!_boardActive()) { clearInterval(_boardTimer); _boardTimer = null; return; }
     if (document.visibilityState === 'hidden') return;
     try {
-      const {changes} = await req('GET', '/board/changes');
+      const {changes} = await req('GET', BOARD_API + '/changes');
       if (changes !== _board.changes) await _reloadBoard();
       else if (_stuckKey() !== _board.stuck) {
         // Ein Review ueberschreitet die 30 Minuten, ohne dass sich etwas aendert: neu zeichnen

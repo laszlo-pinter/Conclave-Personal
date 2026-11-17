@@ -1869,13 +1869,13 @@
         }
       }
     },
-    "/board": {
+    "/board/v1": {
       "get": {
         "summary": "Spalten, Projekte und Aenderungszaehler des Boards.",
         "tags": [
           "board"
         ],
-        "operationId": "board_overview",
+        "operationId": "v1_board_overview",
         "responses": {
           "200": {
             "description": "Erfolg"
@@ -1887,13 +1887,13 @@
         "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
       }
     },
-    "/board/changes": {
+    "/board/v1/changes": {
       "get": {
         "summary": "Aenderungszaehler; die UI laedt neu, wenn er steigt.",
         "tags": [
           "board"
         ],
-        "operationId": "board_changes",
+        "operationId": "v1_board_changes",
         "responses": {
           "200": {
             "description": "Erfolg"
@@ -1905,13 +1905,13 @@
         "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
       }
     },
-    "/board/projects": {
+    "/board/v1/projects": {
       "post": {
         "summary": "Projekt anlegen (Freigabe-Recht).",
         "tags": [
           "board"
         ],
-        "operationId": "board_create_project",
+        "operationId": "v1_board_create_project",
         "responses": {
           "200": {
             "description": "Erfolg"
@@ -1932,13 +1932,13 @@
         }
       }
     },
-    "/board/projects/{slug}": {
+    "/board/v1/projects/{slug}": {
       "put": {
         "summary": "Projekt umbenennen (Freigabe-Recht).",
         "tags": [
           "board"
         ],
-        "operationId": "board_rename_project",
+        "operationId": "v1_board_rename_project",
         "responses": {
           "200": {
             "description": "Erfolg"
@@ -1973,7 +1973,7 @@
         "tags": [
           "board"
         ],
-        "operationId": "board_delete_project",
+        "operationId": "v1_board_delete_project",
         "responses": {
           "200": {
             "description": "Erfolg"
@@ -1983,6 +1983,730 @@
           }
         },
         "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/board/v1/tasks": {
+      "get": {
+        "summary": "Tickets in Board-Reihenfolge; Filter project, status (mehrfach), include_done.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_list_tasks",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        }
+      },
+      "post": {
+        "summary": "Ticket anlegen; neue Tickets landen in der ersten Spalte.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_create_task",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/board/v1/search": {
+      "get": {
+        "summary": "Suche in Titel, Tags, Beschreibung und Kommentaren.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_search",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        }
+      }
+    },
+    "/board/v1/next": {
+      "post": {
+        "summary": "Oberstes freies Ticket der ersten Spalte uebernehmen (atomar); mit ``task`` genau dieses.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_next_task",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/board/v1/projects/{slug}/tasks/{number}": {
+      "get": {
+        "summary": "Ein Ticket mit Kommentaren.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_get_task",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "summary": "Ticket aendern: title, description, tags, status, human, index, rank, version, initiative.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_update_task",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Ticket loeschen (Freigabe-Recht).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_delete_task",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/board/v1/projects/{slug}/initiatives/{initiative}/tasks/{number}": {
+      "get": {
+        "summary": "Ein Ticket ueber seine Vorhaben-Nummer (``projekt/vorhaben-n``, P2); wie das Ticket selbst.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_get_task_in_initiative",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "initiative",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/board/v1/projects/{slug}/initiatives": {
+      "get": {
+        "summary": "Vorhaben des Projekts nach Rang (P2).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_list_initiatives",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "summary": "Vorhaben anlegen: slug, title, optional rank (Freigabe-Recht).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_create_initiative",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/board/v1/projects/{slug}/initiatives/{initiative}": {
+      "put": {
+        "summary": "Vorhaben umbenennen oder ranken: title, rank (Freigabe-Recht).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_update_initiative",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "initiative",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/board/v1/projects/{slug}/tasks/{number}/comments": {
+      "get": {
+        "summary": "Kommentare eines Tickets mit Herkunft.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_list_comments",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      },
+      "post": {
+        "summary": "Kommentar schreiben; die Herkunft kommt aus dem Token.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_add_comment",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/board/v1/projects/{slug}/tasks/{number}/history": {
+      "get": {
+        "summary": "Verlauf eines Tickets: Anlegen und jede Aenderung mit Herkunft.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_history",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/board/v1/projects/{slug}/tasks/{number}/review": {
+      "post": {
+        "summary": "Review-Status setzen (nur Reviewer-Zugang).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_review_task",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/board/v1/projects/{slug}/history": {
+      "get": {
+        "summary": "Verlauf eines Projekts: Anlegen, Umbenennen, geloeschte Tickets (nur Mensch).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_project_history",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/board/v1/comments/{comment_id}": {
+      "put": {
+        "summary": "Eigenen Kommentar aendern (nur Mensch).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_edit_comment",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "comment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Eigenen Kommentar loeschen (nur Mensch).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_delete_comment",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "comment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/board/v1/import": {
+      "post": {
+        "summary": "JSON-Export eines Boards uebernehmen (Freigabe-Recht, idempotent).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_import",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Export ungueltig (ImportFormatError), es wurde nichts geschrieben"
+          },
+          "403": {
+            "description": "HumanOnly: nur mit dem Mensch-Token"
+          },
+          "413": {
+            "description": "ImportTooLarge: Export groesser als 50 MB"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/board": {
+      "get": {
+        "summary": "Spalten, Projekte und Aenderungszaehler des Boards.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_overview",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link. Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
+      }
+    },
+    "/board/changes": {
+      "get": {
+        "summary": "Aenderungszaehler; die UI laedt neu, wenn er steigt.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_changes",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/changes; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link. Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
+      }
+    },
+    "/board/projects": {
+      "post": {
+        "summary": "Projekt anlegen (Freigabe-Recht).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_create_project",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/projects; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link. Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/board/projects/{slug}": {
+      "put": {
+        "summary": "Projekt umbenennen (Freigabe-Recht).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_rename_project",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/projects/<slug>; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link. Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Projekt samt Tickets loeschen (Freigabe-Recht).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_delete_project",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/projects/<slug>; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link. Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "slug",
@@ -2006,7 +2730,9 @@
           "200": {
             "description": "Erfolg"
           }
-        }
+        },
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/tasks; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link."
       },
       "post": {
         "summary": "Ticket anlegen; neue Tickets landen in der ersten Spalte.",
@@ -2019,6 +2745,8 @@
             "description": "Erfolg"
           }
         },
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/tasks; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2041,7 +2769,9 @@
           "200": {
             "description": "Erfolg"
           }
-        }
+        },
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/search; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link."
       }
     },
     "/board/next": {
@@ -2056,6 +2786,8 @@
             "description": "Erfolg"
           }
         },
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/next; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2079,6 +2811,8 @@
             "description": "Erfolg"
           }
         },
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/projects/<slug>/tasks/<int:number>; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link.",
         "parameters": [
           {
             "name": "slug",
@@ -2109,6 +2843,8 @@
             "description": "Erfolg"
           }
         },
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/projects/<slug>/tasks/<int:number>; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link.",
         "parameters": [
           {
             "name": "slug",
@@ -2151,7 +2887,8 @@
             "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
-        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/projects/<slug>/tasks/<int:number>; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link. Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "slug",
@@ -2184,6 +2921,8 @@
             "description": "Erfolg"
           }
         },
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/projects/<slug>/initiatives/<initiative>/tasks/<int:number>; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link.",
         "parameters": [
           {
             "name": "slug",
@@ -2224,6 +2963,8 @@
             "description": "Erfolg"
           }
         },
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/projects/<slug>/initiatives; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link.",
         "parameters": [
           {
             "name": "slug",
@@ -2249,7 +2990,8 @@
             "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
-        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/projects/<slug>/initiatives; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link. Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "slug",
@@ -2286,7 +3028,8 @@
             "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
-        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/projects/<slug>/initiatives/<initiative>; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link. Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "slug",
@@ -2331,7 +3074,8 @@
             "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
-        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/projects/<slug>/tasks/<int:number>/comments; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link. Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "slug",
@@ -2362,6 +3106,8 @@
             "description": "Erfolg"
           }
         },
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/projects/<slug>/tasks/<int:number>/comments; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link.",
         "parameters": [
           {
             "name": "slug",
@@ -2403,6 +3149,8 @@
             "description": "Erfolg"
           }
         },
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/projects/<slug>/tasks/<int:number>/history; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link.",
         "parameters": [
           {
             "name": "slug",
@@ -2435,6 +3183,8 @@
             "description": "Erfolg"
           }
         },
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/projects/<slug>/tasks/<int:number>/review; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link.",
         "parameters": [
           {
             "name": "slug",
@@ -2479,7 +3229,8 @@
             "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
-        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/projects/<slug>/history; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link. Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "slug",
@@ -2507,7 +3258,8 @@
             "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
-        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/comments/<comment_id>; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link. Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "comment_id",
@@ -2542,7 +3294,8 @@
             "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
-        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/comments/<comment_id>; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link. Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "parameters": [
           {
             "name": "comment_id",
@@ -2576,7 +3329,8 @@
             "description": "ImportTooLarge: Export groesser als 50 MB"
           }
         },
-        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "deprecated": true,
+        "description": "Abgekuendigter Alias von /board/v1/import; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link. Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2584,6 +3338,20 @@
                 "type": "object"
               }
             }
+          }
+        }
+      }
+    },
+    "/board/versions": {
+      "get": {
+        "summary": "Versionen der Board-API (ohne Token).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "board_api_versions",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
           }
         }
       }

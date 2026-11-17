@@ -5,6 +5,7 @@ include packages/board/LICENSE
 include packages/board/NOTICE
 include packages/board/README.md
 include packages/board/pyproject.toml
+include packages/board/openapi/board-v1.json
 include THIRD_PARTY.md
 exclude conclave-ui.html
 recursive-include src/conclave/assets *
