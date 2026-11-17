@@ -4,9 +4,8 @@ import json as _json
 import logging
 import os
 import re
-import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 try:
     from flask import Flask, Response, g, jsonify, request, stream_with_context, send_file as flask_send_file
@@ -44,6 +43,7 @@ from conclave.domain.ids import ID_RULE_ERROR, valid_id
 from conclave.domain.principal import HUMAN_PRINCIPAL
 from conclave.api.access import HUMAN_ONLY_ERROR, agent_may, reviewer_may
 from conclave.application.consultations import ConsultationRequestError
+from conclave.application.agent_limits import AgentLimitExceeded, AgentRunGate
 from conclave_board.api.routes import register_board_api
 from conclave_board.api.versions import VERSIONS_PATH, board_versions
 from conclave_board.api.security import (  # noqa: F401  (alte Namen bleiben hier erreichbar)
@@ -128,7 +128,7 @@ MODEL_ROUTES = frozenset({
 
 def create_app(handler: CLIHandler, auth_service=None,
                agent_service=None, config=None, service=None, consultations=None, board=None,
-               allow_unauthenticated: bool = False) -> Flask:
+               allow_unauthenticated: bool = False, agent_gate=None) -> Flask:
     """Baut die Flask-App. Ohne ``auth_service`` nur mit ``allow_unauthenticated=True`` (Tests, R15)."""
     if auth_service is None and not allow_unauthenticated:
         raise ValueError("create_app braucht einen auth_service; ohne Anmeldung nur mit "
@@ -251,9 +251,9 @@ def create_app(handler: CLIHandler, auth_service=None,
             return jsonify(HUMAN_ONLY_ERROR), 403
 
     # ── Grenzen fuer Agenten (R11): Budget je Zugang und Conversation, gleichzeitige Laeufe ──
-    agent_runs = {"active": 0}
-    agent_runs_lock = threading.Lock()
-    run_repo = getattr(service, "_run_repo", None) if service is not None else None
+    # Dieselbe Instanz nutzt der Consultation-Worker (#94): beide zaehlen gegen dieselben Grenzen.
+    gate = agent_gate or AgentRunGate(
+        limits, lambda: getattr(service, "_run_repo", None) if service is not None else None)
 
     @app.before_request
     def _check_agent_limits():
@@ -261,41 +261,18 @@ def create_app(handler: CLIHandler, auth_service=None,
         if (principal is None or not principal.is_agent or request.method == "OPTIONS"
                 or request.url_rule is None or (request.method, request.url_rule.rule) not in MODEL_ROUTES):
             return
-        conversation_id = (request.view_args or {}).get("conversation_id")
-        since = datetime.now(timezone.utc) - timedelta(days=1)
-        if run_repo is not None:
-            if limits.agent_tokens_per_day:
-                used = run_repo.tokens_since(since, origin="agent")
-                if used >= limits.agent_tokens_per_day:
-                    return jsonify({
-                        "error": (f"Tagesbudget der Agenten erschoepft: {used} von {limits.agent_tokens_per_day} "
-                                  "Tokens in den letzten 24 Stunden ([limits] agent_tokens_per_day)."),
-                        "type": "AgentBudgetExceeded"}), 429
-            if limits.conversation_tokens_per_day and conversation_id:
-                used = run_repo.tokens_since(since, origin="agent", conversation_id=conversation_id)
-                if used >= limits.conversation_tokens_per_day:
-                    return jsonify({
-                        "error": (f"Budget dieser Conversation fuer Agenten erschoepft: {used} von "
-                                  f"{limits.conversation_tokens_per_day} Tokens in den letzten 24 Stunden "
-                                  "([limits] conversation_tokens_per_day)."),
-                        "type": "ConversationBudgetExceeded"}), 429
-        if limits.agent_concurrent_runs:
-            with agent_runs_lock:
-                if agent_runs["active"] >= limits.agent_concurrent_runs:
-                    return jsonify({
-                        "error": (f"Zu viele gleichzeitige Modelllaeufe von Agenten (hoechstens "
-                                  f"{limits.agent_concurrent_runs}, [limits] agent_concurrent_runs)."),
-                        "type": "TooManyAgentRuns"}), 429
-                agent_runs["active"] += 1
-                g.agent_run_slot = True
+        try:
+            gate.check_budget((request.view_args or {}).get("conversation_id"))
+            g.agent_run_slot = gate.acquire()
+        except AgentLimitExceeded as exc:
+            return jsonify({"error": str(exc), "type": exc.type}), 429
         # Laeufe dieser Anfrage tragen die Herkunft "agent" schon beim Speichern
         g.agent_origin_token = RUN_ORIGIN.set("agent")
 
     @app.teardown_request
     def _finish_agent_run(_exc=None):
         if g.pop("agent_run_slot", False):
-            with agent_runs_lock:
-                agent_runs["active"] -= 1
+            gate.release()
         token = g.pop("agent_origin_token", None)
         if token is not None:
             RUN_ORIGIN.reset(token)

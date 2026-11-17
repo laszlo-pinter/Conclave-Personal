@@ -148,7 +148,7 @@ def _build_sqlite(config):
     return service, agent_service, conn
 
 
-def _build_consultations(service, agent_service, conn, config, board):
+def _build_consultations(service, agent_service, conn, config, board, agent_gate=None):
     """Consultations: Repository, Ticket-Quelle (eigenes Board oder Kanzo), Ablauf, Worker, Anfragen."""
     from conclave.application.consultation_service import ConsultationService
     from conclave.application.consultation_worker import ConsultationWorker
@@ -184,11 +184,12 @@ def _build_consultations(service, agent_service, conn, config, board):
         source, source_name = BoardTaskSource(board), "board"
     processor = ConsultationService(service, repo, source, source,
                                     comment_max_chars=config.kanzo.comment_max_chars,
-                                    reviewer_name=reviewer_name)
+                                    reviewer_name=reviewer_name, agent_gate=agent_gate)
     worker = ConsultationWorker(repo, processor)
     requests = ConsultationRequests(repo, worker, source, allowed_reviewers=config.kanzo.reviewers,
                                     max_per_hour=config.kanzo.max_per_hour,
-                                    provider_label=processor.provider_label, source=source_name)
+                                    provider_label=processor.provider_label, source=source_name,
+                                    agent_gate=agent_gate)
     return requests, worker
 
 
@@ -280,10 +281,15 @@ def _build_app(config: ConclaveConfig | None = None):
     auth_service = StaticKeyAuthService(config.api_key, config.agent_api_key, config.reviewer_api_key)
 
     board = _build_board(conn, config)
-    consultations, worker = _build_consultations(service, agent_service, conn, config, board)
+    # Ein Tor fuer alle Modelllaeufe von Agenten: API und Consultation-Worker (R11, #94)
+    from conclave.application.agent_limits import AgentRunGate
+    from conclave.cli.config import LimitSettings
+    agent_gate = AgentRunGate(getattr(config, "limits", None) or LimitSettings(),
+                              lambda: getattr(service, "_run_repo", None))
+    consultations, worker = _build_consultations(service, agent_service, conn, config, board, agent_gate)
     app = create_app(handler, auth_service=auth_service,
                      agent_service=agent_service, config=config,
-                     service=service, consultations=consultations, board=board)
+                     service=service, consultations=consultations, board=board, agent_gate=agent_gate)
     # Gestartet wird der Worker erst in runtime.serve.serve() (nicht hier, nicht in create_app)
     app.extensions["conclave_workers"] = [worker]
     if isinstance(conn, ThreadLocalConnection):

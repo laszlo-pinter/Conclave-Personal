@@ -67,7 +67,7 @@ class PostgresRunRepository:
                 """
                 SELECT r.id, r.conversation_id, r.kind, r.participants, r.started_at,
                        r.finished_at, r.status, r.error,
-                       u.provider, u.model, u.input_tokens, u.output_tokens
+                       u.provider, u.model, u.input_tokens, u.output_tokens, r.origin
                 FROM runs r
                 LEFT JOIN usage_records u ON u.run_id = r.id
                 WHERE r.id = %s
@@ -83,7 +83,7 @@ class PostgresRunRepository:
                 """
                 SELECT r.id, r.conversation_id, r.kind, r.participants, r.started_at,
                        r.finished_at, r.status, r.error,
-                       u.provider, u.model, u.input_tokens, u.output_tokens
+                       u.provider, u.model, u.input_tokens, u.output_tokens, r.origin
                 FROM runs r
                 LEFT JOIN usage_records u ON u.run_id = r.id
                 ORDER BY r.started_at DESC
@@ -100,7 +100,7 @@ class PostgresRunRepository:
                 """
                 SELECT r.id, r.conversation_id, r.kind, r.participants, r.started_at,
                        r.finished_at, r.status, r.error,
-                       u.provider, u.model, u.input_tokens, u.output_tokens
+                       u.provider, u.model, u.input_tokens, u.output_tokens, r.origin
                 FROM runs r
                 LEFT JOIN usage_records u ON u.run_id = r.id
                 WHERE r.conversation_id = %s
@@ -133,6 +133,7 @@ class PostgresRunRepository:
             status=row[6],
             error=row[7],
             usage=usage,
+            origin=row[12],
         )
 
     # ── Budgets der Agenten (R11) ────────────────────────────────────────

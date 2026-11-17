@@ -173,6 +173,7 @@ class CLIHandler:
             "status": run.status,
             "error": run.error,
             "usage": usage,
+            "origin": run.origin,          # "agent" oder null (Mensch), R11
         }
 
     def _tool_event_to_dict(self, event) -> dict:

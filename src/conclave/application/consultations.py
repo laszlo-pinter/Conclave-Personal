@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+from conclave.application.agent_limits import AgentLimitExceeded
 from conclave.application.consultation_worker import ConsultationWorker
 from conclave.application.ports import ConsultationRepository, TaskSource
 from conclave.domain.consultation import (
@@ -47,7 +48,7 @@ class ConsultationRequestError(ConclaveError):
 class ConsultationRequests:
     def __init__(self, repository: ConsultationRepository, worker: ConsultationWorker, task_source: TaskSource,
                  *, allowed_reviewers, max_per_hour: int, provider_label=lambda pid: "",
-                 source: str = "kanzo") -> None:
+                 source: str = "kanzo", agent_gate=None) -> None:
         self._repo = repository
         self._worker = worker
         self._source = task_source
@@ -55,6 +56,7 @@ class ConsultationRequests:
         self._max_per_hour = max_per_hour
         self._label = provider_label
         self._source_name = source
+        self._gate = agent_gate
 
     # ── Anlegen ──────────────────────────────────────────────────────────
 
@@ -96,6 +98,12 @@ class ConsultationRequests:
                 f"Nicht erlaubte Reviewer: {', '.join(not_allowed)} (erlaubt: {', '.join(self._allowed)}).",
                 400, "ReviewerNotAllowed")
 
+        if channel != HUMAN and self._gate is not None:
+            # Schon beim Anlegen (klare 429); verbindlich ist die Pruefung im Worker vor dem Modellaufruf
+            try:
+                self._gate.check_budget()
+            except AgentLimitExceeded as exc:
+                raise ConsultationRequestError(str(exc), 429, exc.type) from None
         ticket = self._source.get_task(task)              # TaskNotFound / TaskSourceError -> Fehlerbehandlung
         if ticket.human and channel != HUMAN:
             raise ConsultationRequestError("Ticket ist nur fuer Menschen (human) - Anfragen von Agenten "

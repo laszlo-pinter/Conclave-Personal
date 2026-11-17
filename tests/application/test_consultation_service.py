@@ -359,3 +359,60 @@ def test_unknown_board_ticket_is_task_not_found(board_env):
         board_env.kanzo.adapter.get_task("api#99")
     with pytest.raises(ValueError):
         board_env.kanzo.adapter.get_task("API#1")
+
+
+# ── #94: Grenzen fuer Agenten gelten auch fuer Consultations ────────────────
+
+def _gated(env, **limits):
+    from datetime import UTC, datetime, timedelta
+
+    from conclave.application.agent_limits import AgentRunGate
+    from conclave.cli.config import LimitSettings
+    gate = AgentRunGate(LimitSettings(**{"agent_tokens_per_day": 0, "conversation_tokens_per_day": 0,
+                                        "agent_concurrent_runs": 0, **limits}), lambda: env.flow._run_repo)
+    env.svc._gate = gate
+    env.agent_tokens = lambda: env.flow._run_repo.tokens_since(datetime.now(UTC) - timedelta(days=1), origin="agent")
+    return gate
+
+
+def _calls(env):
+    return sum(len(r.prompts) for r in env.reviewers.values())
+
+
+def test_agent_consultation_runs_count_as_agent_and_hit_the_budget(env):
+    _gated(env, agent_tokens_per_day=20)
+    first = env.new(channel="agent")
+    env.svc.run(first)
+    assert env.repo.get(first.id).status == DONE
+    assert env.agent_tokens() == 30                                   # 2 Reviewer x 15 Tokens, Herkunft agent
+    runs = env.flow._run_repo.list_by_conversation(env.repo.get(first.id).conversation_id)
+    assert runs and {r.origin for r in runs} == {"agent"}             # auch nach dem Laden (P2)
+
+    calls = _calls(env)
+    second = env.new(channel="agent")
+    env.svc.run(second)
+    stored = env.repo.get(second.id)
+    assert stored.status == FAILED and "Tagesbudget" in stored.error
+    assert _calls(env) == calls and stored.conversation_id is None    # kein Modellaufruf, keine Conversation
+
+
+def test_human_consultation_is_not_limited(env):
+    _gated(env, agent_tokens_per_day=20)
+    env.svc.run(env.new(channel="agent"))                             # Budget aufgebraucht
+    human = env.new(channel="human")
+    env.svc.run(human)
+    assert env.repo.get(human.id).status == DONE
+    assert env.agent_tokens() == 30                                   # der Mensch zaehlt nicht ins Agentenbudget
+
+
+def test_agent_consultation_shares_the_concurrency_limit(env):
+    gate = _gated(env, agent_concurrent_runs=1)
+    assert gate.acquire()                                             # z. B. ein laufendes Invoke eines Agenten
+    blocked = env.new(channel="agent")
+    env.svc.run(blocked)
+    stored = env.repo.get(blocked.id)
+    assert stored.status == FAILED and "gleichzeitige" in stored.error and _calls(env) == 0
+    gate.release()
+    ok = env.new(channel="agent")
+    env.svc.run(ok)
+    assert env.repo.get(ok.id).status == DONE and gate.active == 0    # Platz wieder frei
