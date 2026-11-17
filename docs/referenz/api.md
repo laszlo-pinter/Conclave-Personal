@@ -40,7 +40,8 @@ Mit dem Agent-Token sind nur die Routen erlaubt, die die MCP-Tools brauchen:
 
 Der Reviewer-Zugang (`reviewer.token`) hat eine engere Liste: `GET /auth/whoami`,
 `GET /board/v1/tasks`, `GET /board/v1/changes`, `GET /board/v1/search`,
-`GET /board/v1/projects/<slug>/tasks/<n>` samt `/history`, `POST .../comments` und als
+`GET /board/v1/projects/<slug>/tasks/<n>` samt `/history`,
+`GET /board/v1/projects/<slug>/initiatives/<vorhaben>/tasks/<n>`, `POST .../comments` und als
 einziger `POST /board/v1/projects/<slug>/tasks/<n>/review` und
 `POST /board/v1/reviewer/heartbeat` (jeweils auch über den Alias `/board`).
 

@@ -268,9 +268,14 @@ conclave = ["C:\\...\\Conclave_original", "C:\\...\\conclave-board-team"]
 | `legacy_lock_file` | leer | Sperrdatei des früheren, getrennten Watchers: Hält er sie, startet der Reviewer nicht |
 
 Die Daten liegen in `<Konfigurationsordner>/reviewer` (Windows
-`%APPDATA%\Conclave\reviewer`, nur für den Benutzer lesbar): `reviewer.log`,
-`state.json`, `status.json`, `reviewer.lock` und die Worktrees während eines
-Reviews. `CONCLAVE_REVIEWER_DATA_DIR` legt einen anderen Ordner fest,
+`%APPDATA%\Conclave\reviewer`, nur für den Benutzer lesbar):
+
+- `reviewer.log`: das Protokoll, nach der Rotation `reviewer.log.1`
+- `reviewer-start.log`: Fehler beim Start durch `conclave desktop`; zuerst hier
+  nachsehen, wenn das Board „Reviewer aus“ zeigt
+- `state.json`, `status.json`, `reviewer.lock`
+- `mcp-board.json`: die MCP-Konfiguration des laufenden Reviews
+- `worktrees/`: die Worktrees während eines Reviews `CONCLAVE_REVIEWER_DATA_DIR` legt einen anderen Ordner fest,
 `CONCLAVE_CONFIG_FILE` eine andere `config.toml`.
 
 ## Grenzen für Agenten
