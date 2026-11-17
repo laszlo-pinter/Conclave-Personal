@@ -169,39 +169,7 @@
         "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
       }
     },
-    "/board/v1/changes": {
-      "get": {
-        "summary": "Aenderungszaehler; die UI laedt neu, wenn er steigt.",
-        "tags": [
-          "board"
-        ],
-        "operationId": "v1_board_changes",
-        "responses": {
-          "200": {
-            "description": "Erfolg",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "changes": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "changes"
-                  ]
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "HumanOnly: nur fuer den Menschen-Zugang"
-          }
-        },
-        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
-      }
-    },
+    "/board/v1/changes": {},
     "/board/v1/projects": {
       "post": {
         "summary": "Projekt anlegen (Freigabe-Recht).",
@@ -365,6 +333,318 @@
       }
     },
     "/board/v1/tasks": {
+      "get": {
+        "summary": "Tickets in Board-Reihenfolge; Filter project, status (mehrfach), include_done.",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_list_tasks",
+        "responses": {
+          "200": {
+            "description": "Erfolg",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "ref": {
+                            "type": "string"
+                          },
+                          "project": {
+                            "type": "string"
+                          },
+                          "number": {
+                            "type": "integer"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "initiative": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "initiative_ref": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "position": {
+                            "type": "number"
+                          },
+                          "rank": {
+                            "type": "number"
+                          },
+                          "human": {
+                            "type": "boolean"
+                          },
+                          "assignee": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "version": {
+                            "type": "integer"
+                          },
+                          "origin": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "created_by": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "directive": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              },
+                              "scope": {
+                                "type": "string"
+                              },
+                              "ack_by": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "ack_at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "ack_at",
+                              "ack_by",
+                              "scope",
+                              "type"
+                            ],
+                            "nullable": true
+                          },
+                          "review": {
+                            "type": "object",
+                            "properties": {
+                              "state": {
+                                "type": "string"
+                              },
+                              "at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true
+                              },
+                              "red_count": {
+                                "type": "integer"
+                              },
+                              "blocking": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "suggestions": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "checked": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "blocking",
+                              "checked",
+                              "red_count",
+                              "state",
+                              "suggestions"
+                            ]
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "updated_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "assignee",
+                          "created_at",
+                          "created_by",
+                          "description",
+                          "directive",
+                          "human",
+                          "initiative",
+                          "initiative_ref",
+                          "kind",
+                          "number",
+                          "origin",
+                          "position",
+                          "project",
+                          "rank",
+                          "ref",
+                          "review",
+                          "status",
+                          "tags",
+                          "title",
+                          "updated_at",
+                          "version"
+                        ]
+                      }
+                    },
+                    "control": {
+                      "type": "object",
+                      "properties": {
+                        "pauses": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "task": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "scope": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "reason": {
+                                "type": "string"
+                              },
+                              "text": {
+                                "type": "string"
+                              },
+                              "by": {
+                                "type": "string"
+                              },
+                              "at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "by",
+                              "reason",
+                              "scope",
+                              "task",
+                              "text",
+                              "type"
+                            ]
+                          }
+                        },
+                        "hints": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "task": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "scope": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "reason": {
+                                "type": "string"
+                              },
+                              "text": {
+                                "type": "string"
+                              },
+                              "by": {
+                                "type": "string"
+                              },
+                              "at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "by",
+                              "reason",
+                              "scope",
+                              "task",
+                              "text",
+                              "type"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "hints",
+                        "pauses"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "control",
+                    "tasks"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "mehrfach moeglich"
+          },
+          {
+            "name": "include_done",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false",
+                "1",
+                "0",
+                "yes",
+                "no"
+              ]
+            }
+          }
+        ]
+      },
       "post": {
         "summary": "Ticket anlegen; neue Tickets landen in der ersten Spalte.",
         "tags": [
