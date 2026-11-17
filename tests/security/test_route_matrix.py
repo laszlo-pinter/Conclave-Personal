@@ -39,7 +39,7 @@ EXPECTED = {
     ("POST", "/backup"): "human",
     ("GET", "/backups"): "human",
     ("GET", "/board"): "human",
-    ("GET", "/board/changes"): "human",
+    ("GET", "/board/changes"): "agent",
     ("DELETE", "/board/comments/<comment_id>"): "human",
     ("PUT", "/board/comments/<comment_id>"): "human",
     ("POST", "/board/import"): "human",

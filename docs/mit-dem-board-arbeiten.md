@@ -230,6 +230,13 @@ ihre Sitzung abzubrechen. Ein Banner über den Spalten zeigt sie an.
    als Liste nennt (`projects.conclave = ['…', '…']`), und legt je Repo einen
    eigenen Worktree an. Ein Commit, den er in keinem Repo findet, gilt als nicht
    geprüft; das Urteil ist dann höchstens gelb.
+   Danach startet er `conclave board wait <ticket>` im Hintergrund und arbeitet
+   weiter. Der Befehl endet mit einer JSON-Zeile, sobald das Review entschieden
+   ist (`{"event": "review", "verdict": "gelb", ...}`); `conclave board wait
+   --project <slug>` endet auch bei einer neuen Pause oder einem Hinweis
+   (`{"event": "control", ...}`). Nach `--timeout` Minuten (Standard 60) endet
+   er mit Exit-Code 2. Der Befehl liest mit dem Agent-Token nur
+   (Änderungszähler, Ticket bzw. Ticketliste des Projekts).
 2. Nicht auf den Menschen warten: grün ist keine Freigabe.
 3. Höchstens ein offenes Review: Steht ein eigenes Ticket noch ohne Ergebnis in
    `review`, schiebt der Agent das nächste erst nach `review`, wenn das erste

@@ -193,7 +193,8 @@ def test_every_mcp_tool_route_works_with_agent_token(app, mcp_via_app):
 
     blocked = [(m, r, s) for m, r, s in hits if s in (401, 403)]
     assert not blocked, blocked
-    used = {(m, r) for m, r, _ in hits}
+    # dazu der Aenderungszaehler fuer "conclave board wait" (P8, kein MCP-Tool)
+    used = {(m, r) for m, r, _ in hits} | {("GET", "/board/v1/changes")}
     # Die Allowlist ist genau das, was die Tools brauchen, plus whoami (Z5) - auch fuers Board (B4) -
     # und die lesbaren Kontextdaten aus E-S5 (a).
     # Die Tools nutzen /board/v1 (T3); der Alias /board steht fuer aeltere Clients mit derselben Rolle darin.

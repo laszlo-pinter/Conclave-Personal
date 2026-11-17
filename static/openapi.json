@@ -2051,12 +2051,8 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
-        },
-        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
+        }
       }
     },
     "/board/v1/projects": {
@@ -6578,13 +6574,10 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
         },
         "deprecated": true,
-        "description": "Abgekuendigter Alias von /board/v1/changes; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link. Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
+        "description": "Abgekuendigter Alias von /board/v1/changes; Antworten tragen Deprecation, Sunset (Mon, 01 Mar 2027 00:00:00 GMT) und Link."
       }
     },
     "/board/projects": {

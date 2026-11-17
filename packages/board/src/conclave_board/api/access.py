@@ -30,12 +30,13 @@ _BOARD_AGENT_ALLOWED_RELATIVE = frozenset({
     # Vorhaben (P2): lesen und Tickets ueber projekt/vorhaben-n aufrufen
     ("GET", "/projects/<slug>/initiatives"),
     ("GET", "/projects/<slug>/initiatives/<initiative>/tasks/<int:number>"),
+    # Aenderungszaehler (P8): "conclave board wait" fragt ihn ab, statt das Board zu laden
+    ("GET", "/changes"),
 })
 
 # Nur Mensch: Uebersicht, Projekte verwalten, loeschen, Kommentare aendern, Import, Vorhaben pflegen
 _BOARD_HUMAN_ONLY_RELATIVE = frozenset({
     ("GET", ""),
-    ("GET", "/changes"),
     ("GET", "/projects/<slug>/tasks/<int:number>/comments"),
     ("GET", "/projects/<slug>/history"),
     ("POST", "/projects"),

@@ -194,12 +194,8 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "HumanOnly: nur fuer den Menschen-Zugang"
           }
-        },
-        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly."
+        }
       }
     },
     "/board/v1/projects": {

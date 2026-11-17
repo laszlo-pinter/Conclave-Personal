@@ -83,7 +83,6 @@ RULES = [
     ("Projekt loeschen", "DELETE", "/board/projects/api", None, 403, "HumanOnly"),
     ("importieren", "POST", "/board/import", {"projects": []}, 403, "HumanOnly"),
     ("UI-Uebersicht lesen", "GET", "/board", None, 403, "HumanOnly"),
-    ("Aenderungszaehler lesen", "GET", "/board/changes", None, 403, "HumanOnly"),
 ]
 
 

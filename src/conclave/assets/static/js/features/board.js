@@ -523,3 +523,104 @@ function _startBoardPolling() {
     } catch { /* naechster Versuch */ }
   }, BOARD_POLL_MS);
 }
+
+// ── Desktop-Hinweis bei Review-Ergebnissen (P8) ──────────────────────────
+//
+// Abschaltbar (Standard aus); die Erlaubnis fragt erst ein Klick an. Gemeldet wird nur, wenn das
+// Fenster nicht im Vordergrund ist, und jedes Ergebnis nur einmal, auch nach dem Neuladen: Der
+// Zeitpunkt des zuletzt gesehenen Ergebnisses steht in localStorage.
+
+const NOTIFY_KEY = 'conclave.board.notify';
+const NOTIFY_SEEN_KEY = 'conclave.board.notifySeen';
+const NOTIFY_POLL_MS = 15000;
+const NOTIFY_STATES = ['passed', 'rework', 'failed'];
+let _notify = {timer: null, changes: null};
+
+function _store(key, value) {
+  try {
+    if (value === undefined) return localStorage.getItem(key);
+    if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value);
+  } catch { /* privates Fenster: dann eben ohne Merken */ }
+  return null;
+}
+
+function _notifySupported() { return typeof Notification !== 'undefined'; }
+
+function boardNotifyEnabled() {
+  return _notifySupported() && Notification.permission === 'granted' && _store(NOTIFY_KEY) === '1';
+}
+
+function renderBoardNotify() {
+  const btn = document.getElementById('boardNotify');
+  if (!btn) return;
+  btn.hidden = !_notifySupported();
+  const on = boardNotifyEnabled();
+  btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  btn.textContent = t(on ? 'board.notifyOn' : 'board.notifyOff');
+}
+
+async function toggleBoardNotify() {
+  if (!_notifySupported()) return;
+  if (boardNotifyEnabled()) {
+    _store(NOTIFY_KEY, '0');
+  } else {
+    const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+    if (permission !== 'granted') {
+      toast(t('board.notifyDenied'), 'err');
+    } else {
+      // Nur Ergebnisse ab jetzt: der neueste Review-Zeitpunkt des Servers (nicht die Uhr dieses Rechners)
+      try {
+        const data = await req('GET', BOARD_API + '/tasks?include_done=true');
+        _store(NOTIFY_SEEN_KEY, (data.tasks || []).map(task => (task.review || {}).at || '').sort().pop() || '');
+      } catch (e) {
+        toast(e.message, 'err');
+        return;
+      }
+      _store(NOTIFY_KEY, '1');
+      _notify.changes = null;
+    }
+  }
+  renderBoardNotify();
+}
+
+function boardNotifyText(task) {
+  const review = task.review || {};
+  const verdict = t('board.notify.' + review.state);
+  let body = verdict;
+  if (review.state === 'passed') body += ' – ' + t('board.notify.waiting');
+  else if (review.blocking !== null && review.blocking !== undefined) {
+    body += ' – ' + t('board.review.counts', {blocking: review.blocking, suggestions: review.suggestions || 0});
+  }
+  return {title: `${task.ref} ${task.title}`, body};
+}
+
+async function checkBoardNotifications() {
+  if (!boardNotifyEnabled()) return;
+  const {changes} = await req('GET', BOARD_API + '/changes');
+  if (changes === _notify.changes) return;
+  _notify.changes = changes;
+  const seen = _store(NOTIFY_SEEN_KEY) || '';
+  const data = await req('GET', BOARD_API + '/tasks?include_done=true');
+  const fresh = (data.tasks || []).filter(task => NOTIFY_STATES.includes((task.review || {}).state)
+                                            && (task.review.at || '') > seen);
+  if (!fresh.length) return;
+  _store(NOTIFY_SEEN_KEY, fresh.map(task => task.review.at).sort().pop());
+  if (document.visibilityState === 'visible' && document.hasFocus()) return;   // sieht es ohnehin
+  for (const task of fresh) {
+    const {title, body} = boardNotifyText(task);
+    const note = new Notification(title, {body, tag: 'conclave-review-' + task.ref});
+    note.onclick = () => {
+      window.focus();
+      switchTab('board');
+      openBoardTask(task.ref);
+      note.close();
+    };
+  }
+}
+
+function startBoardNotifications() {
+  renderBoardNotify();
+  if (_notify.timer) return;
+  _notify.timer = setInterval(() => { checkBoardNotifications().catch(() => { /* naechster Versuch */ }); },
+                              NOTIFY_POLL_MS);
+}

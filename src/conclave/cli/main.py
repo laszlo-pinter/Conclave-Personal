@@ -244,8 +244,10 @@ def build_parser() -> argparse.ArgumentParser:
     token_show.add_argument("--reveal", action="store_true",
                             help="Den Token-Wert ausgeben (nur auf ausdrueckliche Anfrage)")
 
-    board_p = sub.add_parser("board", help="Board verwalten (als Mensch, direkt auf der Datenbank)")
+    board_p = sub.add_parser("board", help="Board verwalten (als Mensch, direkt auf der Datenbank) und warten")
     board_sub = board_p.add_subparsers(dest="board_command", required=True)
+    from conclave.cli import board_wait
+    board_wait.add_parser(board_sub)
     ini_p = board_sub.add_parser("initiative", help="Vorhaben eines Projekts (P2)")
     ini_sub = ini_p.add_subparsers(dest="initiative_command", required=True)
     ini_list = ini_sub.add_parser("list", help="Vorhaben nach Rang anzeigen")
@@ -684,7 +686,11 @@ def _show_reviewer_token(args, url: str) -> int:
 
 
 def _run_board(args) -> int:
-    """Vorhaben verwalten (P2). Die CLI handelt als Mensch, wie alle lokalen Befehle."""
+    """Vorhaben verwalten (P2). Die CLI handelt als Mensch, wie alle lokalen Befehle.
+    ``wait`` (P8) geht dagegen ueber REST mit dem Agent-Token."""
+    if args.board_command == "wait":
+        from conclave.cli import board_wait
+        return board_wait.run(args)
     from conclave.application.board import BoardError
     from conclave.domain.principal import HUMAN_PRINCIPAL
 
