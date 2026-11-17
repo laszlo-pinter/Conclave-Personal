@@ -275,7 +275,9 @@ Die Daten liegen in `<Konfigurationsordner>/reviewer` (Windows
   nachsehen, wenn das Board „Reviewer aus“ zeigt
 - `state.json`, `status.json`, `reviewer.lock`
 - `mcp-board.json`: die MCP-Konfiguration des laufenden Reviews
-- `worktrees/`: die Worktrees während eines Reviews `CONCLAVE_REVIEWER_DATA_DIR` legt einen anderen Ordner fest,
+- `worktrees/`: die Worktrees während eines Reviews
+
+`CONCLAVE_REVIEWER_DATA_DIR` legt einen anderen Ordner fest,
 `CONCLAVE_CONFIG_FILE` eine andere `config.toml`.
 
 ## Grenzen für Agenten
