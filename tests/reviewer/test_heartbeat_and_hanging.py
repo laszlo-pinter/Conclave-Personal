@@ -85,3 +85,19 @@ def test_column_is_read_only_after_a_change(rv, server, repo, monkeypatch):
     _ticket_in_review(server, head)                           # Aenderung: liest wieder
     rv.poll_once(state, dry_run=False)
     assert len(reads) == 2
+
+
+def test_status_is_cleared_even_when_claude_does_not_start(rv, server, repo, monkeypatch):
+    """#92-Review V1: kein dauerhaft falsches "laufendes Ticket", wenn claude gar nicht startet."""
+    import json as _json
+    path, head = repo
+    task = _ticket_in_review(server, head)
+
+    def broken(key, cmd, cwd):
+        raise OSError("claude fehlt")
+
+    monkeypatch.setattr(rv, "run_claude", broken)
+    with pytest.raises(OSError):
+        rv.run_review(task, "api#1", str(path), dry_run=False)
+    status = _json.loads(rv.status_file.read_text(encoding="utf-8"))
+    assert status["current_task"] is None and status["last_result"]["outcome"] == "failed"

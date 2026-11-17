@@ -13,6 +13,7 @@ Absicherung (durch Tests festgeschrieben, tests/reviewer/test_hardening.py):
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -125,20 +126,99 @@ def write_mcp_config(path: Path, servers: dict) -> None:
     path.write_text(json.dumps(servers))
 
 
-def run_claude(cmd: list[str], cwd: str, timeout_minutes: float, log, key: str) -> str:
-    """Startet den Reviewer; liefert "done", "failed" oder "timeout"."""
-    started = time.monotonic()
+# ── claude endet mit dem Reviewer (W4-Review B1) ───────────────────────────
+#
+# Windows: claude laeuft in einem Job-Objekt mit KILL_ON_JOB_CLOSE. Das Handle haelt nur dieser
+# Prozess; endet er (normal, TerminateProcess, os._exit), schliesst Windows das Job-Objekt und
+# beendet claude samt allen Kindprozessen. POSIX: eigene Prozessgruppe, die ``kill_claude`` beendet
+# (beim Ende mit dem Desktop und bei SIGTERM).
+
+_JOB = None
+
+
+def _windows_job():
+    global _JOB
+    if _JOB is None:
+        import ctypes
+        from ctypes import wintypes
+
+        class IO(ctypes.Structure):
+            _fields_ = [(n, ctypes.c_ulonglong) for n in ("r", "w", "o", "rb", "wb", "ob")]
+
+        class Basic(ctypes.Structure):
+            _fields_ = [("PerProcessUserTimeLimit", ctypes.c_longlong), ("PerJobUserTimeLimit", ctypes.c_longlong),
+                        ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                        ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                        ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
+                        ("SchedulingClass", wintypes.DWORD)]
+
+        class Extended(ctypes.Structure):
+            _fields_ = [("Basic", Basic), ("IoInfo", IO), ("ProcessMemoryLimit", ctypes.c_size_t),
+                        ("JobMemoryLimit", ctypes.c_size_t), ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                        ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+        kernel32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+        kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+        kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, ctypes.c_uint]
+        job = kernel32.CreateJobObjectW(None, None)
+        info = Extended()
+        info.Basic.LimitFlags = 0x2000                     # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        if not job or not kernel32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)):
+            raise OSError(ctypes.get_last_error(), "Job-Objekt fuer claude nicht angelegt")
+        _JOB = (kernel32, job)
+    return _JOB
+
+
+def start_claude(cmd: list[str], cwd: str) -> subprocess.Popen:
+    """claude so starten, dass es den Reviewer nicht ueberlebt."""
+    proc = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, encoding="utf-8", errors="replace",
+                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                            start_new_session=os.name != "nt")
+    if os.name == "nt":
+        kernel32, job = _windows_job()
+        if not kernel32.AssignProcessToJobObject(job, int(proc._handle)):
+            proc.kill()
+            raise OSError("claude nicht ins Job-Objekt gelegt")
+    return proc
+
+
+def kill_claude(proc: subprocess.Popen | None) -> None:
+    """claude samt Kindprozessen beenden."""
+    if proc is None or proc.poll() is not None:
+        return
+    if os.name == "nt":
+        kernel32, job = _windows_job()
+        kernel32.TerminateJobObject(job, 1)               # im Job sind nur claude-Prozesse
+    else:
+        import signal
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
     try:
-        out = subprocess.run(
-            cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=timeout_minutes * 60, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
+        proc.wait(10)
     except subprocess.TimeoutExpired:
+        proc.kill()
+
+
+def run_claude(cmd: list[str], cwd: str, timeout_minutes: float, log, key: str, on_start=None) -> str:
+    """Startet den Reviewer; liefert "done", "failed" oder "timeout". ``on_start(proc)`` meldet den Prozess."""
+    started = time.monotonic()
+    proc = start_claude(cmd, cwd)
+    if on_start is not None:
+        on_start(proc)
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout_minutes * 60)
+    except subprocess.TimeoutExpired:
+        kill_claude(proc)                               # samt Kindprozessen, nicht nur der oberste Prozess
         log(f"{key}: review stopped after {timeout_minutes} minutes")
         return "timeout"
     took = round(time.monotonic() - started)
-    if out.returncode == 0:
-        log(f"{key}: review done in {took}s: {out.stdout.strip()[-300:]!r}")
+    if proc.returncode == 0:
+        log(f"{key}: review done in {took}s: {stdout.strip()[-300:]!r}")
         return "done"
-    log(f"{key}: review failed (exit {out.returncode}) in {took}s: {(out.stderr or out.stdout).strip()[-500:]!r}")
+    log(f"{key}: review failed (exit {proc.returncode}) in {took}s: {(stderr or stdout).strip()[-500:]!r}")
     return "failed"

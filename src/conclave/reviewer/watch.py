@@ -90,6 +90,11 @@ class Reviewer:
         if sys.stdout:
             print(line, end="", flush=True)
 
+    def mark_started(self, dry_run: bool) -> None:
+        """Gleich nach dem Sperren (W4-Review V2), auch im Probelauf: PID und Start passen zum Sperrinhaber."""
+        self.write_status(pid=os.getpid(), started_at=datetime.now().isoformat(timespec="seconds"),
+                          current_task=None, version=_version(), dry_run=dry_run)
+
     def write_status(self, **updates) -> None:
         """Was ``conclave-reviewer status`` zeigt: PID, Start, laufendes Ticket, letztes Ergebnis."""
         from conclave_board.runtime.file_security import replace_private
@@ -161,8 +166,18 @@ class Reviewer:
 
     # ── Ein Review ────────────────────────────────────────────────────────
 
+    claude_proc = None                                # der laufende claude (W4-Review B1)
+
     def run_claude(self, key: str, cmd: list[str], cwd: str) -> str:
-        return command.run_claude(cmd, cwd, self.cfg["review_timeout_minutes"], self.log, key)
+        try:
+            return command.run_claude(cmd, cwd, self.cfg["review_timeout_minutes"], self.log, key,
+                                      on_start=lambda proc: setattr(self, "claude_proc", proc))
+        finally:
+            self.claude_proc = None
+
+    def stop_claude(self) -> None:
+        """Beim Ende mit dem Desktop: den laufenden claude samt Kindprozessen beenden."""
+        command.kill_claude(self.claude_proc)
 
     def command_for(self, task: dict, key: str, checked: str, extra, missing) -> list[str]:
         return command.review_command(self.cfg, task, key, mcp_config=self.mcp_config,
@@ -216,10 +231,12 @@ class Reviewer:
             self.log(f"{key}: review started ({checked}) in {worktree}")
             self.current_task = key
             self.write_status(current_task=key)
+            outcome = "failed"
             outcome = self.run_claude(key, self.command_for(task, key, checked, extra, missing), str(worktree))
-            self.write_status(current_task=None, last_result={"task": key, "outcome": outcome,
-                                                              "at": datetime.now().isoformat(timespec="seconds")})
         finally:
+            if self.current_task is not None:           # auch wenn claude gar nicht startete (W4-Review V1)
+                self.write_status(current_task=None, last_result={
+                    "task": key, "outcome": outcome, "at": datetime.now().isoformat(timespec="seconds")})
             self.current_task = None
             for r, path in reversed(added):             # innere Worktrees zuerst
                 worktrees.remove_worktree(r, path)
@@ -365,9 +382,6 @@ class Reviewer:
         self.log(f"watching {BOARDS['conclave']['name']} {self.cfg['conclave_url']} for tickets moved to "
                  f"{self.cfg['review_status']!r}" + (" (dry run)" if dry_run else ""))
         state, reachable = self.load_state(), True
-        if not dry_run:
-            self.write_status(pid=os.getpid(), started_at=datetime.now().isoformat(timespec="seconds"),
-                              current_task=None, version=_version())
         self.send_heartbeat()
         stop = None if once else self.start_heartbeat()
         try:

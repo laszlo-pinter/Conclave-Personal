@@ -182,3 +182,15 @@ def test_claude_version_warns_on_another_major(tmp_path):
     version, warning = rs.claude_version({"claude_exe": sys.executable})          # "Python 3.x" statt claude 2.x
     assert version and version.startswith("3.") and "unbekannte Version" in warning
     assert rs.claude_version({"claude_exe": str(tmp_path / "fehlt.exe")})[1].startswith("claude nicht gefunden")
+
+
+# ── Review #92 ───────────────────────────────────────────────────────────
+
+def test_dry_run_writes_the_status_right_after_locking(env):
+    """V2: PID und Start passen zum laufenden Probelauf, nicht zum vorigen Lauf."""
+    env["conf"].write_text(env["section"], encoding="utf-8")
+    env["data"].mkdir()
+    (env["data"] / "status.json").write_text(json.dumps({"pid": 1, "started_at": "alt"}), encoding="utf-8")
+    assert main(["run", "--dry-run", "--once"]) == 0
+    status = json.loads((env["data"] / "status.json").read_text(encoding="utf-8"))
+    assert status["pid"] == os.getpid() and status["dry_run"] is True and status["started_at"] != "alt"

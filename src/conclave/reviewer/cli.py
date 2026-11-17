@@ -85,9 +85,18 @@ def _run(args) -> int:
 
         def gone():
             reviewer.log(f"conclave desktop (PID {args.parent_pid}) beendet, Reviewer endet")
-            os._exit(0)                                 # auch mitten in einem Lauf; der naechste Start gibt ihn frei
+            reviewer.stop_claude()                      # claude ueberlebt den Reviewer nicht
+            os._exit(0)                                 # das abgebrochene Review gibt der naechste Start frei (W3)
         watch_parent(args.parent_pid, gone)
+    if os.name != "nt":                                 # SIGTERM (stop_reviewer): erst claude, dann Ende
+        import signal
+
+        def terminated(_sig, _frame):
+            reviewer.stop_claude()
+            os._exit(0)
+        signal.signal(signal.SIGTERM, terminated)
     with ProcessLock(reviewer.lock_file, legacy=locks):
+        reviewer.mark_started(args.dry_run)
         reviewer.loop(dry_run=args.dry_run, once=args.once)
     return 0
 
