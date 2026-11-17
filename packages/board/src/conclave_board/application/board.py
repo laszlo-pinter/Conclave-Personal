@@ -36,7 +36,8 @@ from __future__ import annotations
 
 import json
 import logging
-from contextlib import nullcontext
+import threading
+from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime, timedelta
 from typing import Callable
 
@@ -101,6 +102,7 @@ class BoardService:
         # Rechte und Regeln je Einsatz (T5); Standard sind die Regeln von Personal
         self.policy = policy or PersonalPolicy()
         self._listeners: list[Listener] = []            # Ereignisse (T9), z. B. Webhooks
+        self._pending = threading.local()               # Ereignisse unter einer Sperre: erst nach dem Commit
 
     # ── Ereignisse (T9) ─────────────────────────────────────────────────
 
@@ -118,8 +120,30 @@ class BoardService:
                     _events_log.exception("Empfaenger fuer %s an %s fehlgeschlagen", event.type, event.ref)
 
     def _written(self, task: Task, history=(), comment: TaskComment | None = None) -> None:
-        if self._listeners:
-            self._publish(events_for(task, list(history), self._now(), comment))
+        if not self._listeners:
+            return
+        events = events_for(task, list(history), self._now(), comment)
+        buffer = getattr(self._pending, "events", None)
+        if buffer is not None:
+            buffer.extend(events)                       # unter einer Sperre: noch nicht committet
+        else:
+            self._publish(events)
+
+    @contextmanager
+    def _after_commit(self):
+        """Um eine Sperre (Transaktion) herum: Ereignisse erst nach ihrem Ende veroeffentlichen,
+        bei einem Fehler (Rollback) gar nicht. Verschachtelt gilt die aeusserste."""
+        if getattr(self._pending, "events", None) is not None:
+            yield
+            return
+        self._pending.events = []
+        try:
+            yield
+        except BaseException:
+            self._pending.events = None
+            raise
+        events, self._pending.events = self._pending.events, None
+        self._publish(events)
 
     def _update(self, task: Task, events, comment: TaskComment | None = None) -> bool:
         """``update_task`` des Repositorys; bei Erfolg die Ereignisse dazu."""
@@ -598,7 +622,7 @@ class BoardService:
         old_status = next((e.old_value for e in events if e.field_name == "status"), None)
         key = self.policy.lock_key(principal, task, task.status) if moved_column else None
         # Regeln der Policy und Schreiben unter einer Sperre: "pruefen, dann schreiben" (T2/T5)
-        with (self._repo.locked_key(key) if key else nullcontext()):
+        with self._after_commit(), (self._repo.locked_key(key) if key else nullcontext()):
             if moved_column:
                 self.policy.check_status_change(self, principal, task, task.status)
             # Ticket und Verlauf zusammen, nur wenn seit dem Lesen niemand geaendert hat
@@ -670,7 +694,7 @@ class BoardService:
                              principal: Principal) -> bool:
         """Uebernehmen und Zustaendigkeit setzen (Policy), zusammen in einer Transaktion."""
         assignee = self.policy.assignee_for(principal)
-        with self._repo.locked_task(task.id):
+        with self._after_commit(), self._repo.locked_task(task.id):
             if not self._claim_task(task.id, first, second, position, event):
                 return False
             if assignee is not None and assignee != task.assignee:

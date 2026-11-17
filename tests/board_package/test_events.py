@@ -126,3 +126,75 @@ def test_every_reported_type_is_documented(board, seen):
     board.update_task(ANNA, "api#1", assignee="u_anna")
     board.review(REVIEWER, "api#1", "passed", "gruen")
     assert set(_types(seen)) <= set(EVENT_TYPES)
+
+
+# ── #77-Review V1: erst nach dem Commit, bei Rollback gar nicht ─────────
+
+def _assigning(board):
+    from conclave_board.application.policy import PersonalPolicy
+
+    class Assigning(PersonalPolicy):
+        def assignee_for(self, principal):
+            return principal.actor_id
+
+    board.policy = Assigning()
+
+
+def test_no_event_when_the_claim_is_rolled_back(board, seen, monkeypatch):
+    from conclave_board.application.board import BoardError
+    _assigning(board)
+    board.create_task(ANNA, "api", "T")
+    seen.clear()
+    original = board._repo.update_task
+
+    def conflict(task, events=(), comment=None):
+        if any(e.field_name == "assignee" for e in events):
+            return False                                                 # Zustaendigkeit scheitert nach dem Claim
+        return original(task, events, comment)
+
+    monkeypatch.setattr(board._repo, "update_task", conflict)
+    with pytest.raises(BoardError, match="inzwischen"):
+        board.next_task(AGENT, "api", task="api#1")
+    assert seen == []                                                    # kein Statuswechsel, den es nie gab
+
+
+def test_events_are_published_after_the_lock_is_released(board, monkeypatch):
+    from contextlib import contextmanager
+    _assigning(board)
+    board.create_task(ANNA, "api", "T")
+    held = {"now": False}
+    original = board._repo.locked_task
+
+    @contextmanager
+    def locked(task_id):
+        with original(task_id):
+            held["now"] = True
+            try:
+                yield
+            finally:
+                held["now"] = False
+
+    monkeypatch.setattr(board._repo, "locked_task", locked)
+    during = []
+    board.add_listener(lambda event: during.append((event.type, held["now"])))
+    board.next_task(AGENT, "api")
+    assert during == [("task.status_changed", False), ("task.assigned", False)]
+
+
+def test_a_rule_violation_under_the_status_lock_publishes_nothing(board, seen):
+    from conclave_board.application.board import BoardError
+    from conclave_board.application.policy import PersonalPolicy
+
+    class Strict(PersonalPolicy):
+        def lock_key(self, principal, task, new_status):
+            return "k"
+
+        def check_status_change(self, service, principal, task, new_status):
+            raise BoardError("Regel verletzt", 409, "RuleViolation")
+
+    board.create_task(ANNA, "api", "T")
+    board.policy = Strict()
+    seen.clear()
+    with pytest.raises(BoardError, match="Regel"):
+        board.update_task(ANNA, "api#1", status="doing")
+    assert seen == []
