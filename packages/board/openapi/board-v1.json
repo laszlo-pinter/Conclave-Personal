@@ -2398,6 +2398,10 @@
                   "initiative": {
                     "type": "string",
                     "nullable": true
+                  },
+                  "assignee": {
+                    "type": "string",
+                    "nullable": true
                   }
                 },
                 "additionalProperties": false

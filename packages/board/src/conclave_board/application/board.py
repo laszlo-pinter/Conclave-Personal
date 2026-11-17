@@ -82,6 +82,9 @@ def _forbidden(message: str) -> BoardError:
     return BoardError(message, 403, "HumanOnly")
 
 
+_KEEP = object()          # update_task: Feld nicht uebergeben (assignee=None heisst "leer")
+
+
 def _invalid(message: str) -> BoardError:
     return BoardError(message, 400, "ValidationError")
 
@@ -452,7 +455,7 @@ class BoardService:
     def update_task(self, principal: Principal, ref: str, *, title: str | None = None,
                     description: str | None = None, tags=None, status: str | None = None,
                     human: bool | None = None, index: int | None = None, rank: float | None = None,
-                    version: int | None = None) -> Task:
+                    version: int | None = None, assignee=_KEEP) -> Task:
         """Aendert die uebergebenen Felder. ``index`` setzt den Platz in der (neuen) Spalte: in der
         ersten Spalte ist das die Prioritaet (rank), sonst die Position. Prioritaet aendert nur der
         Mensch (P1). ``version``: nur aendern, wenn das Ticket noch diese Version hat (R9)."""
@@ -476,9 +479,15 @@ class BoardService:
 
         if status is not None:
             status = self.flow_check(status)
-            if status != task.status and self.flow.last in (status, task.status) and (
-                    principal.is_agent or not self.can_approve(principal, task.project_slug)):
-                raise _forbidden("Nach und aus der letzten Spalte schiebt nur, wer das Freigabe-Recht hat.")
+            if status != task.status and self.flow.last in (status, task.status):
+                if principal.is_agent:
+                    raise _forbidden("Nach und aus der letzten Spalte schiebt nur, wer das Freigabe-Recht hat.")
+                if task.kind == "control":
+                    # Steuertickets schliesst und oeffnet, wer sie mit dieser Geltung anlegen darf (T6)
+                    self._require(principal, f"control:{task.control_scope}", task.project_slug, task,
+                                  message="Dieses Steuerticket schliesst nur, wer es mit dieser Geltung anlegen darf.")
+                elif not self.can_approve(principal, task.project_slug):
+                    raise _forbidden("Nach und aus der letzten Spalte schiebt nur, wer das Freigabe-Recht hat.")
             # Agenten uebernehmen ein Ticket sichtbar und atomar, statt "doing" zu ueberspringen (#51)
             if principal.is_agent and status != task.status and task.status == self.flow.first:
                 raise _forbidden(f"Erst uebernehmen: conclave_board_next(task=\"{task.ref}\") "
@@ -501,11 +510,22 @@ class BoardService:
         except (ValueError, TypeError) as e:
             raise _invalid(str(e)) from None
 
+        if assignee is not _KEEP:
+            if principal.is_agent:
+                raise _forbidden("Die Zustaendigkeit setzt der Mensch; Agenten bekommen sie ueber next_task.")
+            if assignee is not None and (not isinstance(assignee, str) or not 0 < len(assignee) <= 100):
+                raise _invalid("assignee: Konto-ID oder null.")
+            mine = assignee in (None, principal.actor_id) and task.assignee in (None, principal.actor_id)
+            self._require(principal, "assign:self" if mine else "assign:other", task.project_slug, task,
+                          message="Andere zustaendig machen darf nur, wer das Freigabe-Recht hat.")
         for name, new in (("title", title), ("description", description), ("status", status), ("human", human)):
             old = getattr(task, name)
             if new is not None and new != old:
                 events.append(TaskEvent.create(task.id, name, old, new, origin, actor_id=actor_id))
                 setattr(task, name, new)
+        if assignee is not _KEEP and assignee != task.assignee:
+            events.append(TaskEvent.create(task.id, "assignee", task.assignee, assignee, origin, actor_id=actor_id))
+            task.assignee = assignee
         if tags is not None:
             new_tags = tuple(dict.fromkeys(t.strip() for t in tags if isinstance(t, str) and t.strip()))
             if new_tags != task.tags:

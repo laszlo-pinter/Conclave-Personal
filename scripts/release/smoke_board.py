@@ -1,7 +1,7 @@
 """Startet das installierte Board-Paket in einer frischen Umgebung und prueft es (T1, CI).
 
 - ``conclave`` (Personal), ``anthropic``, ``openai``, ``httpx`` und ``mcp`` sind nicht installiert
-- ``conclave-board serve`` startet, ``/health`` und ``/board/versions`` antworten ohne Token
+- ``conclave-board-server serve`` startet, ``/health`` und ``/board/versions`` antworten ohne Token
 - unter ``/board/v1``: mit dem Mensch-Token laesst sich ein Projekt anlegen, ohne Token nicht;
   ein Agent-Token sieht die Uebersicht nicht (403), legt ein Ticket an und holt es
 - der Alias ``/board`` antwortet mit ``Deprecation`` und ``Sunset``
@@ -64,9 +64,9 @@ def main() -> int:
     if present:
         print(f"FEHLER: in der Umgebung installiert: {present}", file=sys.stderr)
         return 1
-    executable = shutil.which("conclave-board", path=str(Path(sys.executable).parent))
+    executable = shutil.which("conclave-board-server", path=str(Path(sys.executable).parent))
     if not executable:
-        print("FEHLER: conclave-board nicht neben diesem Python installiert", file=sys.stderr)
+        print("FEHLER: conclave-board-server nicht neben diesem Python installiert", file=sys.stderr)
         return 1
     tmp = Path(tempfile.mkdtemp(prefix="conclave-board-smoke-"))
     port = _free_port()

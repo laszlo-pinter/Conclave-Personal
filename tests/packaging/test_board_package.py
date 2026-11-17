@@ -33,7 +33,7 @@ def test_board_dependencies_contain_no_provider_sdks():
     names = " ".join(project["dependencies"]).lower()
     for sdk in ("anthropic", "openai", "httpx", "mcp"):
         assert sdk not in names
-    assert project["scripts"] == {"conclave-board": "conclave_board.server:main"}
+    assert project["scripts"] == {"conclave-board-server": "conclave_board.server:main"}
 
 
 def test_personal_bundles_the_board_sources():
@@ -54,7 +54,7 @@ def _wheel(tmp_path, version="1.2.3", extra=(), drop=()):
     files = {
         "conclave_board/__init__.py": "", "conclave_board/server.py": "",
         f"{info}licenses/LICENSE": "Apache", f"{info}licenses/NOTICE": "x",
-        f"{info}entry_points.txt": "[console_scripts]\nconclave-board = conclave_board.server:main\n",
+        f"{info}entry_points.txt": "[console_scripts]\nconclave-board-server = conclave_board.server:main\n",
         f"{info}METADATA": "Name: conclave-board\nLicense-Expression: Apache-2.0\nRequires-Dist: flask>=3.1\n",
     }
     files.update({name: "x" for name in extra})

@@ -4255,6 +4255,10 @@
                   "initiative": {
                     "type": "string",
                     "nullable": true
+                  },
+                  "assignee": {
+                    "type": "string",
+                    "nullable": true
                   }
                 },
                 "additionalProperties": false
@@ -8792,6 +8796,10 @@
                     "type": "integer"
                   },
                   "initiative": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "assignee": {
                     "type": "string",
                     "nullable": true
                   }

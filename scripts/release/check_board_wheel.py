@@ -5,7 +5,7 @@
 - nur ``conclave_board/`` und die Metadaten, im Paket nur Python-Dateien
   (keine UI, kein ``static/``)
 - keine Module fuer Provider, Workspace, Consultations oder Conversations
-- LICENSE und NOTICE (Apache-2.0) in den Metadaten, Entry Point ``conclave-board``
+- LICENSE und NOTICE (Apache-2.0) in den Metadaten, Entry Point ``conclave-board-server``
 - keine verbotenen Dateien (Datenbanken, Schluessel, Tokens, Logs, Caches)
 
 Aufruf: python scripts/release/check_board_wheel.py [dist] [pyproject.toml]
@@ -49,8 +49,8 @@ def problems(dist: Path, pyproject: Path) -> list[str]:
             found.append(f"Pflichtdatei fehlt: {required}")
     if f"{info}entry_points.txt" in names:
         entry_points = zipfile.ZipFile(wheels[0]).read(f"{info}entry_points.txt").decode("utf-8")
-        if "conclave-board = conclave_board.server:main" not in entry_points:
-            found.append("Entry Point conclave-board fehlt")
+        if "conclave-board-server = conclave_board.server:main" not in entry_points:
+            found.append("Entry Point conclave-board-server fehlt")
     if f"{info}METADATA" in names:
         metadata = zipfile.ZipFile(wheels[0]).read(f"{info}METADATA").decode("utf-8")
         if "License-Expression: Apache-2.0" not in metadata:

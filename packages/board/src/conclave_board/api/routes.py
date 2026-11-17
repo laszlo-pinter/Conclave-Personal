@@ -297,7 +297,9 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
         Vorhaben zu (``null`` = keinem); das darf nur der Mensch (P2)."""
         body = _json_object()
         _check_task_fields(body, {"title", "description", "tags", "status", "human", "index", "rank", "version",
-                                  "initiative"})
+                                  "initiative", "assignee"})
+        if body.get("assignee") is not None and not isinstance(body["assignee"], str):
+            raise BoardError("assignee muss Text oder null sein.", 400, "ValidationError")
         b = _board()
         if "initiative" in body and not b.can_approve(g.principal, slug):
             raise BoardError("Vorhaben ordnet nur der Mensch zu.", 403, "HumanOnly")
@@ -305,9 +307,10 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
         fields = {k: v for k, v in body.items() if k != "initiative"}
         task = None
         if fields or "initiative" not in body:
+            extra = {"assignee": body["assignee"]} if "assignee" in body else {}
             task = b.update_task(g.principal, ref, title=body.get("title"), description=body.get("description"),
                                  tags=body.get("tags"), status=body.get("status"), human=body.get("human"),
-                                 index=body.get("index"), rank=body.get("rank"), version=body.get("version"))
+                                 index=body.get("index"), rank=body.get("rank"), version=body.get("version"), **extra)
         if "initiative" in body:
             if task is None and body.get("version") is not None:
                 current = b.get_task(ref)

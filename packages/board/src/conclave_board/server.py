@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Laszlo Pinter
 
-"""Board-Server starten: ``conclave-board serve`` (T1).
+"""Board-Server starten: ``conclave-board-server serve`` (T1; seit T6 heisst ``conclave-board`` die CLI im Team-Paket).
 
 Ohne Oberflaeche, nur REST. Die Daten liegen in SQLite (Standard) oder PostgreSQL
 (``--dsn`` bzw. ``CONCLAVE_BOARD_DSN``). Im Konfigurationsordner liegen
@@ -95,8 +95,8 @@ def build_app(*, db_path: Path | None = None, dsn: str = "", config_dir: Path | 
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="conclave-board", description="Conclave Board (ohne Oberflaeche)")
-    parser.add_argument("--version", action="version", version=f"conclave-board {__version__}")
+    parser = argparse.ArgumentParser(prog="conclave-board-server", description="Conclave Board (ohne Oberflaeche)")
+    parser.add_argument("--version", action="version", version=f"conclave-board-server {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
     serve = sub.add_parser("serve", help="Board-Server starten (REST)")
     serve.add_argument("--host", default="127.0.0.1", help="Adresse (Standard 127.0.0.1)")
@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
         app = build_app(db_path=args.db, dsn=args.dsn, config_dir=args.config_dir,
                         allowed_hosts=os.environ.get("CONCLAVE_BOARD_ALLOWED_HOSTS", ""))
         from waitress import serve
-        print(f"conclave-board {__version__} auf http://{args.host}:{args.port}", file=sys.stderr)
+        print(f"conclave-board-server {__version__} auf http://{args.host}:{args.port}", file=sys.stderr)
         serve(app, host=args.host, port=args.port)
     return 0
 

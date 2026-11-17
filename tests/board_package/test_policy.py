@@ -42,7 +42,7 @@ class RolePolicy(BoardPolicy):
             return role in ("member", "approver")
         if action == "release":
             return role == "approver" or (task is not None and task.assignee == principal.actor_id)
-        if action == "control:mine":
+        if action in ("control:mine", "assign:self"):
             return principal.is_human and role in ("member", "approver")
         return principal.is_human and role == "approver"            # approve, control:project, control:all
 
@@ -267,3 +267,28 @@ def test_reading_is_not_a_policy_action():
     import conclave_board.application.board as service_module
     assert '"read"' not in inspect.getsource(service_module)
     assert "read" not in inspect.getsource(PersonalPolicy.can)
+
+
+
+def test_assignee_is_set_by_humans_according_to_the_policy(board):
+    """T6: PATCH assignee; sich selbst (member), andere nur mit Freigabe-Recht, Agenten nie."""
+    board.create_task(ANNA, "api", "T")
+    task = board.update_task(BEN, "api#1", assignee="ben")
+    assert task.assignee == "ben" and ("assignee", "ben") in [(e.field_name, e.new_value) for e in board.history("api#1")]
+    with pytest.raises(BoardError, match="Freigabe-Recht"):
+        board.update_task(BEN, "api#1", assignee="anna")
+    assert board.update_task(ANNA, "api#1", assignee="anna").assignee == "anna"
+    with pytest.raises(BoardError, match="Agenten"):
+        board.update_task(BEN_AGENT, "api#1", assignee=None)
+    assert board.update_task(ANNA, "api#1", assignee=None).assignee is None
+    assert board.update_task(BEN, "api#1", title="nur Titel").assignee is None          # ohne assignee: unveraendert
+
+
+def test_control_tickets_are_closed_with_the_right_to_create_them(board):
+    """T6: Bens eigene Pause ("mine") beendet Ben selbst, ohne Freigabe-Recht; eine Projekt-Pause nicht."""
+    own = board.create_task(BEN, "api", "Ben pausiert", kind="control", control="pause", scope="mine")
+    assert board.update_task(BEN, own.ref, status="done").status == "done"
+    project_pause = board.create_task(ANNA, "api", "Projekt pausiert", kind="control", control="pause", scope="project")
+    with pytest.raises(BoardError, match="Steuerticket"):
+        board.update_task(BEN, project_pause.ref, status="done")
+    assert board.update_task(ANNA, project_pause.ref, status="done").status == "done"

@@ -135,7 +135,8 @@ BOARD_SCHEMAS: dict[tuple[str, str], dict] = {
         "request": _object({"title": STRING, "rank": NUMBER}, required=[], closed=True), "response": INITIATIVE},
     ("PATCH", "/projects/<slug>/tasks/<int:number>"): {
         "request": _object({"title": STRING, "description": STRING, "tags": TAGS, "status": STRING, "human": BOOLEAN,
-                            "index": INTEGER, "rank": NUMBER, "version": INTEGER, "initiative": _nullable(STRING)},
+                            "index": INTEGER, "rank": NUMBER, "version": INTEGER, "initiative": _nullable(STRING),
+                            "assignee": _nullable(STRING)},
                            required=[], closed=True),
         "response": TASK_WITH_CONTROL},
     ("DELETE", "/projects/<slug>/tasks/<int:number>"): {"status": 204},

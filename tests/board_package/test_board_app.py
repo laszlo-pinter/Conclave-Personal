@@ -134,4 +134,4 @@ def test_cli_help_and_version():
     env = dict(os.environ, PYTHONPATH=str(ROOT / "packages" / "board" / "src"))
     result = subprocess.run([sys.executable, "-m", "conclave_board.server", "--version"], env=env,
                             capture_output=True, text=True, timeout=60)
-    assert result.returncode == 0 and result.stdout.startswith("conclave-board ")
+    assert result.returncode == 0 and result.stdout.startswith("conclave-board-server ")

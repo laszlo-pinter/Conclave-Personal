@@ -17,7 +17,8 @@ wird dafuer nicht gefragt. Aktionen fuer ``can``:
 - ``approve``: Freigabe-Recht: nach und aus "erledigt", loeschen, Rang setzen, Vorhaben pflegen,
   "nur fuer Menschen" entfernen, Projekte umbenennen und loeschen
 - ``release``: ein uebernommenes Ticket zurueck in die erste Spalte geben (haengende Tickets)
-- ``control:mine``, ``control:project``, ``control:all``: Steuertickets (Pause, Hinweis) anlegen
+- ``control:mine``, ``control:project``, ``control:all``: Steuertickets (Pause, Hinweis) anlegen und schliessen
+- ``assign:self``, ``assign:other``: Zustaendigkeit setzen (sich selbst bzw. jemand anderen; nur Menschen)
 
 ``project`` ist der Kurzname oder ``None`` (projektuebergreifend), ``task`` das betroffene Ticket.
 """
