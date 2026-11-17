@@ -264,13 +264,18 @@ The MCP server talks to `CONCLAVE_API_URL` (default `http://localhost:8000`).
 with a fixed port (`conclave server --port 8000` or
 `conclave desktop --port 8000`) or set `CONCLAVE_API_URL` to the actual address.
 
-The local API always requires a token, and since v0.5.0 there are two:
+The local API always requires a token. There are three, each with its own rights:
 
 - the **human token** (`api.token`, or `CONCLAVE_API_KEY`) for the web UI, the
   REST API and the CLI,
-- the **agent token** (`agent.token`, or `CONCLAVE_AGENT_KEY`) for agents.
+- the **agent token** (`agent.token`, or `CONCLAVE_AGENT_KEY`) for agents (since v0.5.0),
+- the **reviewer token** (`reviewer.token`, or `CONCLAVE_REVIEWER_KEY`) for the
+  automatic reviewer (since v0.7.0): it reads tickets, comments and sets the
+  review result, nothing else. `conclave-mcp --reviewer` uses it;
+  `conclave token show --reviewer` prints the path.
 
-The server creates both files in the configuration directory on first start.
+The server creates the files in the configuration directory on first start.
+New tokens carry a prefix (`cvh_` human, `cva_` agent, `cvr_` reviewer).
 The MCP server uses only the agent token: it reads `CONCLAVE_AGENT_KEY` or
 `agent.token` on every request (so the server may also be started after the MCP
 client) and never reads `api.token`. `conclave token show --agent` prints the
@@ -414,7 +419,8 @@ endpoints, processing can happen fully locally.
 Conclave binds the local API to `127.0.0.1` by default. The local API always
 requires a token; without `CONCLAVE_API_KEY` one is generated and stored in
 `api.token`. Agents use a separate agent token (`agent.token`,
-`CONCLAVE_AGENT_KEY`) with restricted rights. In `production` mode, `CONCLAVE_API_KEY` and an encryption key
+`CONCLAVE_AGENT_KEY`) with restricted rights, the automatic reviewer its own
+reviewer token (`CONCLAVE_REVIEWER_KEY`) with even narrower rights. In `production` mode, `CONCLAVE_API_KEY` and an encryption key
 (`CONCLAVE_SECRET_KEY`, or an existing key file / `CONCLAVE_SECRET_KEY_FILE`)
 must be set explicitly. Workspace access stays inside the configured workspace
 root, and hidden paths are not read as agent context.

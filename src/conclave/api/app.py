@@ -3,6 +3,7 @@
 import json as _json
 import logging
 import os
+import stat
 import re
 import time
 from datetime import datetime
@@ -126,6 +127,10 @@ MODEL_ROUTES = frozenset({
 })
 
 
+class JsonObjectExpected(Exception):
+    """Der Body ist kein JSON-Objekt (Array, Skalar, kaputtes JSON)."""
+
+
 def create_app(handler: CLIHandler, auth_service=None,
                agent_service=None, config=None, service=None, consultations=None, board=None,
                allow_unauthenticated: bool = False, agent_gate=None) -> Flask:
@@ -182,6 +187,19 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     if app.config.get("MAX_CONTENT_LENGTH") is None:      # Flask legt den Schluessel mit None an
         app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
+
+    def _json_body() -> dict:
+        """Body als JSON-Objekt; leer = ``{}``. Array, Skalar oder kaputtes JSON: 400 (#95)."""
+        if not request.get_data(cache=True):
+            return {}
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            raise JsonObjectExpected()
+        return body
+
+    @app.errorhandler(JsonObjectExpected)
+    def _json_object_expected(_e):
+        return jsonify({"error": "JSON-Objekt erwartet.", "type": "ValidationError"}), 400
 
     @app.errorhandler(413)
     def _too_large(e):
@@ -527,7 +545,7 @@ def create_app(handler: CLIHandler, auth_service=None,
     @app.post("/agents")
     def create_agent():
         from conclave.domain.agent import Agent
-        body = request.get_json() or {}
+        body = _json_body()
         agent_id = body.get("id")
         name     = body.get("name")
         provider = body.get("provider", "anthropic")
@@ -559,7 +577,7 @@ def create_app(handler: CLIHandler, auth_service=None,
     @app.put("/agents/<agent_id>")
     def update_agent(agent_id: str):
         from conclave.domain.agent import Agent
-        body = request.get_json() or {}
+        body = _json_body()
         name     = body.get("name")
         provider = body.get("provider", "anthropic")
         model    = body.get("model", "")
@@ -666,7 +684,7 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     @app.post("/conversations/<conversation_id>/topic")
     def set_topic(conversation_id: str):
-        body = request.get_json() or {}
+        body = _json_body()
         topic = body.get("topic")
         if topic is None:
             return jsonify({"error": "topic ist erforderlich."}), 400
@@ -687,7 +705,7 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     @app.post("/conversations/<conversation_id>/rules")
     def set_rules(conversation_id: str):
-        body = request.get_json() or {}
+        body = _json_body()
         rules = body.get("rules", "")
         model_read = body.get("model_read")
         if model_read is not None and not isinstance(model_read, bool):
@@ -704,7 +722,7 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     @app.post("/conversations/<conversation_id>/floor/grant")
     def grant_floor(conversation_id: str):
-        body = request.get_json() or {}
+        body = _json_body()
         participant_id = body.get("participant_id")
         if not participant_id:
             return jsonify({"error": "participant_id ist erforderlich."}), 400
@@ -761,7 +779,7 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     @app.post("/conversations/<conversation_id>/participants")
     def add_participant(conversation_id: str):
-        body = request.get_json() or {}
+        body = _json_body()
         participant_id = body.get("participant_id") or body.get("id")
         name = body.get("name")
         ptype_str = body.get("type", "model")
@@ -798,7 +816,7 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     @app.post("/conversations/<conversation_id>/messages")
     def add_message(conversation_id: str):
-        body = request.get_json() or {}
+        body = _json_body()
         content = body.get("content")
 
         if not content:
@@ -822,7 +840,7 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     @app.post("/conversations/<conversation_id>/orchestrate")
     def orchestrate(conversation_id: str):
-        body = request.get_json() or {}
+        body = _json_body()
         try:
             sequence = normalize_participant_sequence(body.get("sequence"))
         except ValueError as exc:
@@ -837,7 +855,7 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     @app.post("/conversations/<conversation_id>/orchestrate-parallel")
     def orchestrate_parallel(conversation_id: str):
-        body = request.get_json() or {}
+        body = _json_body()
         try:
             groups = normalize_parallel_groups(body.get("groups"))
         except ValueError as exc:
@@ -850,7 +868,7 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     @app.post("/conversations/<conversation_id>/orchestrate-parallel-stream")
     def orchestrate_parallel_stream(conversation_id: str):
-        body = request.get_json() or {}
+        body = _json_body()
         try:
             groups = normalize_parallel_groups(body.get("groups"))
         except ValueError as exc:
@@ -900,7 +918,7 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     @app.post("/conversations/<conversation_id>/auto-loop")
     def auto_loop(conversation_id: str):
-        body = request.get_json() or {}
+        body = _json_body()
         try:
             sequence, stop_signal, max_rounds, rotation = normalize_auto_loop_options(
                 sequence=body.get("sequence"),
@@ -958,7 +976,7 @@ def create_app(handler: CLIHandler, auth_service=None,
 
     @app.post("/consultations/<consultation_id>/retry")
     def retry_consultation(consultation_id: str):
-        body = request.get_json(silent=True) or {}
+        body = _json_body()
         rerun = body.get("rerun", False)
         if not isinstance(rerun, bool):
             return jsonify({"error": "rerun muss true oder false sein.", "type": "ValidationError"}), 400
@@ -1071,7 +1089,7 @@ def create_app(handler: CLIHandler, auth_service=None,
     def update_settings():
         """Aktualisiert einfache Runtime-Settings fuer die laufende Session."""
         nonlocal WORKSPACE
-        body = request.get_json() or {}
+        body = _json_body()
         workspace_path = body.get("workspace_path")
         if workspace_path is not None:
             workspace_path = str(workspace_path).strip()
@@ -1185,7 +1203,7 @@ def create_app(handler: CLIHandler, auth_service=None,
     @app.post("/restore")
     def restore_backup():
         """Stellt SQLite-DB und Workspace aus einem ZIP-Backup im Backup-Verzeichnis wieder her."""
-        body = request.get_json() or {}
+        body = _json_body()
         if "backup_path" in body:
             return jsonify({
                 "error": "backup_path wird nicht mehr unterstuetzt. Dateinamen aus GET /backups als 'backup' uebergeben.",
@@ -1266,11 +1284,16 @@ def create_app(handler: CLIHandler, auth_service=None,
                 if is_hidden_workspace_path(pathlib.Path(path), root=workspace_root_path):
                     continue
                 rel = os.path.relpath(path, WORKSPACE).replace("\\", "/")
-                files.append({
-                    "path": rel,
-                    "size": os.path.getsize(path),
-                    "modified": os.path.getmtime(path),
-                })
+                # Wie beim Lesen: nur was im Workspace bleibt (Symlinks nach draussen fehlen hier, #95)
+                if os.path.islink(path) and resolve_workspace_path(rel, root=workspace_root_path) is None:
+                    continue
+                try:
+                    info = os.stat(path)          # einmal; kaputte oder verschwundene Eintraege uebergehen
+                except OSError:
+                    continue
+                if not stat.S_ISREG(info.st_mode):
+                    continue
+                files.append({"path": rel, "size": info.st_size, "modified": info.st_mtime})
         files.sort(key=lambda x: x["path"])
         return jsonify({
             "files": files,

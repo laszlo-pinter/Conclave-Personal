@@ -196,7 +196,7 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
     @bp.post("/next")
     def board_next_task():
         """Oberstes freies Ticket der ersten Spalte uebernehmen (atomar); mit ``task`` genau dieses."""
-        body = request.get_json(silent=True) or {}
+        body = _json_object() if request.get_data(cache=True) else {}
         ref = body.get("task")
         if ref is not None and (not isinstance(ref, str) or not ref.strip()):
             raise BoardError("task muss eine Ticket-Referenz wie 'api#12' sein.", 400, "ValidationError")
