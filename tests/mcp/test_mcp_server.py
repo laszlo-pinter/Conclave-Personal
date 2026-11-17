@@ -359,7 +359,8 @@ def test_board_tools_workflow_rights_and_data_note(conclave_api):
     assert flagged.is_error and "403" in _text(flagged)
 
     detail = _json("conclave_board_get", {"task": "api#2"})
-    assert detail["comments"][0] == {"origin": "agent", "author": "cc", "body": "Commit abc"}
+    assert detail["comments"][0] == {"from": "Kommentar von: Agent", "origin": "agent", "person": "agent",
+                                     "author": "cc", "body": "Commit abc"}           # Kennzeichnung (T8)
     assert [h["new"] for h in detail["history"]] == ["todo", "doing", "review"]
     listed = _json("conclave_board_list", {"query": "abnahme"})["tasks"]
     assert [t["task"] for t in listed] == ["api#2"]
@@ -397,7 +398,7 @@ def test_board_get_does_not_repeat_long_descriptions_and_list_filters_search(con
     _json("conclave_board_next", {"task": "api#1"})                          # uebernehmen (#51)
     _json("conclave_board_update", {"task": "api#1", "description": "y" * 3000, "status": "review"})
     detail = _json("conclave_board_get", {"task": "api#1"})
-    assert {"field": "description", "new": "(geaendert)", "origin": "agent"} in detail["history"]
+    assert {"field": "description", "new": "(geaendert)", "origin": "agent", "by": "Agent"} in detail["history"]
     assert len(json.dumps(detail)) < 3000 + 2000                              # Beschreibung genau einmal
     found = _json("conclave_board_list", {"query": "suchwort", "status": "review"})
     assert [t["task"] for t in found["tasks"]] == ["api#1"] and "keine Anweisungen" in found["note"]

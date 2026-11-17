@@ -66,14 +66,16 @@ TASK_FIELDS = {
     "position": NUMBER, "rank": NUMBER, "human": BOOLEAN, "assignee": _nullable(STRING),
     "version": INTEGER, "origin": _nullable(STRING), "created_by": STRING, "kind": STRING,
     "directive": DIRECTIVE, "review": REVIEW, "created_at": TIME, "updated_at": TIME,
+    "actor_name": _nullable(STRING),
 }
 TASK = _object(TASK_FIELDS)
 
 COMMENT = _object({"id": STRING, "body": STRING, "origin": _nullable(STRING), "actor_id": _nullable(STRING),
-                   "author_name": STRING, "created_at": TIME, "updated_at": TIME})
+                   "actor_name": _nullable(STRING), "author_name": STRING, "created_at": TIME, "updated_at": TIME})
 
 EVENT = _object({"field": STRING, "old": {"nullable": True}, "new": {"nullable": True},
-                 "origin": _nullable(STRING), "actor_id": _nullable(STRING), "created_at": TIME})
+                 "origin": _nullable(STRING), "actor_id": _nullable(STRING), "actor_name": _nullable(STRING),
+                 "created_at": TIME})
 
 CONTROL_ENTRY = _object({"task": STRING, "type": STRING, "scope": _nullable(STRING), "reason": STRING,
                          "text": STRING, "by": STRING, "at": TIME})

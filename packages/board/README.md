@@ -44,7 +44,9 @@ changes to its rules:
   only"), release stuck tickets and create control tickets per scope (`mine`,
   `project`, `all`), which tickets `next` may hand out and whom it assigns, extra
   checks on status changes under a named lock (`locked_key`), and receives
-  events (approval, rank, control, release) for an audit log. The default
+  events (approval, rank, control, release) for an audit log. `actor_name(actor_id)`
+  returns a display name for an account; the API then adds `actor_name` to tickets,
+  comments and history (otherwise `null`). The default
   `PersonalPolicy` keeps the rules of Conclave Personal. The fixed rules for
   agents and the reviewer always apply.
 - **Events:** `BoardService.add_listener(fn)` calls `fn(BoardEvent)` after every
@@ -59,3 +61,9 @@ changes to its rules:
   table, with the same transaction and lock rules as the board series.
 
 The core never imports an extension.
+
+**Board tools for agents:** `conclave_board.tools.BoardTools(request, error)` holds the
+board tools of the MCP servers (list, get, next, create, update, comment, review) without
+MCP or an HTTP library: the caller passes the transport. Every text written by someone
+else carries `from` with origin and person ("Kommentar von: Agent von Anna"). Conclave
+Personal (`conclave-mcp`) and the team package (`conclave-board-mcp`) share this code.

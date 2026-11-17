@@ -2526,9 +2526,14 @@
                             "type": "string",
                             "format": "date-time",
                             "nullable": true
+                          },
+                          "actor_name": {
+                            "type": "string",
+                            "nullable": true
                           }
                         },
                         "required": [
+                          "actor_name",
                           "assignee",
                           "created_at",
                           "created_by",
@@ -2834,6 +2839,10 @@
                       "format": "date-time",
                       "nullable": true
                     },
+                    "actor_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "control": {
                       "type": "object",
                       "properties": {
@@ -2927,6 +2936,7 @@
                     }
                   },
                   "required": [
+                    "actor_name",
                     "assignee",
                     "control",
                     "created_at",
@@ -3169,9 +3179,14 @@
                             "type": "string",
                             "format": "date-time",
                             "nullable": true
+                          },
+                          "actor_name": {
+                            "type": "string",
+                            "nullable": true
                           }
                         },
                         "required": [
+                          "actor_name",
                           "assignee",
                           "created_at",
                           "created_by",
@@ -3480,9 +3495,14 @@
                           "type": "string",
                           "format": "date-time",
                           "nullable": true
+                        },
+                        "actor_name": {
+                          "type": "string",
+                          "nullable": true
                         }
                       },
                       "required": [
+                        "actor_name",
                         "assignee",
                         "created_at",
                         "created_by",
@@ -3524,6 +3544,10 @@
                           "type": "string",
                           "nullable": true
                         },
+                        "actor_name": {
+                          "type": "string",
+                          "nullable": true
+                        },
                         "author_name": {
                           "type": "string"
                         },
@@ -3540,6 +3564,7 @@
                       },
                       "required": [
                         "actor_id",
+                        "actor_name",
                         "author_name",
                         "body",
                         "created_at",
@@ -3857,6 +3882,10 @@
                       "format": "date-time",
                       "nullable": true
                     },
+                    "actor_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "comments": {
                       "type": "array",
                       "items": {
@@ -3876,6 +3905,10 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "actor_name": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "author_name": {
                             "type": "string"
                           },
@@ -3892,6 +3925,7 @@
                         },
                         "required": [
                           "actor_id",
+                          "actor_name",
                           "author_name",
                           "body",
                           "created_at",
@@ -3918,6 +3952,10 @@
                           "type": "string",
                           "nullable": true
                         },
+                        "actor_name": {
+                          "type": "string",
+                          "nullable": true
+                        },
                         "author_name": {
                           "type": "string"
                         },
@@ -3934,6 +3972,7 @@
                       },
                       "required": [
                         "actor_id",
+                        "actor_name",
                         "author_name",
                         "body",
                         "created_at",
@@ -4041,6 +4080,7 @@
                     }
                   },
                   "required": [
+                    "actor_name",
                     "assignee",
                     "comments",
                     "control",
@@ -4235,6 +4275,10 @@
                       "format": "date-time",
                       "nullable": true
                     },
+                    "actor_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "control": {
                       "type": "object",
                       "properties": {
@@ -4328,6 +4372,7 @@
                     }
                   },
                   "required": [
+                    "actor_name",
                     "assignee",
                     "control",
                     "created_at",
@@ -4603,6 +4648,10 @@
                       "format": "date-time",
                       "nullable": true
                     },
+                    "actor_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "control": {
                       "type": "object",
                       "properties": {
@@ -4696,6 +4745,7 @@
                     }
                   },
                   "required": [
+                    "actor_name",
                     "assignee",
                     "control",
                     "created_at",
@@ -4908,6 +4958,10 @@
                             "format": "date-time",
                             "nullable": true
                           },
+                          "actor_name": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "status_since": {
                             "type": "string",
                             "format": "date-time",
@@ -4915,6 +4969,7 @@
                           }
                         },
                         "required": [
+                          "actor_name",
                           "assignee",
                           "created_at",
                           "created_by",
@@ -5211,6 +5266,10 @@
                       "format": "date-time",
                       "nullable": true
                     },
+                    "actor_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "comments": {
                       "type": "array",
                       "items": {
@@ -5230,6 +5289,10 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "actor_name": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "author_name": {
                             "type": "string"
                           },
@@ -5246,6 +5309,7 @@
                         },
                         "required": [
                           "actor_id",
+                          "actor_name",
                           "author_name",
                           "body",
                           "created_at",
@@ -5272,6 +5336,10 @@
                           "type": "string",
                           "nullable": true
                         },
+                        "actor_name": {
+                          "type": "string",
+                          "nullable": true
+                        },
                         "author_name": {
                           "type": "string"
                         },
@@ -5288,6 +5356,7 @@
                       },
                       "required": [
                         "actor_id",
+                        "actor_name",
                         "author_name",
                         "body",
                         "created_at",
@@ -5395,6 +5464,7 @@
                     }
                   },
                   "required": [
+                    "actor_name",
                     "assignee",
                     "comments",
                     "control",
@@ -5729,6 +5799,10 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "actor_name": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "author_name": {
                             "type": "string"
                           },
@@ -5745,6 +5819,7 @@
                         },
                         "required": [
                           "actor_id",
+                          "actor_name",
                           "author_name",
                           "body",
                           "created_at",
@@ -5811,6 +5886,10 @@
                       "nullable": true
                     },
                     "actor_id": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "actor_name": {
                       "type": "string",
                       "nullable": true
                     },
@@ -5921,6 +6000,7 @@
                   },
                   "required": [
                     "actor_id",
+                    "actor_name",
                     "author_name",
                     "body",
                     "control",
@@ -6012,6 +6092,10 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "actor_name": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "created_at": {
                             "type": "string",
                             "format": "date-time",
@@ -6020,6 +6104,7 @@
                         },
                         "required": [
                           "actor_id",
+                          "actor_name",
                           "created_at",
                           "field",
                           "new",
@@ -6201,9 +6286,14 @@
                       "type": "string",
                       "format": "date-time",
                       "nullable": true
+                    },
+                    "actor_name": {
+                      "type": "string",
+                      "nullable": true
                     }
                   },
                   "required": [
+                    "actor_name",
                     "assignee",
                     "created_at",
                     "created_by",
@@ -6326,6 +6416,10 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "actor_name": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "created_at": {
                             "type": "string",
                             "format": "date-time",
@@ -6334,6 +6428,7 @@
                         },
                         "required": [
                           "actor_id",
+                          "actor_name",
                           "created_at",
                           "field",
                           "new",
@@ -6396,6 +6491,10 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "actor_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "author_name": {
                       "type": "string"
                     },
@@ -6412,6 +6511,7 @@
                   },
                   "required": [
                     "actor_id",
+                    "actor_name",
                     "author_name",
                     "body",
                     "created_at",
@@ -7215,9 +7315,14 @@
                             "type": "string",
                             "format": "date-time",
                             "nullable": true
+                          },
+                          "actor_name": {
+                            "type": "string",
+                            "nullable": true
                           }
                         },
                         "required": [
+                          "actor_name",
                           "assignee",
                           "created_at",
                           "created_by",
@@ -7525,6 +7630,10 @@
                       "format": "date-time",
                       "nullable": true
                     },
+                    "actor_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "control": {
                       "type": "object",
                       "properties": {
@@ -7618,6 +7727,7 @@
                     }
                   },
                   "required": [
+                    "actor_name",
                     "assignee",
                     "control",
                     "created_at",
@@ -7862,9 +7972,14 @@
                             "type": "string",
                             "format": "date-time",
                             "nullable": true
+                          },
+                          "actor_name": {
+                            "type": "string",
+                            "nullable": true
                           }
                         },
                         "required": [
+                          "actor_name",
                           "assignee",
                           "created_at",
                           "created_by",
@@ -8175,9 +8290,14 @@
                           "type": "string",
                           "format": "date-time",
                           "nullable": true
+                        },
+                        "actor_name": {
+                          "type": "string",
+                          "nullable": true
                         }
                       },
                       "required": [
+                        "actor_name",
                         "assignee",
                         "created_at",
                         "created_by",
@@ -8219,6 +8339,10 @@
                           "type": "string",
                           "nullable": true
                         },
+                        "actor_name": {
+                          "type": "string",
+                          "nullable": true
+                        },
                         "author_name": {
                           "type": "string"
                         },
@@ -8235,6 +8359,7 @@
                       },
                       "required": [
                         "actor_id",
+                        "actor_name",
                         "author_name",
                         "body",
                         "created_at",
@@ -8554,6 +8679,10 @@
                       "format": "date-time",
                       "nullable": true
                     },
+                    "actor_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "comments": {
                       "type": "array",
                       "items": {
@@ -8573,6 +8702,10 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "actor_name": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "author_name": {
                             "type": "string"
                           },
@@ -8589,6 +8722,7 @@
                         },
                         "required": [
                           "actor_id",
+                          "actor_name",
                           "author_name",
                           "body",
                           "created_at",
@@ -8615,6 +8749,10 @@
                           "type": "string",
                           "nullable": true
                         },
+                        "actor_name": {
+                          "type": "string",
+                          "nullable": true
+                        },
                         "author_name": {
                           "type": "string"
                         },
@@ -8631,6 +8769,7 @@
                       },
                       "required": [
                         "actor_id",
+                        "actor_name",
                         "author_name",
                         "body",
                         "created_at",
@@ -8738,6 +8877,7 @@
                     }
                   },
                   "required": [
+                    "actor_name",
                     "assignee",
                     "comments",
                     "control",
@@ -8934,6 +9074,10 @@
                       "format": "date-time",
                       "nullable": true
                     },
+                    "actor_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "control": {
                       "type": "object",
                       "properties": {
@@ -9027,6 +9171,7 @@
                     }
                   },
                   "required": [
+                    "actor_name",
                     "assignee",
                     "control",
                     "created_at",
@@ -9305,6 +9450,10 @@
                       "format": "date-time",
                       "nullable": true
                     },
+                    "actor_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "control": {
                       "type": "object",
                       "properties": {
@@ -9398,6 +9547,7 @@
                     }
                   },
                   "required": [
+                    "actor_name",
                     "assignee",
                     "control",
                     "created_at",
@@ -9611,6 +9761,10 @@
                             "format": "date-time",
                             "nullable": true
                           },
+                          "actor_name": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "status_since": {
                             "type": "string",
                             "format": "date-time",
@@ -9618,6 +9772,7 @@
                           }
                         },
                         "required": [
+                          "actor_name",
                           "assignee",
                           "created_at",
                           "created_by",
@@ -9915,6 +10070,10 @@
                       "format": "date-time",
                       "nullable": true
                     },
+                    "actor_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "comments": {
                       "type": "array",
                       "items": {
@@ -9934,6 +10093,10 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "actor_name": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "author_name": {
                             "type": "string"
                           },
@@ -9950,6 +10113,7 @@
                         },
                         "required": [
                           "actor_id",
+                          "actor_name",
                           "author_name",
                           "body",
                           "created_at",
@@ -9976,6 +10140,10 @@
                           "type": "string",
                           "nullable": true
                         },
+                        "actor_name": {
+                          "type": "string",
+                          "nullable": true
+                        },
                         "author_name": {
                           "type": "string"
                         },
@@ -9992,6 +10160,7 @@
                       },
                       "required": [
                         "actor_id",
+                        "actor_name",
                         "author_name",
                         "body",
                         "created_at",
@@ -10099,6 +10268,7 @@
                     }
                   },
                   "required": [
+                    "actor_name",
                     "assignee",
                     "comments",
                     "control",
@@ -10439,6 +10609,10 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "actor_name": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "author_name": {
                             "type": "string"
                           },
@@ -10455,6 +10629,7 @@
                         },
                         "required": [
                           "actor_id",
+                          "actor_name",
                           "author_name",
                           "body",
                           "created_at",
@@ -10522,6 +10697,10 @@
                       "nullable": true
                     },
                     "actor_id": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "actor_name": {
                       "type": "string",
                       "nullable": true
                     },
@@ -10632,6 +10811,7 @@
                   },
                   "required": [
                     "actor_id",
+                    "actor_name",
                     "author_name",
                     "body",
                     "control",
@@ -10725,6 +10905,10 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "actor_name": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "created_at": {
                             "type": "string",
                             "format": "date-time",
@@ -10733,6 +10917,7 @@
                         },
                         "required": [
                           "actor_id",
+                          "actor_name",
                           "created_at",
                           "field",
                           "new",
@@ -10916,9 +11101,14 @@
                       "type": "string",
                       "format": "date-time",
                       "nullable": true
+                    },
+                    "actor_name": {
+                      "type": "string",
+                      "nullable": true
                     }
                   },
                   "required": [
+                    "actor_name",
                     "assignee",
                     "created_at",
                     "created_by",
@@ -11043,6 +11233,10 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "actor_name": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "created_at": {
                             "type": "string",
                             "format": "date-time",
@@ -11051,6 +11245,7 @@
                         },
                         "required": [
                           "actor_id",
+                          "actor_name",
                           "created_at",
                           "field",
                           "new",
@@ -11114,6 +11309,10 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "actor_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "author_name": {
                       "type": "string"
                     },
@@ -11130,6 +11329,7 @@
                   },
                   "required": [
                     "actor_id",
+                    "actor_name",
                     "author_name",
                     "body",
                     "created_at",

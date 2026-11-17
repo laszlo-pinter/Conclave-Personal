@@ -1093,7 +1093,8 @@ def initiative_to_dict(initiative: Initiative) -> dict:
             "rank": initiative.rank, "created_at": _iso(initiative.created_at)}
 
 
-def task_to_dict(task: Task) -> dict:
+def task_to_dict(task: Task, names: Callable[[str | None], str | None] | None = None) -> dict:
+    """``names``: Anzeigename eines Kontos (Erweiterungspunkt ``BoardPolicy.actor_name``), sonst ``actor_name`` null."""
     return {
         "ref": task.ref, "project": task.project_slug, "number": task.number, "title": task.title,
         "initiative": task.initiative_slug, "initiative_ref": task.initiative_ref,
@@ -1107,20 +1108,24 @@ def task_to_dict(task: Task) -> dict:
                    "blocking": task.review_blocking, "suggestions": task.review_suggestions,
                    "checked": task.review_checked},
         "created_at": _iso(task.created_at), "updated_at": _iso(task.updated_at),
+        "actor_name": names(task.created_by) if names else None,        # wer angelegt hat (T8)
     }
 
 
-def comment_to_dict(comment: TaskComment) -> dict:
+def comment_to_dict(comment: TaskComment, names: Callable[[str | None], str | None] | None = None) -> dict:
     return {"id": comment.id, "body": comment.body, "origin": comment.origin, "actor_id": comment.actor_id,
+            "actor_name": names(comment.actor_id) if names else None,
             "author_name": comment.author_name, "created_at": _iso(comment.created_at),
             "updated_at": _iso(comment.updated_at)}
 
 
-def event_to_dict(event: TaskEvent) -> dict:
+def event_to_dict(event: TaskEvent, names: Callable[[str | None], str | None] | None = None) -> dict:
     return {"field": event.field_name, "old": event.old_value, "new": event.new_value, "origin": event.origin,
-            "actor_id": event.actor_id, "created_at": _iso(event.created_at)}
+            "actor_id": event.actor_id, "actor_name": names(event.actor_id) if names else None,
+            "created_at": _iso(event.created_at)}
 
 
-def project_event_to_dict(event: ProjectEvent) -> dict:
+def project_event_to_dict(event: ProjectEvent, names: Callable[[str | None], str | None] | None = None) -> dict:
     return {"field": event.field_name, "old": event.old_value, "new": event.new_value, "origin": event.origin,
-            "actor_id": event.actor_id, "created_at": _iso(event.created_at)}
+            "actor_id": event.actor_id, "actor_name": names(event.actor_id) if names else None,
+            "created_at": _iso(event.created_at)}

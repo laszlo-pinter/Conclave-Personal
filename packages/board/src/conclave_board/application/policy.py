@@ -61,6 +61,11 @@ class BoardPolicy:
     def record(self, principal: Principal, event: str, project: str | None, target: str, detail: dict) -> None:
         """Ereignis fuer ein Audit-Log (ohne Inhalte): approval, rank, control, release, ..."""
 
+    def actor_name(self, actor_id: str | None) -> str | None:
+        """Anzeigename eines Kontos fuer die Kennzeichnung fremder Texte (T8): ``actor_name`` an Ticket,
+        Kommentaren und Verlauf. ``None``: kein Name bekannt (Personal: die Rolle reicht)."""
+        return None
+
 
 class PersonalPolicy(BoardPolicy):
     """Conclave Personal: Der Mensch darf alles, Agenten schreiben, nur der Mensch gibt frei."""

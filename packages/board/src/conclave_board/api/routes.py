@@ -95,6 +95,19 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
             raise BoardError("Das Board ist in dieser Instanz nicht verfuegbar.", 503, "BoardDisabled")
         return board
 
+    def _names():
+        """Anzeigenamen der Konten fuer diese Anfrage (``BoardPolicy.actor_name``, T8), je Konto einmal gefragt."""
+        cache = g.get("_board_actor_names")
+        if cache is None:
+            cache = g._board_actor_names = {}
+        policy = _board().policy
+
+        def name(actor_id):
+            if actor_id not in cache:
+                cache[actor_id] = policy.actor_name(actor_id) if actor_id else None
+            return cache[actor_id]
+        return name
+
     def _json_object() -> dict:
         body = request.get_json(silent=True)
         if not isinstance(body, dict):
@@ -186,7 +199,7 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
         statuses = request.args.getlist("status") or None
         slug = request.args.get("project") or None
         tasks = _visible(_board().list_tasks(slug, statuses, include_done=_flag("include_done")))
-        return jsonify({"tasks": [task_to_dict(t) for t in tasks], "control": _control(slug)}), 200
+        return jsonify({"tasks": [task_to_dict(t, _names()) for t in tasks], "control": _control(slug)}), 200
 
     @bp.post("/tasks")
     def board_create_task():
@@ -201,14 +214,14 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
                                     human=body.get("human", False), status=body.get("status"),
                                     kind=body.get("kind") or "task", control=body.get("control"),
                                     scope=body.get("scope") or "project", initiative=body.get("initiative") or None)
-        return jsonify({**task_to_dict(task), "control": _control(task.project_slug)}), 201
+        return jsonify({**task_to_dict(task, _names()), "control": _control(task.project_slug)}), 201
 
     @bp.get("/search")
     def board_search():
         """Suche in Titel, Tags, Beschreibung und Kommentaren."""
         slug = request.args.get("project") or None
         tasks = _visible(_board().search(request.args.get("q", ""), slug, include_done=_flag("include_done", True)))
-        return jsonify({"tasks": [task_to_dict(t) for t in tasks], "control": _control(slug)}), 200
+        return jsonify({"tasks": [task_to_dict(t, _names()) for t in tasks], "control": _control(slug)}), 200
 
     @bp.post("/next")
     def board_next_task():
@@ -229,12 +242,12 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
         if task is None:
             return jsonify({"task": None, "control": _control(slug)}), 200
         # Nacharbeit (P3): der letzte Review-Kommentar kommt gleich mit
-        return jsonify({"task": task_to_dict(task), "last_review": _last_review(b, task.ref),
+        return jsonify({"task": task_to_dict(task, _names()), "last_review": _last_review(b, task.ref),
                         "control": _control(task.project_slug)}), 200
 
     def _last_review(b, ref: str):
         comment = b.last_review(ref)
-        return comment_to_dict(comment) if comment else None
+        return comment_to_dict(comment, _names()) if comment else None
 
     def _ref(slug: str, number: int) -> str:
         return f"{slug}#{number}"
@@ -244,7 +257,7 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
         """Ein Ticket mit Kommentaren."""
         b = _board()
         task = b.get_task(_ref(slug, number))
-        return jsonify({**task_to_dict(task), "comments": [comment_to_dict(c) for c in b.comments(task.ref)],
+        return jsonify({**task_to_dict(task, _names()), "comments": [comment_to_dict(c, _names()) for c in b.comments(task.ref)],
                         "last_review": _last_review(b, task.ref), "status_since": _iso(b.status_since(task)),
                         "control": _control(slug)}), 200
 
@@ -252,7 +265,7 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
     def board_release_task(slug: str, number: int):
         """Haengendes Ticket freigeben: zurueck in die erste Spalte, Zustaendigkeit leer (Mensch, T5)."""
         task = _board().release_task(g.principal, _ref(slug, number))
-        return jsonify({**task_to_dict(task), "control": _control(slug)}), 200
+        return jsonify({**task_to_dict(task, _names()), "control": _control(slug)}), 200
 
     @bp.get("/stuck")
     def board_stuck():
@@ -262,7 +275,7 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
             raise BoardError("minutes muss eine ganze Zahl von 1 bis 525600 sein.", 400, "ValidationError")
         slug = request.args.get("project") or None
         found = _board().stuck(g.principal, slug, timedelta(minutes=int(raw)))
-        return jsonify({"tasks": [{**task_to_dict(t), "status_since": _iso(since)} for t, since in found],
+        return jsonify({"tasks": [{**task_to_dict(t, _names()), "status_since": _iso(since)} for t, since in found],
                         "control": _control(slug)}), 200
 
     @bp.get("/projects/<slug>/initiatives/<initiative>/tasks/<int:number>")
@@ -335,7 +348,7 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
                     raise BoardError(f"Ticket '{ref}' hat inzwischen Version {current.version} "
                                      f"(erwartet {body['version']}); bitte neu laden.", 409, "Conflict")
             task = b.assign_initiative(g.principal, ref, body.get("initiative") or None)
-        return jsonify({**task_to_dict(task), "control": _control(slug)}), 200
+        return jsonify({**task_to_dict(task, _names()), "control": _control(slug)}), 200
 
     @bp.delete("/projects/<slug>/tasks/<int:number>")
     def board_delete_task(slug: str, number: int):
@@ -346,7 +359,7 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
     @bp.get("/projects/<slug>/tasks/<int:number>/comments")
     def board_list_comments(slug: str, number: int):
         """Kommentare eines Tickets mit Herkunft."""
-        return jsonify({"comments": [comment_to_dict(c) for c in _board().comments(_ref(slug, number))]}), 200
+        return jsonify({"comments": [comment_to_dict(c, _names()) for c in _board().comments(_ref(slug, number))]}), 200
 
     @bp.post("/projects/<slug>/tasks/<int:number>/comments")
     def board_add_comment(slug: str, number: int):
@@ -354,12 +367,12 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
         body = _json_object()
         comment = _board().add_comment(g.principal, _ref(slug, number), body.get("body"),
                                        author_name=body.get("author_name") or "")
-        return jsonify({**comment_to_dict(comment), "control": _control(slug)}), 201
+        return jsonify({**comment_to_dict(comment, _names()), "control": _control(slug)}), 201
 
     @bp.get("/projects/<slug>/tasks/<int:number>/history")
     def board_history(slug: str, number: int):
         """Verlauf eines Tickets: Anlegen und jede Aenderung mit Herkunft."""
-        return jsonify({"history": [event_to_dict(e) for e in _board().history(_ref(slug, number))]}), 200
+        return jsonify({"history": [event_to_dict(e, _names()) for e in _board().history(_ref(slug, number))]}), 200
 
     @bp.post("/projects/<slug>/tasks/<int:number>/review")
     def board_review_task(slug: str, number: int):
@@ -374,18 +387,18 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
         task = _board().review(g.principal, _ref(slug, number), body.get("state"), body.get("comment"),
                                blocking=body.get("blocking"), suggestions=body.get("suggestions"),
                                checked=body.get("checked"))
-        return jsonify(task_to_dict(task)), 200
+        return jsonify(task_to_dict(task, _names())), 200
 
     @bp.get("/projects/<slug>/history")
     def board_project_history(slug: str):
         """Verlauf eines Projekts: Anlegen, Umbenennen, geloeschte Tickets (nur Mensch)."""
-        return jsonify({"history": [project_event_to_dict(e) for e in _board().project_history(slug)]}), 200
+        return jsonify({"history": [project_event_to_dict(e, _names()) for e in _board().project_history(slug)]}), 200
 
     @bp.put("/comments/<comment_id>")
     def board_edit_comment(comment_id: str):
         """Eigenen Kommentar aendern (nur Mensch)."""
         comment = _board().edit_comment(g.principal, comment_id, _json_object().get("body"))
-        return jsonify(comment_to_dict(comment)), 200
+        return jsonify(comment_to_dict(comment, _names())), 200
 
     @bp.delete("/comments/<comment_id>")
     def board_delete_comment(comment_id: str):
