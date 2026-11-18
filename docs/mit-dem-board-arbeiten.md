@@ -57,7 +57,7 @@ Wer schreibt, ergibt sich aus dem Token, nicht aus einem Feld der Anfrage:
   stehen ebenfalls im Verlauf. Jedes Ticket zeigt, wer es angelegt hat
   (`created_by`); Agenten legen Tickets nur in der ersten Spalte an.
 - **Projekt-Verlauf:** Anlegen, Umbenennen und gelöschte Tickets eines Projekts
-  (`GET /board/projects/<slug>/history`).
+  (`GET /board/v1/projects/<slug>/history`).
 - **Gleichzeitig ändern:** Wer beim Ändern die gelesene `version` mitgibt,
   überschreibt keine Änderung, die inzwischen ein anderer gemacht hat (`409`).
 - Löschen, Projekte verwalten und der Import sind dem Menschen vorbehalten.
@@ -80,7 +80,7 @@ gilt auch hier: Ein Agent, der `api.token` lesen kann, hat den Mensch-Zugang.
 3. **Projekt anlegen** (Mensch-Token), z. B.:
 
    ```bash
-   curl -X POST http://localhost:8000/board/projects \
+   curl -X POST http://localhost:8000/board/v1/projects \
      -H "Authorization: Bearer <Mensch-Token>" -H "Content-Type: application/json" \
      -d '{"slug": "api", "name": "API"}'
    ```
@@ -176,10 +176,37 @@ Priorität ändert.
 5. **Abschluss:** Der Mensch liest Kommentare und Reviews, gibt frei und schiebt
    nach `done`. Korrekturen aus einem Review werden neue Tickets.
 
-Ein automatischer Reviewer lässt sich anschließen: ein eigener Prozess, der
-das Board beobachtet und bei jedem Ticket in `review` einen Review-Agenten
-startet. Er gehört nicht zu Conclave. Gib ihm das Reviewer-Token
-(`conclave token show --reviewer`), den MCP-Server `conclave-mcp --reviewer`,
+**Automatischer Reviewer:** `conclave-reviewer` beobachtet das Board und
+startet für jedes Ticket, das nach `review` kommt, ein Review mit Claude Code
+(`claude -p`). Er bekommt nur das Reviewer-Token, den MCP-Server
+`conclave-mcp --reviewer`, Lesezugriff auf den genannten Commit und keine Shell.
+
+- **Einrichten:** Der Abschnitt `[reviewer]` in Conclaves `config.toml` nennt
+  die Projekte und ihre Checkouts (siehe
+  [Konfiguration](referenz/konfiguration.md#reviewer)). Eine Konfiguration des
+  früheren, getrennten Watchers übernimmt
+  `conclave-reviewer import-config <alte config.toml>`; vor dem Schreiben zeigt
+  es das Ergebnis.
+- **Start und Ende:** `conclave desktop` startet den Reviewer im Hintergrund,
+  wenn `[reviewer]` vorhanden ist, `enabled` nicht `false` ist und
+  `reviewer.token` existiert. Er endet mit dem Desktop, auch nach einem Absturz,
+  und nimmt laufende Claude-Prozesse mit. `conclave server` startet keinen.
+  Läuft schon ein Reviewer oder der frühere Watcher (`legacy_lock_file`),
+  startet kein zweiter.
+- **Geprüfter Stand:** Den Commit nimmt der Reviewer aus dem jüngsten
+  Agent-Kommentar, der einen nennt (Hashes in Backticks, z. B.
+  `` **Branch:** `x` · **Commit:** `abc1234` ``). Deshalb gehören nur Commits,
+  die geprüft werden sollen, in Backticks. Hat ein Projekt mehrere Checkouts, sucht er in allen und prüft
+  jeden in einem eigenen Worktree. Die Worktrees entfernt er danach wieder.
+- **Zustand:** Das Board zeigt „Reviewer aktiv“ (mit dem Ticket, das er gerade
+  prüft) oder „Reviewer aus“. `conclave-reviewer status` zeigt, ob er läuft,
+  das laufende Ticket, das letzte Ergebnis, die Reviews der letzten Stunde und
+  die Version von `claude`.
+- **Nach einem Abbruch:** Beim nächsten Start gibt er hängende Reviews
+  (`running`) frei, prüft sie neu und räumt liegen gebliebene Worktrees auf.
+
+Einen anderen Reviewer kann man genauso anschließen: Er braucht das
+Reviewer-Token (`conclave token show --reviewer`), `conclave-mcp --reviewer`,
 Lesezugriff auf den Code und keine Shell.
 
 **Review-Ablauf:**
@@ -223,15 +250,28 @@ ihre Sitzung abzubrechen. Ein Banner über den Spalten zeigt sie an.
 
 1. Tickets nur über `conclave_board_next` holen; nach `review` schiebt er
    selbst, mit Branch, Commits und Testergebnis als Kommentar. Der Reviewer
-   prüft genau die genannten Commits.
-2. Nicht auf den Menschen warten: grün ist keine Freigabe.
-3. Höchstens ein offenes Review: Steht ein eigenes Ticket noch ohne Ergebnis in
+   prüft genau die genannten Commits. Gehört ein Ticket zu mehreren Repos (etwa
+   einer Bibliothek und einer Anwendung), nennt der Kommentar jedes Repo mit Branch und
+   Commit, z. B. „**Kern:** `feature-x` @ `a07cda0` · **App:** `feature-x` @ `d50667c`“. Der
+   Reviewer sucht jeden Commit in allen Repos, die `config.toml` für das Projekt
+   als Liste nennt (`projects.conclave = ['…', '…']`), und legt je Repo einen
+   eigenen Worktree an. Ein Commit, den er in keinem Repo findet, gilt als nicht
+   geprüft; das Urteil ist dann höchstens gelb.
+2. Nach „→ review“ startet der Agent `conclave board wait <ticket>` im
+   Hintergrund und arbeitet weiter. Der Befehl endet mit einer JSON-Zeile, sobald das Review entschieden
+   ist (`{"event": "review", "verdict": "gelb", ...}`); `conclave board wait
+   --project <slug>` endet auch bei einer neuen Pause oder einem Hinweis
+   (`{"event": "control", ...}`). Nach `--timeout` Minuten (Standard 60) endet
+   er mit Exit-Code 2. Der Befehl liest mit dem Agent-Token nur
+   (Änderungszähler, Ticket bzw. Ticketliste des Projekts).
+3. Nicht auf den Menschen warten: grün ist keine Freigabe.
+4. Höchstens ein offenes Review: Steht ein eigenes Ticket noch ohne Ergebnis in
    `review`, schiebt der Agent das nächste erst nach `review`, wenn das erste
    ein Ergebnis hat. Weiterarbeiten darf er.
-4. Gelb unterbricht nicht: erst das aktuelle Ticket fertig, dann das gelbe.
-5. Rot stoppt: am nächsten sauberen Punkt (Commit) anhalten, das am aktuellen
+5. Gelb unterbricht nicht: erst das aktuelle Ticket fertig, dann das gelbe.
+6. Rot stoppt: am nächsten sauberen Punkt (Commit) anhalten, das am aktuellen
    Ticket vermerken und das rote Ticket nehmen.
-6. Punkt für Punkt antworten: „B1 behoben (`abc1234`), V1 umgesetzt,
+7. Punkt für Punkt antworten: „B1 behoben (`abc1234`), V1 umgesetzt,
    V2 abgelehnt: …“.
 
 ## Import aus Kanzo
@@ -241,7 +281,7 @@ Ein Kanzo-Board lässt sich übernehmen. Kanzo exportiert, Conclave importiert
 
 ```bash
 kanzo export -f json -o board.json            # optional -p <projekt>
-curl -X POST http://localhost:8000/board/import \
+curl -X POST http://localhost:8000/board/v1/import \
   -H "Authorization: Bearer <Mensch-Token>" -H "Content-Type: application/json" \
   --data-binary @board.json
 ```
@@ -249,7 +289,7 @@ curl -X POST http://localhost:8000/board/import \
 In PowerShell:
 
 ```powershell
-Invoke-RestMethod -Method Post http://localhost:8000/board/import `
+Invoke-RestMethod -Method Post http://localhost:8000/board/v1/import `
   -Headers @{Authorization = "Bearer <Mensch-Token>"} -ContentType "application/json" `
   -InFile board.json
 ```

@@ -1,17 +1,18 @@
-"""Consultations in PostgreSQL (Verbindung mit autocommit).
+"""Consultations in PostgreSQL.
 
 Das Limit pro Ticket und Stunde braucht Zaehlen und Einfuegen unter einer Sperre (R10).
-Eine Transaktion auf der geteilten Verbindung waere unsicher (Anweisungen anderer Threads
-liefen mit hinein), und eine einzelne Anweisung saehe unter READ COMMITTED nicht, was
-waehrend des Wartens auf die Sperre festgeschrieben wurde. Deshalb: Sitzungssperre
-``pg_advisory_lock`` je Ticket und Kanal (gegen andere Prozesse), ein Lock im Objekt
-(gegen Threads derselben Verbindung, fuer die die Sitzungssperre wiedereintrittsfaehig
-ist), dann ein ``INSERT ... WHERE count < limit`` mit frischem Snapshot.
+Seit T2 laeuft das in einer Transaktion (``transaction()`` des Pools bzw. von
+``DirectConnection``): ``pg_advisory_xact_lock`` je Ticket und Kanal serialisiert alle
+Prozesse und Threads, die Sperre faellt mit Commit oder Rollback. Danach zaehlt ein
+``INSERT ... WHERE count < limit``; unter READ COMMITTED bekommt jede Anweisung einen
+frischen Snapshot, sieht also, was waehrend des Wartens auf die Sperre festgeschrieben wurde.
+Ausserhalb dieser Methode laeuft jede Anweisung fuer sich (Autocommit).
 """
 
 import json
-import threading
 from datetime import UTC, datetime
+
+from conclave_board.infrastructure.postgres.pool import as_transactional
 
 from conclave.domain.consultation import QUEUED, RUNNING, Consultation, ConsultationDelivery
 from conclave.infrastructure.sqlite.consultation_repository import (
@@ -24,8 +25,8 @@ from conclave.infrastructure.sqlite.consultation_repository import (
 
 class PostgresConsultationRepository:
     def __init__(self, connection) -> None:
-        self._connection = connection
-        self._tx_lock = threading.Lock()
+        # Rohe psycopg2-Verbindungen (Tests, CLI) bekommen dieselbe Transaktions-Schnittstelle
+        self._connection = as_transactional(connection)
 
     def _fetch(self, sql: str, params: tuple, one: bool = False):
         with self._connection.cursor() as cur:
@@ -82,21 +83,18 @@ class PostgresConsultationRepository:
 
     def create_if_under_limit(self, c: Consultation, since: datetime, limit: int) -> bool:
         key = f"consultation-limit:{c.source}:{c.source_ref}:{c.channel}"
-        with self._tx_lock, self._connection.cursor() as cur:
-            cur.execute("SELECT pg_advisory_lock(hashtext(%s))", (key,))
-            try:
-                cur.execute(
-                    "INSERT INTO consultations (id, source, source_ref, question, reviewers_json, channel, mode, "
-                    "context, requested_by, include_previous, status, error, conversation_id, created_at, "
-                    "finished_at) SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s WHERE ("
-                    "  SELECT count(*) FROM consultations WHERE source = %s AND source_ref = %s AND channel = %s "
-                    "  AND created_at >= %s) < %s",
-                    (c.id, c.source, c.source_ref, c.question, json.dumps(list(c.reviewers)), c.channel, c.mode,
-                     c.context, c.requested_by, c.include_previous, c.status, c.error, c.conversation_id,
-                     c.created_at, None, c.source, c.source_ref, c.channel, since, limit))
-                return cur.rowcount == 1
-            finally:
-                cur.execute("SELECT pg_advisory_unlock(hashtext(%s))", (key,))
+        with self._connection.transaction(), self._connection.cursor() as cur:
+            cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (key,))   # faellt mit dem Commit
+            cur.execute(
+                "INSERT INTO consultations (id, source, source_ref, question, reviewers_json, channel, mode, "
+                "context, requested_by, include_previous, status, error, conversation_id, created_at, "
+                "finished_at) SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s WHERE ("
+                "  SELECT count(*) FROM consultations WHERE source = %s AND source_ref = %s AND channel = %s "
+                "  AND created_at >= %s) < %s",
+                (c.id, c.source, c.source_ref, c.question, json.dumps(list(c.reviewers)), c.channel, c.mode,
+                 c.context, c.requested_by, c.include_previous, c.status, c.error, c.conversation_id,
+                 c.created_at, None, c.source, c.source_ref, c.channel, since, limit))
+            return cur.rowcount == 1
 
     def set_conversation(self, consultation_id: str, conversation_id: str) -> None:
         with self._connection.cursor() as cur:

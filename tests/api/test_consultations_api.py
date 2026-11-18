@@ -304,3 +304,18 @@ def test_build_app_picks_the_ticket_source(tmp_path, monkeypatch, source, expect
         assert resp.status_code == 403 and resp.get_json()["type"] == "HumanOnlyTicket"
         resp = client.post("/consultations", json={"task": "api#1", "question": "?"}, headers=human)
         assert resp.status_code == 202 and resp.get_json()["source"] == expected
+
+
+def test_agent_request_is_refused_up_front_when_the_budget_is_spent(env):
+    """#94: klare 429 schon beim Anlegen; der Mensch ist nicht betroffen."""
+    from conclave.application.agent_limits import AgentRunGate
+    from conclave.cli.config import LimitSettings
+
+    class Spent:
+        def tokens_since(self, since, origin=None, conversation_id=None):
+            return 10
+
+    env.requests._gate = AgentRunGate(LimitSettings(agent_tokens_per_day=10), lambda: Spent())
+    resp = _create(env, client=env.agent)
+    assert resp.status_code == 429 and resp.get_json()["type"] == "AgentBudgetExceeded"
+    assert _create(env).status_code == 202

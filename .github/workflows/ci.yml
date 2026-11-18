@@ -117,6 +117,14 @@ jobs:
       - name: Static analysis (medium severity and above)
         run: python -m bandit -r src/conclave --severity-level medium
 
+      - name: Static analysis of the board package (medium severity and above)
+        run: python -m bandit -r packages/board/src/conclave_board --severity-level medium
+
+      - name: Board package does not import Personal or provider SDKs (import-linter)
+        run: |
+          lint-imports
+          lint-imports --config .github/importlinter-extensions.toml
+
   postgres:
     name: PostgreSQL tests (PostgreSQL 16)
     runs-on: ubuntu-latest
@@ -208,3 +216,75 @@ jobs:
         with:
           name: conclave-dist
           path: dist/*
+
+  board-package:
+    name: Board package (${{ matrix.os }}, fresh environment)
+    runs-on: ${{ matrix.os }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    env:
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: ${{ !inputs.release && 'pip' || '' }}
+
+      - name: Install pinned build tools
+        run: "python -m pip install --require-hashes --only-binary :all: -r requirements/release-tools.txt"
+
+      - name: Build the board wheel
+        run: python -m build --wheel --no-isolation --outdir dist-board packages/board
+
+      - name: Inspect the board wheel
+        run: python scripts/release/check_board_wheel.py dist-board
+
+      - name: Install the wheel into a fresh environment (without Personal and provider SDKs)
+        run: |
+          python -m venv board-env
+          if [ "$RUNNER_OS" = "Windows" ]; then BIN=board-env/Scripts; else BIN=board-env/bin; fi
+          echo "BOARD_PYTHON=$BIN/python" >> "$GITHUB_ENV"
+          "$BIN/python" -m pip install "$(ls dist-board/conclave_board-*.whl)[postgres]"
+
+      - name: Check dependency licenses (Apache-2.0 compatible, psycopg2 as exception)
+        run: '"$BOARD_PYTHON" scripts/release/check_board_licenses.py --extra postgres'
+
+      - name: Start the board server and check it
+        run: '"$BOARD_PYTHON" scripts/release/smoke_board.py'
+
+      - name: Upload the board wheel (internal wheelhouse, not for PyPI)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          name: conclave-board-wheel
+          path: dist-board/*
+
+  board-api:
+    name: Board API v1 without breaking changes (oasdiff)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with tags and main for the comparison)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Fetch main for the comparison
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main || true
+
+      - name: Compare board-v1.json with the last release (oasdiff breaking)
+        run: bash scripts/release/check_board_api.sh

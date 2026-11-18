@@ -13,7 +13,7 @@ answer is correct. It gives users a structured workspace for comparing model
 outputs, tracking runs, and deliberately choosing the next step. The human
 decides. Always.
 
-> Status: v0.7.0 Alpha. The primary path is local, desktop-first, and designed
+> Status: v0.8.0 Alpha. The primary path is local, desktop-first, and designed
 > for individual users on Windows and Linux.
 
 ![Conclave Studio](https://raw.githubusercontent.com/laszlo-pinter/Conclave-Personal/main/docs/assets/screenshots/conclave-studio-desktop.png)
@@ -264,13 +264,21 @@ The MCP server talks to `CONCLAVE_API_URL` (default `http://localhost:8000`).
 with a fixed port (`conclave server --port 8000` or
 `conclave desktop --port 8000`) or set `CONCLAVE_API_URL` to the actual address.
 
-The local API always requires a token, and since v0.5.0 there are two:
+The local API always requires a token. There are three, each with its own rights:
 
 - the **human token** (`api.token`, or `CONCLAVE_API_KEY`) for the web UI, the
   REST API and the CLI,
-- the **agent token** (`agent.token`, or `CONCLAVE_AGENT_KEY`) for agents.
+- the **agent token** (`agent.token`, or `CONCLAVE_AGENT_KEY`) for agents (since v0.5.0),
+- the **reviewer token** (`reviewer.token`, or `CONCLAVE_REVIEWER_KEY`) for the
+  automatic reviewer (since v0.7.0): it reads tickets, comments and sets the
+  review result, nothing else. `conclave-mcp --reviewer` uses it;
+  `conclave token show --reviewer` prints the path. Since v0.8.0 the automatic
+  reviewer is built in: install the extra `[reviewer]` and add a `[reviewer]`
+  section to `config.toml`, then `conclave desktop` starts it (see
+  [Working with the board](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/mit-dem-board-arbeiten.md)).
 
-The server creates both files in the configuration directory on first start.
+The server creates the files in the configuration directory on first start.
+New tokens carry a prefix (`cvh_` human, `cva_` agent, `cvr_` reviewer).
 The MCP server uses only the agent token: it reads `CONCLAVE_AGENT_KEY` or
 `agent.token` on every request (so the server may also be started after the MCP
 client) and never reads `api.token`. `conclave token show --agent` prints the
@@ -354,6 +362,13 @@ src/conclave/
   cli/             command line
   runtime/         platform-neutral desktop/server launch logic
 
+packages/board/src/conclave_board/
+                   board package (Apache-2.0, bundled with Personal):
+                   board domain, service, storage, migrations, REST
+                   blueprint, shared building blocks (tokens, crypto,
+                   file permissions, log); runs on its own as
+                   `conclave-board serve`
+
 src/conclave/assets/
   conclave-ui.html installed UI resource
   static/js/       api, i18n, state, utils, main, swagger-init
@@ -407,7 +422,8 @@ endpoints, processing can happen fully locally.
 Conclave binds the local API to `127.0.0.1` by default. The local API always
 requires a token; without `CONCLAVE_API_KEY` one is generated and stored in
 `api.token`. Agents use a separate agent token (`agent.token`,
-`CONCLAVE_AGENT_KEY`) with restricted rights. In `production` mode, `CONCLAVE_API_KEY` and an encryption key
+`CONCLAVE_AGENT_KEY`) with restricted rights, the automatic reviewer its own
+reviewer token (`CONCLAVE_REVIEWER_KEY`) with even narrower rights. In `production` mode, `CONCLAVE_API_KEY` and an encryption key
 (`CONCLAVE_SECRET_KEY`, or an existing key file / `CONCLAVE_SECRET_KEY_FILE`)
 must be set explicitly. Workspace access stays inside the configured workspace
 root, and hidden paths are not read as agent context.
@@ -422,6 +438,7 @@ Important documents:
 - [Example workflows](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/beispiel-workflows.md)
 - [Security](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/sicherheit.md)
 - [Configuration](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/referenz/konfiguration.md)
+- [Release Notes v0.8.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.8.0.md)
 - [Release Notes v0.4.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.4.0.md)
 - [Release Notes v0.5.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.5.0.md)
 - [Release Notes v0.5.1](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.5.1.md)
@@ -448,7 +465,7 @@ Important documents:
 
 ## Known Limitations
 
-v0.7.0 remains alpha. Known limitations:
+v0.8.0 remains alpha. Known limitations:
 
 - Provider compatibility varies by API, model, account, and region.
 - Remote providers receive the data required for the model call.
@@ -467,8 +484,13 @@ CI runs the jobs `test` (Ubuntu and Windows, Python 3.11 and 3.12),
 `bandit`), `postgres` (PostgreSQL 16 tests) and `build` (sdist and wheel,
 artifact inspection).
 
-The v0.7.0 surface was verified with these checks:
+The v0.8.0 surface was verified with these checks:
 
+- Upgrade of a copy of a real v0.7.0 database, going back to v0.7.0 and forward
+  again, the same upgrade on PostgreSQL; fresh installation from wheel and sdist
+  with `[mcp]`, `[mcp,reviewer]` and `[postgres]` and a smoke test (`conclave
+  desktop`, UI login, `conclave-mcp`, `conclave-reviewer status`, `conclave board
+  wait`); `pip-audit` against these environments (v0.8.0)
 - `python -m pytest` (the Playwright browser tests for XSS protection, CSP,
   token login, the settings page, the context chip, the preview, the file viewer and the board only run
   with the browser test setup below; the PostgreSQL tests only run with
@@ -519,3 +541,7 @@ This project was created exclusively by LLM models.
 PolyForm Noncommercial License 1.0.0. See [LICENSE](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/LICENSE).
 
 Free for noncommercial use.
+
+The bundled board package (`conclave_board`, in `packages/board`) is licensed
+under the Apache License 2.0; see `packages/board/LICENSE` and
+`packages/board/NOTICE`.

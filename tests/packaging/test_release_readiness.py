@@ -9,8 +9,20 @@ def test_license_file_exists_and_pyproject_declares_polyform_noncommercial():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
 
     assert "PolyForm Noncommercial License 1.0.0" in license_text
-    assert 'license = "LicenseRef-PolyForm-Noncommercial-1.0.0"' in pyproject
-    assert 'license-files = ["LICENSE"]' in pyproject
+    # Das mitgebuendelte Board-Paket steht unter Apache-2.0 (T1)
+    assert 'license = "LicenseRef-PolyForm-Noncommercial-1.0.0 AND Apache-2.0"' in pyproject
+    assert 'license-files = ["LICENSE", "packages/board/LICENSE", "packages/board/NOTICE"]' in pyproject
+
+
+def test_board_package_declares_apache_2():
+    board = ROOT / "packages" / "board"
+    pyproject = (board / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert "Apache License" in (board / "LICENSE").read_text(encoding="utf-8")
+    assert "Version 2.0, January 2004" in (board / "LICENSE").read_text(encoding="utf-8")
+    assert "Apache License, Version 2.0" in (board / "NOTICE").read_text(encoding="utf-8")
+    assert 'license = "Apache-2.0"' in pyproject
+    assert 'license-files = ["LICENSE", "NOTICE"]' in pyproject
 
 
 def test_release_docs_exist():
@@ -21,6 +33,8 @@ def test_release_docs_exist():
         "docs/mit-kanzo-arbeiten.md",
         "docs/release-notes-v0.6.0.md",
         "docs/release-notes-v0.6.1.md",
+        "docs/release-notes-v0.7.0.md",
+        "docs/release-notes-v0.8.0.md",
         "docs/release-notes-v0.4.0.md",
         "docs/release-notes-v0.5.0.md",
         "docs/release-notes-v0.5.1.md",

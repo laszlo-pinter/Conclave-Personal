@@ -14,6 +14,9 @@ Sicherheit (Plan 4.1, 4.6, 4.7 und Erweiterungen aus C3):
 - Tickets "nur fuer Menschen" werden abgelehnt, wenn der Kanal nicht ``human`` ist
   (der Kanal kommt aus dem Token, Z3).
 - In der Ticket-Quelle (eigenes Board oder Kanzo) wird nur kommentiert.
+- Hat ein Agent die Consultation angefordert (Kanal ``agent``), gelten Budget und gleichzeitige
+  Laeufe aus ``[limits]`` wie bei Invoke und Orchestrate (R11), geprueft vor dem ersten
+  Modellaufruf; die Laeufe tragen die Herkunft ``agent`` und zaehlen ins Tagesbudget.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ import secrets
 from datetime import UTC, datetime
 from typing import Callable
 
+from conclave.application.agent_limits import AgentLimitExceeded
 from conclave.application.ports import CommentSink, ConsultationRepository, TaskSource
 from conclave.domain.consultation import (
     DELIVERED,
@@ -68,6 +72,7 @@ class ConsultationService:
         *,
         comment_max_chars: int = 2000,
         reviewer_name: Callable[[str], str] = lambda pid: pid,
+        agent_gate=None,
     ) -> None:
         self._flow = flow
         self._repo = repository
@@ -75,6 +80,7 @@ class ConsultationService:
         self._sink = comment_sink
         self._max_chars = comment_max_chars
         self._name = reviewer_name
+        self._gate = agent_gate                              # Grenzen fuer Agenten (R11, #94)
 
     # ── Bearbeitung (vom Worker aufgerufen) ──────────────────────────────
 
@@ -84,7 +90,17 @@ class ConsultationService:
             self._finish(c, FAILED, "Ticket ist nur fuer Menschen (human) - Anfragen von Agenten werden abgelehnt.",
                          expected=RUNNING)
             return
+        if c.channel == HUMAN or self._gate is None:
+            self._run(c, ticket)
+            return
+        try:
+            with self._gate.agent_run():                     # vor dem ersten Modellaufruf
+                self._run(c, ticket)
+        except AgentLimitExceeded as exc:
+            logger.warning("Consultation %s nicht gestartet: %s", c.id, exc.type)
+            self._finish(c, FAILED, str(exc), expected=RUNNING)
 
+    def _run(self, c: Consultation, ticket) -> None:
         conversation = self._flow.create_conversation(topic=f"{c.source}:{c.source_ref} · {c.id}")
         c.conversation_id = conversation.id
         self._repo.set_conversation(c.id, conversation.id)          # Status nicht mitschreiben (R10)

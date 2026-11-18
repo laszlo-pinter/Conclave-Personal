@@ -47,3 +47,16 @@ def test_origin_and_token_sums_on_postgres(pg):
     assert repo.tokens_since(since, origin="agent") == 100
     assert repo.tokens_since(since, origin="agent", conversation_id="c2") == 0
     assert repo.tokens_since(since) == 150
+
+
+def test_origin_survives_the_roundtrip_on_postgres(pg):
+    """#94 (P2): get und beide list-Abfragen liefern die gespeicherte Herkunft."""
+    from conclave.infrastructure.postgres.run_repository import PostgresRunRepository
+    repo = PostgresRunRepository(pg)
+    now = datetime.now(UTC)
+    agent, human = _run("c1", now, 10, origin="agent"), _run("c1", now - timedelta(seconds=1), 10)
+    repo.save(agent)
+    repo.save(human)
+    assert repo.get(agent.id).origin == "agent" and repo.get(human.id).origin is None
+    assert [r.origin for r in repo.list_by_conversation("c1")] == ["agent", None]
+    assert [r.origin for r in repo.list_all()] == ["agent", None]

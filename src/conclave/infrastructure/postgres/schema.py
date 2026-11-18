@@ -1,10 +1,19 @@
 # src/conclave/infrastructure/postgres/schema.py
 
-from conclave.infrastructure.migrations import run_migrations
+from conclave.infrastructure.migrations import advisory_lock, run_board_migrations, run_migrations
 
 
 def initialize_schema(connection) -> None:
-    """Erstellt alle Tabellen in PostgreSQL (idempotent via IF NOT EXISTS)."""
+    """Erstellt alle Tabellen in PostgreSQL (idempotent via IF NOT EXISTS).
+
+    Unter der Advisory-Sperre der Migrationen (T2): Zwei Instanzen, die gleichzeitig starten,
+    legen Grundschema und Migrationen nacheinander an. Gleichzeitige ``CREATE TABLE IF NOT
+    EXISTS`` koennen sonst an den Systemkatalogen scheitern."""
+    with advisory_lock(connection, is_postgres=True):
+        _initialize_schema(connection)
+
+
+def _initialize_schema(connection) -> None:
     with connection.cursor() as cur:
         cur.execute("""
             CREATE TABLE IF NOT EXISTS conversations (
@@ -171,3 +180,4 @@ def initialize_schema(connection) -> None:
 
     # Migrationen fuer bestehende DBs (fuegt fehlende Spalten hinzu)
     run_migrations(connection, is_postgres=True)
+    run_board_migrations(connection, is_postgres=True)    # Reihe des Boards (T1), uebernimmt die alten

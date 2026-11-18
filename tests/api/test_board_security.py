@@ -83,7 +83,6 @@ RULES = [
     ("Projekt loeschen", "DELETE", "/board/projects/api", None, 403, "HumanOnly"),
     ("importieren", "POST", "/board/import", {"projects": []}, 403, "HumanOnly"),
     ("UI-Uebersicht lesen", "GET", "/board", None, 403, "HumanOnly"),
-    ("Aenderungszaehler lesen", "GET", "/board/changes", None, 403, "HumanOnly"),
 ]
 
 
@@ -140,7 +139,9 @@ def test_origin_fields_in_comment_body_are_ignored(client, extra):
 @pytest.mark.parametrize("extra", [{"origin": "human"}, {"created_by": "human"}, {"number": 5}, {"assignee": "x"}])
 def test_task_fields_outside_the_list_are_rejected(client, extra):
     _task(client)
-    assert client.patch(f"{URL}/1", json=extra, headers=_bearer(AGENT)).status_code == 400
+    # assignee ist seit T6 ein Feld von PATCH, das nur Menschen setzen: fuer Agenten 403 statt 400
+    expected = 403 if "assignee" in extra else 400
+    assert client.patch(f"{URL}/1", json=extra, headers=_bearer(AGENT)).status_code == expected
     assert client.post("/board/tasks", json={"project": "api", "title": "T", **extra},
                        headers=_bearer(AGENT)).status_code == 400
 

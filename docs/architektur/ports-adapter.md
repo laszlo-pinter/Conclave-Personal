@@ -4,7 +4,10 @@
 
 Definiert in `src/conclave/application/ports.py` als `typing.Protocol` mit
 `@runtime_checkable`. Infrastructure-Adapter implementieren diese Protocols
-implizit über strukturelles Subtyping.
+implizit über strukturelles Subtyping. Der Speicher des Boards
+(`BoardRepository`) liegt im Board-Paket unter
+`packages/board/src/conclave_board/application/ports.py`; `ports.py` von
+Personal stellt ihn unter dem alten Namen bereit.
 
 | Protocol | Zweck | Implementierungen |
 |----------|-------|-------------------|

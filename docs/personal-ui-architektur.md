@@ -161,7 +161,7 @@ was ein Agent geändert oder kommentiert hat (siehe
   „über Agent“, „Zweitmeinung (Modell)“, „unbekannt“), Verlauf, Status,
   Markierung, neuer Kommentar
 - Neues Ticket, Suche, Projektauswahl, Schalter „Erledigte zeigen“
-- Live-Aktualisierung: alle 5 Sekunden `GET /board/changes`, nur bei aktivem
+- Live-Aktualisierung: alle 5 Sekunden `GET /board/v1/changes`, nur bei aktivem
   Bereich und sichtbarer Seite
 
 ### Sicherheitsregeln

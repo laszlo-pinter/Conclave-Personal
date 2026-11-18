@@ -6,6 +6,8 @@
 let _board = {statuses: [], projects: [], tasks: [], changes: null, open: null, query: '',
               control: {pauses: [], hints: []}, role: '', approvalsOnly: false, stuck: ''};
 let _boardTimer = null;
+// Versionierte Board-API (T3); /board ohne Version ist ein abgekuendigter Alias
+const BOARD_API = '/board/v1';
 const BOARD_POLL_MS = 5000;
 const REVIEW_STUCK_MS = 30 * 60 * 1000;     // "laeuft" laenger als 30 Minuten: haengt (P4)
 const REVIEW_RED_LIMIT = 3;                 // E-R3: nach drei roten uebernimmt der Mensch
@@ -19,7 +21,7 @@ function _boardEl(tag, cls, text) {
 
 function _taskPath(ref) {
   const i = ref.lastIndexOf('#');
-  return `/board/projects/${encodeURIComponent(ref.slice(0, i))}/tasks/${Number(ref.slice(i + 1))}`;
+  return `${BOARD_API}/projects/${encodeURIComponent(ref.slice(0, i))}/tasks/${Number(ref.slice(i + 1))}`;
 }
 
 function _boardProject() { return document.getElementById('boardProject').value; }
@@ -54,11 +56,12 @@ async function loadBoard() {
 
 // Uebersicht (Spalten, Projekte, Zaehler), Tickets und ein offenes Ticket neu laden
 async function _reloadBoard() {
-  const data = await req('GET', '/board');
+  const data = await req('GET', BOARD_API);
   _board.statuses = data.statuses || [];
   _board.projects = data.projects || [];
   _board.changes = data.changes;
   _board.control = data.control || {pauses: [], hints: []};
+  renderBoardReviewer(data.reviewer);
   _renderBoardProjects();
   await _loadBoardTasks();
   // Per Klick auf den Hintergrund geschlossen: nicht weiter nachladen
@@ -74,9 +77,9 @@ async function _loadBoardTasks() {
   let data;
   if (_board.query) {
     params.set('q', _board.query);
-    data = await req('GET', '/board/search?' + params);
+    data = await req('GET', BOARD_API + '/search?' + params);
   } else {
-    data = await req('GET', '/board/tasks?' + params);
+    data = await req('GET', BOARD_API + '/tasks?' + params);
   }
   _board.tasks = data.tasks || [];
   renderBoard();
@@ -410,7 +413,7 @@ async function createBoardTask() {
   if (!title) { toast(t('board.titleRequired'), 'err'); return; }
   const tags = document.getElementById('boardNewTags').value.split(',').map(s => s.trim()).filter(Boolean);
   try {
-    await req('POST', '/board/tasks', {
+    await req('POST', BOARD_API + '/tasks', {
       project: document.getElementById('boardNewProject').value, title,
       description: document.getElementById('boardNewDesc').value, tags,
       human: document.getElementById('boardNewHuman').checked,
@@ -471,7 +474,7 @@ async function pauseBoardAgents() {
   const slug = _boardProject() || _board.projects[0]?.slug;
   if (!slug) { toast(t('board.noProjects'), 'err'); return; }
   try {
-    await req('POST', '/board/tasks', {project: slug, title: t('board.pauseTitle'), kind: 'control',
+    await req('POST', BOARD_API + '/tasks', {project: slug, title: t('board.pauseTitle'), kind: 'control',
                                        control: 'pause', scope: 'all'});
     toast(t('board.paused'), 'ok');
   } catch (e) {
@@ -510,7 +513,7 @@ function _startBoardPolling() {
     if (!_boardActive()) { clearInterval(_boardTimer); _boardTimer = null; return; }
     if (document.visibilityState === 'hidden') return;
     try {
-      const {changes} = await req('GET', '/board/changes');
+      const {changes} = await req('GET', BOARD_API + '/changes');
       if (changes !== _board.changes) await _reloadBoard();
       else if (_stuckKey() !== _board.stuck) {
         // Ein Review ueberschreitet die 30 Minuten, ohne dass sich etwas aendert: neu zeichnen
@@ -520,4 +523,149 @@ function _startBoardPolling() {
       }
     } catch { /* naechster Versuch */ }
   }, BOARD_POLL_MS);
+}
+
+// ── Desktop-Hinweis bei Review-Ergebnissen (P8) ──────────────────────────
+//
+// Abschaltbar (Standard aus); die Erlaubnis fragt erst ein Klick an. Gemeldet wird nur, wenn das
+// Fenster nicht im Vordergrund ist, und jedes Ergebnis nur einmal, auch nach dem Neuladen: Der
+// Zeitpunkt des zuletzt gesehenen Ergebnisses steht in localStorage.
+
+const NOTIFY_KEY = 'conclave.board.notify';
+const NOTIFY_SEEN_KEY = 'conclave.board.notifySeen';
+const NOTIFY_POLL_MS = 15000;
+const NOTIFY_STATES = ['passed', 'rework', 'failed'];
+let _notify = {timer: null, changes: null};
+
+function _store(key, value) {
+  try {
+    if (value === undefined) return localStorage.getItem(key);
+    if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value);
+  } catch { /* privates Fenster: dann eben ohne Merken */ }
+  return null;
+}
+
+function _notifySupported() { return typeof Notification !== 'undefined'; }
+
+function boardNotifyEnabled() {
+  return _notifySupported() && Notification.permission === 'granted' && _store(NOTIFY_KEY) === '1';
+}
+
+function renderBoardNotify() {
+  const btn = document.getElementById('boardNotify');
+  if (!btn) return;
+  btn.hidden = !_notifySupported();
+  const on = boardNotifyEnabled();
+  btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  btn.textContent = t(on ? 'board.notifyOn' : 'board.notifyOff');
+}
+
+async function toggleBoardNotify() {
+  if (!_notifySupported()) return;
+  if (boardNotifyEnabled()) {
+    _store(NOTIFY_KEY, '0');
+  } else {
+    const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+    if (permission !== 'granted') {
+      toast(t('board.notifyDenied'), 'err');
+    } else {
+      // Nur Ergebnisse ab jetzt: der neueste Review-Zeitpunkt des Servers (nicht die Uhr dieses Rechners)
+      try {
+        const data = await req('GET', BOARD_API + '/tasks?include_done=true');
+        _store(NOTIFY_SEEN_KEY, (data.tasks || []).map(task => (task.review || {}).at || '').sort().pop() || '');
+      } catch (e) {
+        toast(e.message, 'err');
+        return;
+      }
+      _store(NOTIFY_KEY, '1');
+      _notify.changes = null;
+    }
+  }
+  renderBoardNotify();
+}
+
+function boardNotifyText(task) {
+  const review = task.review || {};
+  const verdict = t('board.notify.' + review.state);
+  let body = verdict;
+  if (review.state === 'passed') body += ' – ' + t('board.notify.waiting');
+  else if (review.blocking !== null && review.blocking !== undefined) {
+    body += ' – ' + t('board.review.counts', {blocking: review.blocking, suggestions: review.suggestions || 0});
+  }
+  return {title: `${task.ref} ${task.title}`, body};
+}
+
+async function checkBoardNotifications() {
+  if (!boardNotifyEnabled()) return;
+  const {changes} = await req('GET', BOARD_API + '/changes');
+  if (changes === _notify.changes) return;
+  const seen = _store(NOTIFY_SEEN_KEY) || '';
+  const data = await req('GET', BOARD_API + '/tasks?include_done=true');
+  _notify.changes = changes;                 // erst nach erfolgreichem Laden (sonst beim naechsten Takt erneut)
+  const fresh = (data.tasks || []).filter(task => NOTIFY_STATES.includes((task.review || {}).state)
+                                            && (task.review.at || '') > seen);
+  if (!fresh.length) return;
+  _store(NOTIFY_SEEN_KEY, fresh.map(task => task.review.at).sort().pop());
+  if (document.visibilityState === 'visible' && document.hasFocus()) return;   // sieht es ohnehin
+  for (const task of fresh) {
+    const {title, body} = boardNotifyText(task);
+    const note = new Notification(title, {body, tag: 'conclave-review-' + task.ref});
+    note.onclick = () => {
+      window.focus();
+      switchTab('board');
+      openBoardTask(task.ref);
+      note.close();
+    };
+  }
+}
+
+// ── Laeuft der Reviewer? (W3) ────────────────────────────────────────────
+
+const NOTIFY_REVIEWER_OFF_KEY = 'conclave.board.notifyReviewerOff';
+
+function renderBoardReviewer(status) {
+  const el = document.getElementById('boardReviewer');
+  if (!el) return;
+  if (!status) { el.hidden = true; return; }
+  el.hidden = false;
+  el.dataset.state = status.state;
+  const text = status.state === 'active' ? t('board.reviewerActive')
+    : status.since ? t('board.reviewerOffSince', {date: _boardDate(status.since)}) : t('board.reviewerOff');
+  el.replaceChildren(_boardEl('span', 'board-review-symbol', status.state === 'active' ? '●' : '○'),
+                     _boardEl('span', '', text));
+}
+
+// Wie der Server (StatusFlow.review): "review", wenn es die Spalte gibt, sonst die vorletzte
+function _reviewColumn(columns) {
+  if (!columns || !columns.length || columns.includes('review')) return 'review';
+  return columns[Math.max(0, columns.length - 2)];
+}
+
+// Liegen Tickets in review und der Reviewer ist aus, meldet das ein Desktop-Hinweis: einmal je Ausfall
+// (gemerkt wird der Zeitpunkt des letzten Herzschlags, "nie" fuer einen Reviewer, der nie lief).
+async function checkReviewerOff() {
+  if (!boardNotifyEnabled()) return;                  // nur mit eingeschaltetem Hinweis; die Anzeige laedt das Board
+  const status = await req('GET', BOARD_API + '/reviewer');
+  if (_boardActive()) renderBoardReviewer(status);
+  if (status.state === 'active') { _store(NOTIFY_REVIEWER_OFF_KEY, null); return; }
+  const period = status.since || 'nie';
+  if (_store(NOTIFY_REVIEWER_OFF_KEY) === period) return;
+  const review = _reviewColumn(_board.statuses);
+  const data = await req('GET', BOARD_API + '/tasks?status=' + encodeURIComponent(review));
+  const waiting = (data.tasks || []).filter(task => task.status === review);
+  if (!waiting.length) return;
+  _store(NOTIFY_REVIEWER_OFF_KEY, period);
+  if (document.visibilityState === 'visible' && document.hasFocus()) return;
+  const note = new Notification(t('board.notify.reviewerOffTitle'),
+                                {body: t('board.notify.reviewerOffBody', {n: waiting.length}), tag: 'conclave-reviewer-off'});
+  note.onclick = () => { window.focus(); switchTab('board'); note.close(); };
+}
+
+function startBoardNotifications() {
+  renderBoardNotify();
+  if (_notify.timer) return;
+  _notify.timer = setInterval(() => {
+    checkBoardNotifications().catch(() => { /* naechster Versuch */ });
+    checkReviewerOff().catch(() => { /* naechster Versuch */ });
+  }, NOTIFY_POLL_MS);
 }

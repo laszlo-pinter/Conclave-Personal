@@ -250,6 +250,8 @@
           <input type="search" id="boardSearch" class="board-input" data-i18n-placeholder="board.search" placeholder="Suchen..."/>
           <button class="btn-full page-action" data-action="board-new" data-i18n="board.new">Neues Ticket</button>
           <button class="btn-full secondary page-action board-approvals" id="boardApprovals" data-action="board-approvals" aria-pressed="false" hidden></button>
+          <span class="board-reviewer" id="boardReviewer" role="status" hidden></span>
+          <button class="btn-full secondary page-action board-notify" id="boardNotify" data-action="board-notify" aria-pressed="false" hidden>Benachrichtigen: aus</button>
           <button class="btn-full secondary page-action board-pause-btn" data-action="board-pause" data-i18n="board.pauseAgents">Agenten pausieren</button>
         </div>
       </div>
@@ -602,7 +604,7 @@
     <div class="field">
       <label data-i18n="auth.keyLabel">API-Key (Bearer Token)</label>
       <input type="password" id="keyInput" placeholder="Token aus api.token oder CONCLAVE_API_KEY" data-i18n-placeholder="auth.keyPlaceholder"/>
-      <div class="field-hint" data-i18n="auth.keyHint">Wird lokal im Browser gespeichert (LocalStorage). Wird als Authorization: Bearer Header gesendet.</div>
+      <div class="field-hint" data-i18n="auth.keyHint">conclave desktop setzt das Token automatisch. Es liegt nur in diesem Tab (sessionStorage), nicht dauerhaft im Browser, und wird als Authorization: Bearer gesendet.</div>
     </div>
     <div class="modal-acts">
       <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayKey" data-i18n="common.cancel">Abbrechen</button>

@@ -161,6 +161,19 @@ handelt als Mensch und arbeitet direkt auf der konfigurierten Datenbank.
 `assign` vergibt die Nummern in der Reihenfolge der Tickets (`projekt#n` oder
 nur die Nummer); `-` entfernt die Zuordnung.
 
+```powershell
+conclave board wait <ticket> [--timeout 60] [--interval 5] [--url <server>] [--human]
+conclave board wait --project <projekt>
+```
+
+Wartet, bis das Review eines Tickets entschieden ist, und endet mit einer
+JSON-Zeile (`{"event": "review", "verdict": "gelb", ...}`). Mit `--project`
+endet er beim ersten Review-Ergebnis oder Steuerticket (Pause, Hinweis) im
+Projekt (`{"event": "control", ...}`). Nach `--timeout` Minuten endet er mit
+Exit-Code 2. Der Befehl fragt den Änderungszähler alle `--interval` Sekunden ab
+und nutzt das Agent-Token, mit `--human` das Mensch-Token (siehe
+[Mit dem Board arbeiten](../mit-dem-board-arbeiten.md)).
+
 ## Schlüssel
 
 ```powershell
@@ -195,6 +208,7 @@ Neben `conclave` installiert das Paket diese Konsolenprogramme:
 | `conclave-api` | Startet den API-Server direkt (ohne die Launch-Logik von `conclave server`) |
 | `conclave-mcp` | MCP-Server, der die Conclave-API über `CONCLAVE_API_URL` (Default `http://localhost:8000`) anspricht. Nutzt nur das Agent-Token (`CONCLAVE_AGENT_KEY` bzw. `agent.token`), nie `api.token` oder `CONCLAVE_API_KEY`; mit dem Mensch-Token lehnt jedes Tool ab (Ausnahme zur Fehlersuche: `CONCLAVE_MCP_ALLOW_HUMAN=1`) |
 | `conclave-watch` | Beobachtet eine Conversation über die HTTP-API |
+| `conclave-reviewer` | Automatischer Reviewer für das Board (Extra `reviewer`); startet sonst mit `conclave desktop` |
 
 ```powershell
 conclave-watch <conversation_id> [--api http://localhost:8000] [--interval 5] [--since 0] [--full] [--key <token>]

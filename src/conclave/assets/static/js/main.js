@@ -70,6 +70,7 @@ const _actions = {
   'ws-viewer-close':     () => closeWorkspaceViewer(),
   'board-new':           () => openBoardNew(),
   'board-pause':         () => pauseBoardAgents(),
+  'board-notify':        () => toggleBoardNotify(),
   'board-approvals':     () => toggleBoardApprovals(),
   'board-close-control': (el) => closeBoardControl(el.dataset.ref),
   'board-create':        () => createBoardTask(),
@@ -141,6 +142,7 @@ tokenReady.finally(() => {
   loadConversations();
   loadAgents();
   loadPresets();
+  startBoardNotifications();        // Desktop-Hinweis bei Review-Ergebnissen (P8), nur wenn eingeschaltet
 });
 
 // Polling nur im aktiven Tab, mit laengeren Intervallen

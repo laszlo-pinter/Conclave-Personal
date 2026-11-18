@@ -107,7 +107,7 @@ def test_result_needs_a_comment_and_a_known_state(board):
     ref = _in_review(board)
     assert _error(board.review, REVIEWER, ref, "passed", "").status == 400
     assert _error(board.review, REVIEWER, ref, "gruen", "x").status == 400
-    assert _error(board.review, REVIEWER, ref, "none", "x").status == 400
+    assert _error(board.review, REVIEWER, ref, "none", "x").status == 409   # W3: none nur aus running
     assert _error(board.review, REVIEWER, ref, "rework", "x", blocking=-1).status == 400
     assert _error(board.review, REVIEWER, ref, "rework", "x", blocking=True).status == 400
 

@@ -29,18 +29,21 @@ Mit dem Agent-Token sind nur die Routen erlaubt, die die MCP-Tools brauchen:
 - `GET /agents`, `GET /usage`
 - `GET /workspace`, `GET`/`POST /workspace/<path>`
 - `POST /consultations`, `GET /consultations/<id>`
-- Board: `GET`/`POST /board/tasks`, `GET /board/search`, `POST /board/next`,
-  `GET`/`PATCH /board/projects/<slug>/tasks/<n>`,
-  `POST /board/projects/<slug>/tasks/<n>/comments`,
-  `GET /board/projects/<slug>/tasks/<n>/history`,
-  `GET /board/projects/<slug>/initiatives`,
-  `GET /board/projects/<slug>/initiatives/<vorhaben>/tasks/<n>` (die feineren
+- Board (unter `/board/v1`, ebenso über den Alias `/board`): `GET`/`POST /board/v1/tasks`,
+  `GET /board/v1/search`, `POST /board/v1/next`,
+  `GET`/`PATCH /board/v1/projects/<slug>/tasks/<n>`,
+  `POST /board/v1/projects/<slug>/tasks/<n>/comments`,
+  `GET /board/v1/projects/<slug>/tasks/<n>/history`,
+  `GET /board/v1/projects/<slug>/initiatives`,
+  `GET /board/v1/projects/<slug>/initiatives/<vorhaben>/tasks/<n>` (die feineren
   Regeln prüft das Board selbst, siehe [Board](#board))
 
 Der Reviewer-Zugang (`reviewer.token`) hat eine engere Liste: `GET /auth/whoami`,
-`GET /board/tasks`, `GET /board/search`, `GET /board/projects/<slug>/tasks/<n>`
-samt `/history`, `POST .../comments` und als einziger
-`POST /board/projects/<slug>/tasks/<n>/review`.
+`GET /board/v1/tasks`, `GET /board/v1/changes`, `GET /board/v1/search`,
+`GET /board/v1/projects/<slug>/tasks/<n>` samt `/history`,
+`GET /board/v1/projects/<slug>/initiatives/<vorhaben>/tasks/<n>`, `POST .../comments` und als
+einziger `POST /board/v1/projects/<slug>/tasks/<n>/review` und
+`POST /board/v1/reviewer/heartbeat` (jeweils auch über den Alias `/board`).
 
 Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 `{"type": "HumanOnly", "error": "Nur für den Menschen-Zugang."}`.
@@ -102,32 +105,57 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `GET` | `/workspace/<path:filepath>` | Liest eine Datei aus dem Workspace. |
 | `POST` | `/workspace/<path:filepath>` | Schreibt eine Datei in den Workspace (`content` als Text). Agenten: nur neue Dateien oder unter `agents/`, sonst `403`. |
 | `DELETE` | `/workspace/<path:filepath>` | Löscht eine Datei aus dem Workspace. |
-| `GET` | `/board` | Spalten, Projekte und Änderungszähler (nur Mensch). |
-| `GET` | `/board/changes` | Änderungszähler; die UI lädt neu, wenn er steigt (nur Mensch). |
-| `POST` | `/board/projects` | Projekt anlegen (nur Mensch). |
-| `PUT` | `/board/projects/<slug>` | Projekt umbenennen (nur Mensch). |
-| `DELETE` | `/board/projects/<slug>` | Projekt samt Tickets löschen (nur Mensch). |
-| `GET` | `/board/tasks` | Tickets in Board-Reihenfolge; Filter `project`, `status` (mehrfach), `include_done`. |
-| `POST` | `/board/tasks` | Ticket anlegen; neue Tickets landen in der ersten Spalte. Optional `initiative`: Kurzname eines vorhandenen Vorhabens. |
-| `GET` | `/board/search` | Suche in Titel, Tags, Beschreibung und Kommentaren (`q`, `project`, `include_done`). |
-| `POST` | `/board/next` | Oberstes freies Ticket der ersten Spalte übernehmen (atomar); `task` als `projekt#n` oder `projekt/vorhaben-n`. |
-| `GET` | `/board/projects/<slug>/tasks/<int:number>` | Ein Ticket mit Kommentaren. |
-| `PATCH` | `/board/projects/<slug>/tasks/<int:number>` | Ticket ändern: `title`, `description`, `tags`, `status`, `human`, `index`, `rank`, optional `version`; `initiative` (Kurzname oder `null`) ordnet einem Vorhaben zu (nur Mensch). |
-| `GET` | `/board/projects/<slug>/initiatives` | Vorhaben des Projekts nach Rang. |
-| `POST` | `/board/projects/<slug>/initiatives` | Vorhaben anlegen: `slug`, `title`, optional `rank` (nur Mensch). |
-| `PUT` | `/board/projects/<slug>/initiatives/<initiative>` | Vorhaben umbenennen oder ranken: `title`, `rank` (nur Mensch). |
-| `GET` | `/board/projects/<slug>/initiatives/<initiative>/tasks/<int:number>` | Ein Ticket über seine Vorhaben-Nummer, Antwort wie oben. |
-| `DELETE` | `/board/projects/<slug>/tasks/<int:number>` | Ticket löschen (nur Mensch). |
-| `GET` | `/board/projects/<slug>/tasks/<int:number>/comments` | Kommentare mit Herkunft (nur Mensch; Agenten lesen sie über das Ticket). |
-| `POST` | `/board/projects/<slug>/tasks/<int:number>/comments` | Kommentar schreiben; die Herkunft kommt aus dem Token. |
-| `GET` | `/board/projects/<slug>/tasks/<int:number>/history` | Verlauf mit Herkunft: Anlegen und jede Änderung. |
-| `POST` | `/board/projects/<slug>/tasks/<int:number>/review` | Review-Status setzen (nur Reviewer-Zugang). |
-| `GET` | `/board/projects/<slug>/history` | Projekt-Verlauf: Anlegen, Umbenennen, gelöschte Tickets (nur Mensch). |
-| `PUT` | `/board/comments/<comment_id>` | Eigenen Kommentar ändern (nur Mensch). |
-| `DELETE` | `/board/comments/<comment_id>` | Eigenen Kommentar löschen (nur Mensch). |
-| `POST` | `/board/import` | JSON-Export eines Kanzo-Boards übernehmen (nur Mensch, idempotent). |
+| `GET` | `/board/v1` | Spalten, Projekte, Änderungszähler und `reviewer` (Zustand wie `GET /board/v1/reviewer`; nur Mensch). |
+| `GET` | `/board/v1/changes` | Änderungszähler; die UI und der Reviewer laden neu, wenn er steigt (Mensch und Reviewer-Zugang). |
+| `GET` | `/board/v1/reviewer` | Läuft der automatische Reviewer? `{"state": "active", "last_seen", "version", "task"}` oder `{"state": "off", "since"}` (nur Mensch). |
+| `POST` | `/board/v1/reviewer/heartbeat` | Lebenszeichen des Reviewers, etwa alle 60 s: `version` (höchstens 50 Zeichen), `task` (laufendes Ticket oder `null`). Ohne Herzschlag seit 180 s gilt er als aus. Nur im Speicher des Servers (nur Reviewer-Zugang). |
+| `POST` | `/board/v1/projects` | Projekt anlegen (nur Mensch). |
+| `PUT` | `/board/v1/projects/<slug>` | Projekt umbenennen (nur Mensch). |
+| `DELETE` | `/board/v1/projects/<slug>` | Projekt samt Tickets löschen (nur Mensch). |
+| `GET` | `/board/v1/tasks` | Tickets in Board-Reihenfolge; Filter `project`, `status` (mehrfach), `include_done`. |
+| `POST` | `/board/v1/tasks` | Ticket anlegen; neue Tickets landen in der ersten Spalte. Optional `initiative`: Kurzname eines vorhandenen Vorhabens. |
+| `GET` | `/board/v1/search` | Suche in Titel, Tags, Beschreibung und Kommentaren (`q`, `project`, `include_done`). |
+| `POST` | `/board/v1/next` | Oberstes freies Ticket der ersten Spalte übernehmen (atomar); `task` als `projekt#n` oder `projekt/vorhaben-n`. |
+| `GET` | `/board/v1/projects/<slug>/tasks/<int:number>` | Ein Ticket mit Kommentaren. |
+| `PATCH` | `/board/v1/projects/<slug>/tasks/<int:number>` | Ticket ändern: `title`, `description`, `tags`, `status`, `human`, `index`, `rank`, optional `version`; `initiative` (Kurzname oder `null`) ordnet einem Vorhaben zu (nur Mensch). |
+| `GET` | `/board/v1/projects/<slug>/initiatives` | Vorhaben des Projekts nach Rang. |
+| `POST` | `/board/v1/projects/<slug>/initiatives` | Vorhaben anlegen: `slug`, `title`, optional `rank` (nur Mensch). |
+| `PUT` | `/board/v1/projects/<slug>/initiatives/<initiative>` | Vorhaben umbenennen oder ranken: `title`, `rank` (nur Mensch). |
+| `GET` | `/board/v1/projects/<slug>/initiatives/<initiative>/tasks/<int:number>` | Ein Ticket über seine Vorhaben-Nummer, Antwort wie oben. |
+| `DELETE` | `/board/v1/projects/<slug>/tasks/<int:number>` | Ticket löschen (nur Mensch). |
+| `GET` | `/board/v1/projects/<slug>/tasks/<int:number>/comments` | Kommentare mit Herkunft (nur Mensch; Agenten lesen sie über das Ticket). |
+| `POST` | `/board/v1/projects/<slug>/tasks/<int:number>/comments` | Kommentar schreiben; die Herkunft kommt aus dem Token. |
+| `GET` | `/board/v1/projects/<slug>/tasks/<int:number>/history` | Verlauf mit Herkunft: Anlegen und jede Änderung. |
+| `POST` | `/board/v1/projects/<slug>/tasks/<int:number>/review` | Review-Status setzen (nur Reviewer-Zugang). |
+| `GET` | `/board/v1/projects/<slug>/history` | Projekt-Verlauf: Anlegen, Umbenennen, gelöschte Tickets (nur Mensch). |
+| `PUT` | `/board/v1/comments/<comment_id>` | Eigenen Kommentar ändern (nur Mensch). |
+| `DELETE` | `/board/v1/comments/<comment_id>` | Eigenen Kommentar löschen (nur Mensch). |
+| `POST` | `/board/v1/import` | JSON-Export eines Kanzo-Boards übernehmen (nur Mensch, idempotent). |
+| `GET` | `/board/versions` | Versionen der Board-API, ohne Token; dieselbe Angabe steht in `/health` unter `board_api`. |
 
-*Stand: v0.6.0 (2026-10-29), abgeglichen mit `openapi.json`*
+### Versionierung der Board-API
+
+Die Board-Routen liegen unter `/board/v1/...` (seit T3; Vertrag in
+`packages/board/openapi/board-v1.json`). Die unversionierten Pfade `/board/...`
+aus v0.7.0 bleiben als **Alias** mit denselben Antworten und Rechten. Jede Antwort
+des Alias trägt `Deprecation`, `Sunset` (frühestens 1. März 2027) und
+`Link: </board/v1/...>; rel="successor-version"`. UI und `conclave-mcp` nutzen v1.
+
+Innerhalb von v1 gibt es nur Ergänzungen: neue Routen, neue optionale Felder in
+Anfragen, neue Felder in Antworten. **Clients ignorieren unbekannte Felder.**
+Brechend und damit nur in einer neuen Version (v2):
+
+- Felder entfernen oder umbenennen, Typ oder Bedeutung ändern
+- neue Pflichtfelder, strengere Prüfung
+- andere Statuscodes oder Fehlerformate
+- Rechte zum Nachteil bestehender Clients
+
+v1 und eine neue Version laufen mindestens ein Minor-Release und drei Monate
+parallel. Die CI vergleicht `board-v1.json` mit dem letzten Release-Stand
+(`oasdiff breaking`); eine brechende Änderung lässt sie scheitern. Die Datei
+entsteht mit `python scripts/gen-openapi.py` aus den registrierten Routen.
+
+*Stand: v0.8.0 (Board-API v1, 2026-11-18), abgeglichen mit `openapi.json` und `board-v1.json`*
 
 ## Kontext-Reports
 
@@ -295,10 +323,11 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
   Löschen: alt → `null`). Gelöschte Kommentare verschwinden aus der Liste, ihr
   Inhalt bleibt im Verlauf.
 - **Review** `POST .../review` (nur Reviewer-Zugang, Agent und Mensch `403`):
-  `{"state": "running"|"passed"|"rework"|"failed", "comment": "...",
+  `{"state": "running"|"passed"|"rework"|"failed"|"none", "comment": "...",
   "blocking": 0, "suggestions": 3, "checked": "branch @ abc..def"}`. Nur für
   Tickets in der Review-Spalte (sonst `409 NotInReview`); außer bei `running`
-  ist `comment` Pflicht. Ergebnis, Kommentar (Herkunft `reviewer`) und Folgen
+  und `none` ist `comment` Pflicht. `none` gibt ein hängendes Review frei und
+  geht nur von `running` aus (sonst `409 ReviewNotRunning`). Ergebnis, Kommentar (Herkunft `reviewer`) und Folgen
   werden zusammen gespeichert:
   - `passed` (grün): bleibt in `review`, der Zähler roter Reviews wird 0.
   - `rework` (gelb) und `failed` (rot): zurück in die erste Spalte, dort vor
@@ -306,8 +335,8 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
   - Das dritte `failed` in Folge macht das Ticket „nur für Menschen“; `rework`
     zählt nicht mit. Nimmt der Mensch die Markierung wieder weg, beginnt die
     Zählung neu (`review_red_count` → 0, mit Verlaufseintrag).
-  - Tickets „nur für Menschen“ bewertet der Reviewer nicht (`403`); auch der
-    Watcher startet für sie kein Review.
+  - Tickets „nur für Menschen“ bewertet der Reviewer nicht (`403`); auch
+    `conclave-reviewer` startet für sie kein Review.
   - Bei `POST /board/next` ohne Projekt kommt Nacharbeit (`rework`/`failed`)
     aus allen Projekten zuerst, danach gilt die Board-Reihenfolge.
   - Kommt ein Ticket wieder nach `review`, steht der Status auf `none`.

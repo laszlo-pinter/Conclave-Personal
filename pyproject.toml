@@ -4,11 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "conclave-personal"
-version = "0.7.0"
+version = "0.8.0"
 description = "Local personal multi-agent workspace for Windows and Linux."
 readme = "README.md"
-license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
-license-files = ["LICENSE"]
+# Personal steht unter PolyForm; das mitgebuendelte Board-Paket (conclave_board) unter Apache-2.0 (T1)
+license = "LicenseRef-PolyForm-Noncommercial-1.0.0 AND Apache-2.0"
+license-files = ["LICENSE", "packages/board/LICENSE", "packages/board/NOTICE"]
 authors = [{ name = "Laszlo Pinter" }]
 requires-python = ">=3.11"
 keywords = ["multi-agent", "llm", "local-first", "workspace", "cli"]
@@ -36,7 +37,7 @@ Homepage = "https://github.com/laszlo-pinter/Conclave-Personal"
 Source = "https://github.com/laszlo-pinter/Conclave-Personal"
 Issues = "https://github.com/laszlo-pinter/Conclave-Personal/issues"
 Documentation = "https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/index.md"
-Changelog = "https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.7.0.md"
+Changelog = "https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.8.0.md"
 
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.40.0"]
@@ -45,10 +46,12 @@ api = ["flask>=3.1", "flask-limiter>=4.0", "waitress>=3.0.2"]
 crypto = ["cryptography>=42.0"]
 postgres = ["psycopg2-binary>=2.9"]
 mcp = ["mcp>=2,<3", "httpx>=0.27"]
+# Automatischer Reviewer (W1): nur Standardbibliothek; braucht claude und conclave-mcp (Extra mcp)
+reviewer = ["mcp>=2,<3", "httpx>=0.27"]
 dev     = ["pytest>=9.0"]
 dev-api = ["pytest>=9.0", "flask>=3.1"]
 dev-ui  = ["pytest>=9.0", "playwright==1.64.1"]
-dev-security = ["pip-audit==2.10.1", "bandit==1.9.4"]
+dev-security = ["pip-audit==2.10.1", "bandit==1.9.4", "import-linter==2.16"]
 dev-all = ["pytest>=9.0", "pytest-asyncio>=1.0", "mcp>=2,<3", "flask>=3.1", "flask-limiter>=4.0", "waitress>=3.0.2", "httpx>=0.27", "anthropic>=0.40.0", "openai>=1.0", "cryptography>=42.0", "psycopg2-binary>=2.9"]
 
 [project.scripts]
@@ -56,17 +59,45 @@ conclave = "conclave.cli.main:main"
 conclave-api = "conclave.api.server:main"
 conclave-mcp = "conclave.mcp_server:main"
 conclave-watch = "conclave.cli.watch:main"
+conclave-reviewer = "conclave.reviewer.cli:main"
+
+# Grenze des Board-Pakets (T1): lint-imports in der CI (Job "security")
+[tool.importlinter]
+root_packages = ["conclave_board", "conclave"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "conclave_board importiert conclave nicht"
+type = "forbidden"
+source_modules = ["conclave_board"]
+forbidden_modules = ["conclave"]
+
+[[tool.importlinter.contracts]]
+name = "conclave_board braucht keine Provider-SDKs, kein httpx und kein MCP"
+type = "forbidden"
+source_modules = ["conclave_board"]
+forbidden_modules = ["anthropic", "openai", "httpx", "mcp"]
+
+[[tool.importlinter.contracts]]
+name = "Der Reviewer nutzt nur runtime und HTTP, nicht die Schichten der App (W1)"
+type = "forbidden"
+source_modules = ["conclave.reviewer"]
+forbidden_modules = ["conclave.application", "conclave.infrastructure", "conclave.api", "conclave.cli",
+                     "conclave.domain", "conclave.mcp_server", "conclave_board.application",
+                     "conclave_board.infrastructure", "conclave_board.api", "flask", "httpx", "mcp"]
+
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "packages/board/src"]
 testpaths = ["tests"]
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+# Das Board-Paket (packages/board, Apache-2.0) wird mitgebuendelt (T1)
+package-dir = {"" = "src", "conclave_board" = "packages/board/src/conclave_board"}
 include-package-data = true
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "packages/board/src"]
 
 [tool.setuptools.package-data]
 "conclave" = [
@@ -82,4 +113,5 @@ where = ["src"]
     "assets/static/vendor/swagger-ui/*",
     "assets/scripts/windows/*.ps1",
     "assets/scripts/linux/*",
+    "reviewer/reviewer-prompt-conclave.md",
 ]

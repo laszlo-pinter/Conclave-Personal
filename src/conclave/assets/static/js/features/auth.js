@@ -35,20 +35,38 @@ function clearKey(){
 }
 
 
+// Rolle eines Tokens laut Server: 'human'/'agent'/..., '' = ungueltig (nur 401/403), null = nicht
+// pruefbar. Ein voruebergehender Fehler (Netzwerk, 5xx, 429) wird kurz wiederholt und als Warnung
+// in der Konsole vermerkt (Versuch und Grund, nie das Token), statt das Token zu verwerfen (#96).
+const WHOAMI_RETRY_DELAYS_MS=[250,750,1500];
+async function _whoamiRole(token){
+  for(let attempt=0;;attempt++){
+    let reason='';
+    try{
+      const r=await fetch(window.location.origin+'/auth/whoami',{headers:{'Authorization':'Bearer '+token}});
+      if(r.ok) return (await r.json()).role||'';
+      if(r.status===401||r.status===403) return '';
+      reason='HTTP '+r.status;
+    }catch(e){
+      reason=(e&&e.name)||'Fehler';
+    }
+    console.warn(`whoami: Versuch ${attempt+1} gescheitert (${reason})`);
+    if(attempt>=WHOAMI_RETRY_DELAYS_MS.length) return null;
+    await new Promise(resolve=>setTimeout(resolve,WHOAMI_RETRY_DELAYS_MS[attempt]));
+  }
+}
+
 // Token aus dem Fragment (#token=…): erst die Rolle pruefen, dann uebernehmen oder nachfragen (R5).
 async function confirmPendingToken(){
   const pending=AppState.getState('pendingToken');
   if(!pending) return;
   AppState.setState({pendingToken:''});
-  let role='';
-  try{
-    const r=await fetch(window.location.origin+'/auth/whoami',{headers:{'Authorization':'Bearer '+pending}});
-    if(r.ok) role=(await r.json()).role||'';
-  }catch{}
+  const role=await _whoamiRole(pending);
   // Ohne gespeichertes Token gilt ein Mensch-Token sofort (Start ueber conclave desktop/web);
   // ein Agent-Token, ein ungueltiges oder ein Wechsel brauchen eine Bestaetigung.
   const silent=!storedValue(TOKEN_KEY)&&role==='human';
-  const label=role==='human'?t('auth.roleHuman'):role==='agent'?t('auth.roleAgent'):t('auth.roleInvalid');
+  const label=role==='human'?t('auth.roleHuman'):role==='agent'?t('auth.roleAgent')
+    :role===null?t('auth.roleUnknown'):t('auth.roleInvalid');
   if(!silent&&!window.confirm(t('auth.switchToken',{role:label}))) return;
   API=window.location.origin;
   apiKey=pending;

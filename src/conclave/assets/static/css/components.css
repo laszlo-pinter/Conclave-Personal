@@ -369,3 +369,6 @@ select.sel:focus{border-color:var(--accent)}
 .board-control-text{color:var(--text-dim);white-space:pre-wrap;word-break:break-word}
 .board-control-ack{font-size:11px;color:var(--text-faint)}
 .btn-full.secondary.board-pause-btn{border-color:var(--danger);color:var(--danger)}
+.board-reviewer{display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:8px;font-size:12px;border:1px solid var(--border-strong);background:var(--bg-2);color:var(--text-dim);align-self:center}
+.board-reviewer[data-state="active"]{color:var(--accent);border-color:var(--accent-glow)}
+.board-reviewer[data-state="off"]{color:var(--danger-text);border-color:var(--danger-line)}

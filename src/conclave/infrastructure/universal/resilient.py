@@ -141,21 +141,34 @@ class ResilientAdapter:
         raise ProviderUnavailable(self.provider, 0) from last_exception
 
 
+MAX_RETRY_AFTER_SECONDS = 60.0         # laengere Wartezeiten des Providers werden gekappt
+
+
+def _retry_seconds(value: str) -> float | None:
+    """Endliche Sekunden >= 0, hoechstens ``MAX_RETRY_AFTER_SECONDS``; sonst ``None`` (normales Backoff)."""
+    import math
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(seconds) or seconds < 0:
+        return None
+    return min(seconds, MAX_RETRY_AFTER_SECONDS)
+
+
 def _parse_retry_after(response: httpx.Response) -> float | None:
-    """Versucht Retry-After Header oder Body-Hinweis zu parsen."""
+    """Retry-After-Header oder Hinweis im Body; ungueltige Werte (negativ, nan, inf) zaehlen nicht."""
     header = response.headers.get("retry-after")
     if header:
-        try:
-            return float(header)
-        except ValueError:
-            pass
+        seconds = _retry_seconds(header.strip())
+        if seconds is not None:
+            return seconds
     # Gemini gibt retry-Info im Body: "Please retry in 7.371630858s."
     try:
         import re
-        text = response.text
-        match = re.search(r'retry in ([\d.]+)s', text)
+        match = re.search(r'retry in ([\d.]+)s', response.text)
         if match:
-            return float(match.group(1))
+            return _retry_seconds(match.group(1))
     except Exception:
         pass
     return None

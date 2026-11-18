@@ -1,6 +1,6 @@
 import sqlite3
 
-from conclave.infrastructure.migrations import run_migrations
+from conclave.infrastructure.migrations import run_board_migrations, run_migrations
 
 
 def initialize_schema(connection: sqlite3.Connection) -> None:
@@ -194,3 +194,4 @@ def initialize_schema(connection: sqlite3.Connection) -> None:
 
     # Migrationen fuer bestehende DBs (fuegt fehlende Spalten hinzu)
     run_migrations(connection, is_postgres=False)
+    run_board_migrations(connection, is_postgres=False)   # Reihe des Boards (T1), uebernimmt die alten

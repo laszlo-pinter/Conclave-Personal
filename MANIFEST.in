@@ -1,6 +1,11 @@
 include README.md
 include PROJECT.md
 include LICENSE
+include packages/board/LICENSE
+include packages/board/NOTICE
+include packages/board/README.md
+include packages/board/pyproject.toml
+include packages/board/openapi/board-v1.json
 include THIRD_PARTY.md
 exclude conclave-ui.html
 recursive-include src/conclave/assets *
@@ -31,6 +36,8 @@ include docs/release-notes-v0.5.0.md
 include docs/release-notes-v0.5.1.md
 include docs/release-notes-v0.6.0.md
 include docs/release-notes-v0.6.1.md
+include docs/release-notes-v0.7.0.md
+include docs/release-notes-v0.8.0.md
 include docs/sicherheit.md
 include docs/provider-smoke-test.md
 include docs/architektur/ports-adapter.md

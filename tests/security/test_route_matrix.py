@@ -39,7 +39,9 @@ EXPECTED = {
     ("POST", "/backup"): "human",
     ("GET", "/backups"): "human",
     ("GET", "/board"): "human",
-    ("GET", "/board/changes"): "human",
+    ("GET", "/board/changes"): "agent+reviewer",
+    ("GET", "/board/reviewer"): "human",
+    ("POST", "/board/reviewer/heartbeat"): "reviewer",
     ("DELETE", "/board/comments/<comment_id>"): "human",
     ("PUT", "/board/comments/<comment_id>"): "human",
     ("POST", "/board/import"): "human",
@@ -107,6 +109,15 @@ EXPECTED = {
     ("GET", "/workspace/<path:filepath>"): "agent",
     ("POST", "/workspace/<path:filepath>"): "agent",
 }
+
+# T5: haengende Tickets anzeigen und freigeben (nur Mensch)
+EXPECTED[("GET", "/board/stuck")] = "human"
+EXPECTED[("POST", "/board/projects/<slug>/tasks/<int:number>/release")] = "human"
+
+# T3: Jede Board-Route gibt es auch unter /board/v1 mit derselben Rolle; /board bleibt als Alias.
+EXPECTED.update({(method, "/board/v1" + rule[len("/board"):]): role for (method, rule), role in list(EXPECTED.items())
+                 if rule == "/board" or rule.startswith("/board/")})
+EXPECTED[("GET", "/board/versions")] = "public"
 
 ALLOWED = {
     "public": {"none", "human", "agent", "reviewer"},

@@ -1,0 +1,321 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Laszlo Pinter
+
+"""Board: Projekte, Tickets, Kommentare und Ticket-Verlauf (Plan board.md, B1).
+
+Eigene Umsetzung nach der Funktionsbeschreibung im Plan, kein Code aus anderen
+Boards. Ein Ticket heisst nach aussen ``slug#nummer``; die Nummer ist je Projekt
+fortlaufend und wird vom Repository vergeben.
+
+Vorhaben (P2, ``Initiative``): eine Ebene im Projekt mit eigener fortlaufender
+Nummer, z. B. ``conclave/sich-3``. Die Projektnummer bleibt, ``conclave#33`` gilt weiter.
+
+Herkunft (``origin``) von Kommentaren und Verlaufseintraegen:
+``human``/``agent``/``reviewer`` aus dem Token, ``system`` fuer Eintraege, die Conclave selbst
+schreibt (z. B. Consultations), ``None`` fuer Importiertes oder Unbekanntes.
+``actor_id`` bereitet den Mehrbenutzerbetrieb vor (Plan, Abschnitt 6).
+"""
+
+from __future__ import annotations
+
+import re
+import uuid
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+
+SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,39}\Z")
+REF = re.compile(r"([a-z0-9][a-z0-9-]{0,39})#([1-9][0-9]{0,8})\Z")
+INITIATIVE_SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,19}\Z")
+# projekt/vorhaben-n; das Vorhaben darf selbst '-' enthalten, die Nummer steht hinter dem letzten
+INITIATIVE_REF = re.compile(r"([a-z0-9][a-z0-9-]{0,39})/([a-z0-9][a-z0-9-]{0,19})-([1-9][0-9]{0,8})\Z")
+DEFAULT_STATUSES = ("todo", "doing", "review", "done")
+ORIGINS = ("human", "agent", "reviewer", "system")
+# Review-Status (P3): none nach jedem Wechsel nach review, running waehrend des Laufs,
+# dann passed (gruen), rework (gelb) oder failed (rot)
+REVIEW_STATES = ("none", "running", "passed", "rework", "failed")
+REVIEW_RESULTS = ("running", "passed", "rework", "failed")      # was der Reviewer setzen darf
+RED_LIMIT = 3                                                   # E-R3: so viele rote in Folge -> Mensch
+# Steuertickets (P6): nur der Mensch legt sie an; Pause haelt next an, Hinweis wartet auf Quittung
+KINDS = ("task", "control")
+CONTROL_TYPES = ("pause", "hint")
+CONTROL_SCOPES = ("project", "all", "mine")   # mine: nur die Agenten des anlegenden Menschen (T5)
+# Verlaufseintraege fuer diese Felder (Plan 2, "Ticket-Verlauf"); "created" ist das Anlegen,
+# "comment" Bearbeiten/Loeschen eines Kommentars (alt -> neu bzw. -> None), R9
+TRACKED_FIELDS = ("created", "status", "title", "description", "human", "rank", "tags", "position", "comment",
+                  "review_state", "control_ack", "review_red_count", "initiative",
+                  "assignee")                                 # Zustaendigkeit (T5)
+# Verlauf eines Projekts: Anlegen, Umbenennen, geloeschte Tickets (Tombstone), R9
+PROJECT_FIELDS = ("created", "name", "task_deleted", "initiative")
+POSITION_STEP = 1024.0      # Abstand der Karten nach dem Neunummerieren
+# Laengengrenzen (R6): Titel, Beschreibung bzw. Kommentar, Anzahl und Laenge der Tags
+TITLE_MAX = 300
+TEXT_MAX = 64 * 1024
+TAGS_MAX = 50
+TAG_MAX = 50
+
+
+def check_field_limits(*, title=None, text=None, tags=None, what: str = "Beschreibung") -> None:
+    """ValueError, wenn ein Feld die Grenzen ueberschreitet."""
+    if isinstance(title, str) and len(title) > TITLE_MAX:
+        raise ValueError(f"Titel hoechstens {TITLE_MAX} Zeichen.")
+    if isinstance(text, str) and len(text) > TEXT_MAX:
+        raise ValueError(f"{what} hoechstens {TEXT_MAX} Zeichen.")
+    if tags is not None:
+        tags = list(tags)
+        if len(tags) > TAGS_MAX:
+            raise ValueError(f"Hoechstens {TAGS_MAX} Tags.")
+        if any(isinstance(t, str) and len(t) > TAG_MAX for t in tags):
+            raise ValueError(f"Tags hoechstens {TAG_MAX} Zeichen.")
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _id() -> str:
+    return str(uuid.uuid4())
+
+
+def parse_ref(ref: str) -> tuple[str, int]:
+    """``api#12`` -> (``api``, 12); alles andere ist ein ``ValueError``."""
+    m = REF.match(ref) if isinstance(ref, str) else None
+    if not m:
+        raise ValueError(f"Ticket-Referenz muss wie 'projekt#12' aussehen: {ref!r}")
+    return m.group(1), int(m.group(2))
+
+
+def parse_any_ref(ref: str) -> tuple[str, str | None, int]:
+    """``api#12`` -> (``api``, None, 12); ``api/sich-3`` -> (``api``, ``sich``, 3)."""
+    if isinstance(ref, str):
+        m = INITIATIVE_REF.match(ref)
+        if m:
+            return m.group(1), m.group(2), int(m.group(3))
+    try:
+        slug, number = parse_ref(ref)
+    except ValueError:
+        raise ValueError(f"Ticket-Referenz muss wie 'projekt#12' oder 'projekt/vorhaben-3' aussehen: {ref!r}") from None
+    return slug, None, number
+
+
+def check_origin(origin: str | None) -> str | None:
+    if origin is not None and origin not in ORIGINS:
+        raise ValueError(f"origin muss einer von {ORIGINS} oder None sein")
+    return origin
+
+
+def event_value(value) -> str | None:
+    """Wert fuer den Verlauf, vollstaendig (Entscheidung Laszlo, 29.10.2026): Nur so ist
+    sichtbar, *was* sich an einer Abnahme geaendert hat. Verschluesselt wird im Repository."""
+    if value is None:
+        return None
+    return str(value)
+
+
+@dataclass(frozen=True)
+class StatusFlow:
+    """Die Spalten des Boards; neue Tickets in die erste, die letzte gilt als erledigt."""
+    statuses: tuple[str, ...] = DEFAULT_STATUSES
+
+    def __post_init__(self) -> None:
+        if len(self.statuses) < 2 or len(set(self.statuses)) != len(self.statuses):
+            raise ValueError("Es braucht mindestens zwei verschiedene Status")
+        for s in self.statuses:
+            if not SLUG.match(s):
+                raise ValueError(f"Ungueltiger Status: {s!r}")
+
+    @property
+    def first(self) -> str:
+        return self.statuses[0]
+
+    @property
+    def second(self) -> str:
+        return self.statuses[1]
+
+    @property
+    def last(self) -> str:
+        return self.statuses[-1]
+
+    @property
+    def review(self) -> str:
+        """Spalte fuer das Review: ``review``, sonst die vor der letzten."""
+        return "review" if "review" in self.statuses else self.statuses[-2]
+
+    def check(self, status: str) -> str:
+        if status not in self.statuses:
+            raise ValueError(f"Status muss einer von {self.statuses} sein")
+        return status
+
+
+@dataclass
+class Project:
+    id: str
+    slug: str
+    name: str
+    created_at: datetime = field(default_factory=_now)
+
+    def __post_init__(self) -> None:
+        if not SLUG.match(self.slug or ""):
+            raise ValueError("Projekt-Kurzname: Kleinbuchstaben, Ziffern und '-', hoechstens 40 Zeichen")
+        if not self.name.strip():
+            raise ValueError("Projektname darf nicht leer sein")
+
+    @staticmethod
+    def create(slug: str, name: str) -> "Project":
+        return Project(id=_id(), slug=slug, name=name)
+
+
+@dataclass
+class Initiative:
+    """Vorhaben im Projekt (P2): Kurzname, Titel, Rang (nur der Mensch), eigene Nummern."""
+    id: str
+    project_id: str
+    project_slug: str
+    slug: str
+    title: str
+    rank: float = 0.0
+    created_at: datetime = field(default_factory=_now)
+
+    def __post_init__(self) -> None:
+        if not INITIATIVE_SLUG.match(self.slug or ""):
+            raise ValueError("Vorhaben-Kurzname: Kleinbuchstaben, Ziffern und '-', hoechstens 20 Zeichen")
+        if not isinstance(self.title, str) or not self.title.strip():
+            raise ValueError("Titel des Vorhabens darf nicht leer sein")
+        if len(self.title) > TITLE_MAX:
+            raise ValueError(f"Titel hoechstens {TITLE_MAX} Zeichen.")
+
+    @staticmethod
+    def create(project: "Project", slug: str, title: str, rank: float = 0.0) -> "Initiative":
+        return Initiative(id=_id(), project_id=project.id, project_slug=project.slug, slug=slug, title=title,
+                          rank=rank)
+
+
+@dataclass
+class Task:
+    id: str
+    project_id: str
+    project_slug: str
+    number: int | None              # vom Repository beim Anlegen vergeben
+    title: str
+    status: str
+    description: str = ""
+    tags: tuple[str, ...] = ()
+    position: float = 0.0           # Platz in der Spalte (Arbeitsstand: wer ankommt, steht hinten)
+    human: bool = False
+    assignee: str | None = None     # Mehrbenutzerbetrieb, vorerst leer
+    rank: float = 0.0               # Prioritaet (P1): ordnet die erste Spalte, setzt nur der Mensch
+    version: int = 1                # optimistische Sperre: jede Aenderung erhoeht sie
+    created_at: datetime = field(default_factory=_now)
+    updated_at: datetime = field(default_factory=_now)
+    origin: str | None = None       # wer angelegt hat (aus dem Token), None = importiert/unbekannt (R9)
+    actor_id: str | None = None     # vorerst die Rolle, spaeter der Benutzer
+    created_by: str = ""            # Anzeige: Rolle, "import" oder leer (aelter als R9)
+    review_state: str = "none"      # P3, siehe REVIEW_STATES
+    review_at: datetime | None = None
+    review_red_count: int = 0       # rote Reviews in Folge (E-R3)
+    review_blocking: int | None = None
+    review_suggestions: int | None = None
+    review_checked: str = ""        # gepruefter Stand, z. B. "sicherheit @ abc..def"
+    kind: str = "task"              # P6: "task" oder "control" (Steuerticket des Menschen)
+    control: str | None = None      # bei kind=control: "pause" oder "hint"
+    control_scope: str = ""         # "project" oder "all"
+    control_ack_by: str = ""        # Hinweis quittiert von (Anzeigename bzw. Rolle)
+    control_ack_at: datetime | None = None
+    initiative_id: str | None = None        # P2: Vorhaben, None = keins
+    initiative_slug: str | None = None      # aus dem Vorhaben gelesen (nicht gespeichert)
+    initiative_number: int | None = None    # Nummer im Vorhaben, vom Repository vergeben
+    initiative_rank: float | None = None    # Rang des Vorhabens fuer die Reihenfolge (nicht gespeichert)
+
+    def __post_init__(self) -> None:
+        check_origin(self.origin)
+        if not self.title.strip():
+            raise ValueError("Titel darf nicht leer sein")
+        self.tags = tuple(dict.fromkeys(t.strip() for t in self.tags if t and t.strip()))
+
+    @property
+    def ref(self) -> str:
+        if self.number is None:
+            raise ValueError("Ticket hat noch keine Nummer (erst nach dem Speichern)")
+        return f"{self.project_slug}#{self.number}"
+
+    @property
+    def initiative_ref(self) -> str | None:
+        """``projekt/vorhaben-n`` oder None ohne Vorhaben."""
+        if not self.initiative_slug or self.initiative_number is None:
+            return None
+        return f"{self.project_slug}/{self.initiative_slug}-{self.initiative_number}"
+
+    @staticmethod
+    def create(project: Project, title: str, status: str, *, description: str = "", tags=(),
+               position: float = 0.0, human: bool = False, rank: float = 0.0) -> "Task":
+        return Task(id=_id(), project_id=project.id, project_slug=project.slug, number=None, title=title,
+                    status=status, description=description, tags=tuple(tags), position=position, human=human,
+                    rank=rank)
+
+
+@dataclass
+class TaskComment:
+    id: str
+    task_id: str
+    body: str
+    origin: str | None
+    actor_id: str | None = None
+    author_name: str = ""
+    created_at: datetime = field(default_factory=_now)
+    updated_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        check_origin(self.origin)
+        if not self.body.strip():
+            raise ValueError("Kommentar darf nicht leer sein")
+
+    @staticmethod
+    def create(task_id: str, body: str, origin: str | None, *, actor_id: str | None = None,
+               author_name: str = "") -> "TaskComment":
+        return TaskComment(id=_id(), task_id=task_id, body=body, origin=origin, actor_id=actor_id,
+                           author_name=author_name)
+
+
+@dataclass
+class TaskEvent:
+    id: str
+    task_id: str
+    field_name: str
+    old_value: str | None
+    new_value: str | None
+    origin: str | None
+    actor_id: str | None = None
+    created_at: datetime = field(default_factory=_now)
+
+    def __post_init__(self) -> None:
+        check_origin(self.origin)
+        if self.field_name not in TRACKED_FIELDS:
+            raise ValueError(f"Verlauf nur fuer {TRACKED_FIELDS}")
+
+    @staticmethod
+    def create(task_id: str, field_name: str, old, new, origin: str | None, *,
+               actor_id: str | None = None) -> "TaskEvent":
+        return TaskEvent(id=_id(), task_id=task_id, field_name=field_name, old_value=event_value(old),
+                         new_value=event_value(new), origin=origin, actor_id=actor_id)
+
+
+@dataclass
+class ProjectEvent:
+    id: str
+    project_id: str
+    field_name: str
+    old_value: str | None
+    new_value: str | None
+    origin: str | None
+    actor_id: str | None = None
+    created_at: datetime = field(default_factory=_now)
+
+    def __post_init__(self) -> None:
+        check_origin(self.origin)
+        if self.field_name not in PROJECT_FIELDS:
+            raise ValueError(f"Projekt-Verlauf nur fuer {PROJECT_FIELDS}")
+
+    @staticmethod
+    def create(project_id: str, field_name: str, old, new, origin: str | None, *,
+               actor_id: str | None = None) -> "ProjectEvent":
+        return ProjectEvent(id=_id(), project_id=project_id, field_name=field_name, old_value=event_value(old),
+                            new_value=event_value(new), origin=origin, actor_id=actor_id)

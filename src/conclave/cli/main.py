@@ -244,8 +244,10 @@ def build_parser() -> argparse.ArgumentParser:
     token_show.add_argument("--reveal", action="store_true",
                             help="Den Token-Wert ausgeben (nur auf ausdrueckliche Anfrage)")
 
-    board_p = sub.add_parser("board", help="Board verwalten (als Mensch, direkt auf der Datenbank)")
+    board_p = sub.add_parser("board", help="Board verwalten (als Mensch, direkt auf der Datenbank) und warten")
     board_sub = board_p.add_subparsers(dest="board_command", required=True)
+    from conclave.cli import board_wait
+    board_wait.add_parser(board_sub)
     ini_p = board_sub.add_parser("initiative", help="Vorhaben eines Projekts (P2)")
     ini_sub = ini_p.add_subparsers(dest="initiative_command", required=True)
     ini_list = ini_sub.add_parser("list", help="Vorhaben nach Rang anzeigen")
@@ -655,7 +657,17 @@ def _run_server(args, should_open_browser: bool = False) -> int:
     if not env_secret("CONCLAVE_API_KEY"):
         print(f"Conclave API-Token: {token_path()}")
     from conclave.runtime.serve import serve
-    serve(app, config.host, config.port, debug=config.debug)
+    reviewer = None
+    if should_open_browser:                    # nur conclave desktop startet den Reviewer (W4, E-W3)
+        from conclave.runtime.reviewer_launch import start_reviewer
+        log = get_logger("cli.reviewer")
+        reviewer = start_reviewer(lambda msg: (log.info(msg), print(f"Conclave Reviewer: {msg}")))
+    try:
+        serve(app, config.host, config.port, debug=config.debug)
+    finally:
+        if reviewer is not None:
+            from conclave.runtime.reviewer_launch import stop_reviewer
+            stop_reviewer(reviewer)
     return 0
 
 
@@ -684,7 +696,11 @@ def _show_reviewer_token(args, url: str) -> int:
 
 
 def _run_board(args) -> int:
-    """Vorhaben verwalten (P2). Die CLI handelt als Mensch, wie alle lokalen Befehle."""
+    """Vorhaben verwalten (P2). Die CLI handelt als Mensch, wie alle lokalen Befehle.
+    ``wait`` (P8) geht dagegen ueber REST mit dem Agent-Token."""
+    if args.board_command == "wait":
+        from conclave.cli import board_wait
+        return board_wait.run(args)
     from conclave.application.board import BoardError
     from conclave.domain.principal import HUMAN_PRINCIPAL
 

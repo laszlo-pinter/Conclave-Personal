@@ -54,8 +54,9 @@ def _dist(tmp_path, version="1.2.3", extra=(), sdist_extra=()):
     dist = tmp_path / "dist"
     dist.mkdir()
     with zipfile.ZipFile(dist / f"conclave_personal-{version}-py3-none-any.whl", "w") as zf:
+        licenses = [f"conclave_personal-{version}.dist-info/licenses/{n}" for n in check_dist.REQUIRED_LICENSES]
         for name in (*check_dist.REQUIRED_WHEEL, f"conclave_personal-{version}.dist-info/entry_points.txt",
-                     "conclave/__init__.py", *extra):
+                     "conclave/__init__.py", *licenses, *extra):
             zf.writestr(name, "x")
     with tarfile.open(dist / f"conclave_personal-{version}.tar.gz", "w:gz") as tf:
         for name in (f"conclave_personal-{version}/pyproject.toml", f"conclave_personal-{version}/src/conclave/__init__.py",
@@ -84,6 +85,19 @@ def test_package_with_a_banned_file_fails(tmp_path, bad):
 def test_sdist_with_a_banned_file_fails(tmp_path, bad):
     """R14-Review V1: Das Sdist ist der Weg, auf dem Repo-Dateien durchrutschen koennten."""
     assert check_dist.main([str(_dist(tmp_path, sdist_extra=[bad])), str(_pyproject(tmp_path))]) == 1
+
+
+def test_package_without_the_bundled_board_fails(tmp_path):
+    """T1: Personal bringt conclave_board samt Apache-Lizenz mit."""
+    dist = _dist(tmp_path)
+    wheel = next(dist.glob("*.whl"))
+    with zipfile.ZipFile(wheel) as zf:
+        names = [n for n in zf.namelist() if not n.startswith("conclave_board/") and "packages/board" not in n]
+        data = {n: zf.read(n) for n in names}
+    with zipfile.ZipFile(wheel, "w") as zf:
+        for name, content in data.items():
+            zf.writestr(name, content)
+    assert check_dist.main([str(dist), str(_pyproject(tmp_path))]) == 1
 
 
 def test_package_with_another_version_fails(tmp_path):

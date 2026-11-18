@@ -31,6 +31,7 @@
 - [Ports & adapters](architektur/ports-adapter.md) - Interfaces, ProviderProfiles, ResilientAdapter
 
 ### Release
+- [Release Notes v0.8.0](release-notes-v0.8.0.md) - Board core as its own package with API `/board/v1`, built-in automatic reviewer, `board wait`
 - [Release Notes v0.7.0](release-notes-v0.7.0.md) - Hardening, board priorities, initiatives, reviewer role, control tickets, light mode
 - [Release Notes v0.6.1](release-notes-v0.6.1.md) - `[consultations]` section, board as the place for work packages (included in v0.7.0)
 - [Release Notes v0.6.0](release-notes-v0.6.0.md) - Own board for work packages, consultations on it
