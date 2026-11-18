@@ -239,11 +239,14 @@ class BoardService:
         return self._project(slug)
 
     def delete_project(self, principal: Principal, slug: str, only_empty: bool = False) -> None:
-        """Loescht samt Tickets; mit ``only_empty`` (Board-Seite, U4) nur ein Projekt ohne Tickets, sonst 409."""
+        """Loescht samt Tickets; mit ``only_empty`` (Board-Seite, U4) nur ein Projekt ohne Tickets und
+        ohne Vorhaben, sonst 409."""
         project = self._project(slug)
         self._require_approval(principal, project)
-        if not self._repo.delete_project(slug, only_empty=only_empty) and only_empty                 and self._repo.get_project(slug) is not None:
-            raise BoardError(f"Projekt '{slug}' hat Tickets und wird nicht geloescht.", 409, "ProjectNotEmpty")
+        deleted = self._repo.delete_project(slug, only_empty=only_empty)
+        if not deleted and only_empty and self._repo.get_project(slug) is not None:
+            raise BoardError(f"Projekt '{slug}' hat Tickets oder Vorhaben und wird nicht geloescht.", 409,
+                             "ProjectNotEmpty")
 
     # ── Vorhaben (P2) ────────────────────────────────────────────────────
 

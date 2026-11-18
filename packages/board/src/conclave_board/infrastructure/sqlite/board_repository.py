@@ -232,12 +232,14 @@ class SQLiteBoardRepository:
     def delete_project(self, slug: str, only_empty: bool = False) -> bool:
         """Eine Anweisung; Zaehler, Tickets, Kommentare und Verlauf folgen per CASCADE.
 
-        Mit ``only_empty`` prueft dieselbe Anweisung, dass es keine Tickets gibt (auch keine erledigten
-        oder Steuertickets): Ein Ticket, das ein Agent kurz vorher anlegt, geht so nicht verloren (U4).
+        Mit ``only_empty`` prueft dieselbe Anweisung, dass es keine Tickets (auch keine erledigten oder
+        Steuertickets) und keine Vorhaben gibt: Was ein Agent kurz vorher anlegt, geht so nicht verloren (U4).
         """
         sql = "DELETE FROM board_projects WHERE slug = ?"
         if only_empty:
-            sql += " AND NOT EXISTS (SELECT 1 FROM board_tasks WHERE board_tasks.project_id = board_projects.id)"
+            sql += (" AND NOT EXISTS (SELECT 1 FROM board_tasks WHERE board_tasks.project_id = board_projects.id)"
+                    " AND NOT EXISTS (SELECT 1 FROM board_initiatives"
+                    " WHERE board_initiatives.project_id = board_projects.id)")
         with self._tx():
             changed = self._rowcount(sql, (slug,))
             if changed:

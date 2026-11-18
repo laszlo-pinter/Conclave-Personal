@@ -113,6 +113,9 @@ def test_create_rename_and_delete_an_empty_project(chromium, board_server):
 def test_project_with_tickets_cannot_be_deleted(chromium, board_server):
     assert board_server.human.post("/board/v1/projects", json={"slug": "api", "name": "API"}).status_code == 201
     assert board_server.human.post("/board/v1/projects", json={"slug": "fast-leer", "name": "F"}).status_code == 201
+    assert board_server.human.post("/board/v1/projects", json={"slug": "plan", "name": "Plan"}).status_code == 201
+    assert board_server.human.post("/board/v1/projects/plan/initiatives",
+                                   json={"slug": "sich", "title": "Sicherheit"}).status_code == 201
     done = board_server.agent.post("/board/v1/tasks", json={"project": "api", "title": "Alt"}).json()
     assert board_server.human.patch(f"/board/v1/projects/api/tasks/{done['number']}",
                                     json={"status": "done"}).status_code == 200
@@ -124,13 +127,16 @@ def test_project_with_tickets_cannot_be_deleted(chromium, board_server):
         # Auch ein erledigtes Ticket zaehlt: kein Loeschen, stattdessen die Anzahl
         assert _row(page, "api").locator("[data-action='board-project-delete']").count() == 0
         assert _row(page, "api").locator(".board-project-count").inner_text() == "1 Ticket(s)"
+        # Ein Projekt nur mit Vorhaben gilt nicht als leer (Review V2)
+        assert _row(page, "plan").locator("[data-action='board-project-delete']").count() == 0
+        assert _row(page, "plan").locator(".board-project-count").inner_text() == "1 Vorhaben"
 
         # Ein Agent legt ein Ticket an, waehrend der Dialog offen ist: Der Server lehnt das Loeschen ab
         assert board_server.agent.post("/board/v1/tasks", json={"project": "fast-leer", "title": "X"}).status_code == 201
         _row(page, "fast-leer").locator("[data-action='board-project-delete']").click()
         page.locator(".toast.err").first.wait_for(timeout=5000)
         _row(page, "fast-leer").locator(".board-project-count").wait_for(timeout=5000)
-        assert set(_projects(board_server)) == {"api", "fast-leer"}
+        assert set(_projects(board_server)) == {"api", "fast-leer", "plan"}
         assert board_server.human.get("/board/v1/projects/fast-leer/tasks/1").status_code == 200
         assert errors == []
     finally:

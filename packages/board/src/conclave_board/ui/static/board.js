@@ -440,7 +440,7 @@ async function createBoardTask() {
 // ── Projekte verwalten (U4) ──────────────────────────────────────────────
 //
 // Nur der Mensch (die API antwortet dem Agenten 403). Loeschen bietet die Ansicht nur fuer Projekte
-// ohne Tickets an; der Server prueft das mit only_empty noch einmal im selben Schritt.
+// ohne Tickets und ohne Vorhaben an; der Server prueft das mit only_empty noch einmal im selben Schritt.
 
 async function openBoardProjects() {
   if (_board.role !== 'human') return;
@@ -465,6 +465,17 @@ async function _renderBoardProjectList() {
     list.replaceChildren(_boardEl('div', 'surface-empty', t('board.projects.none')));
     return;
   }
+  // Vorhaben nur fuer Projekte ohne Tickets nachsehen: Nur dort haengt "Loeschen" davon ab
+  const initiatives = {};
+  try {
+    await Promise.all(_board.projects.filter(p => !counts[p.slug]).map(async p => {
+      const data = await req('GET', BOARD_API + '/projects/' + encodeURIComponent(p.slug) + '/initiatives');
+      initiatives[p.slug] = (data.initiatives || []).length;
+    }));
+  } catch (e) {
+    list.replaceChildren(_boardEl('div', 'board-error', e.message));
+    return;
+  }
   list.replaceChildren(..._board.projects.map(p => {
     const row = _boardEl('div', 'board-project-row');
     row.dataset.slug = p.slug;
@@ -477,8 +488,10 @@ async function _renderBoardProjectList() {
     rename.dataset.slug = p.slug;
     row.append(_boardEl('span', 'board-ref', p.slug), name, rename);
     const n = counts[p.slug] || 0;
-    if (n) {
-      const count = _boardEl('span', 'board-project-count', t('board.projects.tasks', {n}));
+    const m = initiatives[p.slug] || 0;
+    if (n || m) {
+      const count = _boardEl('span', 'board-project-count',
+                             n ? t('board.projects.tasks', {n}) : t('board.projects.initiatives', {n: m}));
       count.title = t('board.projects.notEmpty');
       row.appendChild(count);
     } else {

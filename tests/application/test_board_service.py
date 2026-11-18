@@ -581,10 +581,15 @@ def test_delete_project_only_empty(board):
     assert (e.value.status, e.value.type) == (409, "ProjectNotEmpty")
     assert [t.ref for t in board.list_tasks("api", include_done=True)] == ["api#1"]
     _forbidden(board.delete_project, AGENT, "api", only_empty=True)
+    board.create_project(HUMAN, "plan", "Plan")
+    board.create_initiative(HUMAN, "plan", "sich", "Sicherheit")
+    with pytest.raises(BoardError) as e:
+        board.delete_project(HUMAN, "plan", only_empty=True)                # Vorhaben zaehlen mit
+    assert e.value.type == "ProjectNotEmpty"
     board.create_project(HUMAN, "leer", "Leer")
     board.delete_project(HUMAN, "leer", only_empty=True)
     with pytest.raises(BoardError) as e:
         board.delete_project(HUMAN, "leer", only_empty=True)
     assert e.value.status == 404
     board.delete_project(HUMAN, "api")
-    assert board.list_projects() == []
+    assert [p.slug for p in board.list_projects()] == ["plan"]

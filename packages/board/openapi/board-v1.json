@@ -491,7 +491,7 @@
         }
       },
       "delete": {
-        "summary": "Projekt samt Tickets loeschen (Freigabe-Recht); only_empty=true nur ohne Tickets, sonst 409.",
+        "summary": "Projekt samt Tickets loeschen (Freigabe-Recht); only_empty=true nur ohne Tickets und Vorhaben, sonst 409.",
         "tags": [
           "board"
         ],
@@ -529,7 +529,7 @@
                 "no"
               ]
             },
-            "description": "nur loeschen, wenn das Projekt keine Tickets hat; sonst 409 ProjectNotEmpty"
+            "description": "nur loeschen, wenn das Projekt keine Tickets und keine Vorhaben hat; sonst 409 ProjectNotEmpty"
           }
         ]
       }

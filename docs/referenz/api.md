@@ -111,7 +111,7 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `POST` | `/board/v1/reviewer/heartbeat` | Lebenszeichen des Reviewers, etwa alle 60 s: `version` (höchstens 50 Zeichen), `task` (laufendes Ticket oder `null`). Ohne Herzschlag seit 180 s gilt er als aus. Nur im Speicher des Servers (nur Reviewer-Zugang). |
 | `POST` | `/board/v1/projects` | Projekt anlegen (nur Mensch). |
 | `PUT` | `/board/v1/projects/<slug>` | Projekt umbenennen (nur Mensch). |
-| `DELETE` | `/board/v1/projects/<slug>` | Projekt samt Tickets löschen (nur Mensch). Mit `only_empty=true` nur ein Projekt ohne Tickets (auch ohne erledigte), sonst `409 ProjectNotEmpty`; Prüfung und Löschen in einem Schritt. So löscht die Board-Ansicht. |
+| `DELETE` | `/board/v1/projects/<slug>` | Projekt samt Tickets löschen (nur Mensch). Mit `only_empty=true` nur ein Projekt ohne Tickets (auch ohne erledigte) und ohne Vorhaben, sonst `409 ProjectNotEmpty`; Prüfung und Löschen in einem Schritt. So löscht die Board-Ansicht. |
 | `GET` | `/board/v1/tasks` | Tickets in Board-Reihenfolge; Filter `project`, `status` (mehrfach), `include_done`. |
 | `POST` | `/board/v1/tasks` | Ticket anlegen; neue Tickets landen in der ersten Spalte. Optional `initiative`: Kurzname eines vorhandenen Vorhabens. |
 | `GET` | `/board/v1/search` | Suche in Titel, Tags, Beschreibung und Kommentaren (`q`, `project`, `include_done`). |

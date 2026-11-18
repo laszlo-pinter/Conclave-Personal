@@ -6,6 +6,7 @@ import threading
 import pytest
 
 from conclave.domain.board import (
+    Initiative,
     Project,
     StatusFlow,
     Task,
@@ -540,4 +541,8 @@ def test_delete_project_only_empty_checks_in_the_same_statement(repo):
     assert repo.delete_project("leer", only_empty=True)
     assert repo.get_project("leer") is None
     deletes = [s for s in statements if s.startswith("DELETE")]
-    assert len(deletes) == 2 and all("NOT EXISTS" in s for s in deletes)
+    assert len(deletes) == 2 and all("board_initiatives" in s for s in deletes)
+    nur_vorhaben = _project(repo, "plan")
+    repo.create_initiative(Initiative.create(nur_vorhaben, "sich", "Sicherheit"))
+    assert not repo.delete_project("plan", only_empty=True)              # Vorhaben zaehlen wie Tickets (U4, V2)
+    assert repo.get_project("plan") is not None
