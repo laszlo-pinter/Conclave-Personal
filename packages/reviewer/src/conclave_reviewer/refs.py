@@ -15,6 +15,8 @@ COMMIT_REF = re.compile(r"`([0-9a-f]{7,40})`")
 BRANCH_REF = re.compile(r"Branch:\*{0,2}\s*`([A-Za-z0-9_./-]{1,100})`")
 # Form fuer mehrere Repos (P7): **Kern:** `feature-x` @ `a07cda0`
 BRANCH_AT = re.compile(r"`([A-Za-z0-9_./-]{1,100})`\s*@\s*`[0-9a-f]{7,40}`")
+# Der zu pruefende Commit in dieser Form (TR2-Review V1)
+AT_COMMIT = re.compile(r"`[A-Za-z0-9_./-]{1,100}`\s*@\s*`([0-9a-f]{7,40})`")
 GIT = ["git", "--no-pager", "-c", "core.pager=cat", "-c", "core.fsmonitor=false"]
 
 
@@ -58,6 +60,16 @@ def named_refs(detail: dict, author: str) -> tuple[list[str], list[str]]:
             branches = BRANCH_REF.findall(comment["body"]) + BRANCH_AT.findall(comment["body"])
             return hashes, list(dict.fromkeys(branches))
     return [], []
+
+
+def pinned_commits(detail: dict, author: str) -> list[str]:
+    """Die zu pruefenden Commits (Form `branch` @ `hash`) aus demselben Kommentar wie ``named_refs``."""
+    for comment in reversed(detail.get("comments", [])):
+        if comment.get("origin") != "agent" or comment.get("author_name") == author:
+            continue
+        if COMMIT_REF.findall(comment.get("body", "")):
+            return list(dict.fromkeys(AT_COMMIT.findall(comment["body"])))
+    return []
 
 
 def named_commits(detail: dict, author: str) -> tuple[list[str], str | None]:

@@ -36,11 +36,13 @@ api = ['D:\checkouts\api']
 - **Token:** the reviewer token (`cvr_`) of a service account, limited to its projects. It comes from
   the Windows Credential Manager of the service account (`cmdkey /generic:ConclaveReviewer /user:reviewer /pass`)
   or from a file only that account can read. It never appears in the settings file or on a command line.
-- **TLS:** requests to the board use only `ca_bundle` (no system store, no `SSL_CERT_FILE`), ignore proxy
-  variables and do not follow redirects. The MCP server gets the same CA.
+- **TLS:** `ca_bundle` is required. Requests to the board use only that CA (no system store, no
+  `SSL_CERT_FILE`), ignore proxy variables and do not follow redirects. The MCP server gets the same CA.
 - **MCP:** `conclave-board-mcp --reviewer` from the team package, with the same three tools as in Personal.
-- **Git:** before each review the reviewer runs `git fetch` in the checkouts. A commit named in the ticket
-  that is not on the git server gives a red review without running `claude` ("Commits nicht im Git-Server").
+- **Git:** before each review the reviewer runs `git fetch` in the checkouts. If none of the commits named
+  in the ticket is on the git server, or the commit to check (`branch` @ `hash`) is missing, the review is
+  red without running `claude` ("Commits nicht im Git-Server"). Other missing commits are only passed on
+  to `claude` as a note.
 
 ## License
 

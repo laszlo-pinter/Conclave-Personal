@@ -193,6 +193,7 @@ def test_personal_keeps_its_defaults(tmp_path):
     ({"server_url": "https://user:pw@board.intern"}, "ohne Anmeldedaten"),
     ({"server": "firma"}, "server: einer von"),
     ({"ca_bundle": "fehlt.pem"}, "gibt es nicht"),
+    ({"ca_bundle": ""}, "ca_bundle fehlt"),                             # Review V2: Pflicht im Team
     ({"reviewer_token_credential": "X"}, "nicht beides"),
     ({"conclave_url": "https://a"}, "server_url oder conclave_url"),
     ({"missing_commits": "orange"}, "missing_commits"),
@@ -271,6 +272,16 @@ def test_reviewer_talks_to_the_team_server_over_tls_with_its_ca_and_sends_a_hear
     rv.send_heartbeat()
     status = tls.call("GET", "/board/v1/reviewer")
     assert status["state"] == "active" and status["version"]
+
+
+def test_team_without_ca_bundle_is_refused_even_with_ssl_cert_file(tmp_path, tls, repos, monkeypatch):
+    """Review V2: Ohne ca_bundle gaelten SSL_CERT_FILE/SSL_CERT_DIR; im Team-Modus startet er so nicht."""
+    monkeypatch.setenv("SSL_CERT_FILE", tls.ca)
+    path = _settings(tmp_path, tls, repos.checkout)
+    path.write_text("\n".join(ln for ln in path.read_text(encoding="utf-8").splitlines()
+                              if not ln.startswith("ca_bundle")) + "\n", encoding="utf-8")
+    with pytest.raises(rc.ConfigError, match="ca_bundle fehlt"):
+        rc.load(path)
 
 
 def test_other_ca_or_system_store_is_refused_even_with_ssl_cert_file(tmp_path, tls, repos, monkeypatch):
@@ -363,6 +374,52 @@ def test_commit_missing_on_the_git_server_is_red_without_claude(tmp_path, tls, r
     assert detail["status"] == "todo"                                    # rot: zurueck zur Nacharbeit
     last = detail["comments"][-1]
     assert last["origin"] == "reviewer" and "Commits nicht im Git-Server: `abcdef1`" in last["body"]
+    for line in ("Urteil: rot", "Geprüft:", "Blockierend:", "Vorschläge:", "Erledigt aus dem letzten Review:",
+                 "Nicht geprüft:", "nicht von Laszlo freigegeben"):                 # Review V4: festes Format
+        assert line in last["body"], line
+
+
+def test_only_mentioned_old_commit_is_a_note_for_claude_not_red(tmp_path, tls, repos, monkeypatch):
+    """Review V1: Ein nur erwaehnter Commit (etwa vor einem Rebase) fehlt; der zu pruefende ist da."""
+    rv = _reviewer(tmp_path, rc.load(_settings(tmp_path, tls, repos.checkout)))
+    head = repos.push("zwei\n")
+    task = _ticket(tls, f"**Repo:** `feature` @ `{head[:7]}` · vorher `1234567` (vor dem Rebase)")
+    seen = {}
+
+    def fake_claude(key, cmd, cwd):
+        seen["ask"] = cmd[2]
+        tls.call("POST", "/board/v1/projects/api/tasks/1/review", REVIEWER,
+                 {"state": "passed", "comment": "Urteil: gruen", "blocking": 0, "suggestions": 0})
+        return "done"
+
+    monkeypatch.setattr(rv, "run_claude", fake_claude)
+    rv.prepare()
+    rv.run_review(task, "api#1", str(repos.checkout), dry_run=False)
+    assert "`1234567`" in seen["ask"]                                    # als Hinweis an claude
+    assert tls.call("GET", "/board/v1/projects/api/tasks/1")["review"]["state"] == "passed"
+
+
+def test_missing_commit_to_check_is_red_even_if_another_named_one_exists(tmp_path, tls, repos, monkeypatch):
+    """Review V1: Der zu pruefende Commit (`branch` @ `hash`) fehlt, ein anderer genannter ist da: rot."""
+    rv = _reviewer(tmp_path, rc.load(_settings(tmp_path, tls, repos.checkout)))
+    old = _git(repos.checkout, "rev-parse", "HEAD")
+    task = _ticket(tls, f"**Repo:** `feature` @ `abcdef1` · Basis `{old[:7]}`")
+    monkeypatch.setattr(rv, "run_claude", lambda *a: pytest.fail("claude darf nicht starten"))
+    rv.prepare()
+    rv.run_review(task, "api#1", str(repos.checkout), dry_run=False)
+    detail = tls.call("GET", "/board/v1/projects/api/tasks/1")
+    assert detail["review"]["state"] == "failed"
+    assert "Commits nicht im Git-Server: `abcdef1`" in detail["comments"][-1]["body"]
+    assert old[:7] not in detail["comments"][-1]["body"]
+
+
+def test_token_file_left_by_a_killed_run_is_removed_on_start(tmp_path, tls, repos):
+    """Review V3: nach einem harten Ende liegt mcp-reviewer.token noch im Datenordner."""
+    rv = _reviewer(tmp_path, rc.load(_settings(tmp_path, tls, repos.checkout)))
+    rv.data_dir.mkdir(parents=True)
+    rv.mcp_token.write_text(REVIEWER, encoding="utf-8")
+    rv.prepare()
+    assert not rv.mcp_token.exists()
 
 
 def test_personal_keeps_missing_commits_yellow_and_does_not_fetch(tmp_path, tls, repos, monkeypatch):

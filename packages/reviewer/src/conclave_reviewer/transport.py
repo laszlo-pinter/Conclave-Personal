@@ -1,7 +1,8 @@
 """HTTP zum Board: https mit eigenem CA-Buendel, ohne Proxy und ohne Umleitungen (TR2, R12).
 
 - ``ca_bundle`` (Pfad zu einer PEM-Datei) ersetzt die Zertifikate des Systems ganz: Es gilt nur die
-  CA der Firma. Ohne Angabe gilt der Zertifikatsspeicher des Systems.
+  CA der Firma, ``SSL_CERT_FILE`` und ``SSL_CERT_DIR`` wirken nicht. Ohne Angabe (nur in Personal
+  moeglich, am Team-Server Pflicht) gilt der Zertifikatsspeicher des Systems.
 - Proxy-Umgebungsvariablen (``HTTPS_PROXY`` usw.) gelten nicht, Umleitungen werden nicht verfolgt:
   Das Reviewer-Token geht nur an den eingetragenen Server.
 - http nur fuer einen Server auf diesem Rechner (127.0.0.1, ::1, localhost), sonst https.

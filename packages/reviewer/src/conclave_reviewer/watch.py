@@ -37,11 +37,13 @@ from conclave_reviewer import command, refs, transport, worktrees
 from conclave_reviewer.command import BOARDS
 
 LOG_LIMIT = 1_000_000
+# Festes Review-Format wie im Prompt (Urteil, Geprueft, Blockierend, Vorschlaege, Erledigt, Nicht geprueft)
 MISSING_ON_SERVER = (
     "Urteil: rot\nGeprüft: –\nBlockierend:\n- B1 Commits nicht im Git-Server: {hashes}. Auf dem Server prüft "
     "der Reviewer nur, was gepusht ist. Bitte den Branch pushen (oder den Commit im Kommentar berichtigen) und "
-    "das Ticket erneut nach review schieben.\nVorschläge:\n- keine\n"
-    "— automatisches Review (Reviewer, ohne claude: Commits fehlen)")
+    "das Ticket erneut nach review schieben.\nVorschläge:\n- keine\nErledigt aus dem letzten Review: –\n"
+    "Nicht geprüft:\n- der Code: Ohne die Commits im Git-Server gibt es keinen Stand zum Prüfen.\n"
+    "— automatisches Review (Reviewer, ohne claude: Commits fehlen), nicht von Laszlo freigegeben")
 
 
 def load_config(path: Path) -> dict:
@@ -82,6 +84,8 @@ class Reviewer:
         from conclave_board.runtime.file_security import make_private_dirs, restrict
         make_private_dirs(self.data_dir)
         restrict(self.data_dir, directory=True)
+        # Token-Datei fuer den MCP-Server, die ein hart beendeter Lauf liegen liess (TR2-Review V3)
+        self.mcp_token.unlink(missing_ok=True)
 
     @staticmethod
     def _private_file(path: Path) -> None:
@@ -249,7 +253,11 @@ class Reviewer:
             for r in repos:                             # Team-Server: nur der Stand im Git-Server zaehlt (TR2)
                 refs.fetch(r)
         if hashes and self.cfg.get("missing_commits") == "red":
-            absent = [h for h in dict.fromkeys(hashes) if not any(refs.exists(r, h) for r in repos)]
+            # Rot nur, wenn keiner der genannten Commits da ist oder ein zu pruefender (`branch` @ `hash`)
+            # fehlt; ein nur erwaehnter alter Commit geht wie bisher als Hinweis an claude (Review V1).
+            known = {h: any(refs.exists(r, h) for r in repos) for h in dict.fromkeys(hashes)}
+            pinned = refs.pinned_commits(detail, self.cfg["author"])
+            absent = list(known) if not any(known.values()) else [h for h in pinned if not known.get(h, True)]
             if absent:
                 self.log(f"{key}: commits not on the git server: {', '.join(absent)}; red without claude")
                 if not dry_run:

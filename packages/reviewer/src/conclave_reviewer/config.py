@@ -31,7 +31,8 @@ Team-Server (TR2): eine eigene Datei, z. B. ``C:\\ProgramData\\Conclave\\reviewe
     [reviewer.projects]
     api = ['D:\\checkouts\\api']
 
-Mit ``server = "team"`` gelten: MCP-Server ``conclave-board-mcp --reviewer`` (mit ``CONCLAVE_BOARD_URL``,
+Mit ``server = "team"`` ist ``ca_bundle`` Pflicht (nur diese CA gilt, keine Umgebungsvariablen), und es
+gelten: MCP-Server ``conclave-board-mcp --reviewer`` (mit ``CONCLAVE_BOARD_URL``,
 ``CONCLAVE_BOARD_CA_BUNDLE``, ``CONCLAVE_BOARD_TOKEN_FILE``), ``fetch = true`` (vor jedem Review
 ``git fetch`` in den Checkouts) und ``missing_commits = "red"`` (genannte Commits, die es im Git-Server
 nicht gibt, ergeben ein rotes Review ohne claude). Relative Pfade gelten relativ zu dieser Datei.
@@ -131,6 +132,10 @@ def _server_settings(cfg: dict, section: dict, path: Path) -> None:
     if server == "team":
         if not cfg.get("conclave_url"):
             raise ConfigError("[reviewer] server_url fehlt (z. B. https://board.intern).")
+        if not cfg.get("ca_bundle"):
+            # Ohne eigenes Buendel laedt Python die Standardorte, und dann gelten SSL_CERT_FILE und
+            # SSL_CERT_DIR (R12, TR2-Review V2); die interne CA der Firma steht ohnehin nur im Buendel.
+            raise ConfigError("[reviewer] ca_bundle fehlt: die CA der Firma als PEM-Datei (z. B. firmen-ca.pem).")
         if not (section.get("reviewer_token_file") or credential):
             raise ConfigError("[reviewer]: reviewer_token_credential oder reviewer_token_file angeben; das Token "
                               "selbst steht nie in dieser Datei.")
