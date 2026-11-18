@@ -12,11 +12,11 @@ stattdessen (siehe conftest.py).
 """
 
 import json
+from pathlib import Path
 
 import pytest
 
 from conclave.runtime.assets import get_asset_root
-
 
 ASSET_ROOT = get_asset_root()
 
@@ -45,10 +45,18 @@ SAFE_MARKDOWN = (
 )
 
 
-def _harness_html() -> str:
+# U1: dieselben Payloads gegen utils.js (Studio) und board-markdown.js (Board-Seite aus dem Kern)
+MARKDOWN_SCRIPTS = {
+    "studio": ASSET_ROOT / "static" / "js" / "utils.js",
+    "board-page": Path(__file__).resolve().parents[2] / "packages" / "board" / "src" / "conclave_board" / "ui"
+                  / "static" / "board-markdown.js",
+}
+
+
+def _harness_html(script: Path = MARKDOWN_SCRIPTS["studio"]) -> str:
     # Skripte per src laden wie in der echten UI (DOMPurify laesst sich nicht inline einbetten)
     purify = (ASSET_ROOT / "static" / "vendor" / "purify.min.js").as_uri()
-    utils = (ASSET_ROOT / "static" / "js" / "utils.js").as_uri()
+    utils = script.as_uri()
     # "</" escapen, damit "</script>" in den Payloads den Skriptblock nicht beendet
     payloads = json.dumps(PAYLOADS + [SAFE_MARKDOWN]).replace("</", "<\\/")
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
@@ -87,10 +95,10 @@ EVALUATE = """() => {
 }"""
 
 
-@pytest.fixture(scope="module")
-def rendered(chromium, tmp_path_factory):
+@pytest.fixture(scope="module", params=sorted(MARKDOWN_SCRIPTS))
+def rendered(chromium, tmp_path_factory, request):
     harness = tmp_path_factory.mktemp("xss") / "harness.html"
-    harness.write_text(_harness_html(), encoding="utf-8")
+    harness.write_text(_harness_html(MARKDOWN_SCRIPTS[request.param]), encoding="utf-8")
     page = chromium.new_page()
     try:
         page.goto(harness.as_uri())

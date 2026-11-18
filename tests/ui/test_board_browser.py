@@ -11,6 +11,8 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+from tests.ui.conftest import goto_board, reload_board  # noqa: F401
+
 HUMAN = "cvh_mensch-token"
 AGENT = "cva_agent-token"
 EVIL = """## Abnahme
@@ -24,7 +26,7 @@ EVIL = """## Abnahme
 
 
 @pytest.fixture
-def board_server(tmp_path, monkeypatch):
+def board_server(tmp_path, monkeypatch, board_surface):
     from werkzeug.serving import make_server
 
     from conclave.api.server import _build_app
@@ -44,7 +46,7 @@ def board_server(tmp_path, monkeypatch):
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     url = f"http://127.0.0.1:{server.server_port}"
-    api = SimpleNamespace(url=url, human=httpx.Client(base_url=url, headers={"Authorization": f"Bearer {HUMAN}"}),
+    api = SimpleNamespace(surface=board_surface, url=url, human=httpx.Client(base_url=url, headers={"Authorization": f"Bearer {HUMAN}"}),
                           agent=httpx.Client(base_url=url, headers={"Authorization": f"Bearer {AGENT}"}))
     assert api.human.post("/board/projects", json={"slug": "api", "name": "API"}).status_code == 201
     try:
@@ -75,8 +77,7 @@ def _open_board(chromium, server):
                          "e=>window.__csp.push(e.violatedDirective+' '+e.sourceFile));")
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
-    page.goto(f"{server.url}/#token={HUMAN}")
-    page.click("[data-action='switch-tab'][data-tab='board']")
+    goto_board(page, server, HUMAN)
     page.locator("#boardColumns .board-col").first.wait_for(timeout=10000)
     return page, errors
 

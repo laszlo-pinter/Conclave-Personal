@@ -11,7 +11,13 @@ Fensters ist ueber ``window.__focus`` steuerbar, die Uhr ueber ``page.clock``.
 
 import pytest
 
-from tests.ui.test_board_review_browser import HUMAN, _review, _ticket_in_review, board_server  # noqa: F401
+from tests.ui.conftest import goto_board, reload_board  # noqa: F401
+from tests.ui.test_board_review_browser import (  # noqa: F401
+    HUMAN,
+    _review,
+    _ticket_in_review,
+    board_server,
+)
 
 FAKE_NOTIFICATION = """
 window.__notes = [];
@@ -41,8 +47,7 @@ def _open(chromium, server, scheme="dark"):
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.clock.install()
-    page.goto(f"{server.url}/#token={HUMAN}")
-    page.click("[data-action='switch-tab'][data-tab='board']")
+    goto_board(page, server, HUMAN)
     page.locator("#boardColumns .board-col").first.wait_for(timeout=10000)
     return context, page, errors
 
@@ -90,8 +95,7 @@ def test_result_is_notified_once_and_only_when_enabled(chromium, board_server, s
         _tick(page)
         assert len(_notes(page)) == 1                                     # genau einmal
 
-        page.reload()
-        page.click("[data-action='switch-tab'][data-tab='board']")      # angemeldet: Board laedt
+        reload_board(page, board_server)
         page.locator("#boardColumns .board-col").first.wait_for(timeout=10000)
         _tick(page)
         assert _notes(page) == []                                         # auch nach dem Neuladen nicht erneut

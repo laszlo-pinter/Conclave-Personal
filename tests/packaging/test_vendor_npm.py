@@ -80,3 +80,17 @@ def test_unlisted_vendor_file_fails(tmp_path):
     tarballs = _tarballs(vendor)
     found = check_vendor.problems(tarballs.__getitem__, vendor=vendor, integrity=_integrity(tarballs))
     assert found == ["neu.min.js: keine Quelle eingetragen"]
+
+
+def test_core_board_page_ships_only_listed_files():
+    """U1: Die Board-Seite im Kern bringt marked, DOMPurify und die Schriften mit, mit Lizenzen."""
+    vendor = check_vendor.KERN_VENDOR
+    shipped = {p.relative_to(vendor).as_posix() for p in vendor.rglob("*") if p.is_file()}
+    assert shipped == set(check_vendor.KERN_SOURCES) | check_vendor.OWN
+
+
+def test_core_board_page_files_pass_the_npm_check():
+    tarballs = _tarballs(check_vendor.VENDOR)
+    found = check_vendor.problems(tarballs.__getitem__, vendor=check_vendor.KERN_VENDOR,
+                                  integrity=_integrity(tarballs), sources=check_vendor.KERN_SOURCES, own=check_vendor.OWN)
+    assert found == []

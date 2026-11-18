@@ -115,3 +115,12 @@ where = ["src", "packages/board/src"]
     "assets/scripts/linux/*",
     "reviewer/reviewer-prompt-conclave.md",
 ]
+# Board-Oberflaeche aus dem Board-Kern (U1)
+"conclave_board" = [
+    "ui/board.html",
+    "ui/static/*.js",
+    "ui/static/*.css",
+    "ui/static/vendor/*.js",
+    "ui/static/vendor/fonts/*",
+    "ui/static/vendor/licenses/*",
+]

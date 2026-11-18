@@ -65,3 +65,30 @@ def live_server(tmp_path_factory):
         finally:
             server.shutdown()
             thread.join(timeout=5)
+
+
+# U1 (conclave#110): Die Board-Tests laufen gegen den Board-Reiter des Studios und gegen die
+# eigenstaendige Board-Seite aus dem Kern; beide nutzen dieselbe Ansicht (board.js).
+BOARD_SURFACES = ["studio", "page"]
+BOARD_TAB = "[data-action='switch-tab'][data-tab='board']"
+
+
+@pytest.fixture(params=BOARD_SURFACES)
+def board_surface(request):
+    return request.param
+
+
+def goto_board(page, server, token):
+    """Board oeffnen und mit ``token`` anmelden (Token im Fragment, wie bei ``conclave desktop``)."""
+    if server.surface == "page":
+        page.goto(f"{server.url}/ui/board#token={token}")
+    else:
+        page.goto(f"{server.url}/#token={token}")
+        page.click(BOARD_TAB)
+
+
+def reload_board(page, server):
+    """Neu laden; angemeldet bleibt der Tab (sessionStorage)."""
+    page.reload()
+    if server.surface != "page":
+        page.click(BOARD_TAB)

@@ -16,6 +16,20 @@
     }
   ],
   "paths": {
+    "/ui/board": {
+      "get": {
+        "summary": "Board-Seite (HTML, ohne Daten; die Daten laedt sie ueber /board/v1).",
+        "tags": [
+          "ui"
+        ],
+        "operationId": "board_page",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "summary": "Serve Ui",

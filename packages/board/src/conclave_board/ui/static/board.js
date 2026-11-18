@@ -1,7 +1,15 @@
-// static/js/features/board.js — Board: Spalten, Karten, Ticketansicht, Live-Refresh (B5)
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Laszlo Pinter
+//
+// board.js — Board: Spalten, Karten, Ticketansicht, Live-Refresh (B5)
 //
 // Werte aus der API kommen nur per textContent ins DOM; Beschreibung und Kommentare
 // laufen ueber renderMarkdown() (DOMPurify).
+//
+// Dieselbe Datei laeuft auf der Board-Seite (board.html mit board-page.js) und im Board-Reiter des
+// Studios von Conclave Personal (U1). Seite bzw. Studio stellen bereit: t(), getLanguage(), req(),
+// whoami(), toast(), renderMarkdown(), openOverlay() und closeOverlay(). Angesprochen werden nur
+// /board/v1 und (ueber whoami) /auth/whoami.
 
 let _board = {statuses: [], projects: [], tasks: [], changes: null, open: null, query: '',
               control: {pauses: [], hints: []}, role: '', approvalsOnly: false, stuck: ''};
@@ -288,7 +296,7 @@ async function openBoardTask(ref) {
   document.getElementById('boardTaskRef').textContent = ref;
   ['boardTaskTitle', 'boardTaskReview', 'boardTaskTags', 'boardTaskComments', 'boardTaskHistory']
     .forEach(id => document.getElementById(id).replaceChildren());
-  document.getElementById('boardTaskDesc').replaceChildren(_boardEl('div', 'surface-empty', t('common.loading')));
+  document.getElementById('boardTaskDesc').replaceChildren(_boardEl('div', 'surface-empty', t('board.loading')));
   openOverlay('overlayBoardTask');
   await _renderOpenTask();
 }
@@ -503,8 +511,14 @@ async function _refreshBoard() {
   }
 }
 
+// Auf der Board-Seite ist das Board immer sichtbar, im Studio nur im Reiter "Board"
 function _boardActive() {
+  if (document.body.classList.contains('board-standalone')) return true;
   return document.querySelector('.sb-tab.active')?.dataset.tab === 'board';
+}
+
+function _showBoard() {
+  if (typeof switchTab === 'function') switchTab('board');
 }
 
 function _startBoardPolling() {
@@ -612,7 +626,7 @@ async function checkBoardNotifications() {
     const note = new Notification(title, {body, tag: 'conclave-review-' + task.ref});
     note.onclick = () => {
       window.focus();
-      switchTab('board');
+      _showBoard();
       openBoardTask(task.ref);
       note.close();
     };
@@ -658,7 +672,7 @@ async function checkReviewerOff() {
   if (document.visibilityState === 'visible' && document.hasFocus()) return;
   const note = new Notification(t('board.notify.reviewerOffTitle'),
                                 {body: t('board.notify.reviewerOffBody', {n: waiting.length}), tag: 'conclave-reviewer-off'});
-  note.onclick = () => { window.focus(); switchTab('board'); note.close(); };
+  note.onclick = () => { window.focus(); _showBoard(); note.close(); };
 }
 
 function startBoardNotifications() {
@@ -668,4 +682,30 @@ function startBoardNotifications() {
     checkBoardNotifications().catch(() => { /* naechster Versuch */ });
     checkReviewerOff().catch(() => { /* naechster Versuch */ });
   }, NOTIFY_POLL_MS);
+}
+
+// ── Bedienung: data-action und Felder, fuer Board-Seite und Studio gleich ──
+
+const BOARD_ACTIONS = {
+  'board-new':           () => openBoardNew(),
+  'board-pause':         () => pauseBoardAgents(),
+  'board-notify':        () => toggleBoardNotify(),
+  'board-approvals':     () => toggleBoardApprovals(),
+  'board-close-control': (el) => closeBoardControl(el.dataset.ref),
+  'board-create':        () => createBoardTask(),
+  'board-open-task':     (el) => openBoardTask(el.dataset.ref),
+  'board-close-task':    () => closeBoardTask(),
+  'board-comment':       () => addBoardComment(),
+};
+
+function bindBoardEvents() {
+  const on = (id, event, handler) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(event, handler);
+  };
+  on('boardProject', 'change', onBoardFilter);
+  on('boardShowDone', 'change', onBoardFilter);
+  on('boardSearch', 'input', onBoardSearch);
+  on('boardTaskStatus', 'change', () => saveBoardTaskField('status'));
+  on('boardTaskHuman', 'change', () => saveBoardTaskField('human'));
 }

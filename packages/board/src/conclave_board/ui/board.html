@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 Laszlo Pinter -->
+<!-- Eigenstaendige Board-Seite (U1). Kein Inline-Skript, kein Inline-Style; die Board-Ansicht
+     (board.js) ist dieselbe wie im Studio von Conclave Personal. -->
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conclave Board</title>
+<link rel="stylesheet" href="static/vendor/fonts/fonts.css">
+<link rel="stylesheet" href="static/theme.css">
+<link rel="stylesheet" href="static/board-page.css">
+<link rel="stylesheet" href="static/board.css">
+</head>
+<body class="board-standalone">
+
+<header class="board-topbar">
+  <div class="board-topbar-title" data-i18n="board.page.title">Conclave Board</div>
+  <select id="boardPageLang" data-i18n-title="board.page.language">
+    <option value="de">Deutsch</option>
+    <option value="en">English</option>
+  </select>
+  <select id="boardPageTheme" data-i18n-title="board.page.theme">
+    <option value="system" data-i18n="board.page.themeSystem">System</option>
+    <option value="light" data-i18n="board.page.themeLight">Hell</option>
+    <option value="dark" data-i18n="board.page.themeDark">Dunkel</option>
+  </select>
+  <button class="btn-full secondary page-action" id="boardPageLogin" data-action="board-login">Anmelden</button>
+</header>
+
+<main class="board-standalone-main" id="boardMain">
+  <div class="workspace-page board-page">
+    <div class="page-head">
+      <div>
+        <h2>Board</h2>
+        <p data-i18n="board.subtitle">Arbeitspakete fuer Menschen und Agenten.</p>
+      </div>
+      <div class="page-actions">
+        <select id="boardProject" class="board-input" data-i18n-title="board.project"></select>
+        <input type="search" id="boardSearch" class="board-input" data-i18n-placeholder="board.search" placeholder="Suchen..."/>
+        <button class="btn-full page-action" data-action="board-new" data-i18n="board.new">Neues Ticket</button>
+        <button class="btn-full secondary page-action board-approvals" id="boardApprovals" data-action="board-approvals" aria-pressed="false" hidden></button>
+        <span class="board-reviewer" id="boardReviewer" role="status" hidden></span>
+        <button class="btn-full secondary page-action board-notify" id="boardNotify" data-action="board-notify" aria-pressed="false" hidden>Benachrichtigen: aus</button>
+        <button class="btn-full secondary page-action board-pause-btn" data-action="board-pause" data-i18n="board.pauseAgents">Agenten pausieren</button>
+      </div>
+    </div>
+    <div class="board-view">
+      <span class="workbench-title" data-i18n="board.view">Ansicht</span>
+      <label class="board-check"><input type="checkbox" id="boardShowDone"/> <span data-i18n="board.showDone">Erledigte zeigen</span></label>
+      <div class="surface-info" data-i18n="board.hint">Karten per Drag &amp; Drop verschieben. Das Board aktualisiert sich selbst.</div>
+    </div>
+    <div class="board-control" id="boardControl" role="status" aria-live="polite" hidden></div>
+    <div class="board-columns" id="boardColumns"><div class="surface-empty" data-i18n="board.loading">Lade...</div></div>
+  </div>
+</main>
+
+<div class="overlay" id="overlayBoardNew">
+  <div class="modal">
+    <div class="modal-title" data-i18n="board.new">Neues Ticket</div>
+    <div class="field">
+      <label data-i18n="board.project">Projekt</label>
+      <select id="boardNewProject"></select>
+    </div>
+    <div class="field">
+      <label data-i18n="board.title">Titel</label>
+      <input type="text" id="boardNewTitle"/>
+    </div>
+    <div class="field">
+      <label data-i18n="board.description">Beschreibung (Markdown)</label>
+      <textarea id="boardNewDesc"></textarea>
+    </div>
+    <div class="field">
+      <label data-i18n="board.tags">Tags (mit Komma getrennt)</label>
+      <input type="text" id="boardNewTags"/>
+    </div>
+    <label class="board-check"><input type="checkbox" id="boardNewHuman"/> <span data-i18n="board.humanOnly">Nur fuer Menschen</span></label>
+    <div class="modal-acts">
+      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayBoardNew" data-i18n="board.cancel">Abbrechen</button>
+      <button class="btn-confirm" data-action="board-create" data-i18n="board.create">Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlayBoardTask">
+  <div class="modal board-task-modal">
+    <div class="modal-title"><span class="board-ref" id="boardTaskRef"></span> <span id="boardTaskTitle"></span></div>
+    <div class="board-task-review" id="boardTaskReview"></div>
+    <div class="board-task-meta">
+      <select id="boardTaskStatus" class="board-input" data-i18n-title="board.status"></select>
+      <label class="board-check"><input type="checkbox" id="boardTaskHuman"/> <span data-i18n="board.humanOnly">Nur fuer Menschen</span></label>
+      <div class="board-tags" id="boardTaskTags"></div>
+    </div>
+    <div class="board-task-desc msg-content" id="boardTaskDesc"></div>
+    <div class="workbench-title" data-i18n="board.comments">Kommentare</div>
+    <div id="boardTaskComments"></div>
+    <div class="field board-comment-new">
+      <textarea id="boardCommentBody" data-i18n-placeholder="board.commentPlaceholder" placeholder="Kommentar (Markdown)"></textarea>
+    </div>
+    <div class="workbench-title" data-i18n="board.history">Verlauf</div>
+    <div id="boardTaskHistory"></div>
+    <div class="modal-acts">
+      <button class="btn-cancel" data-action="board-close-task" data-i18n="board.close">Schliessen</button>
+      <button class="btn-confirm" data-action="board-comment" data-i18n="board.addComment">Kommentieren</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlayBoardLogin">
+  <div class="modal">
+    <div class="modal-title" data-i18n="board.page.loginTitle">Am Board anmelden</div>
+    <div class="field">
+      <label for="boardLoginToken" data-i18n="board.page.token">Token</label>
+      <input type="password" id="boardLoginToken" autocomplete="off"/>
+    </div>
+    <div class="surface-info" data-i18n="board.page.loginHint"></div>
+    <div class="modal-acts">
+      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayBoardLogin" data-i18n="board.cancel">Abbrechen</button>
+      <button class="btn-confirm" data-action="board-login-submit" data-i18n="board.page.login">Anmelden</button>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="static/vendor/marked.min.js"></script>
+<script src="static/vendor/purify.min.js"></script>
+<script src="static/board-i18n.js"></script>
+<script src="static/board-markdown.js"></script>
+<script src="static/board-page.js"></script>
+<script src="static/board.js"></script>
+</body>
+</html>

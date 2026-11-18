@@ -68,15 +68,7 @@ const _actions = {
   'ws-viewer-mode':      () => toggleWorkspaceViewerMode(),
   'ws-viewer-insert':    () => insertViewerRef(),
   'ws-viewer-close':     () => closeWorkspaceViewer(),
-  'board-new':           () => openBoardNew(),
-  'board-pause':         () => pauseBoardAgents(),
-  'board-notify':        () => toggleBoardNotify(),
-  'board-approvals':     () => toggleBoardApprovals(),
-  'board-close-control': (el) => closeBoardControl(el.dataset.ref),
-  'board-create':        () => createBoardTask(),
-  'board-open-task':     (el) => openBoardTask(el.dataset.ref),
-  'board-close-task':    () => closeBoardTask(),
-  'board-comment':       () => addBoardComment(),
+  ...BOARD_ACTIONS,                // Board-Ansicht aus dem Board-Kern (board.js, U1)
   'export-conv':         () => exportConv(),
   'open-key-modal':      () => openKeyModal(),
   'save-key':            () => saveKey(),
@@ -117,11 +109,7 @@ function _bindStaticUiEvents() {
   ;['aId','aName','aTopic'].forEach(id => on(id, 'input', updatePrompt))
   on('aPreset', 'change', onPresetChange)
   on('aApiUrl', 'input', updateApiUrlHint)
-  on('boardProject', 'change', onBoardFilter)
-  on('boardShowDone', 'change', onBoardFilter)
-  on('boardSearch', 'input', onBoardSearch)
-  on('boardTaskStatus', 'change', () => saveBoardTaskField('status'))
-  on('boardTaskHuman', 'change', () => saveBoardTaskField('human'))
+  bindBoardEvents()
   on('aSysPrompt', 'input', onSysEdit)
 }
 

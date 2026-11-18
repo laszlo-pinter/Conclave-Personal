@@ -89,3 +89,14 @@ def test_api_docs_uses_local_swagger_without_inline_script(client):
     assert "/static/vendor/swagger-ui/swagger-ui-bundle.js" in html
     assert "/static/js/swagger-init.js" in html
     assert "<script>" not in html
+
+
+@pytest.mark.parametrize("path", ["/ui/board", "/ui/board/static/board.js", "/ui/board/static/board.css"])
+def test_board_page_has_the_same_headers(client, path):
+    """U1: Board-Seite aus dem Kern mit derselben CSP wie das Studio."""
+    from conclave.api.app import CONTENT_SECURITY_POLICY
+    resp = client.get(path)
+    assert resp.status_code == 200
+    assert resp.headers["Content-Security-Policy"] == CONTENT_SECURITY_POLICY
+    assert resp.headers["X-Content-Type-Options"] == "nosniff"
+    assert resp.headers["X-Frame-Options"] == "DENY"

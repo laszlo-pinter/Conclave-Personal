@@ -2,8 +2,8 @@
 
 - ``conclave_board`` importiert nichts aus ``conclave`` (auch nicht in Funktionen).
 - Jede Datei traegt den Apache-2.0-Kopf.
-- Im Paket liegen nur Python-Dateien, keine UI und keine Module fuer Provider,
-  Workspace, Consultations oder Conversations.
+- Im Paket liegen ausser Python nur die Board-Oberflaeche unter ``ui/`` (U1), keine Module fuer
+  Provider, Workspace, Consultations oder Conversations.
 
 Dieselbe Grenze prueft ``lint-imports`` (Vertrag in pyproject.toml) in der CI.
 """
@@ -61,9 +61,10 @@ def test_every_board_file_has_the_apache_header():
 
 
 def test_board_package_contains_only_board_modules():
+    """Ausser Python nur die Board-Oberflaeche unter ``ui/`` (U1), die eine Host-App einbinden muss."""
     others = [p.relative_to(BOARD).as_posix() for p in BOARD.rglob("*")
               if p.is_file() and p.suffix != ".py" and "__pycache__" not in p.parts]
-    assert others == []                                       # keine static/, keine UI-Dateien
+    assert others and all(n == "ui/board.html" or n.startswith("ui/static/") for n in others), others
     names = [p.relative_to(BOARD).as_posix() for p in _files()]
     assert [n for n in names if any(word in n.lower() for word in FORBIDDEN_NAMES)] == []
 

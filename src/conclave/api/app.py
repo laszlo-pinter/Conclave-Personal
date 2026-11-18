@@ -46,6 +46,7 @@ from conclave.api.access import HUMAN_ONLY_ERROR, agent_may, reviewer_may
 from conclave.application.consultations import ConsultationRequestError
 from conclave.application.agent_limits import AgentLimitExceeded, AgentRunGate
 from conclave_board.api.routes import register_board_api
+from conclave_board.ui import register_board_ui
 from conclave_board.api.versions import VERSIONS_PATH, board_versions
 from conclave_board.api.security import (  # noqa: F401  (alte Namen bleiben hier erreichbar)
     BOARD_IMPORT_MAX_BYTES,
@@ -110,6 +111,8 @@ CONTENT_SECURITY_POLICY = "; ".join([
 PERMISSIONS_POLICY = "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
 
 # Ohne Token erreichbar (B12): UI-Seite, statische Dateien, Healthcheck, API-Doku.
+# Dazu die Board-Seite unter BOARD_UI_PREFIX mit ihren statischen Dateien (U1, ohne Daten).
+BOARD_UI_PREFIX = "/ui/board"
 PUBLIC_GET_PATHS = frozenset({"/", "/health", "/api-docs", "/openapi.json", VERSIONS_PATH})
 
 # Groessen, CLIENT_HEADER und Host-Allowlist (B2) kommen aus conclave_board.api.security (T1).
@@ -242,6 +245,7 @@ def create_app(handler: CLIHandler, auth_service=None,
             return
         if request.method in ("GET", "HEAD") and (
             request.path in PUBLIC_GET_PATHS or request.path.startswith("/static/")
+            or request.path == BOARD_UI_PREFIX or request.path.startswith(BOARD_UI_PREFIX + "/static/")
         ):
             return
         token = None
@@ -373,6 +377,9 @@ def create_app(handler: CLIHandler, auth_service=None,
             }))
         except Exception:
             pass
+
+    # Board-Seite aus dem Board-Kern (U1); der Board-Reiter des Studios laedt dieselben Dateien
+    register_board_ui(app, BOARD_UI_PREFIX)
 
     @app.get("/")
     def serve_ui():

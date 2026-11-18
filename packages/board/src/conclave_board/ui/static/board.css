@@ -1,0 +1,76 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright 2026 Laszlo Pinter */
+/* board.css — Board-Ansicht fuer Board-Seite und Studio (U1). Farben nur als Variablen aus theme.css. */
+
+/* Board (B5) */
+.board-page{max-width:none}
+.board-input{background:var(--bg-3);border:1px solid var(--border-mid);border-radius:var(--r);padding:7px 10px;color:var(--text);font-family:var(--font-ui);font-size:12px;outline:none}
+.board-input:focus{border-color:var(--accent)}
+.board-check{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);margin:6px 0;cursor:pointer}
+.board-columns{display:flex;gap:12px;overflow-x:auto;align-items:flex-start;padding-bottom:8px}
+.board-col{flex:1 0 220px;max-width:340px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r2);padding:10px;min-height:160px;transition:border-color var(--tr)}
+.board-col.drop{border-color:var(--accent)}
+.board-col-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--text-faint)}
+.board-col-count{background:var(--bg-4);border-radius:8px;padding:1px 7px}
+.board-col-list{display:flex;flex-direction:column;gap:6px;min-height:40px}
+.board-card{background:var(--bg-3);border:1px solid var(--border-mid);border-radius:var(--r);padding:8px 10px;cursor:grab;transition:border-color var(--tr)}
+.board-card:hover{border-color:var(--border-strong)}
+.board-card.dragging{opacity:.5}
+.board-card.human{border-left:3px solid var(--floor-color)}
+.board-card-top{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.board-ref{font-family:var(--font-mono);font-size:10px;color:var(--accent)}
+.board-initiative{font-family:var(--font-mono);font-size:10px;color:var(--text-dim)}
+/* Review-Status (P4): Symbol und Text neben der Farbe; Farben mit Kontrast >= 4.5:1 auf den Karten */
+.board-review{display:inline-flex;align-items:center;gap:5px;margin-top:6px;padding:1px 8px;border-radius:8px;font-size:11px;line-height:1.6;border:1px solid var(--border-strong);background:var(--bg-2);color:var(--text-dim)}
+.board-review-symbol{font-size:10px}
+.board-review-symbol.pulse{animation:pulse 1.4s ease-in-out infinite}
+.board-review[data-state="passed"]{color:var(--accent);border-color:var(--accent-glow);background:var(--bg-2)}
+.board-review[data-state="rework"]{color:var(--floor-color);border-color:var(--floor-border);background:var(--bg-2)}
+.board-review[data-state="failed"]{color:var(--danger-text);border-color:var(--danger-line);background:var(--bg-2)}
+.board-review[data-state="stuck"]{color:var(--text-dim);border-style:dashed;background:var(--bg-2)}
+.board-task-review:empty{display:none}
+.board-task-review{margin:2px 0 8px}
+.board-approvals.active{border-color:var(--accent);color:var(--accent)}
+.board-approvals[hidden]{display:none}          /* .btn-full setzt display */
+.board-human{font-family:var(--font-mono);font-size:9px;padding:1px 6px;border-radius:8px;background:var(--floor-bg);color:var(--floor-color);border:1px solid var(--floor-border)}
+.board-card-title{font-size:13px;line-height:1.4;word-break:break-word}
+.board-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.board-tag{font-family:var(--font-mono);font-size:9px;padding:1px 6px;border-radius:8px;background:var(--purple-bg);color:var(--purple)}
+.board-error{color:var(--danger)}
+.board-task-modal{width:760px}
+.board-task-meta{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px}
+.board-task-meta .board-tags{margin-top:0}
+.board-task-desc{padding:12px 14px;border:1px solid var(--border-mid);border-radius:8px;background:var(--bg-3);margin-bottom:16px}
+.board-comment{border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;margin-bottom:6px;background:var(--bg-3)}
+.board-comment-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.board-origin{font-family:var(--font-mono);font-size:9px;padding:1px 6px;border-radius:8px;border:1px solid var(--border-mid);color:var(--text-dim)}
+.board-origin.origin-human{color:var(--accent);border-color:var(--accent-glow)}
+.board-origin.origin-agent{color:var(--purple);border-color:var(--purple-bg)}
+.board-origin.origin-system{color:var(--floor-color);border-color:var(--floor-border)}
+.board-author{font-size:11px;color:var(--text-dim)}
+.board-time{font-size:10px;color:var(--text-faint)}
+.board-comment-body{font-size:13px}
+.board-comment-new{margin-top:8px}
+.board-event{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;font-size:11px;padding:4px 0;border-bottom:1px solid var(--border)}
+.board-event-field{color:var(--text-dim)}
+.board-event-change{color:var(--text);word-break:break-word}
+.board-event-details{width:100%}
+.board-event-details pre{white-space:pre-wrap;word-break:break-word;font-family:var(--font-mono);font-size:11px;background:var(--bg-3);padding:6px 8px;border-radius:var(--r);margin:4px 0}
+
+/* Steuertickets (P6): Anweisungen des Menschen ueber den Spalten; Farbe nie allein, immer mit Text */
+.board-control{border:1px solid var(--floor-border);background:var(--floor-bg);color:var(--text);border-radius:var(--r2);padding:10px 12px;margin-bottom:12px;display:flex;flex-direction:column;gap:8px}
+.board-control[hidden]{display:none}
+.board-control.paused{border-color:var(--danger);background:var(--danger-bg)}
+.board-control-head{font-family:var(--font-hd);font-size:13px;font-weight:600}
+.board-control-item{display:grid;grid-template-columns:auto auto auto 1fr auto;align-items:start;gap:8px;font-size:13px}
+.board-control-kind{font-family:var(--font-mono);font-size:10px;padding:1px 8px;border-radius:8px;border:1px solid currentColor;font-weight:600}
+.board-control-item.pause .board-control-kind{color:var(--danger)}
+.board-control-item.hint .board-control-kind{color:var(--floor-color)}
+.board-control-scope{font-size:11px;color:var(--text-dim)}
+.board-control-reason{font-weight:600;word-break:break-word}
+.board-control-text{color:var(--text-dim);white-space:pre-wrap;word-break:break-word}
+.board-control-ack{font-size:11px;color:var(--text-faint)}
+.btn-full.secondary.board-pause-btn{border-color:var(--danger);color:var(--danger)}
+.board-reviewer{display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:8px;font-size:12px;border:1px solid var(--border-strong);background:var(--bg-2);color:var(--text-dim);align-self:center}
+.board-reviewer[data-state="active"]{color:var(--accent);border-color:var(--accent-glow)}
+.board-reviewer[data-state="off"]{color:var(--danger-text);border-color:var(--danger-line)}

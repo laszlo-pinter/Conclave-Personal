@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "conclave-board"
 # Gleicher Stand wie conclave-personal (Release im Gleichschritt, tests/packaging prueft das)
 version = "0.8.0"
-description = "Board server for teams: tickets, review and priority over REST, without a user interface."
+description = "Board server for teams: tickets, review and priority over REST, with an optional board page for host apps."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
@@ -44,3 +44,14 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# Board-Oberflaeche (U1): nur Ressourcen, ausgeliefert nur, wenn eine Host-App sie einbindet
+[tool.setuptools.package-data]
+"conclave_board" = [
+    "ui/board.html",
+    "ui/static/*.js",
+    "ui/static/*.css",
+    "ui/static/vendor/*.js",
+    "ui/static/vendor/fonts/*",
+    "ui/static/vendor/licenses/*",
+]

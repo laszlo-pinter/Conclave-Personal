@@ -54,6 +54,12 @@ SOURCES = {
 # Eigener Code, nicht aus npm
 OWN = {"fonts/fonts.css"}
 
+# Board-Seite im Board-Kern (U1): marked, DOMPurify und die Schriften, dieselben Versionen
+KERN_VENDOR = ROOT / "packages" / "board" / "src" / "conclave_board" / "ui" / "static" / "vendor"
+KERN_SOURCES = {name: source for name, source in SOURCES.items()
+                if name.startswith(("fonts/", "licenses/dompurify", "licenses/marked", "licenses/syne", "licenses/dm-sans"))
+                or name in ("purify.min.js", "marked.min.js")}
+
 
 def documented_integrity(text: str | None = None) -> dict[str, str]:
     """Paket@Version -> sha512-Integritaet aus THIRD_PARTY.md."""
@@ -71,15 +77,18 @@ def integrity_of(data: bytes) -> str:
     return "sha512-" + base64.b64encode(hashlib.sha512(data).digest()).decode()
 
 
-def problems(fetch, vendor: Path = VENDOR, integrity: dict[str, str] | None = None) -> list[str]:
+def problems(fetch, vendor: Path = VENDOR, integrity: dict[str, str] | None = None,
+             sources: dict[str, tuple[str, str]] | None = None, own: set[str] | None = None) -> list[str]:
     """Abweichungen; ``fetch(url) -> bytes`` laedt einen Tarball."""
     integrity = integrity if integrity is not None else documented_integrity()
+    sources = SOURCES if sources is None else sources
+    own = OWN if own is None else own
     found = []
     shipped = {p.relative_to(vendor).as_posix() for p in vendor.rglob("*") if p.is_file()}
-    for name in sorted(shipped - set(SOURCES) - OWN):
+    for name in sorted(shipped - set(sources) - own):
         found.append(f"{name}: keine Quelle eingetragen")
     tarballs: dict[str, tarfile.TarFile | None] = {}
-    for name, (package, member) in sorted(SOURCES.items()):
+    for name, (package, member) in sorted(sources.items()):
         if name not in shipped:
             found.append(f"{name}: eingetragen, aber nicht ausgeliefert")
             continue
@@ -114,11 +123,12 @@ def _fetch(url: str) -> bytes:
 
 def main() -> int:
     found = problems(_fetch)
+    found += [f"Kern: {line}" for line in problems(_fetch, KERN_VENDOR, sources=KERN_SOURCES, own=OWN)]
     for line in found:
         print(f"FEHLER: {line}", file=sys.stderr)
     if found:
         return 1
-    print(f"{len(SOURCES)} Dateien stimmen mit den npm-Paketen ueberein.")
+    print(f"{len(SOURCES) + len(KERN_SOURCES)} Dateien stimmen mit den npm-Paketen ueberein.")
     return 0
 
 

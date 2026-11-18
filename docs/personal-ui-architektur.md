@@ -243,7 +243,6 @@ src/conclave/assets/static/
       agents.js
       auth.js
       autoloop.js
-      board.js
       context.js
       conversations.js
       export.js
@@ -268,6 +267,11 @@ Die UI ist Vanilla-JavaScript ohne Build-Schritt:
 - `utils.js` enthält `esc()` und `renderMarkdown()`: marked erzeugt HTML,
   DOMPurify filtert es, bevor Modellausgaben angezeigt werden.
 - `api.js` sendet das Token als `Authorization: Bearer …`.
+- Die Board-Ansicht liegt im Board-Kern unter `packages/board/src/conclave_board/ui/`
+  (`board.js`, `board.css`, `board-i18n.js`). Personal bindet sie mit `register_board_ui`
+  unter `/ui/board` ein: als eigene Board-Seite und als Board-Reiter im Studio, der
+  dieselben Dateien unter `/ui/board/static/` lädt. Die Board-Texte kommen aus
+  `board-i18n.js` und werden in `i18n.js` mit den übrigen Texten zusammengeführt.
 - `features/context.js` baut Kontext-Chip, Detailansicht und Vorschau
   ausschließlich mit `createElement`/`textContent` (Dateinamen und Pfade sind
   Nutzerdaten).

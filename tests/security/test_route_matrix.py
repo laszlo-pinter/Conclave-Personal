@@ -35,6 +35,8 @@ EXPECTED = {
     ("PUT", "/agents/<agent_id>"): "human",
     ("POST", "/agents/<agent_id>/test"): "human",
     ("GET", "/api-docs"): "public",
+    ("GET", "/ui/board"): "public",
+    ("GET", "/ui/board/static/<path:filename>"): "public",
     ("GET", "/auth/whoami"): "agent+reviewer",
     ("POST", "/backup"): "human",
     ("GET", "/backups"): "human",
