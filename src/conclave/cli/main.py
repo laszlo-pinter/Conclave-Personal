@@ -881,8 +881,8 @@ def main() -> None:
         sys.exit(run())
     except ConfigError as exc:
         # Ungueltiger Wert in config.toml (z. B. [ui] mode): Meldung mit Datei statt Traceback (U2)
-        from conclave.cli.config import default_config_path
-        print(f"FEHLER in {default_config_path()}: {exc}", file=sys.stderr)
+        from conclave.cli.config import config_error_message
+        print(config_error_message(exc), file=sys.stderr)
         sys.exit(1)
     except MigrationError as exc:
         # Kurze Meldung statt Traceback; die Migration ist zurueckgerollt (R1, R15)

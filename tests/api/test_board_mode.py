@@ -157,3 +157,41 @@ def test_web_opens_the_page_of_the_mode(monkeypatch, mode, expected):
 def test_desktop_opens_the_page_of_the_mode(mode, path):
     from conclave.cli.main import _ui_url
     assert _ui_url(ConclaveConfig(ui=UiSettings(mode)), "http://127.0.0.1:8123") == "http://127.0.0.1:8123" + path
+
+
+def _broken_mode():
+    raise ConfigError("[ui] mode muss einer von ['studio', 'board'] sein, nicht 'desk'")
+
+
+def test_conclave_api_reports_the_invalid_mode_without_traceback(monkeypatch, capsys):
+    """U2-Review V1: auch der Einstieg conclave-api meldet den Fehler mit der Datei."""
+    import conclave.api.server as server
+
+    monkeypatch.setattr(server.ConclaveConfig, "from_sources", classmethod(lambda cls, *a, **k: _broken_mode()))
+    with pytest.raises(SystemExit) as exit_info:
+        server.main()
+    assert exit_info.value.code == 1
+    err = capsys.readouterr().err
+    assert err.startswith("FEHLER in ") and "config.toml: [ui] mode muss einer von" in err
+
+
+def test_wsgi_factory_names_the_config_file(monkeypatch):
+    import conclave.api.server as server
+
+    monkeypatch.setattr(server.ConclaveConfig, "from_sources", classmethod(lambda cls, *a, **k: _broken_mode()))
+    with pytest.raises(ConfigError, match=r"^FEHLER in .*config\.toml: \[ui\] mode muss einer von"):
+        server.create_wsgi_app()
+
+
+def test_a_real_config_file_with_an_invalid_mode_stops_conclave_api(tmp_path, monkeypatch, capsys):
+    """Ende zu Ende: config.toml mit mode = "desk" ueber den echten Ladepfad."""
+    import conclave.api.server as server
+    import conclave.cli.config as config_module
+
+    path = tmp_path / "config.toml"
+    path.write_text('[ui]\nmode = "desk"\n', encoding="utf-8")
+    monkeypatch.setattr(config_module, "default_config_path", lambda: path)
+    with pytest.raises(SystemExit):
+        server.main()
+    err = capsys.readouterr().err
+    assert err == f"FEHLER in {path}: [ui] mode muss einer von ['studio', 'board'] sein, nicht 'desk'\n"

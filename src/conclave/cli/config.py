@@ -105,7 +105,13 @@ class BoardSettings:
 
 
 class ConfigError(ValueError):
-    """Ungueltiger Wert in config.toml; ``conclave`` meldet ihn beim Start ohne Traceback."""
+    """Ungueltiger Wert in config.toml; ``conclave`` und ``conclave-api`` melden ihn beim Start
+    ohne Traceback (``config_error_message``)."""
+
+
+def config_error_message(exc: Exception) -> str:
+    """Startmeldung fuer einen ungueltigen Wert in config.toml, mit der Datei."""
+    return f"FEHLER in {default_config_path()}: {exc}"
 
 
 UI_MODES = ("studio", "board")
