@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Laszlo Pinter
 
-"""Board-Tools fuer Agenten und Reviewer, ohne MCP und ohne HTTP-Bibliothek (T8, Plan board-team.md 3.3).
+"""Board-Tools fuer Agenten und Reviewer, ohne MCP und ohne HTTP-Bibliothek (T8).
 
 Gemeinsamer Code fuer ``conclave-mcp`` (Personal) und weitere MCP-Server einer Erweiterung: Aufrufe
 gegen ``/board/v1`` und die Form der Antworten. Wer die Tools anbietet, gibt nur zwei Dinge mit:

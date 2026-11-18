@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Laszlo Pinter
 
-"""Ereignisse als Erweiterungspunkt (T9, Plan board-team.md 2.3 und 8).
+"""Ereignisse als Erweiterungspunkt (T9).
 
 Nach jedem erfolgreichen Schreiben meldet der ``BoardService`` die passenden Ereignisse an alle
 Empfaenger, die mit ``BoardService.add_listener`` eingehaengt sind (z. B. Webhooks einer Erweiterung).

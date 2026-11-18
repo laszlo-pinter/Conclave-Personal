@@ -404,7 +404,7 @@ def conclave_upload_file(filepath: str, content: str) -> dict:
 
 
 # ── Tools: Board (Arbeitspakete) ──────────────────────────────────────────
-# Die Logik liegt im Board-Paket (conclave_board.tools, T8); conclave-board-mcp nutzt denselben Code.
+# Die Logik liegt im Board-Paket (conclave_board.tools, T8); weitere MCP-Server koennen denselben Code nutzen.
 
 from conclave_board.tools import BOARD_DATA_NOTE, BoardTools  # noqa: E402,F401 - BOARD_DATA_NOTE fuer Tests
 

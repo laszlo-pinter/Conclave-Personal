@@ -3,7 +3,7 @@
 
 """REST-Routen des Boards als Flask-Blueprint (Plan board.md, B3; T1, T3).
 
-Versionierung (T3, Plan board-team.md Abschnitt 7, E9):
+Versionierung (T3, E9):
 
 - ``/board/v1/...`` ist die stabile API. Innerhalb von v1 gibt es nur Ergaenzungen
   (neue Routen, neue optionale Felder in Anfragen, neue Felder in Antworten).

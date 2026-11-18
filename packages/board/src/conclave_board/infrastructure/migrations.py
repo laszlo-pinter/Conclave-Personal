@@ -330,7 +330,7 @@ def _add_board_initiatives(connection, is_postgres: bool) -> None:
 
 # ── Runner ────────────────────────────────────────────────────────────────
 
-# Erweiterungen bringen eigene Reihen mit eigener Tracking-Tabelle (T4), z. B. board_team_migrations
+# Erweiterungen bringen eigene Reihen mit eigener Tracking-Tabelle (T4), z. B. board_example_migrations
 _EXTENSION_TABLE = re.compile(r"^[a-z][a-z0-9_]{0,40}_migrations$")
 
 
