@@ -36,6 +36,8 @@ include docs/release-notes-v0.5.0.md
 include docs/release-notes-v0.5.1.md
 include docs/release-notes-v0.6.0.md
 include docs/release-notes-v0.6.1.md
+include docs/release-notes-v0.7.0.md
+include docs/release-notes-v0.8.0.md
 include docs/sicherheit.md
 include docs/provider-smoke-test.md
 include docs/architektur/ports-adapter.md

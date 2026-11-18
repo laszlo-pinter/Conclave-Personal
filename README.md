@@ -13,7 +13,7 @@ answer is correct. It gives users a structured workspace for comparing model
 outputs, tracking runs, and deliberately choosing the next step. The human
 decides. Always.
 
-> Status: v0.7.0 Alpha. The primary path is local, desktop-first, and designed
+> Status: v0.8.0 Alpha. The primary path is local, desktop-first, and designed
 > for individual users on Windows and Linux.
 
 ![Conclave Studio](https://raw.githubusercontent.com/laszlo-pinter/Conclave-Personal/main/docs/assets/screenshots/conclave-studio-desktop.png)
@@ -272,7 +272,10 @@ The local API always requires a token. There are three, each with its own rights
 - the **reviewer token** (`reviewer.token`, or `CONCLAVE_REVIEWER_KEY`) for the
   automatic reviewer (since v0.7.0): it reads tickets, comments and sets the
   review result, nothing else. `conclave-mcp --reviewer` uses it;
-  `conclave token show --reviewer` prints the path.
+  `conclave token show --reviewer` prints the path. Since v0.8.0 the automatic
+  reviewer is built in: install the extra `[reviewer]` and add a `[reviewer]`
+  section to `config.toml`, then `conclave desktop` starts it (see
+  [Working with the board](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/mit-dem-board-arbeiten.md)).
 
 The server creates the files in the configuration directory on first start.
 New tokens carry a prefix (`cvh_` human, `cva_` agent, `cvr_` reviewer).
@@ -440,6 +443,7 @@ Important documents:
 - [Release Notes v0.5.1](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.5.1.md)
 - [Release Notes v0.6.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.6.0.md)
 - [Release Notes v0.6.1](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.6.1.md)
+- [Release Notes v0.8.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.8.0.md)
 - [Release Notes v0.7.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.7.0.md)
 - [Release Notes v0.3.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.3.0.md)
 - [Release Notes v0.2.3](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.2.3.md)
@@ -461,7 +465,7 @@ Important documents:
 
 ## Known Limitations
 
-v0.7.0 remains alpha. Known limitations:
+v0.8.0 remains alpha. Known limitations:
 
 - Provider compatibility varies by API, model, account, and region.
 - Remote providers receive the data required for the model call.
@@ -480,7 +484,7 @@ CI runs the jobs `test` (Ubuntu and Windows, Python 3.11 and 3.12),
 `bandit`), `postgres` (PostgreSQL 16 tests) and `build` (sdist and wheel,
 artifact inspection).
 
-The v0.7.0 surface was verified with these checks:
+The v0.8.0 surface was verified with these checks:
 
 - `python -m pytest` (the Playwright browser tests for XSS protection, CSP,
   token login, the settings page, the context chip, the preview, the file viewer and the board only run

@@ -155,7 +155,7 @@ parallel. Die CI vergleicht `board-v1.json` mit dem letzten Release-Stand
 (`oasdiff breaking`); eine brechende Änderung lässt sie scheitern. Die Datei
 entsteht mit `python scripts/gen-openapi.py` aus den registrierten Routen.
 
-*Stand: nach v0.7.0 (Board-API v1, 2026-11-17), abgeglichen mit `openapi.json` und `board-v1.json`*
+*Stand: v0.8.0 (Board-API v1, 2026-11-18), abgeglichen mit `openapi.json` und `board-v1.json`*
 
 ## Kontext-Reports
 
@@ -335,8 +335,8 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
   - Das dritte `failed` in Folge macht das Ticket „nur für Menschen“; `rework`
     zählt nicht mit. Nimmt der Mensch die Markierung wieder weg, beginnt die
     Zählung neu (`review_red_count` → 0, mit Verlaufseintrag).
-  - Tickets „nur für Menschen“ bewertet der Reviewer nicht (`403`); auch der
-    Watcher startet für sie kein Review.
+  - Tickets „nur für Menschen“ bewertet der Reviewer nicht (`403`); auch
+    `conclave-reviewer` startet für sie kein Review.
   - Bei `POST /board/next` ohne Projekt kommt Nacharbeit (`rework`/`failed`)
     aus allen Projekten zuerst, danach gilt die Board-Reihenfolge.
   - Kommt ein Ticket wieder nach `review`, steht der Status auf `none`.

@@ -33,6 +33,8 @@ def test_release_docs_exist():
         "docs/mit-kanzo-arbeiten.md",
         "docs/release-notes-v0.6.0.md",
         "docs/release-notes-v0.6.1.md",
+        "docs/release-notes-v0.7.0.md",
+        "docs/release-notes-v0.8.0.md",
         "docs/release-notes-v0.4.0.md",
         "docs/release-notes-v0.5.0.md",
         "docs/release-notes-v0.5.1.md",

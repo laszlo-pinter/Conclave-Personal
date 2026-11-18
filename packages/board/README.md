@@ -66,4 +66,4 @@ The core never imports an extension.
 board tools of the MCP servers (list, get, next, create, update, comment, review) without
 MCP or an HTTP library: the caller passes the transport. Every text written by someone
 else carries `from` with origin and person ("Kommentar von: Agent von Anna"). Conclave
-Personal (`conclave-mcp`) and the team package (`conclave-board-mcp`) share this code.
+Personal (`conclave-mcp`) uses this code; an extension can offer the same tools.

@@ -251,9 +251,9 @@ ihre Sitzung abzubrechen. Ein Banner über den Spalten zeigt sie an.
 1. Tickets nur über `conclave_board_next` holen; nach `review` schiebt er
    selbst, mit Branch, Commits und Testergebnis als Kommentar. Der Reviewer
    prüft genau die genannten Commits. Gehört ein Ticket zu mehreren Repos (etwa
-   Kern und Team-Paket), nennt der Kommentar jedes Repo mit Branch und Commit,
-   z. B. „**Kern:** `team-t6` @ `a07cda0` · **Team:** `t6` @ `d50667c`“. Der
-   Watcher sucht jeden Commit in allen Repos, die `config.toml` für das Projekt
+   einer Bibliothek und einer Anwendung), nennt der Kommentar jedes Repo mit Branch und
+   Commit, z. B. „**Kern:** `feature-x` @ `a07cda0` · **App:** `feature-x` @ `d50667c`“. Der
+   Reviewer sucht jeden Commit in allen Repos, die `config.toml` für das Projekt
    als Liste nennt (`projects.conclave = ['…', '…']`), und legt je Repo einen
    eigenen Worktree an. Ein Commit, den er in keinem Repo findet, gilt als nicht
    geprüft; das Urteil ist dann höchstens gelb.

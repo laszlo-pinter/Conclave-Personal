@@ -248,7 +248,7 @@ beendet ihn mit sich selbst. `conclave server` startet keinen.
 [reviewer]
 poll_seconds = 30
 [reviewer.projects]
-conclave = ["C:\\...\\Conclave_original", "C:\\...\\conclave-board-team"]
+conclave = ["C:\\...\\conclave", "C:\\...\\conclave-plugins"]
 ```
 
 | Schlüssel | Default | Bedeutung |
