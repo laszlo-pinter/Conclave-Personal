@@ -215,8 +215,12 @@ def kill_claude(proc: subprocess.Popen | None) -> None:
         proc.kill()
 
 
-def run_claude(cmd: list[str], cwd: str, timeout_minutes: float, log, key: str, on_start=None) -> str:
-    """Startet den Reviewer; liefert "done", "failed" oder "timeout". ``on_start(proc)`` meldet den Prozess."""
+def run_claude(cmd: list[str], cwd: str, timeout_minutes: float, log, key: str, on_start=None,
+               quiet: bool = False) -> str:
+    """Startet den Reviewer; liefert "done", "failed" oder "timeout". ``on_start(proc)`` meldet den Prozess.
+
+    ``quiet`` (Team-Server, TR3): die Ausgabe von claude nicht ins Log, sie kann Text aus dem Review und
+    damit aus Tickets enthalten; bei einem Fehler nur stderr (Meldungen von claude selbst)."""
     started = time.monotonic()
     proc = start_claude(cmd, cwd)
     if on_start is not None:
@@ -229,7 +233,8 @@ def run_claude(cmd: list[str], cwd: str, timeout_minutes: float, log, key: str, 
         return "timeout"
     took = round(time.monotonic() - started)
     if proc.returncode == 0:
-        log(f"{key}: review done in {took}s: {stdout.strip()[-300:]!r}")
+        log(f"{key}: review done in {took}s" + ("" if quiet else f": {stdout.strip()[-300:]!r}"))
         return "done"
-    log(f"{key}: review failed (exit {proc.returncode}) in {took}s: {(stderr or stdout).strip()[-500:]!r}")
+    detail = (stderr or "").strip()[-500:] if quiet else (stderr or stdout).strip()[-500:]
+    log(f"{key}: review failed (exit {proc.returncode}) in {took}s: {detail!r}")
     return "failed"

@@ -209,7 +209,8 @@ class Reviewer:
     def run_claude(self, key: str, cmd: list[str], cwd: str) -> str:
         try:
             return command.run_claude(cmd, cwd, self.cfg["review_timeout_minutes"], self.log, key,
-                                      on_start=lambda proc: setattr(self, "claude_proc", proc))
+                                      on_start=lambda proc: setattr(self, "claude_proc", proc),
+                                      quiet=self.cfg.get("server") == "team")
         finally:
             self.claude_proc = None
 

@@ -110,19 +110,36 @@ def _run(args) -> int:
             _shutdown(reviewer)                         # claude ueberlebt den Reviewer nicht
             os._exit(0)                                 # das abgebrochene Review gibt der naechste Start frei (W3)
         watch_parent(args.parent_pid, gone)
-    if os.name != "nt":                                 # SIGTERM (stop_reviewer): erst claude, dann Ende
-        import signal
-
-        def terminated(_sig, _frame):
-            _shutdown(reviewer)
-            os._exit(0)
-        signal.signal(signal.SIGTERM, terminated)
+    _stop_signals(reviewer)
     with ProcessLock(reviewer.lock_file, legacy=locks):
         reviewer.mark_started(args.dry_run)
         if not args.dry_run:
             reviewer.clean_orphans()                    # Reste eines Endes mitten im Review (#98-Review V3)
-        reviewer.loop(dry_run=args.dry_run, once=args.once)
+        try:
+            reviewer.loop(dry_run=args.dry_run, once=args.once)
+        except KeyboardInterrupt:                       # Strg+C, auch von einem Dienst-Wrapper (TR3)
+            reviewer.log("stopped (Ctrl+C)")
+            _shutdown(reviewer)
     return 0
+
+
+def _stop_signals(reviewer) -> None:
+    """Stopp-Signale: erst claude samt Kindprozessen und die Worktrees, dann Ende (W4, TR3).
+
+    - POSIX: SIGTERM (``stop_reviewer``, systemd).
+    - Windows: Strg+Untbr (SIGBREAK, z. B. von einem Dienst-Wrapper an die Konsolengruppe); Strg+C kommt
+      als KeyboardInterrupt in ``_run`` an. Ein hartes Beenden (Aufgabenplanung "Beenden",
+      TerminateProcess) beendet claude ueber das Job-Objekt; die Worktrees und ein haengendes Review
+      raeumt der naechste Start auf.
+    """
+    import signal
+
+    def stop(_sig, _frame):
+        reviewer.log("stopped (signal)")
+        _shutdown(reviewer)
+        os._exit(0)
+    for name in ("SIGTERM",) if os.name != "nt" else ("SIGBREAK",):
+        signal.signal(getattr(signal, name), stop)
 
 
 def _status(args) -> int:
