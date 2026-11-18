@@ -91,3 +91,80 @@ def test_team_log_has_no_output_of_claude(tmp_path, quiet):
     assert command.run_claude([sys.executable, "-c", failing], str(tmp_path), 1, lines.append, "api#1",
                               quiet=quiet) == "failed"
     assert "Anmeldung fehlt" in lines[-1] and "GEHEIM" not in lines[-1]
+
+
+# ── Stopp mitten im Review (TR3-Review B1, V1) ───────────────────────────
+
+CHILD = r'''
+import os, signal, sys
+from conclave_reviewer import command, cli
+
+pidfile, marker = sys.argv[1], sys.argv[2]
+
+class Reviewer:                      # nur was _shutdown braucht
+    claude_proc = None
+    def stop_claude(self): command.kill_claude(self.claude_proc)
+    def drop_worktrees(self): open(marker, "w").write("worktrees entfernt")
+    def log(self, msg): print(msg, flush=True)
+
+r = Reviewer()
+cli._stop_signals(r)
+claude = [sys.executable, "-c", f"import os, time; open({pidfile!r}, 'w').write(str(os.getpid())); time.sleep(120)"]
+command.run_claude(claude, ".", 5, print, "api#1", on_start=lambda p: setattr(r, "claude_proc", p))
+'''
+
+
+def _alive(pid: int) -> bool:
+    if os.name == "nt":
+        out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"], capture_output=True, text=True,
+                             encoding="utf-8", errors="replace").stdout
+        return str(pid) in out
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def test_stop_signal_during_a_review_ends_claude_quickly(tmp_path):
+    """Strg+Untbr (Windows) bzw. SIGTERM, waehrend claude laeuft und der Reviewer auf es wartet (V1)."""
+    pidfile, marker = tmp_path / "claude.pid", tmp_path / "worktrees"
+    env = dict(os.environ, PYTHONPATH=os.pathsep.join(
+        str(ROOT / part) for part in ("src", "packages/board/src", "packages/reviewer/src")))
+    flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+    proc = subprocess.Popen([sys.executable, "-c", CHILD, str(pidfile), str(marker)], env=env, cwd=tmp_path,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=flags)
+    try:
+        assert _wait(pidfile.exists, 30), proc.stderr.read() if proc.poll() is not None else "claude startete nicht"
+        claude_pid = int(pidfile.read_text(encoding="utf-8"))
+        time.sleep(1)                                                    # sicher beim Warten auf claude
+        started = time.monotonic()
+        proc.send_signal(signal.CTRL_BREAK_EVENT if os.name == "nt" else signal.SIGTERM)
+        assert proc.wait(30) == 0
+        took = time.monotonic() - started
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+    assert took < 10, f"Stopp dauerte {took:.1f} s"
+    assert _wait(lambda: not _alive(claude_pid), 10), "claude laeuft noch"
+    assert marker.read_text(encoding="utf-8") == "worktrees entfernt"
+
+
+def test_keyboard_interrupt_while_waiting_kills_claude_first(monkeypatch):
+    """Strg+C kommt beim Warten auf claude an: claude wird beendet, bevor die Ausnahme weiterlaeuft (B1)."""
+    from conclave_reviewer import command
+    order = []
+
+    class Proc:
+        returncode = None
+        stdout = stderr = None
+        args = ["claude"]
+
+        def poll(self):
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(command, "start_claude", lambda cmd, cwd: Proc())
+    monkeypatch.setattr(command, "kill_claude", lambda proc: order.append("kill"))
+    with pytest.raises(KeyboardInterrupt):
+        command.run_claude(["claude"], ".", 1, lambda m: None, "api#1")
+    assert order == ["kill"]

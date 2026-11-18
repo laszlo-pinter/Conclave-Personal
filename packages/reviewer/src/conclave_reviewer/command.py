@@ -215,6 +215,31 @@ def kill_claude(proc: subprocess.Popen | None) -> None:
         proc.kill()
 
 
+POLL_SECONDS = 0.2
+
+
+def _wait_for(proc: subprocess.Popen, timeout: float) -> tuple[str, str]:
+    """Wie ``communicate(timeout=...)``, aber unterbrechbar (TR3-Review V1).
+
+    ``communicate`` wartet unter Windows ununterbrechbar auf seine Lesethreads; ein Stopp-Signal
+    (Strg+Untbr eines Dienst-Wrappers) kaeme erst nach dem Ende von claude an. Hier lesen zwei Threads
+    stdout und stderr, und der Hauptthread wartet in kurzen Schritten: Signale kommen sofort an."""
+    import threading
+    out, err = [], []
+    readers = [threading.Thread(target=lambda s=stream, sink=sink: sink.append(s.read() if s else ""), daemon=True)
+               for stream, sink in ((proc.stdout, out), (proc.stderr, err))]
+    for reader in readers:
+        reader.start()
+    deadline = time.monotonic() + timeout
+    while proc.poll() is None:
+        if time.monotonic() >= deadline:
+            raise subprocess.TimeoutExpired(proc.args, timeout)
+        time.sleep(POLL_SECONDS)
+    for reader in readers:
+        reader.join(10)
+    return "".join(out), "".join(err)
+
+
 def run_claude(cmd: list[str], cwd: str, timeout_minutes: float, log, key: str, on_start=None,
                quiet: bool = False) -> str:
     """Startet den Reviewer; liefert "done", "failed" oder "timeout". ``on_start(proc)`` meldet den Prozess.
@@ -226,11 +251,16 @@ def run_claude(cmd: list[str], cwd: str, timeout_minutes: float, log, key: str, 
     if on_start is not None:
         on_start(proc)
     try:
-        stdout, stderr = proc.communicate(timeout=timeout_minutes * 60)
+        stdout, stderr = _wait_for(proc, timeout_minutes * 60)
     except subprocess.TimeoutExpired:
         kill_claude(proc)                               # samt Kindprozessen, nicht nur der oberste Prozess
         log(f"{key}: review stopped after {timeout_minutes} minutes")
         return "timeout"
+    except BaseException:
+        # Strg+C oder ein anderer Abbruch mitten im Review (TR3-Review B1): claude zuerst beenden, solange
+        # der Prozess noch bekannt ist; danach entfernt der Aufrufer die Worktrees
+        kill_claude(proc)
+        raise
     took = round(time.monotonic() - started)
     if proc.returncode == 0:
         log(f"{key}: review done in {took}s" + ("" if quiet else f": {stdout.strip()[-300:]!r}"))
