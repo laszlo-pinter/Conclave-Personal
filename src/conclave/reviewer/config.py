@@ -8,7 +8,7 @@
     claude_exe = ""            # leer: VS-Code-Erweiterung, sonst PATH
     prompt_file = ""           # leer: die mitgelieferte Fassung; relativ zum Ordner dieser config.toml
     [reviewer.projects]
-    conclave = ["C:\\...\\Conclave_original", "C:\\...\\conclave-board-team"]
+    conclave = ["C:\\...\\conclave", "C:\\...\\conclave-plugins"]
 
 Weitere Schluessel mit Standard: ``conclave_url`` (``CONCLAVE_API_URL`` bzw. http://127.0.0.1:8000),
 ``conclave_mcp_exe`` (``conclave-mcp`` neben dem Python dieses Reviewers bzw. im PATH),

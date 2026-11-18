@@ -1,7 +1,7 @@
 """Welcher Stand geprueft wird: die Commits und Branches, die ein Ticket nennt (P7, Fix aus #113).
 
 Massgeblich ist der neueste Kommentar des umsetzenden Agenten, der einen Commit nennt. Ein Projekt
-kann mehrere Checkouts haben (Kern und Team-Paket); in jedem wird gesucht.
+kann mehrere Checkouts haben (etwa eine Bibliothek und eine Anwendung); in jedem wird gesucht.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from pathlib import Path
 # Ein Commit in einem Kommentar des umsetzenden Agenten, z. B. `c6487d7`
 COMMIT_REF = re.compile(r"`([0-9a-f]{7,40})`")
 BRANCH_REF = re.compile(r"Branch:\*{0,2}\s*`([A-Za-z0-9_./-]{1,100})`")
-# Form fuer mehrere Repos (P7): **Kern:** `team-t6` @ `a07cda0`
+# Form fuer mehrere Repos (P7): **Kern:** `feature-x` @ `a07cda0`
 BRANCH_AT = re.compile(r"`([A-Za-z0-9_./-]{1,100})`\s*@\s*`[0-9a-f]{7,40}`")
 GIT = ["git", "--no-pager", "-c", "core.pager=cat", "-c", "core.fsmonitor=false"]
 

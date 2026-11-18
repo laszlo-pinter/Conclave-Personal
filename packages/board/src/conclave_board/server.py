@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Laszlo Pinter
 
-"""Board-Server starten: ``conclave-board-server serve`` (T1; seit T6 heisst ``conclave-board`` die CLI im Team-Paket).
+"""Board-Server starten: ``conclave-board-server serve`` (T1).
 
 Ohne Oberflaeche, nur REST. Die Daten liegen in SQLite (Standard) oder PostgreSQL
 (``--dsn`` bzw. ``CONCLAVE_BOARD_DSN``). Im Konfigurationsordner liegen
 ``secret.key`` und die drei Token-Dateien (``api.token``, ``agent.token``,
 ``reviewer.token``); sie entstehen beim ersten Start, nur fuer den Benutzer lesbar.
 Hinter einem Proxy gelten ``X-Forwarded-*`` nur von den Adressen in
-``CONCLAVE_BOARD_TRUSTED_PROXIES`` (T7). Konten, Tokens pro Person und die Startpruefung
-fuer den Netzbetrieb bringt das Team-Paket mit.
+``CONCLAVE_BOARD_TRUSTED_PROXIES`` (T7). Konten, Tokens pro Person und eine Startpruefung
+fuer den Netzbetrieb kann eine Erweiterung ueber die Erweiterungspunkte mitbringen.
 """
 
 from __future__ import annotations

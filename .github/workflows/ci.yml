@@ -121,7 +121,9 @@ jobs:
         run: python -m bandit -r packages/board/src/conclave_board --severity-level medium
 
       - name: Board package does not import Personal or provider SDKs (import-linter)
-        run: lint-imports
+        run: |
+          lint-imports
+          lint-imports --config .github/importlinter-extensions.toml
 
   postgres:
     name: PostgreSQL tests (PostgreSQL 16)

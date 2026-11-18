@@ -28,7 +28,7 @@ claude_exe = 'C:\Tools\claude.exe'
 prompt_file = "reviewer-prompt-conclave.md"
 
 [projects]
-conclave = ['C:\Code\Conclave_original', 'C:\Code\conclave-board-team']
+conclave = ['C:\Code\conclave', 'C:\Code\conclave-plugins']
 kanzo = 'C:\Code\kanzo'
 """
 

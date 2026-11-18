@@ -312,8 +312,8 @@ def test_check_passes_all_existing_repos_and_drops_missing_ones(rv, cfg, repo, t
 
 def test_multi_repo_comment_form_names_branches():
     detail = {"comments": [{"origin": "agent", "author_name": "cc",
-                            "body": "**Kern:** `team-t6` @ `a07cda0` · **Team:** `t6` @ `d50667c`"}]}
-    assert refs.named_refs(detail, "CD · auto-review") == (["a07cda0", "d50667c"], ["team-t6", "t6"])
+                            "body": "**Kern:** `feature-x` @ `a07cda0` · **App:** `feature-y` @ `d50667c`"}]}
+    assert refs.named_refs(detail, "CD · auto-review") == (["a07cda0", "d50667c"], ["feature-x", "feature-y"])
 
 
 def test_commit_on_the_named_branch_wins_over_a_newer_one_in_the_text(rv, cfg, server, repo, tmp_path, monkeypatch):

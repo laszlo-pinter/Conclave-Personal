@@ -3,7 +3,7 @@
 
 """Board-Tools fuer Agenten und Reviewer, ohne MCP und ohne HTTP-Bibliothek (T8, Plan board-team.md 3.3).
 
-Gemeinsamer Code fuer ``conclave-mcp`` (Personal) und ``conclave-board-mcp`` (Team-Paket): Aufrufe
+Gemeinsamer Code fuer ``conclave-mcp`` (Personal) und weitere MCP-Server einer Erweiterung: Aufrufe
 gegen ``/board/v1`` und die Form der Antworten. Wer die Tools anbietet, gibt nur zwei Dinge mit:
 
 - ``request(method, path, params=None, json=None) -> dict``: der Transport mit Token, Fehlern und

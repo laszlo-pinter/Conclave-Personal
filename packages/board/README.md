@@ -28,7 +28,7 @@ an address gets 429 until the minute ends. `create_board_app` takes
 
 ## Extension points
 
-Extensions (such as an internal team package) plug into the board without
+Extensions plug into the board without
 changes to its rules:
 
 - **Token check:** `create_board_app(board, auth_service)` takes any object with

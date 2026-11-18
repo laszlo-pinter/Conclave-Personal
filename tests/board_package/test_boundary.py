@@ -38,11 +38,13 @@ def test_board_package_does_not_import_conclave():
     assert offending == []
 
 
-def test_core_and_personal_do_not_import_the_team_package():
-    """Plan 2.3: Das Team-Paket haengt vom Kern ab, nie umgekehrt; Personal kennt es nicht."""
+def test_core_and_personal_do_not_import_extensions():
+    """Plan 2.3: Eine Erweiterung haengt vom Kern ab, nie umgekehrt; Personal kennt keine.
+
+    Erweiterungen heissen ``conclave_board_<name>``; geprueft wird das Muster, kein bestimmter Name."""
     personal = ROOT / "src" / "conclave"
     offending = [(p.relative_to(ROOT).as_posix(), name) for p in [*_files(), *sorted(personal.rglob("*.py"))]
-                 for name in _imports(p) if name.split(".")[0] == "conclave_board_team"]
+                 for name in _imports(p) if name.split(".")[0].startswith("conclave_board_")]
     assert offending == []
 
 

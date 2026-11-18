@@ -36,7 +36,7 @@ dependencies = [
 postgres = ["psycopg2-binary>=2.9"]
 
 [project.scripts]
-# Server des Kerns; "conclave-board" ist die CLI fuer Menschen im Team-Paket (T6)
+# Server des Kerns (T1)
 conclave-board-server = "conclave_board.server:main"
 
 [tool.setuptools]

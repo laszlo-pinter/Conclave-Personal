@@ -4,7 +4,7 @@
 """Ereignisse als Erweiterungspunkt (T9, Plan board-team.md 2.3 und 8).
 
 Nach jedem erfolgreichen Schreiben meldet der ``BoardService`` die passenden Ereignisse an alle
-Empfaenger, die mit ``BoardService.add_listener`` eingehaengt sind (z. B. Webhooks im Team-Paket).
+Empfaenger, die mit ``BoardService.add_listener`` eingehaengt sind (z. B. Webhooks einer Erweiterung).
 Ein Ereignis traegt **keine Inhalte**: kein Titel, keine Beschreibung, kein Kommentartext, nur
 Referenz, Art, Herkunft, Konto, Zeit und kleine Metadaten (alter und neuer Status, Review-Ergebnis,
 Zustaendigkeit, ID eines Kommentars).
