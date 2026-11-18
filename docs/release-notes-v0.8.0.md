@@ -115,8 +115,12 @@ See [Working with the board](mit-dem-board-arbeiten.md) and the section
 
 ## Known limitations
 
-- Going back to v0.7.0: restore the backup made before the upgrade.
-  <!-- L2 (conclave#104): Ergebnis des Rückwegs hier eintragen. -->
+- **Going back to v0.7.0** works with the same database (tested on a copy of a
+  real database): v0.7.0 starts, the board (list, ticket, comment, review) and
+  the conversations can be used, and v0.8.0 starts again afterwards. v0.7.0
+  ignores what it does not know (the board migration series, new columns). In
+  v0.7.0 there is no reviewer and no `/board/v1`, so use the v0.7.0 MCP clients
+  as well. Keep the backup made before the upgrade anyway.
 - The reviewer needs Claude Code (`claude`) on the same machine.
 
 ## Verification
@@ -126,5 +130,13 @@ See [Working with the board](mit-dem-board-arbeiten.md) and the section
 - PostgreSQL tests
 - `bandit` and `pip-audit`
 - Wheel and sdist built and checked
+- On copies: upgrade of a real v0.7.0 database (migrations taken over,
+  `_migrations` unchanged, all conversations, messages, runs, tickets, comments
+  and history kept), going back to v0.7.0 and forward again, the same upgrade on
+  PostgreSQL
+- Fresh installation from wheel and sdist with `[mcp]`, `[mcp,reviewer]` and
+  `[postgres]`: `conclave desktop`, UI login, `conclave-mcp` with the agent
+  token, `conclave-reviewer status`, `conclave board wait`
+- `pip-audit` against the fresh environments
 
 v0.8.0 remains alpha.

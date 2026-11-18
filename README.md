@@ -486,6 +486,11 @@ artifact inspection).
 
 The v0.8.0 surface was verified with these checks:
 
+- Upgrade of a copy of a real v0.7.0 database, going back to v0.7.0 and forward
+  again, the same upgrade on PostgreSQL; fresh installation from wheel and sdist
+  with `[mcp]`, `[mcp,reviewer]` and `[postgres]` and a smoke test (`conclave
+  desktop`, UI login, `conclave-mcp`, `conclave-reviewer status`, `conclave board
+  wait`); `pip-audit` against these environments (v0.8.0)
 - `python -m pytest` (the Playwright browser tests for XSS protection, CSP,
   token login, the settings page, the context chip, the preview, the file viewer and the board only run
   with the browser test setup below; the PostgreSQL tests only run with
