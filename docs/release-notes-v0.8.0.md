@@ -117,8 +117,10 @@ See [Working with the board](mit-dem-board-arbeiten.md) and the section
 
 - **Going back to v0.7.0** works with the same database (tested on a copy of a
   real database): v0.7.0 starts, the board (list, ticket, comment, review) and
-  the conversations can be used, and v0.8.0 starts again afterwards. v0.7.0
-  ignores what it does not know (the board migration series, new columns). In
+  the conversations can be used, and v0.8.0 starts again afterwards. This
+  holds for data written under v0.8.0 as well: apart from the new table
+  `board_migrations`, which v0.7.0 does not read, the database schema is the
+  same, and `_migrations` stays complete. In
   v0.7.0 there is no reviewer and no `/board/v1`, so use the v0.7.0 MCP clients
   as well. Keep the backup made before the upgrade anyway.
 - The reviewer needs Claude Code (`claude`) on the same machine.
