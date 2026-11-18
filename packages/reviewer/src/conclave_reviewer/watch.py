@@ -12,6 +12,11 @@ sagt warum; Conclave zeigt das als haengendes Review.
 Ein Projekt kann mehrere Checkouts haben (P7, ``projects.conclave = ['...', '...']``): Die genannten
 Commits werden in jedem gesucht; jedes Repo mit Treffer bekommt einen eigenen Worktree und einen
 eigenen git-Server. Das Verhalten entspricht dem alten Watcher (``kanzo-reviewer/watcher.py``).
+
+Am Team-Server (TR2, ``server = "team"``): https mit dem CA-Buendel aus der Konfiguration, ohne Proxy
+und ohne Umleitungen (``transport``); das Token aus der Anmeldeinformationsverwaltung oder einer Datei;
+vor jedem Review ``git fetch`` in den Checkouts; genannte Commits, die es dort nicht gibt, ergeben ein
+rotes Review ohne claude ("Commits nicht im Git-Server").
 """
 
 from __future__ import annotations
@@ -28,10 +33,15 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
-from conclave_reviewer import command, refs, worktrees
+from conclave_reviewer import command, refs, transport, worktrees
 from conclave_reviewer.command import BOARDS
 
 LOG_LIMIT = 1_000_000
+MISSING_ON_SERVER = (
+    "Urteil: rot\nGeprüft: –\nBlockierend:\n- B1 Commits nicht im Git-Server: {hashes}. Auf dem Server prüft "
+    "der Reviewer nur, was gepusht ist. Bitte den Branch pushen (oder den Commit im Kommentar berichtigen) und "
+    "das Ticket erneut nach review schieben.\nVorschläge:\n- keine\n"
+    "— automatisches Review (Reviewer, ohne claude: Commits fehlen)")
 
 
 def load_config(path: Path) -> dict:
@@ -63,7 +73,9 @@ class Reviewer:
         self.worktrees = data_dir / "worktrees"
         self.state_file = data_dir / "state.json"
         self.status_file = data_dir / "status.json"      # fuer conclave-reviewer status (W4)
-        self.active_worktrees: list = []                 # (Repo, Pfad) des laufenden Reviews
+        self.mcp_token = data_dir / "mcp-reviewer.token"  # nur waehrend eines Reviews, bei Token aus der
+        self.active_worktrees: list = []                 # Anmeldeinformationsverwaltung (TR2)
+        self._opener = None
 
     def prepare(self) -> None:
         """Datenordner nur fuer den Benutzer (R13); neue Dateien darin erben das unter Windows."""
@@ -122,6 +134,10 @@ class Reviewer:
     # ── Board ueber HTTP, nur mit dem Reviewer-Token ──────────────────────
 
     def token_file(self) -> Path:
+        """Die Token-Datei fuer den MCP-Server; bei einem Token aus der Anmeldeinformationsverwaltung eine
+        Datei nur fuer das Dienstkonto im Datenordner, die nur waehrend eines Reviews existiert."""
+        if self.cfg.get("reviewer_token_credential"):
+            return self.mcp_token
         if self.cfg.get("reviewer_token_file"):
             return Path(self.cfg["reviewer_token_file"])
         # Wie conclave.runtime.api_token.reviewer_token_path (ohne dessen Logging-Abhaengigkeit)
@@ -132,26 +148,45 @@ class Reviewer:
         return conclave_config_dir() / "reviewer.token"
 
     def token(self) -> str:
+        if self.cfg.get("reviewer_token_credential"):
+            from conclave_reviewer.credentials import read_generic
+            return read_generic(self.cfg["reviewer_token_credential"])
         return self.token_file().read_text(encoding="utf-8").strip()
+
+    def write_mcp_token(self) -> None:
+        """Fuer die Dauer eines Reviews: Token aus der Anmeldeinformationsverwaltung als Datei fuer den MCP-Server."""
+        if self.cfg.get("reviewer_token_credential"):
+            from conclave_board.runtime.file_security import replace_private
+            replace_private(self.mcp_token, self.token().encode("utf-8"))
+
+    def drop_mcp_token(self) -> None:
+        if self.cfg.get("reviewer_token_credential"):
+            self.mcp_token.unlink(missing_ok=True)
+
+    def http(self) -> urllib.request.OpenerDirector:
+        """https mit dem CA-Buendel aus der Konfiguration, ohne Proxy und ohne Umleitungen (TR2, R12)."""
+        if self._opener is None:
+            self._opener = transport.opener(self.cfg.get("ca_bundle"))
+        return self._opener
 
     def get_json(self, url: str):
         req = urllib.request.Request(url, headers={"Authorization": f"Bearer {self.token()}"})
-        with urllib.request.urlopen(req, timeout=10) as r:  # nosec B310 - URL aus der eigenen Konfiguration
+        with self.http().open(req, timeout=10) as r:  # nosec B310 - URL aus der eigenen Konfiguration
             return json.load(r)
 
     def post_json(self, url: str, body: dict):
         req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), method="POST",
                                      headers={"Authorization": f"Bearer {self.token()}",
                                               "Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=10) as r:  # nosec B310 - URL aus der eigenen Konfiguration
+        with self.http().open(req, timeout=10) as r:  # nosec B310 - URL aus der eigenen Konfiguration
             return json.load(r)
 
     def task_url(self, key: str) -> str:
         project, number = key.split("#", 1)
         return f"{self.cfg['conclave_url']}/board/v1/projects/{urllib.parse.quote(project, safe='')}/tasks/{int(number)}"
 
-    def set_review(self, key: str, state: str, comment: str = "") -> None:
-        self.post_json(self.task_url(key) + "/review", {"state": state, "comment": comment})
+    def set_review(self, key: str, state: str, comment: str = "", **counts) -> None:
+        self.post_json(self.task_url(key) + "/review", {"state": state, "comment": comment, **counts})
 
     def note(self, key: str, body: str) -> None:
         """Kommentar des Reviewers selbst (Herkunft reviewer), z. B. wenn ein Lauf ohne Ergebnis endete."""
@@ -210,9 +245,20 @@ class Reviewer:
         repos = [repo] if isinstance(repo, str) else list(repo)
         detail = self.get_json(self.task_url(key))
         hashes, branches = refs.named_refs(detail, self.cfg["author"])
+        if self.cfg.get("fetch") and (hashes or branches):
+            for r in repos:                             # Team-Server: nur der Stand im Git-Server zaehlt (TR2)
+                refs.fetch(r)
+        if hashes and self.cfg.get("missing_commits") == "red":
+            absent = [h for h in dict.fromkeys(hashes) if not any(refs.exists(r, h) for r in repos)]
+            if absent:
+                self.log(f"{key}: commits not on the git server: {', '.join(absent)}; red without claude")
+                if not dry_run:
+                    self.set_review(key, "failed", MISSING_ON_SERVER.format(
+                        hashes=", ".join(f"`{h}`" for h in absent)), blocking=1, suggestions=0)
+                return
         found = []                                      # (Repo, Commit, Branch)
         for r in repos:
-            state = refs.find_state(r, hashes, branches) if (hashes or branches) else None
+            state = refs.find_state(r, hashes, branches, bool(self.cfg.get("fetch"))) if (hashes or branches) else None
             if state:
                 found.append((r, *state))
         if not found:
@@ -244,6 +290,7 @@ class Reviewer:
             from conclave_board.runtime.file_security import replace_private
             servers = command.mcp_servers(self.cfg, [str(p) for _r, p in added], self.token_file())
             replace_private(self.mcp_config, json.dumps(servers).encode("utf-8"))
+            self.write_mcp_token()
             self.log(f"{key}: review started ({checked}) in {worktree}")
             self.current_task = key
             self.write_status(current_task=key)
@@ -254,6 +301,7 @@ class Reviewer:
                 self.write_status(current_task=None, last_result={
                     "task": key, "outcome": outcome, "at": datetime.now().isoformat(timespec="seconds")})
             self.current_task = None
+            self.drop_mcp_token()
             self.drop_worktrees()
         after = self.get_json(self.task_url(key))
         if after.get("status") == self.cfg["review_status"] and (after.get("review") or {}).get("state") == "running":

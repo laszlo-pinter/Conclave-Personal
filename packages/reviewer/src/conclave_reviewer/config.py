@@ -18,6 +18,24 @@ Der Datenordner ist ``<Konfigurationsordner von Conclave>/reviewer`` (Windows
 ``%APPDATA%\\Conclave\\reviewer``), nur fuer den Benutzer (R13).
 
 Ein Abschnitt ``[reviewer]`` laesst ``conclave desktop`` den Reviewer starten (W4, E-W3).
+
+Team-Server (TR2): eine eigene Datei, z. B. ``C:\\ProgramData\\Conclave\\reviewer.toml``, gestartet mit
+``conclave-reviewer run --settings <Datei>``::
+
+    [reviewer]
+    server = "team"
+    server_url = "https://board.intern"        # https, http nur fuer diesen Rechner
+    ca_bundle = 'C:\\ProgramData\\Conclave\\firmen-ca.pem'
+    reviewer_token_credential = "ConclaveReviewer"   # oder reviewer_token_file (nur fuer das Dienstkonto)
+    data_dir = 'C:\\ProgramData\\Conclave\\reviewer'
+    [reviewer.projects]
+    api = ['D:\\checkouts\\api']
+
+Mit ``server = "team"`` gelten: MCP-Server ``conclave-board-mcp --reviewer`` (mit ``CONCLAVE_BOARD_URL``,
+``CONCLAVE_BOARD_CA_BUNDLE``, ``CONCLAVE_BOARD_TOKEN_FILE``), ``fetch = true`` (vor jedem Review
+``git fetch`` in den Checkouts) und ``missing_commits = "red"`` (genannte Commits, die es im Git-Server
+nicht gibt, ergeben ein rotes Review ohne claude). Relative Pfade gelten relativ zu dieser Datei.
+Das Token steht nie in der Datei.
 """
 
 from __future__ import annotations
@@ -36,6 +54,12 @@ DEFAULTS = {"enabled": True, "poll_seconds": 30, "max_reviews_per_hour": 6, "rev
 NUMBERS = ("poll_seconds", "max_reviews_per_hour", "review_timeout_minutes")
 # Was import-config aus der alten config.toml uebernimmt (Projekte, Grenzwerte, claude)
 IMPORTED = ("poll_seconds", "max_reviews_per_hour", "review_timeout_minutes", "claude_exe", "author")
+
+
+SERVERS = ("personal", "team")
+# Mit server = "team" (TR2); in Personal gilt das bisherige Verhalten
+TEAM_DEFAULTS = {"conclave_mcp_args": ["--reviewer"], "fetch": True, "missing_commits": "red"}
+PERSONAL_DEFAULTS = {"fetch": False, "missing_commits": "yellow"}
 
 
 class ConfigError(SystemExit):
@@ -66,14 +90,72 @@ def default_token_file() -> Path:
     return conclave_config_dir() / "reviewer.token"
 
 
-def default_mcp_exe() -> str:
-    """conclave-mcp aus derselben Installation wie dieser Reviewer, sonst aus dem PATH."""
+def default_mcp_exe(program: str = "conclave-mcp") -> str:
+    """``program`` (conclave-mcp, im Team conclave-board-mcp) aus derselben Installation wie dieser
+    Reviewer, sonst aus dem PATH."""
     scripts = Path(sys.executable).parent
-    for name in ("conclave-mcp.exe", "conclave-mcp"):
+    for name in (f"{program}.exe", program):
         for folder in (scripts, scripts / "Scripts", scripts / "bin"):
             if (folder / name).is_file():
                 return str(folder / name)
-    return shutil.which("conclave-mcp") or "conclave-mcp"
+    return shutil.which(program) or program
+
+
+def _file_beside(path: Path, value, key: str, *, must_exist: bool) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(f"[reviewer] {key}: Pfad erwartet.")
+    target = Path(value).expanduser()
+    if not target.is_absolute():
+        target = path.parent / target                  # nie gegen das Arbeitsverzeichnis
+    if must_exist and not target.is_file():
+        raise ConfigError(f"[reviewer] {key}: {target} gibt es nicht.")
+    return str(target)
+
+
+def _server_settings(cfg: dict, section: dict, path: Path) -> None:
+    """Personal oder Team-Server (TR2): Adresse, CA-Buendel, Token-Quelle, MCP, git fetch, fehlende Commits."""
+    from conclave_reviewer.transport import TransportError, check_url
+    server = cfg.get("server", "personal")
+    if server not in SERVERS:
+        raise ConfigError(f"[reviewer] server: einer von {SERVERS}.")
+    cfg["server"] = server
+    if "server_url" in section:
+        if "conclave_url" in section:
+            raise ConfigError("[reviewer]: server_url oder conclave_url, nicht beides.")
+        cfg["conclave_url"] = section["server_url"]
+    if section.get("reviewer_token_file") and section.get("reviewer_token_credential"):
+        raise ConfigError("[reviewer]: reviewer_token_file oder reviewer_token_credential, nicht beides.")
+    credential = section.get("reviewer_token_credential")
+    if credential is not None and (not isinstance(credential, str) or not credential.strip()):
+        raise ConfigError("[reviewer] reviewer_token_credential: Zielname der Anmeldeinformation erwartet.")
+    if server == "team":
+        if not cfg.get("conclave_url"):
+            raise ConfigError("[reviewer] server_url fehlt (z. B. https://board.intern).")
+        if not (section.get("reviewer_token_file") or credential):
+            raise ConfigError("[reviewer]: reviewer_token_credential oder reviewer_token_file angeben; das Token "
+                              "selbst steht nie in dieser Datei.")
+        if "conclave_mcp_exe" not in section:
+            cfg["conclave_mcp_exe"] = default_mcp_exe("conclave-board-mcp")
+        for key, value in TEAM_DEFAULTS.items():
+            cfg.setdefault(key, value)
+        try:
+            cfg["conclave_url"] = check_url(cfg["conclave_url"])
+        except TransportError as e:
+            raise ConfigError(f"[reviewer] server_url: {e}") from None
+    else:
+        for key, value in PERSONAL_DEFAULTS.items():
+            cfg.setdefault(key, value)
+    if not isinstance(cfg["fetch"], bool):
+        raise ConfigError("[reviewer] fetch: true oder false.")
+    if cfg["missing_commits"] not in ("red", "yellow"):
+        raise ConfigError('[reviewer] missing_commits: "red" oder "yellow".')
+    if cfg.get("ca_bundle"):
+        cfg["ca_bundle"] = _file_beside(path, cfg["ca_bundle"], "ca_bundle", must_exist=True)
+    if section.get("reviewer_token_file"):
+        cfg["reviewer_token_file"] = _file_beside(path, section["reviewer_token_file"], "reviewer_token_file",
+                                                  must_exist=False)
+    if cfg.get("data_dir"):
+        cfg["data_dir"] = _file_beside(path, cfg["data_dir"], "data_dir", must_exist=False)
 
 
 def _projects(value) -> dict:
@@ -108,9 +190,11 @@ def load(path: Path | None = None) -> dict:
             raise ConfigError(f"[reviewer] {name}: positive Zahl erwartet.")
     cfg["projects"] = _projects(section.get("projects"))
     cfg["board"] = "conclave"
+    _server_settings(cfg, section, path)
     cfg.setdefault("conclave_url", os.environ.get("CONCLAVE_API_URL", "").strip() or "http://127.0.0.1:8000")
     cfg.setdefault("conclave_mcp_exe", default_mcp_exe())
-    cfg.setdefault("reviewer_token_file", str(default_token_file()))
+    if not cfg.get("reviewer_token_credential"):
+        cfg.setdefault("reviewer_token_file", str(default_token_file()))
     cfg["claude_exe"] = cfg["claude_exe"] or None
     cfg["_config_path"] = str(path)
     return cfg

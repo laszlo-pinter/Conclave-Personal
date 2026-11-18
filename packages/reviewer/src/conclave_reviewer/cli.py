@@ -1,8 +1,12 @@
 """``conclave-reviewer``: den Reviewer starten und die alte Konfiguration uebernehmen.
 
-    conclave-reviewer run [--data-dir <ordner>] [--dry-run] [--once]
+    conclave-reviewer run [--settings <datei>] [--data-dir <ordner>] [--dry-run] [--once]
     conclave-reviewer import-config <alte config.toml> [--target <config.toml>] [--yes]
-    conclave-reviewer status [--json]
+    conclave-reviewer status [--settings <datei>] [--json]
+
+``--settings``: ``[reviewer]`` aus dieser Datei statt aus Conclaves ``config.toml``, z. B. die eigene
+Datei auf dem Team-Server (TR2). Der Datenordner kommt dann aus ``data_dir`` darin, sofern nicht
+``--data-dir`` angegeben ist.
 
 ``conclave desktop`` startet ``run`` als Kindprozess mit ``--parent-pid``: Der Reviewer endet, sobald
 der Desktop weg ist (W4).
@@ -32,14 +36,18 @@ def _parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="Spalte review beobachten und Reviews starten")
     run.add_argument("--config", type=Path, default=None,
                      help="alte Form: config.toml des alten Watchers (ohne: [reviewer] in Conclaves config.toml)")
+    run.add_argument("--settings", type=Path, default=None,
+                     help="[reviewer] aus dieser Datei (z. B. reviewer.toml auf dem Team-Server)")
     run.add_argument("--data-dir", type=Path, default=None,
-                     help="Ordner fuer Log, Zustand, Sperre und Worktrees (Standard: <Konfiguration>/reviewer)")
+                     help="Ordner fuer Log, Zustand, Sperre und Worktrees (Standard: data_dir bzw. "
+                          "<Konfiguration>/reviewer)")
     run.add_argument("--dry-run", action="store_true",
                      help="nur protokollieren, was liefe (mit Aufruf und MCP-Konfiguration); kein Review")
     run.add_argument("--once", action="store_true", help="einmal abfragen und beenden")
     run.add_argument("--parent-pid", type=int, default=None,
                      help="mit diesem Prozess enden (conclave desktop startet den Reviewer so)")
     status = sub.add_parser("status", help="Laeuft der Reviewer? Ticket, letztes Ergebnis, Reviews je Stunde, claude")
+    status.add_argument("--settings", type=Path, default=None, help="[reviewer] aus dieser Datei")
     status.add_argument("--data-dir", type=Path, default=None)
     status.add_argument("--json", action="store_true", help="als JSON")
     imp = sub.add_parser("import-config", help="Projekte und Grenzwerte aus der alten config.toml uebernehmen")
@@ -47,6 +55,11 @@ def _parser() -> argparse.ArgumentParser:
     imp.add_argument("--target", type=Path, default=None, help="Ziel (Standard: Conclaves config.toml)")
     imp.add_argument("--yes", action="store_true", help="ohne Rueckfrage schreiben")
     return parser
+
+
+def _data_dir(args, cfg: dict) -> Path:
+    """--data-dir, sonst data_dir aus der Konfiguration (Team-Server), sonst der Standard."""
+    return Path(args.data_dir or cfg.get("data_dir") or default_data_dir()).resolve()
 
 
 def _ask(text: str) -> bool:
@@ -81,12 +94,12 @@ def _run(args) -> int:
         reviewer = Reviewer(cfg, (args.data_dir or default_data_dir()).resolve(), base_dir=config_path.parent)
         locks = legacy_locks(cfg, config_path)
     else:
-        cfg = reviewer_config.load()
+        cfg = reviewer_config.load(args.settings.resolve() if args.settings else None)
         if not cfg["enabled"]:
             print("Reviewer ist abgeschaltet ([reviewer] enabled = false).", file=sys.stderr)
             return 0
         prompt = reviewer_config.prompt_text(cfg)       # ohne Platzhalter kein Start
-        reviewer = Reviewer(cfg, (args.data_dir or default_data_dir()).resolve(), prompt=prompt)
+        reviewer = Reviewer(cfg, _data_dir(args, cfg), prompt=prompt)
         locks = tuple(Path(p) for p in [cfg.get("legacy_lock_file")] if p)
     reviewer.prepare()
     if args.parent_pid:
@@ -117,10 +130,12 @@ def _status(args) -> int:
 
     from conclave_reviewer.status import collect, format_status
     try:
-        cfg = reviewer_config.load()
+        cfg = reviewer_config.load(args.settings.resolve() if args.settings else None)
     except reviewer_config.ConfigError:
+        if args.settings:
+            raise
         cfg = {}                                        # auch ohne [reviewer]: dann eben "laeuft nicht"
-    info = collect(cfg, (args.data_dir or default_data_dir()).resolve())
+    info = collect(cfg, _data_dir(args, cfg))
     print(json.dumps(info, ensure_ascii=False, indent=2) if args.json else format_status(info))
     return 0
 

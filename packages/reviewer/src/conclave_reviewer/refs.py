@@ -26,6 +26,11 @@ def git(repo: str, *args: str) -> str:
     return out.stdout.strip()
 
 
+def fetch(repo: str) -> None:
+    """Neuen Stand aus dem Git-Server holen (Team-Server, TR2); der Zugang ist dort nur lesend."""
+    git(repo, "fetch", "--all", "--prune", "--quiet")
+
+
 def repos_for(cfg: dict, project: str) -> list[str]:
     """Checkouts eines Projekts: ein Pfad (alte Form) oder eine Liste (P7)."""
     value = (cfg.get("projects") or {}).get(project)
@@ -89,21 +94,27 @@ def is_ancestor(repo: str, commit: str, head: str) -> bool:
         return False
 
 
-def branch_head(repo: str, branch: str) -> str | None:
-    try:
-        return git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}^{{commit}}")
-    except RuntimeError:
-        return None
+def branch_head(repo: str, branch: str, remote_first: bool = False) -> str | None:
+    """Kopf des Branches: lokal, sonst der von origin. ``remote_first`` (Team-Server mit fetch, TR2): erst
+    origin, denn dort zaehlt der Stand im Git-Server; die lokalen Branches des Checkouts bleiben alt."""
+    refs = [f"refs/heads/{branch}", f"refs/remotes/origin/{branch}"]
+    for ref in (refs[::-1] if remote_first else refs):
+        try:
+            return git(repo, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
+        except RuntimeError:
+            continue
+    return None
 
 
-def find_state(repo: str, hashes: list[str], branches: list[str]) -> tuple[str, str | None] | None:
+def find_state(repo: str, hashes: list[str], branches: list[str],
+               remote_first: bool = False) -> tuple[str, str | None] | None:
     """(Commit, Branch) fuer ein Repo.
 
     Ein genannter Commit auf einem genannten Branch dieses Repos hat Vorrang (der neueste davon),
     damit ein nur im Text erwaehnter Commit nicht den zu pruefenden ersetzt; sonst der neueste
     genannte Commit; sonst der Kopf eines genannten Branches."""
     for branch in branches:
-        head = branch_head(repo, branch)
+        head = branch_head(repo, branch, remote_first)
         on_branch = [h for h in hashes if head and exists(repo, h) and is_ancestor(repo, h, head)]
         commit = pick_commit(repo, on_branch) if on_branch else None
         if commit is not None:
@@ -111,12 +122,12 @@ def find_state(repo: str, hashes: list[str], branches: list[str]) -> tuple[str, 
     commit = pick_commit(repo, hashes) if hashes else None
     if commit is not None:
         for branch in branches:                     # der genannte Branch, der den Commit enthaelt
-            head = branch_head(repo, branch)
+            head = branch_head(repo, branch, remote_first)
             if head and is_ancestor(repo, commit, head):
                 return commit, branch
         return commit, None                         # kein genannter Branch dieses Repos enthaelt ihn
     for branch in branches:
-        head = branch_head(repo, branch)
+        head = branch_head(repo, branch, remote_first)
         if head:
             return head, branch
     return None

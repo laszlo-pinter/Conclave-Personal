@@ -7,7 +7,8 @@ Absicherung (durch Tests festgeschrieben, tests/reviewer/test_hardening.py):
   ``DENIED_ALWAYS`` und alle uebrigen Board-Tools sind ausdruecklich verboten.
 - git nur ueber ``git_mcp`` (schreibgeschuetzt, mit ``python -I`` gestartet).
 - Das Board nur ueber ``conclave-mcp --reviewer`` mit dem Reviewer-Token, nie mit dem Agent- oder
-  Mensch-Token.
+  Mensch-Token. Am Team-Server (TR2) ueber ``conclave-board-mcp --reviewer``: dieselben drei Tools,
+  derselbe Servername ``conclave`` in der MCP-Konfiguration, also dieselben erlaubten Tool-Namen.
 """
 
 from __future__ import annotations
@@ -80,10 +81,20 @@ def mcp_servers(cfg: dict, repos: list[str], token_file: Path) -> dict:
     servers = {git_server(i, r): {"command": python, "args": ["-I", str(GIT_MCP), "--repo", r]}
                for i, r in enumerate(repos)}
     servers["conclave"] = {"command": cfg["conclave_mcp_exe"],
-                           "args": list(cfg.get("conclave_mcp_args", ["--reviewer"])), "env": {
-        "CONCLAVE_API_URL": cfg["conclave_url"], "CONCLAVE_MCP_ROLE": "reviewer",
-        "CONCLAVE_REVIEWER_TOKEN_FILE": str(token_file)}}
+                           "args": list(cfg.get("conclave_mcp_args", ["--reviewer"])), "env": board_env(cfg, token_file)}
     return {"mcpServers": servers}
+
+
+def board_env(cfg: dict, token_file: Path) -> dict:
+    """Umgebung des Board-MCP-Servers: nur Adresse, Rolle, Pfad der Token-Datei und CA (nie das Token)."""
+    if cfg.get("server") == "team":                    # conclave-board-mcp (Team-Paket, TR2)
+        env = {"CONCLAVE_BOARD_URL": cfg["conclave_url"], "CONCLAVE_BOARD_MCP_ROLE": "reviewer",
+               "CONCLAVE_BOARD_TOKEN_FILE": str(token_file)}
+        if cfg.get("ca_bundle"):
+            env["CONCLAVE_BOARD_CA_BUNDLE"] = cfg["ca_bundle"]
+        return env
+    return {"CONCLAVE_API_URL": cfg["conclave_url"], "CONCLAVE_MCP_ROLE": "reviewer",
+            "CONCLAVE_REVIEWER_TOKEN_FILE": str(token_file)}
 
 
 def prompt(cfg: dict, base_dir: Path) -> str:

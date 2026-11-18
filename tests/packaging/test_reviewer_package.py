@@ -19,7 +19,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 REVIEWER = ROOT / "packages" / "reviewer"
 SOURCE = REVIEWER / "src" / "conclave_reviewer"
-MODULES = sorted(p.stem for p in SOURCE.glob("*.py") if p.stem not in ("__init__", "__main__"))
+# Module, die es unter conclave.reviewer gab (TR1); spaetere Module brauchen keinen Alias
+MODULES = ["cli", "command", "config", "git_mcp", "lock", "paths", "refs", "status", "watch", "worktrees"]
 
 
 def _load(name):
