@@ -571,3 +571,20 @@ def test_human_move_with_renumber_does_not_overwrite_a_foreign_change(board, mon
     assert (e.value.status, e.value.type) == (409, "Conflict")
     task = board.get_task("api#3")
     assert (task.description, task.title) == ("vom Agenten", "c")
+
+
+def test_delete_project_only_empty(board):
+    """U4: mit only_empty 409 ProjectNotEmpty, solange es Tickets gibt; ohne den Schalter wie bisher samt Tickets."""
+    board.create_task(AGENT, "api", "Ticket")
+    with pytest.raises(BoardError) as e:
+        board.delete_project(HUMAN, "api", only_empty=True)
+    assert (e.value.status, e.value.type) == (409, "ProjectNotEmpty")
+    assert [t.ref for t in board.list_tasks("api", include_done=True)] == ["api#1"]
+    _forbidden(board.delete_project, AGENT, "api", only_empty=True)
+    board.create_project(HUMAN, "leer", "Leer")
+    board.delete_project(HUMAN, "leer", only_empty=True)
+    with pytest.raises(BoardError) as e:
+        board.delete_project(HUMAN, "leer", only_empty=True)
+    assert e.value.status == 404
+    board.delete_project(HUMAN, "api")
+    assert board.list_projects() == []

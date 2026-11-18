@@ -77,7 +77,8 @@ gilt auch hier: Ein Agent, der `api.token` lesen kann, hat den Mensch-Zugang.
    statuses = ["todo", "doing", "review", "done"]
    ```
 
-3. **Projekt anlegen** (Mensch-Token), z. B.:
+3. **Projekt anlegen:** in der Board-Ansicht über „Projekte“ (nur mit dem
+   Mensch-Token; dort auch umbenennen und leere Projekte löschen) oder per API, z. B.:
 
    ```bash
    curl -X POST http://localhost:8000/board/v1/projects \

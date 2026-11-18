@@ -154,7 +154,7 @@ def test_board_js_talks_only_to_the_board_api():
     # Pfade als Text nur unter /board/v1: keine anderen absoluten Pfade in Zeichenketten
     paths = re.findall(r"['`](/[\w/-]*)", js)
     assert [p for p in paths if not p.startswith("/board/v1")
-            and p not in ("/search", "/tasks", "/changes", "/reviewer", "/comments", "/history", "/projects/")] == []
+            and p not in ("/search", "/tasks", "/changes", "/reviewer", "/comments", "/history", "/projects", "/projects/")] == []
 
 
 def test_board_page_talks_only_to_board_api_and_whoami():

@@ -251,6 +251,7 @@
           <select id="boardProject" class="board-input" data-i18n-title="board.project"></select>
           <input type="search" id="boardSearch" class="board-input" data-i18n-placeholder="board.search" placeholder="Suchen..."/>
           <button class="btn-full page-action" data-action="board-new" data-i18n="board.new">Neues Ticket</button>
+          <button class="btn-full secondary page-action board-projects-btn" id="boardProjects" data-action="board-projects" data-i18n="board.projects.open" hidden>Projekte</button>
           <button class="btn-full secondary page-action board-approvals" id="boardApprovals" data-action="board-approvals" aria-pressed="false" hidden></button>
           <span class="board-reviewer" id="boardReviewer" role="status" hidden></span>
           <button class="btn-full secondary page-action board-notify" id="boardNotify" data-action="board-notify" aria-pressed="false" hidden>Benachrichtigen: aus</button>
@@ -408,6 +409,29 @@
     <div class="modal-acts">
       <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayBoardNew" data-i18n="board.cancel">Abbrechen</button>
       <button class="btn-confirm" data-action="board-create" data-i18n="board.create">Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlayBoardProjects">
+  <div class="modal board-projects-modal">
+    <div class="modal-title" data-i18n="board.projects.title">Projekte</div>
+    <div class="board-projects-list" id="boardProjectsList"></div>
+    <div class="workbench-title" data-i18n="board.projects.new">Neues Projekt</div>
+    <div class="board-projects-new">
+      <div class="field">
+        <label for="boardProjectSlug" data-i18n="board.projects.slug">Kurzname</label>
+        <input type="text" id="boardProjectSlug" maxlength="40" autocomplete="off" spellcheck="false" data-i18n-placeholder="board.projects.slugHint" placeholder="z. B. api"/>
+      </div>
+      <div class="field">
+        <label for="boardProjectName" data-i18n="board.projects.name">Titel</label>
+        <input type="text" id="boardProjectName" autocomplete="off"/>
+      </div>
+    </div>
+    <div class="surface-info" data-i18n="board.projects.hint"></div>
+    <div class="modal-acts">
+      <button class="btn-cancel" data-action="close-overlay" data-overlay="overlayBoardProjects" data-i18n="board.close">Schließen</button>
+      <button class="btn-confirm" data-action="board-project-create" data-i18n="board.projects.create">Anlegen</button>
     </div>
   </div>
 </div>

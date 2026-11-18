@@ -491,7 +491,7 @@
         }
       },
       "delete": {
-        "summary": "Projekt samt Tickets loeschen (Freigabe-Recht).",
+        "summary": "Projekt samt Tickets loeschen (Freigabe-Recht); only_empty=true nur ohne Tickets, sonst 409.",
         "tags": [
           "board"
         ],
@@ -513,6 +513,23 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "only_empty",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false",
+                "1",
+                "0",
+                "yes",
+                "no"
+              ]
+            },
+            "description": "nur loeschen, wenn das Projekt keine Tickets hat; sonst 409 ProjectNotEmpty"
           }
         ]
       }

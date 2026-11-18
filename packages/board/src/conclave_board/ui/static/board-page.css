@@ -64,6 +64,8 @@ body.board-standalone{display:block;min-height:100%}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent)}
 .field textarea{resize:vertical;min-height:80px;line-height:1.55}
 .modal-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+.btn-sm{padding:5px 11px;background:var(--bg-4);border:1px solid var(--border-mid);color:var(--text-dim);border-radius:var(--r);font-size:12px;cursor:pointer;font-family:var(--font-ui);transition:background var(--tr),color var(--tr),border-color var(--tr);display:flex;align-items:center;gap:4px;flex-shrink:0}
+.btn-sm:hover{background:var(--bg-5);color:var(--text);border-color:var(--border-strong)}
 .btn-cancel{padding:8px 16px;background:var(--bg-4);border:1px solid var(--border);color:var(--text-dim);border-radius:var(--r);font-family:var(--font-hd);font-weight:700;font-size:13px;cursor:pointer;transition:background var(--tr)}
 .btn-cancel:hover{background:var(--bg-5)}
 .btn-confirm{padding:8px 18px;background:var(--accent);color:var(--on-accent);border:none;border-radius:var(--r);font-family:var(--font-hd);font-weight:700;font-size:13px;cursor:pointer;transition:opacity var(--tr)}

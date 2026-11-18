@@ -189,8 +189,8 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
 
     @bp.delete("/projects/<slug>")
     def board_delete_project(slug: str):
-        """Projekt samt Tickets loeschen (Freigabe-Recht)."""
-        _board().delete_project(g.principal, slug)
+        """Projekt samt Tickets loeschen (Freigabe-Recht); only_empty=true nur ohne Tickets, sonst 409."""
+        _board().delete_project(g.principal, slug, only_empty=_flag("only_empty"))
         return "", 204
 
     @bp.get("/tasks")

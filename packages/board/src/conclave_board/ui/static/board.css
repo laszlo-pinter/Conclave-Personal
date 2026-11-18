@@ -31,7 +31,7 @@
 .board-task-review:empty{display:none}
 .board-task-review{margin:2px 0 8px}
 .board-approvals.active{border-color:var(--accent);color:var(--accent)}
-.board-approvals[hidden]{display:none}          /* .btn-full setzt display */
+.board-approvals[hidden],.board-projects-btn[hidden]{display:none}   /* .btn-full setzt display */
 .board-human{font-family:var(--font-mono);font-size:9px;padding:1px 6px;border-radius:8px;background:var(--floor-bg);color:var(--floor-color);border:1px solid var(--floor-border)}
 .board-card-title{font-size:13px;line-height:1.4;word-break:break-word}
 .board-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
@@ -74,3 +74,14 @@
 .board-reviewer{display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:8px;font-size:12px;border:1px solid var(--border-strong);background:var(--bg-2);color:var(--text-dim);align-self:center}
 .board-reviewer[data-state="active"]{color:var(--accent);border-color:var(--accent-glow)}
 .board-reviewer[data-state="off"]{color:var(--danger-text);border-color:var(--danger-line)}
+
+/* Projekte verwalten (U4) */
+.board-projects-modal{width:560px}
+.board-projects-list{display:flex;flex-direction:column;gap:6px;margin-bottom:18px}
+.board-project-row{display:flex;align-items:center;gap:8px}
+.board-project-row .board-ref{min-width:72px}
+.board-project-row .board-project-name{flex:1;min-width:0}
+.board-project-count{font-size:11px;color:var(--text-faint);white-space:nowrap;cursor:help}
+.board-project-delete{color:var(--danger)}
+.board-projects-new{display:grid;grid-template-columns:1fr 2fr;gap:0 10px}
+@media (max-width:520px){.board-projects-new{grid-template-columns:1fr}.board-project-row{flex-wrap:wrap}}
