@@ -161,3 +161,23 @@ def test_reviewer_wheel_with_wrong_metadata_fails(tmp_path, variant):
     if "version" in variant:
         pyproject.write_text('[project]\nname = "conclave-personal"\nversion = "9.9.9"\n', encoding="utf-8")
     assert check_reviewer_wheel.main([str(dist), str(pyproject)]) == 1
+
+
+@pytest.mark.parametrize("installed,expected", [
+    ({"conclave-reviewer": "0.9.0", "conclave-personal": "0.9.0"}, "0.9.0"),
+    ({"conclave-reviewer": "0.9.1"}, "0.9.1"),                 # Firmen-Wheel ohne Personal (Review V1)
+    ({"conclave-personal": "0.9.2"}, "0.9.2"),                 # in Personal gebuendelt
+    ({}, "dev"),                                               # Quellbaum ohne Installation
+])
+def test_heartbeat_version_comes_from_the_reviewer_wheel_or_personal(monkeypatch, installed, expected):
+    import importlib.metadata
+
+    from conclave_reviewer import watch
+
+    def version(name):
+        if name not in installed:
+            raise importlib.metadata.PackageNotFoundError(name)
+        return installed[name]
+
+    monkeypatch.setattr(importlib.metadata, "version", version)
+    assert watch._version() == expected

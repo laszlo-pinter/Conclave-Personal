@@ -4,6 +4,7 @@
   nicht installiert
 - alle Module von ``conclave_reviewer`` lassen sich importieren, ohne dass ein Modul aus ``conclave``
   geladen wird; der mitgelieferte Prompt liegt im Paket
+- Herzschlag und ``status.json`` melden die Version des Wheels, nicht "dev" (TR1, Review V1)
 - ``conclave-reviewer --help`` nennt run, status und import-config
 - eine Konfiguration mit ``[reviewer]`` laedt mit den Standardwerten; die Standardorte folgen der
   Regel von Personal, ohne Personal zu importieren
@@ -44,6 +45,11 @@ def main() -> int:
         problems.append(f"Module aus Personal geladen: {loaded}")
 
     from importlib import resources
+    from importlib.metadata import version
+
+    from conclave_reviewer.watch import _version
+    if _version() != version("conclave-reviewer"):
+        problems.append(f"Herzschlag und status.json melden Version {_version()!r} statt der des Wheels")
     if not resources.files("conclave_reviewer").joinpath("reviewer-prompt-conclave.md").is_file():
         problems.append("Prompt reviewer-prompt-conclave.md fehlt im Paket")
 

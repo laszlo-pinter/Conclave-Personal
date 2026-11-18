@@ -431,12 +431,18 @@ class Reviewer:
             time.sleep(self.cfg["poll_seconds"])
 
 
+# Eigenes Wheel (Team-Server) zuerst, dann Personal, das den Reviewer buendelt (TR1); gleiche Version
+VERSION_SOURCES = ("conclave-reviewer", "conclave-personal")
+
+
 def _version() -> str:
-    try:
-        from importlib.metadata import version
-        return version("conclave-personal")
-    except Exception:  # noqa: BLE001 - Quellbaum ohne Installation
-        return "dev"
+    from importlib.metadata import version
+    for name in VERSION_SOURCES:
+        try:
+            return version(name)
+        except Exception:  # noqa: BLE001, S112 - nicht installiert: naechste Quelle
+            continue
+    return "dev"                                              # Quellbaum ohne Installation
 
 
 def legacy_locks(cfg: dict, config_path: Path) -> tuple[Path, ...]:
