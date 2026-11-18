@@ -131,10 +131,11 @@ ALLOWED = {
 TOKENS = {"none": None, "human": HUMAN, "agent": AGENT, "reviewer": REVIEWER}
 
 
-@pytest.fixture(scope="module")
-def app(tmp_path_factory):
+@pytest.fixture(scope="module", params=["studio", "board"])
+def app(tmp_path_factory, request):
+    """U2: Im Board-Modus gilt dieselbe Matrix; nur die Oberflaeche unter / wechselt."""
     from conclave.api.server import _build_app
-    from conclave.cli.config import ConclaveConfig, LimitSettings
+    from conclave.cli.config import ConclaveConfig, LimitSettings, UiSettings
 
     root = tmp_path_factory.mktemp("matrix")
     with pytest.MonkeyPatch.context() as mp:
@@ -146,7 +147,7 @@ def app(tmp_path_factory):
         mp.setenv("CONCLAVE_BACKUP_DIR", str(root / "backups"))
         config = ConclaveConfig(db_path=root / "c.db", api_key=HUMAN, agent_api_key=AGENT,
                                 reviewer_api_key=REVIEWER, rate_limit="off",
-                                limits=LimitSettings(agent_rate_limit="off"))
+                                limits=LimitSettings(agent_rate_limit="off"), ui=UiSettings(request.param))
         app, _ = _build_app(config)
     app.config["TESTING"] = True
     # Nur die Zugriffsschicht pruefen: jede View antwortet 204, ohne etwas auszuloesen

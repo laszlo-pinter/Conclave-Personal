@@ -187,6 +187,10 @@ path = "/pfad/zur/conclave.db"
 # CONCLAVE_RATE_LIMIT hat Vorrang.
 rate_limit = "120 per minute"
 
+[ui]
+# "studio" (Standard) oder "board": nur die Board-Seite, ohne Studio
+mode = "studio"
+
 [board]
 # Spalten des Boards: neue Tickets in die erste, die letzte gilt als erledigt
 statuses = ["todo", "doing", "review", "done"]
@@ -236,6 +240,22 @@ Tickets, wo sie sind.
 
 Das Board braucht SQLite ab Version 3.35 (bei Python 3.11 und 3.12 üblich)
 oder PostgreSQL.
+
+## Oberfläche
+
+Abschnitt `[ui]`: welche Oberfläche der Browser unter `/` sieht.
+
+| Schlüssel | Default | Bedeutung |
+|---|---|---|
+| `mode` | `"studio"` | `"studio"`: das Studio wie bisher, das Board ist ein Reiter darin. `"board"`: nur das Board. `/` leitet auf `/ui/board` weiter, das Studio (Seite, Skripte, Stile) antwortet mit 404 und dem Hinweis „Board-Modus“. `conclave desktop` und `conclave web` öffnen dann direkt die Board-Seite. |
+
+- Die Board-Seite unter `/ui/board` gibt es in beiden Modi. Sie zeigt dieselbe Ansicht wie der
+  Board-Reiter des Studios und meldet sich mit dem Token des Tabs an, wie das Studio.
+- Die API ist in beiden Modi gleich. Agenten mit `conclave-mcp`, Consultations, der Reviewer und
+  `/api-docs` arbeiten im Board-Modus weiter. Der Modus ändert nur die Oberfläche und ist keine
+  Zugriffsgrenze; die regelt das Token.
+- Ein anderer Wert als `"studio"` oder `"board"` bricht den Start mit einer Meldung ab, die
+  `config.toml` nennt. Der Modus gilt nach einem Neustart des Servers.
 
 ## Reviewer
 

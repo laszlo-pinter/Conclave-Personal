@@ -613,12 +613,19 @@ def _server_url(host: str, port: int) -> str:
     return server_url(host, port)
 
 
+def _ui_url(config, base: str) -> str:
+    """Startseite im Browser: im Board-Modus gleich die Board-Seite (U2)."""
+    from conclave.cli.config import BOARD_PAGE_PATH
+    ui = getattr(config, "ui", None)
+    return base + BOARD_PAGE_PATH if ui is not None and ui.board_only else base
+
+
 def _run_web(args) -> int:
     from conclave.runtime.api_token import read_token
     from conclave.runtime.browser import is_local_url, url_with_token
 
     config = ConclaveConfig.from_sources()
-    url = args.url or _server_url(config.host, config.port)
+    url = args.url or _ui_url(config, _server_url(config.host, config.port))
     # Das Mensch-Token nur an eine lokale Adresse haengen, nie an einen fremden Host (R5)
     own = not args.url or is_local_url(url)
     open_browser(url_with_token(url, read_token()) if own else url)
@@ -650,7 +657,7 @@ def _run_server(args, should_open_browser: bool = False) -> int:
     app, config = _build_app(launch.config)
     if should_open_browser:
         import threading
-        browser_url = url_with_token(launch.url, config.api_key)
+        browser_url = url_with_token(_ui_url(config, launch.url), config.api_key)
         threading.Timer(1.0, lambda: open_browser(browser_url)).start()
         print(f"Conclave Desktop: {launch.url}")
     print(f"Conclave Logs: {log_file}")
@@ -868,9 +875,15 @@ def _run_migrate_personal(args) -> int:
 
 
 def main() -> None:
+    from conclave.cli.config import ConfigError
     from conclave.infrastructure.migrations import MigrationError
     try:
         sys.exit(run())
+    except ConfigError as exc:
+        # Ungueltiger Wert in config.toml (z. B. [ui] mode): Meldung mit Datei statt Traceback (U2)
+        from conclave.cli.config import default_config_path
+        print(f"FEHLER in {default_config_path()}: {exc}", file=sys.stderr)
+        sys.exit(1)
     except MigrationError as exc:
         # Kurze Meldung statt Traceback; die Migration ist zurueckgerollt (R1, R15)
         print(f"FEHLER: {exc}", file=sys.stderr)

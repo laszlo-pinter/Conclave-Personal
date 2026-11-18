@@ -89,7 +89,7 @@ conclave runs --conversation-id "$CONV"
 | Studio | Conversations, messages, participants, floor control, invoke, stream, orchestration, auto-loop, context chip and preview (what each call sends) |
 | Agents | Agents, roles, providers, models, presets, per-agent message limit, connection tests |
 | Workspace | Local files, context, notes, outputs |
-| Board | Work packages for humans and agents: columns, drag and drop, comments with origin, history, live refresh |
+| Board | Work packages for humans and agents: columns, drag and drop, comments with origin, history, live refresh. Also a page of its own at `/ui/board`; with `[ui] mode = "board"` in `config.toml` Conclave shows only the board (no Studio), the API stays the same |
 | Runs | Invoke, auto-loop, orchestration history, usage, and errors |
 | Settings | Runtime info, workspace path, API access token, provider key status, backup creation (restore via CLI/API), rate limit, server log. The language switch is in the sidebar footer. |
 

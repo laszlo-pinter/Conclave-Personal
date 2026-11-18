@@ -10,6 +10,7 @@ from datetime import datetime
 
 try:
     from flask import Flask, Response, g, jsonify, request, stream_with_context, send_file as flask_send_file
+    from flask import redirect as flask_redirect
     from werkzeug.exceptions import HTTPException
 except ImportError:
     raise ImportError(
@@ -59,7 +60,7 @@ from conclave_board.api.security import (  # noqa: F401  (alte Namen bleiben hie
 )
 from conclave.domain.errors import TaskNotFound, TaskSourceError, public_message, redact_secrets
 from conclave.cli.bootstrap import rate_limit_disabled, validate_rate_limit
-from conclave.cli.config import DEFAULT_RATE_LIMIT, LimitSettings
+from conclave.cli.config import BOARD_PAGE_PATH, DEFAULT_RATE_LIMIT, LimitSettings, UiSettings
 from conclave.application.conversation_flow import RUN_ORIGIN
 from conclave.application.workspace_security import (
     agent_read_limit_bytes,
@@ -112,7 +113,7 @@ PERMISSIONS_POLICY = "camera=(), geolocation=(), microphone=(self), payment=(), 
 
 # Ohne Token erreichbar (B12): UI-Seite, statische Dateien, Healthcheck, API-Doku.
 # Dazu die Board-Seite unter BOARD_UI_PREFIX mit ihren statischen Dateien (U1, ohne Daten).
-BOARD_UI_PREFIX = "/ui/board"
+BOARD_UI_PREFIX = BOARD_PAGE_PATH
 PUBLIC_GET_PATHS = frozenset({"/", "/health", "/api-docs", "/openapi.json", VERSIONS_PATH})
 
 # Groessen, CLIENT_HEADER und Host-Allowlist (B2) kommen aus conclave_board.api.security (T1).
@@ -158,6 +159,7 @@ def create_app(handler: CLIHandler, auth_service=None,
     }
 
     limits = getattr(config, "limits", None) or LimitSettings()
+    ui = getattr(config, "ui", None) or UiSettings()
 
     def _request_role() -> str:
         """Rolle laut Token, schon vor der Anmeldung (das Rate-Limit laeuft zuerst)."""
@@ -381,8 +383,24 @@ def create_app(handler: CLIHandler, auth_service=None,
     # Board-Seite aus dem Board-Kern (U1); der Board-Reiter des Studios laedt dieselben Dateien
     register_board_ui(app, BOARD_UI_PREFIX)
 
+    # Board-Modus (U2): nur die Board-Seite. Das Studio (Seite, Skripte, Stile) wird nicht ausgeliefert;
+    # die API bleibt unveraendert, ebenso /api-docs mit seinen Dateien.
+    studio_off = (f"Board-Modus: Das Studio ist abgeschaltet ([ui] mode = \"board\" in config.toml). "
+                  f"Das Board liegt unter {BOARD_UI_PREFIX}.")
+
+    @app.before_request
+    def _board_mode_hides_the_studio():
+        if not ui.board_only or request.method not in ("GET", "HEAD"):
+            return None
+        path = request.path
+        if path.startswith("/static/css/") or (path.startswith("/static/js/") and path != "/static/js/swagger-init.js"):
+            return studio_off, 404, {"Content-Type": "text/plain; charset=utf-8"}
+        return None
+
     @app.get("/")
     def serve_ui():
+        if ui.board_only:
+            return flask_redirect(BOARD_UI_PREFIX, code=302)
         ui_path = asset_root / "conclave-ui.html"
         if ui_path.is_file():
             return flask_send_file(str(ui_path), mimetype="text/html")

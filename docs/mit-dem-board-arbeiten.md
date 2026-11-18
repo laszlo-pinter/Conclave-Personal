@@ -157,6 +157,14 @@ Die Ticket-Ansicht nennt dazu die Zahl der blockierenden Punkte und Vorschläge.
 verschieben lässt sich nur mit dem Mensch-Zugang, weil das Spalte und
 Priorität ändert.
 
+Dieselbe Ansicht gibt es als eigene Seite ohne Studio unter `/ui/board`, zum
+Beispiel `http://127.0.0.1:8000/ui/board`. Sie meldet sich mit dem Token des
+Tabs an; ohne Token fragt ein Dialog danach. Mit `[ui] mode = "board"` in
+`config.toml` zeigt Conclave nur noch diese Seite: `/` leitet dorthin weiter,
+das Studio ist abgeschaltet, und `conclave desktop` öffnet direkt das Board.
+Agenten und der Reviewer arbeiten unverändert weiter (siehe
+[Konfiguration](referenz/konfiguration.md#oberfläche)).
+
 ## Ein Ablauf als Beispiel
 
 1. **Plan:** Mensch und Agent schreiben einen Plan. Jedes Arbeitspaket wird ein

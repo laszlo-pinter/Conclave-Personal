@@ -104,6 +104,37 @@ class BoardSettings:
         return cls(statuses=flow.statuses, source=source)
 
 
+class ConfigError(ValueError):
+    """Ungueltiger Wert in config.toml; ``conclave`` meldet ihn beim Start ohne Traceback."""
+
+
+UI_MODES = ("studio", "board")
+# Pfad der Board-Seite aus dem Board-Kern (U1); /board bleibt bis zum Sunset der API-Alias
+BOARD_PAGE_PATH = "/ui/board"
+
+
+@dataclass(frozen=True)
+class UiSettings:
+    """Abschnitt [ui] in config.toml (U2, Plan board-ui.md 3.3).
+
+    ``mode = "studio"`` (Standard) zeigt das Studio unter ``/``. ``mode = "board"`` zeigt nur die
+    Board-Seite: ``/`` leitet auf ``/ui/board`` weiter, das Studio wird nicht ausgeliefert. Die API
+    bleibt in beiden Modi gleich (Agenten, Consultations, Reviewer).
+    """
+    mode: str = "studio"
+
+    @classmethod
+    def from_section(cls, section: dict) -> "UiSettings":
+        mode = section.get("mode", "studio")
+        if mode not in UI_MODES:
+            raise ConfigError(f"[ui] mode muss einer von {list(UI_MODES)} sein, nicht {mode!r}")
+        return cls(mode=mode)
+
+    @property
+    def board_only(self) -> bool:
+        return self.mode == "board"
+
+
 DEFAULT_AGENT_RATE_LIMIT = "60 per minute"
 
 
@@ -181,6 +212,7 @@ class ConclaveConfig:
     kanzo: KanzoSettings = field(default_factory=KanzoSettings)
     board: BoardSettings = field(default_factory=BoardSettings)
     limits: LimitSettings = field(default_factory=LimitSettings)
+    ui: UiSettings = field(default_factory=UiSettings)
 
     @classmethod
     def from_sources(
@@ -239,6 +271,7 @@ class ConclaveConfig:
         kanzo_url_set = "url" in data.get("kanzo", {}) or bool(os.environ.get("CONCLAVE_KANZO_URL", "").strip())
         board = BoardSettings.from_section(data.get("board", {}), kanzo_url_set=kanzo_url_set)
         limits = LimitSettings.from_section(data.get("limits", {}))
+        ui = UiSettings.from_section(data.get("ui", {}))
         return cls(
             db_provider=provider,
             db_path=db_path,
@@ -262,6 +295,7 @@ class ConclaveConfig:
             kanzo=kanzo,
             board=board,
             limits=limits,
+            ui=ui,
         )
 
 
