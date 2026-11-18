@@ -55,8 +55,10 @@ def test_check_then_write_under_the_lock_loses_no_update(tmp_path):
         t.start()
     for t in threads:
         t.join(300)
+    assert not any(t.is_alive() for t in threads), "ein Thread haengt (kein verlorenes Update)"
     assert int(repo.get_setting("zaehler")) == len(done)                    # nichts still verloren
-    assert errors == [] and len(done) == 80
+    assert errors == []
+    assert len(done) == 80
 
 
 def test_a_lock_that_times_out_raises_and_writes_nothing(tmp_path):
