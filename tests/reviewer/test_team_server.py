@@ -413,13 +413,38 @@ def test_missing_commit_to_check_is_red_even_if_another_named_one_exists(tmp_pat
     assert old[:7] not in detail["comments"][-1]["body"]
 
 
-def test_token_file_left_by_a_killed_run_is_removed_on_start(tmp_path, tls, repos):
-    """Review V3: nach einem harten Ende liegt mcp-reviewer.token noch im Datenordner."""
-    rv = _reviewer(tmp_path, rc.load(_settings(tmp_path, tls, repos.checkout)))
-    rv.data_dir.mkdir(parents=True)
+def _credential_settings(tmp_path, tls, repos, monkeypatch) -> Path:
+    path = _settings(tmp_path, tls, repos.checkout)
+    path.write_text(path.read_text(encoding="utf-8").replace(
+        'reviewer_token_file = "secrets/reviewer.token"', 'reviewer_token_credential = "ConclaveReviewerTest"'),
+        encoding="utf-8")
+    monkeypatch.setattr(credentials, "read_generic", lambda target: REVIEWER)
+    return path
+
+
+def test_token_file_left_by_a_killed_run_is_removed_once_the_lock_is_held(tmp_path, tls, repos, monkeypatch):
+    """Review V3: nach einem harten Ende liegt mcp-reviewer.token noch im Datenordner; der naechste
+    Start mit der Sperre (clean_orphans) entfernt sie."""
+    rv = _reviewer(tmp_path, rc.load(_credential_settings(tmp_path, tls, repos, monkeypatch)))
+    rv.prepare()
     rv.mcp_token.write_text(REVIEWER, encoding="utf-8")
     rv.prepare()
+    assert rv.mcp_token.exists()                                        # prepare laeuft vor der Sperre
+    rv.clean_orphans()
     assert not rv.mcp_token.exists()
+
+
+def test_second_start_while_a_review_runs_leaves_the_token_file(tmp_path, tls, repos, monkeypatch):
+    """Review V1 (2. Runde): Ein zweiter Start mit demselben Datenordner scheitert an der Sperre und
+    loescht die Token-Datei des laufenden Reviews nicht."""
+    from conclave_reviewer.lock import ProcessLock
+    path = _credential_settings(tmp_path, tls, repos, monkeypatch)
+    rv = _reviewer(tmp_path, rc.load(path))
+    rv.prepare()
+    rv.mcp_token.write_text(REVIEWER, encoding="utf-8")
+    with ProcessLock(rv.lock_file):                                     # das laufende Review haelt die Sperre
+        assert cli_main(["run", "--settings", str(path), "--once"]) == 1
+        assert rv.mcp_token.read_text(encoding="utf-8") == REVIEWER
 
 
 def test_personal_keeps_missing_commits_yellow_and_does_not_fetch(tmp_path, tls, repos, monkeypatch):

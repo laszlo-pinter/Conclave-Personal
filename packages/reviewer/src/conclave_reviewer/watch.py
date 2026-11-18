@@ -84,8 +84,6 @@ class Reviewer:
         from conclave_board.runtime.file_security import make_private_dirs, restrict
         make_private_dirs(self.data_dir)
         restrict(self.data_dir, directory=True)
-        # Token-Datei fuer den MCP-Server, die ein hart beendeter Lauf liegen liess (TR2-Review V3)
-        self.mcp_token.unlink(missing_ok=True)
 
     @staticmethod
     def _private_file(path: Path) -> None:
@@ -222,7 +220,10 @@ class Reviewer:
             worktrees.remove_worktree(r, path)
 
     def clean_orphans(self) -> None:
-        """Beim Start: Worktrees, die ein abgebrochener Lauf liegen liess (#98-Review V3)."""
+        """Beim Start, mit gehaltener Sperre: Worktrees und die Token-Datei fuer den MCP-Server, die ein
+        abgebrochener Lauf liegen liess (#98-Review V3, TR2-Review V3). Erst nach der Sperre: Ein zweiter
+        Start, der an ihr scheitert, loescht nichts, was ein laufendes Review noch braucht."""
+        self.drop_mcp_token()
         repos = dict.fromkeys(r for project in (self.cfg.get("projects") or {})
                               for r in refs.repos_for(self.cfg, project))
         removed = worktrees.remove_orphans(self.worktrees, list(repos))
