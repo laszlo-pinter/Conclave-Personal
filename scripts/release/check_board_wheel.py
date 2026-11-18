@@ -2,8 +2,9 @@
 
 - genau ein Wheel ``conclave_board-<version>-py3-none-any.whl``; die Version ist
   dieselbe wie die von conclave-personal (Release im Gleichschritt)
-- nur ``conclave_board/`` und die Metadaten, im Paket nur Python-Dateien
-  (keine UI, kein ``static/``)
+- nur ``conclave_board/`` und die Metadaten, im Paket ausser Python nur die Board-Seite
+  ``ui/board.html`` und ``ui/static/…`` (U1, ausgeliefert nur, wenn eine Host-App sie einbindet);
+  sie ist Pflicht, sonst kein ``static/`` und keine anderen Ressourcen
 - keine Module fuer Provider, Workspace, Consultations oder Conversations
 - LICENSE und NOTICE (Apache-2.0) in den Metadaten, Entry Point ``conclave-board-server``
 - keine verbotenen Dateien (Datenbanken, Schluessel, Tokens, Logs, Caches)
@@ -19,6 +20,14 @@ from pathlib import Path
 FORBIDDEN_NAMES = ("anthropic", "openai", "universal", "provider", "workspace", "consultation", "conversation",
                    "orchestrat", "participant", "mcp", "static/", "assets/")
 BANNED = (".db", ".key", ".token", ".pem", ".log", ".env", "__pycache__", ".pyc")
+# Board-Seite (U1): die einzigen Dateien ausser Python, die zum Paket gehoeren
+UI_PAGE = "conclave_board/ui/board.html"
+UI_STATIC = "conclave_board/ui/static/"
+REQUIRED_UI = (UI_PAGE, UI_STATIC + "board.js", UI_STATIC + "board-page.js", UI_STATIC + "vendor/purify.min.js")
+
+
+def _ui_resource(name: str) -> bool:
+    return name == UI_PAGE or (name.startswith(UI_STATIC) and not name.endswith("/"))
 
 
 def problems(dist: Path, pyproject: Path) -> list[str]:
@@ -33,18 +42,19 @@ def problems(dist: Path, pyproject: Path) -> list[str]:
     outside = [n for n in names if not (n.startswith("conclave_board/") or n.startswith(info))]
     if outside:
         found.append(f"Dateien ausserhalb von conclave_board/: {outside[:20]}")
-    not_python = [n for n in names if n.startswith("conclave_board/") and not n.endswith(".py")]
+    not_python = [n for n in names if n.startswith("conclave_board/") and not n.endswith(".py")
+                  and not _ui_resource(n)]
     if not_python:
         found.append(f"Nicht-Python-Dateien im Paket: {not_python[:20]}")
     forbidden = [n for n in names if n.startswith("conclave_board/")
-                 and any(word in n.lower() for word in FORBIDDEN_NAMES)]
+                 and any(word in n.lower().replace(UI_STATIC, "", 1) for word in FORBIDDEN_NAMES)]
     if forbidden:
         found.append(f"Module, die nicht ins Board-Paket gehoeren: {forbidden}")
     bad = [n for n in names if any(part in n.lower() for part in BANNED)]
     if bad:
         found.append(f"Verbotene Dateien: {bad[:20]}")
     for required in ("conclave_board/__init__.py", "conclave_board/server.py", f"{info}licenses/LICENSE",
-                     f"{info}licenses/NOTICE", f"{info}entry_points.txt"):
+                     f"{info}licenses/NOTICE", f"{info}entry_points.txt", *REQUIRED_UI):
         if required not in names:
             found.append(f"Pflichtdatei fehlt: {required}")
     if f"{info}entry_points.txt" in names:

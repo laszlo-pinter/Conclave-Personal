@@ -25,6 +25,8 @@ REQUIRED_WHEEL = (
     "conclave_board/__init__.py",
     "conclave_board/api/routes.py",
     "conclave_board/infrastructure/migrations.py",
+    "conclave_board/ui/board.html",                 # Board-Seite aus dem Kern (U1)
+    "conclave_board/ui/static/board.js",
 )
 # Lizenzdateien in den Metadaten (relativ zu <name>-<version>.dist-info/licenses/)
 REQUIRED_LICENSES = ("LICENSE", "packages/board/LICENSE", "packages/board/NOTICE")

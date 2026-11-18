@@ -39,8 +39,8 @@ def board_server(tmp_path, monkeypatch, board_surface):
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     url = f"http://127.0.0.1:{server.server_port}"
-    api = SimpleNamespace(surface=board_surface, 
-        url=url, db=tmp_path / "conclave.db",
+    api = SimpleNamespace(
+        surface=board_surface, url=url, db=tmp_path / "conclave.db",
         human=httpx.Client(base_url=url, headers={"Authorization": f"Bearer {HUMAN}"}),
         agent=httpx.Client(base_url=url, headers={"Authorization": f"Bearer {AGENT}"}),
         reviewer=httpx.Client(base_url=url, headers={"Authorization": f"Bearer {REVIEWER}"}))
