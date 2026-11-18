@@ -6,14 +6,19 @@
 
 html,body{overflow:auto}
 body.board-standalone{display:block;min-height:100%}
-.board-topbar{display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid var(--border);background:var(--bg-2)}
-.board-topbar-title{font-family:var(--font-hd);font-weight:800;font-size:15px;margin-right:auto}
-.board-topbar select{background:var(--bg-3);border:1px solid var(--border-mid);border-radius:var(--r);padding:5px 8px;color:var(--text);font-family:var(--font-ui);font-size:12px}
-.board-topbar .btn-full{width:auto;flex:0 0 auto}
-.board-standalone-main{padding:20px}
-.board-view{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
-.board-view .surface-info{padding:0}
-.board-view .workbench-title{margin:0}
+.board-toolbar{position:sticky;top:0;z-index:10;display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;padding:8px 20px;border-bottom:1px solid var(--border);background:var(--bg-2)}
+.board-toolbar-title{font-family:var(--font-hd);font-weight:800;font-size:14px;white-space:nowrap}
+.board-toolbar-group{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.board-toolbar-end{margin-left:auto}
+.board-toolbar [hidden]{display:none !important}
+.board-toolbar .board-check{margin:0}
+.board-toolbar .btn-full{width:auto;min-width:0;padding:6px 10px;font-size:12px;flex:0 0 auto}
+.board-toolbar .board-input,.board-toolbar select{padding:6px 8px;font-size:12px}
+.board-toolbar #boardSearch{width:140px}
+.board-toolbar select{background:var(--bg-3);border:1px solid var(--border-mid);border-radius:var(--r);color:var(--text);font-family:var(--font-ui)}
+.board-logout{background:none;border:none;padding:6px 4px;color:var(--text-dim);font-family:var(--font-ui);font-size:12px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.board-logout:hover{color:var(--text)}
+.board-standalone-main{padding:16px 20px}
 
 .workspace-page{width:100%;max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
 .page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-bottom:12px;border-bottom:1px solid var(--border)}
