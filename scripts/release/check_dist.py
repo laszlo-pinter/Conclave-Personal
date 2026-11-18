@@ -27,6 +27,10 @@ REQUIRED_WHEEL = (
     "conclave_board/infrastructure/migrations.py",
     "conclave_board/ui/board.html",                 # Board-Seite aus dem Kern (U1)
     "conclave_board/ui/static/board.js",
+    "conclave_reviewer/__init__.py",                 # Reviewer als eigenes Paket, mitgebuendelt (TR1)
+    "conclave_reviewer/watch.py",
+    "conclave_reviewer/reviewer-prompt-conclave.md",
+    "conclave/reviewer/watch.py",                    # alter Name als Alias (TR1)
 )
 # Lizenzdateien in den Metadaten (relativ zu <name>-<version>.dist-info/licenses/)
 REQUIRED_LICENSES = ("LICENSE", "packages/board/LICENSE", "packages/board/NOTICE")

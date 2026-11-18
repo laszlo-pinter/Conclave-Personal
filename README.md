@@ -369,6 +369,12 @@ packages/board/src/conclave_board/
                    file permissions, log); runs on its own as
                    `conclave-board serve`
 
+packages/reviewer/src/conclave_reviewer/
+                   automatic reviewer (PolyForm like Personal, bundled):
+                   `conclave-reviewer`, started by `conclave desktop`;
+                   imports nothing from Personal, own wheel for a team
+                   server (`conclave.reviewer` remains an alias)
+
 src/conclave/assets/
   conclave-ui.html installed UI resource
   static/js/       api, i18n, state, utils, main, swagger-init
@@ -545,3 +551,7 @@ Free for noncommercial use.
 The bundled board package (`conclave_board`, in `packages/board`) is licensed
 under the Apache License 2.0; see `packages/board/LICENSE` and
 `packages/board/NOTICE`.
+
+The bundled reviewer package (`conclave_reviewer`, in `packages/reviewer`) is
+licensed like Personal under PolyForm Noncommercial 1.0.0; see
+`packages/reviewer/README.md`.

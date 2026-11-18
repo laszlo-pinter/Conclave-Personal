@@ -39,7 +39,7 @@ def test_board_dependencies_contain_no_provider_sdks():
 def test_personal_bundles_the_board_sources():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert '"conclave_board" = "packages/board/src/conclave_board"' in pyproject
-    assert 'where = ["src", "packages/board/src"]' in pyproject
+    assert 'where = ["src", "packages/board/src", "packages/reviewer/src"]' in pyproject
 
 
 # ── Wheel-Pruefung (scripts/release/check_board_wheel.py) ───────────────────

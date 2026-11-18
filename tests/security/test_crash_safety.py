@@ -27,7 +27,8 @@ CRASH = 3
 
 def _run_crashing(code: str, **params) -> int:
     """Fuehrt ``code`` in einem eigenen Prozess aus; ``params`` stehen dort als JSON in P."""
-    paths = (str(ROOT / "src"), str(ROOT / "packages" / "board" / "src"), os.environ.get("PYTHONPATH", ""))
+    paths = (str(ROOT / "src"), str(ROOT / "packages" / "board" / "src"), str(ROOT / "packages" / "reviewer" / "src"),
+             os.environ.get("PYTHONPATH", ""))
     env = dict(os.environ, PYTHONPATH=os.pathsep.join(paths))      # Board-Paket liegt daneben (T1)
     script = "import json, os, sys\nP = json.loads(sys.argv[1])\n" + textwrap.dedent(code)
     result = subprocess.run([sys.executable, "-c", script, json.dumps(params)], env=env,

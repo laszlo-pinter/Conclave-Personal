@@ -46,7 +46,7 @@ api = ["flask>=3.1", "flask-limiter>=4.0", "waitress>=3.0.2"]
 crypto = ["cryptography>=42.0"]
 postgres = ["psycopg2-binary>=2.9"]
 mcp = ["mcp>=2,<3", "httpx>=0.27"]
-# Automatischer Reviewer (W1): nur Standardbibliothek; braucht claude und conclave-mcp (Extra mcp)
+# Automatischer Reviewer (W1, eigenes Paket seit TR1): braucht claude und conclave-mcp (Extra mcp)
 reviewer = ["mcp>=2,<3", "httpx>=0.27"]
 dev     = ["pytest>=9.0"]
 dev-api = ["pytest>=9.0", "flask>=3.1"]
@@ -59,11 +59,11 @@ conclave = "conclave.cli.main:main"
 conclave-api = "conclave.api.server:main"
 conclave-mcp = "conclave.mcp_server:main"
 conclave-watch = "conclave.cli.watch:main"
-conclave-reviewer = "conclave.reviewer.cli:main"
+conclave-reviewer = "conclave_reviewer.cli:main"
 
 # Grenze des Board-Pakets (T1): lint-imports in der CI (Job "security")
 [tool.importlinter]
-root_packages = ["conclave_board", "conclave"]
+root_packages = ["conclave_board", "conclave_reviewer", "conclave"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
@@ -79,25 +79,31 @@ source_modules = ["conclave_board"]
 forbidden_modules = ["anthropic", "openai", "httpx", "mcp"]
 
 [[tool.importlinter.contracts]]
-name = "Der Reviewer nutzt nur runtime und HTTP, nicht die Schichten der App (W1)"
+name = "conclave_reviewer importiert nichts aus Personal (TR1)"
 type = "forbidden"
-source_modules = ["conclave.reviewer"]
-forbidden_modules = ["conclave.application", "conclave.infrastructure", "conclave.api", "conclave.cli",
-                     "conclave.domain", "conclave.mcp_server", "conclave_board.application",
-                     "conclave_board.infrastructure", "conclave_board.api", "flask", "httpx", "mcp"]
+source_modules = ["conclave_reviewer"]
+forbidden_modules = ["conclave"]
+
+[[tool.importlinter.contracts]]
+name = "Der Reviewer nutzt nur conclave_board.runtime und HTTP, keine Schichten des Boards (W1, TR1)"
+type = "forbidden"
+source_modules = ["conclave_reviewer"]
+forbidden_modules = ["conclave_board.application", "conclave_board.infrastructure", "conclave_board.api",
+                     "flask", "httpx", "mcp"]
 
 
 [tool.pytest.ini_options]
-pythonpath = ["src", "packages/board/src"]
+pythonpath = ["src", "packages/board/src", "packages/reviewer/src"]
 testpaths = ["tests"]
 
 [tool.setuptools]
-# Das Board-Paket (packages/board, Apache-2.0) wird mitgebuendelt (T1)
-package-dir = {"" = "src", "conclave_board" = "packages/board/src/conclave_board"}
+# Das Board-Paket (packages/board, Apache-2.0) wird mitgebuendelt (T1), ebenso der Reviewer
+# (packages/reviewer, PolyForm wie Personal, TR1)
+package-dir = {"" = "src", "conclave_board" = "packages/board/src/conclave_board", "conclave_reviewer" = "packages/reviewer/src/conclave_reviewer"}
 include-package-data = true
 
 [tool.setuptools.packages.find]
-where = ["src", "packages/board/src"]
+where = ["src", "packages/board/src", "packages/reviewer/src"]
 
 [tool.setuptools.package-data]
 "conclave" = [
@@ -113,8 +119,9 @@ where = ["src", "packages/board/src"]
     "assets/static/vendor/swagger-ui/*",
     "assets/scripts/windows/*.ps1",
     "assets/scripts/linux/*",
-    "reviewer/reviewer-prompt-conclave.md",
 ]
+# Reviewer (TR1)
+"conclave_reviewer" = ["reviewer-prompt-conclave.md"]
 # Board-Oberflaeche aus dem Board-Kern (U1)
 "conclave_board" = [
     "ui/board.html",

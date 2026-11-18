@@ -45,7 +45,8 @@ time.sleep(120)
 
 def _run(tmp_path, mode):
     pids_file = tmp_path / "pids.json"
-    env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(ROOT / "src"), str(ROOT / "packages" / "board" / "src")]))
+    env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(ROOT / "src"), str(ROOT / "packages" / "board" / "src"),
+                                                      str(ROOT / "packages" / "reviewer" / "src")]))
     reviewer = subprocess.Popen([sys.executable, "-c", REVIEWER, FAKE_CLAUDE, str(pids_file), mode],
                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env, cwd=tmp_path)
     assert reviewer.stdout.readline().strip() == "ready"

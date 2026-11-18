@@ -31,7 +31,8 @@ def env(tmp_path, monkeypatch):
     data = tmp_path / "rdata"
     monkeypatch.setenv("CONCLAVE_CONFIG_FILE", str(conf))
     monkeypatch.setenv("CONCLAVE_REVIEWER_DATA_DIR", str(data))
-    monkeypatch.setenv("PYTHONPATH", os.pathsep.join([str(ROOT / "src"), str(ROOT / "packages" / "board" / "src")]))
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join([str(ROOT / "src"), str(ROOT / "packages" / "board" / "src"),
+                                                   str(ROOT / "packages" / "reviewer" / "src")]))
     section = ("[reviewer]\nconclave_url = \"http://127.0.0.1:9\"\npoll_seconds = 1\nclaude_exe = \"claude\"\n"
                f"reviewer_token_file = {json.dumps(str(token))}\n[reviewer.projects]\napi = {json.dumps(str(tmp_path))}\n")
     return {"conf": conf, "token": token, "data": data, "section": section}

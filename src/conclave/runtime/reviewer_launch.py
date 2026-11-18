@@ -20,7 +20,7 @@ from pathlib import Path
 
 def reviewer_configured() -> tuple[bool, str, dict | None]:
     """(konfiguriert, Grund, Konfiguration)."""
-    from conclave.reviewer import config as rc
+    from conclave_reviewer import config as rc
     path = rc.conclave_config_path()
     if not path.exists():
         return False, f"keine Konfiguration unter {path}", None
@@ -40,8 +40,8 @@ def reviewer_configured() -> tuple[bool, str, dict | None]:
 
 def already_running(cfg: dict) -> str | None:
     """Grund, warum kein zweiter Reviewer startet (Sperre gehalten), sonst None."""
-    from conclave.reviewer.config import data_dir
-    from conclave.reviewer.lock import AlreadyRunning, ProcessLock
+    from conclave_reviewer.config import data_dir
+    from conclave_reviewer.lock import AlreadyRunning, ProcessLock
     legacy = tuple(Path(p) for p in [cfg.get("legacy_lock_file")] if p)
     try:
         ProcessLock(data_dir() / "reviewer.lock", legacy=legacy).acquire().release()
@@ -71,10 +71,10 @@ def _start(log) -> subprocess.Popen | None:
     if running:
         log(f"Reviewer nicht gestartet: {running}")
         return None
-    from conclave.reviewer.config import data_dir
+    from conclave_reviewer.config import data_dir
     folder = data_dir()
     folder.mkdir(parents=True, exist_ok=True)
-    cmd = [sys.executable, "-m", "conclave.reviewer", "run", "--parent-pid", str(os.getpid())]
+    cmd = [sys.executable, "-m", "conclave_reviewer", "run", "--parent-pid", str(os.getpid())]
     with (folder / "reviewer-start.log").open("ab") as errors:   # nur Startfehler; das Log fuehrt er selbst
         proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=errors,
                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), close_fds=True)

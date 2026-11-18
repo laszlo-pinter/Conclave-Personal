@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "conclave-reviewer"
+# Gleicher Stand wie conclave-personal (Release im Gleichschritt, tests/packaging prueft das)
+version = "0.8.0"
+description = "Automatic reviewer for the Conclave board: checks tickets in review with claude -p, read-only."
+readme = "README.md"
+license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Laszlo Pinter" }]
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+]
+# Nur der Board-Kern (Dateirechte, conclave_board.runtime); sonst Standardbibliothek. Zum Board spricht
+# der Reviewer ueber HTTP und einen MCP-Server, den er claude mitgibt (conclave-mcp oder
+# conclave-board-mcp); der ist nicht Teil dieses Pakets.
+dependencies = [
+    "conclave-board>=0.8,<0.9",
+]
+
+[project.scripts]
+conclave-reviewer = "conclave_reviewer.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"conclave_reviewer" = ["reviewer-prompt-conclave.md"]

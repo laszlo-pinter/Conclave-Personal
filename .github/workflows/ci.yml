@@ -120,7 +120,10 @@ jobs:
       - name: Static analysis of the board package (medium severity and above)
         run: python -m bandit -r packages/board/src/conclave_board --severity-level medium
 
-      - name: Board package does not import Personal or provider SDKs (import-linter)
+      - name: Static analysis of the reviewer package (medium severity and above)
+        run: python -m bandit -r packages/reviewer/src/conclave_reviewer --severity-level medium
+
+      - name: Board and reviewer packages do not import Personal or provider SDKs (import-linter)
         run: |
           lint-imports
           lint-imports --config .github/importlinter-extensions.toml
@@ -272,6 +275,61 @@ jobs:
         with:
           name: conclave-board-wheel
           path: dist-board/*
+
+  reviewer-package:
+    name: Reviewer package (${{ matrix.os }}, fresh environment)
+    runs-on: ${{ matrix.os }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    env:
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: ${{ !inputs.release && 'pip' || '' }}
+
+      - name: Install pinned build tools
+        run: "python -m pip install --require-hashes --only-binary :all: -r requirements/release-tools.txt"
+
+      - name: Build the board and reviewer wheels
+        run: |
+          python -m build --wheel --no-isolation --outdir dist-reviewer packages/board
+          python -m build --wheel --no-isolation --outdir dist-reviewer packages/reviewer
+
+      - name: Inspect the reviewer wheel (no Personal code, only the board core as dependency)
+        run: python scripts/release/check_reviewer_wheel.py dist-reviewer
+
+      - name: Install both wheels into a fresh environment (without Personal)
+        run: |
+          python -m venv reviewer-env
+          if [ "$RUNNER_OS" = "Windows" ]; then BIN=reviewer-env/Scripts; else BIN=reviewer-env/bin; fi
+          echo "REVIEWER_PYTHON=$BIN/python" >> "$GITHUB_ENV"
+          "$BIN/python" -m pip install dist-reviewer/conclave_board-*.whl dist-reviewer/conclave_reviewer-*.whl
+
+      - name: Start the reviewer without Personal and check it
+        run: '"$REVIEWER_PYTHON" scripts/release/smoke_reviewer.py'
+
+      - name: Upload the reviewer wheel (internal wheelhouse, not for PyPI)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          name: conclave-reviewer-wheel
+          path: dist-reviewer/conclave_reviewer-*
 
   board-api:
     name: Board API v1 without breaking changes (oasdiff)
