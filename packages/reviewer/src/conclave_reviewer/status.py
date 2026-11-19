@@ -61,7 +61,8 @@ def collect(cfg: dict, data_dir: Path, *, check_claude: bool = True) -> dict:
     running = is_running(data_dir / "reviewer.lock")
     status, state = read("status.json"), read("state.json")
     hour_ago = time.time() - 3600
-    info = {"running": running, "data_dir": str(data_dir),
+    from conclave_reviewer.watch import _version
+    info = {"running": running, "version": _version(), "data_dir": str(data_dir),
             "pid": status.get("pid") if running else None,
             "started_at": status.get("started_at") if running else None,
             "current_task": status.get("current_task") if running else None,
@@ -73,7 +74,7 @@ def collect(cfg: dict, data_dir: Path, *, check_claude: bool = True) -> dict:
 
 
 def format_status(info: dict) -> str:
-    lines = [f"Reviewer laeuft: {'ja' if info['running'] else 'nein'}"]
+    lines = [f"Reviewer laeuft: {'ja' if info['running'] else 'nein'}", f"Version: {info.get('version') or '–'}"]
     if info["running"]:
         lines.append(f"  seit {info.get('started_at') or '?'} (PID {info.get('pid') or '?'})")
         lines.append(f"Laufendes Ticket: {info.get('current_task') or 'keins'}")

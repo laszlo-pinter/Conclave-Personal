@@ -165,6 +165,18 @@ def test_status_when_stopped(env, capsys, monkeypatch):
     assert "claude: 2.1.326" in out and "WARNUNG" not in out
 
 
+def test_status_shows_the_reviewer_version(env, capsys, monkeypatch):
+    """L2-Review V1: status nennt die Version des Reviewers (Wheel bzw. Personal), auch in --json."""
+    from conclave_reviewer import watch
+    env["conf"].write_text(env["section"], encoding="utf-8")
+    monkeypatch.setattr(rs, "claude_version", lambda cfg: ("2.1.326", None))
+    monkeypatch.setattr(watch, "_version", lambda: "0.9.0")
+    assert main(["status"]) == 0
+    assert "Version: 0.9.0" in capsys.readouterr().out
+    assert main(["status", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["version"] == "0.9.0"
+
+
 def test_status_while_running(env, capsys, monkeypatch):
     env["conf"].write_text(env["section"], encoding="utf-8")
     monkeypatch.setattr(rs, "claude_version", lambda cfg: ("3.0.0", "unbekannte Version von claude (3.0.0)"))
