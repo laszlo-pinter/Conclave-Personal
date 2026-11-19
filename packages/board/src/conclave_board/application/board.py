@@ -681,11 +681,15 @@ class BoardService:
             self._raise_if_paused(ticket.project_slug, principal)
             return self._claim(task, origin, actor_id, principal)
         self._raise_if_paused(slug, principal)
-        # Nacharbeit aus dem Review zuerst, auch ueber Projekte hinweg; sonst Board-Reihenfolge
-        candidates = sorted(self.list_tasks(slug, [first]), key=lambda t: t.review_state not in REWORK_STATES)
-        for candidate in candidates:
-            if candidate.human or candidate.kind == "control" or not principal.sees(candidate.project_slug):
-                continue
+        # Nacharbeit aus dem Review zuerst, auch ueber Projekte hinweg; dann die Gruppe der Policy; sonst
+        # Board-Reihenfolge (stabil). A2-Review V1: vorher die Filter ohne Policy, dann die Gruppen in einem
+        # Aufruf fuer alle; Rechte und Zuordnung (Policy) weiter erst je Kandidat bis zum ersten passenden.
+        candidates = [t for t in self.list_tasks(slug, [first])
+                      if not t.human and t.kind != "control" and principal.sees(t.project_slug)]
+        groups = list(self.policy.next_groups(principal, candidates))
+        order = sorted(range(len(candidates)),
+                       key=lambda i: (candidates[i].review_state not in REWORK_STATES, groups[i]))
+        for candidate in (candidates[i] for i in order):
             if (not self.policy.can(principal, "write", candidate.project_slug, candidate)
                     or not self.policy.claimable(principal, candidate)):
                 continue
