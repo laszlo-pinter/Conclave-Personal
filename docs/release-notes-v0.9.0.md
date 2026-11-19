@@ -102,16 +102,29 @@ configuration reference.
 
 ## Known limitations
 
-- **Going back to v0.8.0** works with the same database: there is no
-  migration in v0.9.0.
+- **Going back to v0.8.0** works with the same database (tested on a copy of a
+  real database): there is no migration in v0.9.0, the schema stays the same,
+  and v0.8.0 shows all conversations and tickets; v0.9.0 starts again
+  afterwards.
 - The reviewer needs Claude Code (`claude`) on the same machine.
 
 ## Verification
 
 - `python -m pytest`, including the Playwright browser tests
-- PostgreSQL tests
+- PostgreSQL tests, and `only_empty` against PostgreSQL through an installed
+  server
 - `bandit`, `pip-audit` and `import-linter`
-- Wheels of Conclave Personal, the board core and the reviewer built and
-  checked; the reviewer wheel installed and started without Conclave Personal
+- Wheel and sdist of Conclave Personal and the wheels of the board core and the
+  reviewer built and checked
+- Fresh installation from wheel and sdist with `[mcp]`, `[mcp,reviewer]` and
+  `[postgres]`: `conclave desktop` with the Studio and the board page, board
+  mode, creating a project and deleting an empty one, `conclave-mcp` with the
+  agent token, `conclave board wait`, `conclave-reviewer run --dry-run` and
+  `status`
+- The reviewer wheel alone, without Conclave Personal
+- On a copy of a real v0.8.0 database: upgrade (no migration, schema and all
+  rows unchanged, the existing reviewer configuration works), going back to
+  v0.8.0 and forward again
+- `pip-audit` against the fresh environments
 
 v0.9.0 remains alpha.
