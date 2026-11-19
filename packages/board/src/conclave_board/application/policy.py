@@ -52,6 +52,13 @@ class BoardPolicy:
         """
         return 0
 
+    def next_groups(self, principal: Principal, tasks: "list[Task]") -> list[int]:
+        """Gruppen fuer alle Kandidaten eines ``next_task`` in einem Aufruf (A2-Review V1), in der Reihenfolge von
+        ``tasks`` (erste Spalte, sichtbar, ohne "nur fuer Menschen" und Steuertickets; Rechte prueft der Dienst
+        danach). Standard: ``next_group`` je Ticket. Eine Policy, die dafuer Daten liest, ueberschreibt diese
+        Methode und liest sie einmal."""
+        return [self.next_group(principal, task) for task in tasks]
+
     def assignee_for(self, principal: Principal) -> str | None:
         """Zustaendiger beim Uebernehmen (``assignee``); ``None`` = unveraendert lassen."""
         return None

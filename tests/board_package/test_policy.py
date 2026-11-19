@@ -353,3 +353,31 @@ def test_next_task_orders_by_the_policy_group_after_rework(board):
     assert board.next_task(ANNA_AGENT, "api").title == "vorne 3"
     # Ohne Gruppe (Standard) gilt die reine Board-Reihenfolge
     assert BoardPolicy.next_group(PersonalPolicy(), BEN_AGENT, extra) == 0
+    assert PersonalPolicy().next_groups(BEN_AGENT, [extra, extra]) == [0, 0]
+
+
+class CountingGroups(OwnInitiativeFirst):
+    def __init__(self):
+        super().__init__()
+        self.batches = []
+
+    def next_group(self, principal, task):
+        raise AssertionError("next_task fragt die Gruppen gesammelt ab")
+
+    def next_groups(self, principal, tasks):
+        self.batches.append([t.title for t in tasks])
+        return [0 if self.OWNERS.get(t.initiative_slug) == principal.actor_id else 1 for t in tasks]
+
+
+def test_next_task_asks_for_the_groups_once_and_only_for_candidates(board):
+    """A2-Review V1: ein Aufruf je next_task, ohne Tickets "nur fuer Menschen", Steuertickets und fremde Projekte."""
+    board.policy = CountingGroups()
+    board.create_initiative(ANNA, "api", "hinten", "Hinten")
+    board.create_task(ANNA, "api", "nur Menschen", human=True)
+    board.create_task(ANNA, "api", "Pause", kind="control", control="hint", scope="project")
+    board.create_task(ANNA, "web", "anderswo")
+    board.create_task(ANNA, "api", "frei")
+    board.assign_initiative(ANNA, board.create_task(ANNA, "api", "hinten 1").ref, "hinten")
+    scoped_ben = Principal("agent", actor_id="ben", projects=frozenset({"api"}))
+    assert board.next_task(scoped_ben).title == "hinten 1"
+    assert board.policy.batches == [["hinten 1", "frei"]]
