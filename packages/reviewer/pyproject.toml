@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "conclave-reviewer"
 # Gleicher Stand wie conclave-personal (Release im Gleichschritt, tests/packaging prueft das)
-version = "0.8.0"
+version = "0.9.0"
 description = "Automatic reviewer for the Conclave board: checks tickets in review with claude -p, read-only."
 readme = "README.md"
 license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
@@ -26,7 +26,7 @@ classifiers = [
 # der Reviewer ueber HTTP und einen MCP-Server, den er claude mitgibt (conclave-mcp oder
 # conclave-board-mcp); der ist nicht Teil dieses Pakets.
 dependencies = [
-    "conclave-board>=0.8,<0.9",
+    "conclave-board>=0.9,<0.10",
 ]
 
 [project.scripts]

@@ -19,13 +19,13 @@ Der Datenordner ist ``<Konfigurationsordner von Conclave>/reviewer`` (Windows
 
 Ein Abschnitt ``[reviewer]`` laesst ``conclave desktop`` den Reviewer starten (W4, E-W3).
 
-Team-Server (TR2): eine eigene Datei, z. B. ``C:\\ProgramData\\Conclave\\reviewer.toml``, gestartet mit
+Entfernter Board-Server (TR2): eine eigene Datei, z. B. ``C:\\ProgramData\\Conclave\\reviewer.toml``, gestartet mit
 ``conclave-reviewer run --settings <Datei>``::
 
     [reviewer]
     server = "team"
     server_url = "https://board.intern"        # https, http nur fuer diesen Rechner
-    ca_bundle = 'C:\\ProgramData\\Conclave\\firmen-ca.pem'
+    ca_bundle = 'C:\\ProgramData\\Conclave\\eigene-ca.pem'
     reviewer_token_credential = "ConclaveReviewer"   # oder reviewer_token_file (nur fuer das Dienstkonto)
     data_dir = 'C:\\ProgramData\\Conclave\\reviewer'
     [reviewer.projects]
@@ -92,7 +92,7 @@ def default_token_file() -> Path:
 
 
 def default_mcp_exe(program: str = "conclave-mcp") -> str:
-    """``program`` (conclave-mcp, im Team conclave-board-mcp) aus derselben Installation wie dieser
+    """``program`` (conclave-mcp, am entfernten Server conclave-board-mcp) aus derselben Installation wie dieser
     Reviewer, sonst aus dem PATH."""
     scripts = Path(sys.executable).parent
     for name in (f"{program}.exe", program):
@@ -114,7 +114,7 @@ def _file_beside(path: Path, value, key: str, *, must_exist: bool) -> str:
 
 
 def _server_settings(cfg: dict, section: dict, path: Path) -> None:
-    """Personal oder Team-Server (TR2): Adresse, CA-Buendel, Token-Quelle, MCP, git fetch, fehlende Commits."""
+    """Personal oder entfernter Board-Server (TR2): Adresse, CA-Buendel, Token-Quelle, MCP, git fetch, fehlende Commits."""
     from conclave_reviewer.transport import TransportError, check_url
     server = cfg.get("server", "personal")
     if server not in SERVERS:
@@ -134,8 +134,8 @@ def _server_settings(cfg: dict, section: dict, path: Path) -> None:
             raise ConfigError("[reviewer] server_url fehlt (z. B. https://board.intern).")
         if not cfg.get("ca_bundle"):
             # Ohne eigenes Buendel laedt Python die Standardorte, und dann gelten SSL_CERT_FILE und
-            # SSL_CERT_DIR (R12, TR2-Review V2); die interne CA der Firma steht ohnehin nur im Buendel.
-            raise ConfigError("[reviewer] ca_bundle fehlt: die CA der Firma als PEM-Datei (z. B. firmen-ca.pem).")
+            # SSL_CERT_DIR (R12, TR2-Review V2); die eigene CA steht ohnehin nur im Buendel.
+            raise ConfigError("[reviewer] ca_bundle fehlt: die eigene CA als PEM-Datei (z. B. eigene-ca.pem).")
         if not (section.get("reviewer_token_file") or credential):
             raise ConfigError("[reviewer]: reviewer_token_credential oder reviewer_token_file angeben; das Token "
                               "selbst steht nie in dieser Datei.")

@@ -18,5 +18,5 @@ Aufteilung:
 
 Eigenes Paket seit TR1 (Plan team-reviewer.md): Es nutzt nur die Standardbibliothek, HTTP und
 ``conclave_board.runtime`` und importiert nichts aus Conclave Personal (``conclave``) oder dem
-Team-Paket (import-linter). Personal buendelt es; ``conclave.reviewer`` ist dort ein Alias.
+einer Erweiterung des Boards (import-linter). Personal buendelt es; ``conclave.reviewer`` ist dort ein Alias.
 """

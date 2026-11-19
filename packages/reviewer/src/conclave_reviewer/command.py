@@ -7,7 +7,7 @@ Absicherung (durch Tests festgeschrieben, tests/reviewer/test_hardening.py):
   ``DENIED_ALWAYS`` und alle uebrigen Board-Tools sind ausdruecklich verboten.
 - git nur ueber ``git_mcp`` (schreibgeschuetzt, mit ``python -I`` gestartet).
 - Das Board nur ueber ``conclave-mcp --reviewer`` mit dem Reviewer-Token, nie mit dem Agent- oder
-  Mensch-Token. Am Team-Server (TR2) ueber ``conclave-board-mcp --reviewer``: dieselben drei Tools,
+  Mensch-Token. An einem entfernten Board-Server (TR2) ueber ``conclave-board-mcp --reviewer``: dieselben drei Tools,
   derselbe Servername ``conclave`` in der MCP-Konfiguration, also dieselben erlaubten Tool-Namen.
 """
 
@@ -87,7 +87,7 @@ def mcp_servers(cfg: dict, repos: list[str], token_file: Path) -> dict:
 
 def board_env(cfg: dict, token_file: Path) -> dict:
     """Umgebung des Board-MCP-Servers: nur Adresse, Rolle, Pfad der Token-Datei und CA (nie das Token)."""
-    if cfg.get("server") == "team":                    # conclave-board-mcp (Team-Paket, TR2)
+    if cfg.get("server") == "team":                    # conclave-board-mcp (Board-Server mit Konten, TR2)
         env = {"CONCLAVE_BOARD_URL": cfg["conclave_url"], "CONCLAVE_BOARD_MCP_ROLE": "reviewer",
                "CONCLAVE_BOARD_TOKEN_FILE": str(token_file)}
         if cfg.get("ca_bundle"):
@@ -244,7 +244,7 @@ def run_claude(cmd: list[str], cwd: str, timeout_minutes: float, log, key: str, 
                quiet: bool = False) -> str:
     """Startet den Reviewer; liefert "done", "failed" oder "timeout". ``on_start(proc)`` meldet den Prozess.
 
-    ``quiet`` (Team-Server, TR3): die Ausgabe von claude nicht ins Log, sie kann Text aus dem Review und
+    ``quiet`` (entfernter Server, TR3): die Ausgabe von claude nicht ins Log, sie kann Text aus dem Review und
     damit aus Tickets enthalten; bei einem Fehler nur stderr (Meldungen von claude selbst)."""
     started = time.monotonic()
     proc = start_claude(cmd, cwd)

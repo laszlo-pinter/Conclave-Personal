@@ -13,7 +13,7 @@ answer is correct. It gives users a structured workspace for comparing model
 outputs, tracking runs, and deliberately choosing the next step. The human
 decides. Always.
 
-> Status: v0.8.0 Alpha. The primary path is local, desktop-first, and designed
+> Status: v0.9.0 Alpha. The primary path is local, desktop-first, and designed
 > for individual users on Windows and Linux.
 
 ![Conclave Studio](https://raw.githubusercontent.com/laszlo-pinter/Conclave-Personal/main/docs/assets/screenshots/conclave-studio-desktop.png)
@@ -444,6 +444,7 @@ Important documents:
 - [Example workflows](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/beispiel-workflows.md)
 - [Security](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/sicherheit.md)
 - [Configuration](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/referenz/konfiguration.md)
+- [Release Notes v0.9.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.9.0.md)
 - [Release Notes v0.8.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.8.0.md)
 - [Release Notes v0.4.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.4.0.md)
 - [Release Notes v0.5.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.5.0.md)
@@ -471,7 +472,7 @@ Important documents:
 
 ## Known Limitations
 
-v0.8.0 remains alpha. Known limitations:
+v0.9.0 remains alpha. Known limitations:
 
 - Provider compatibility varies by API, model, account, and region.
 - Remote providers receive the data required for the model call.
@@ -487,8 +488,9 @@ v0.8.0 remains alpha. Known limitations:
 
 CI runs the jobs `test` (Ubuntu and Windows, Python 3.11 and 3.12),
 `ui-browser` (Playwright browser tests in Chromium), `security` (`pip-audit`,
-`bandit`), `postgres` (PostgreSQL 16 tests) and `build` (sdist and wheel,
-artifact inspection).
+`bandit`, `import-linter`), `postgres` (PostgreSQL 16 tests), `build` (sdist and
+wheel, artifact inspection) and `board-package` and `reviewer-package` (their
+wheels in a fresh environment without Conclave Personal).
 
 The v0.8.0 surface was verified with these checks:
 

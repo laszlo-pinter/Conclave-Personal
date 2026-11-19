@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "conclave-personal"
-version = "0.8.0"
+version = "0.9.0"
 description = "Local personal multi-agent workspace for Windows and Linux."
 readme = "README.md"
 # Personal steht unter PolyForm; das mitgebuendelte Board-Paket (conclave_board) unter Apache-2.0 (T1)
@@ -37,7 +37,7 @@ Homepage = "https://github.com/laszlo-pinter/Conclave-Personal"
 Source = "https://github.com/laszlo-pinter/Conclave-Personal"
 Issues = "https://github.com/laszlo-pinter/Conclave-Personal/issues"
 Documentation = "https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/index.md"
-Changelog = "https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.8.0.md"
+Changelog = "https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.9.0.md"
 
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.40.0"]

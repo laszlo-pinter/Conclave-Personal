@@ -287,6 +287,24 @@ conclave = ["C:\\...\\conclave", "C:\\...\\conclave-plugins"]
 | `reviewer_token_file` | wie `CONCLAVE_REVIEWER_TOKEN_FILE` | Das Token liest nur der MCP-Server; der Start prüft nur, ob die Datei da ist |
 | `legacy_lock_file` | leer | Sperrdatei des früheren, getrennten Watchers: Hält er sie, startet der Reviewer nicht |
 
+**Entfernter Board-Server (ab v0.9.0, optional).** Ohne diese Schlüssel ändert sich nichts. Mit
+`server = "team"` prüft der Reviewer gegen einen Board-Server mit Konten statt gegen Conclave Personal.
+Die Einstellungen stehen dann meist in einer eigenen Datei, gestartet mit
+`conclave-reviewer run --settings <Datei>`. Relative Pfade gelten relativ zu dieser Datei.
+
+| Schlüssel | Default | Bedeutung |
+|---|---|---|
+| `server` | `personal` | `team`: entfernter Board-Server; dann gelten die Pflichten und Standards dieser Tabelle |
+| `server_url` | – (Pflicht mit `team`) | Adresse des Servers, `https`; `http` nur für diesen Rechner. Statt `conclave_url` |
+| `ca_bundle` | – (Pflicht mit `team`) | Eigene CA als PEM-Datei. Es gilt nur diese CA; `SSL_CERT_FILE`, `SSL_CERT_DIR` und Proxy-Variablen wirken nicht, Umleitungen werden nicht verfolgt |
+| `reviewer_token_file` / `reviewer_token_credential` | – (eins davon Pflicht mit `team`) | Token-Datei nur für den Benutzer bzw. Zielname einer generischen Anmeldeinformation in der Windows-Anmeldeinformationsverwaltung. Das Token steht nie in der Datei |
+| `data_dir` | `<Konfigurationsordner>/reviewer` | Datenordner; `--data-dir` hat Vorrang |
+| `conclave_mcp_exe`, `conclave_mcp_args` | mit `team`: `conclave-board-mcp`, `["--reviewer"]` | MCP-Server des Board-Servers |
+| `fetch` | mit `team`: `true` | Vor jedem Review `git fetch` in den Checkouts; die Branches von `origin` haben Vorrang |
+| `missing_commits` | mit `team`: `red` | `red`: Liegt keiner der genannten Commits oder der zu prüfende (`branch` @ `hash`) nicht im Git-Server, ist das Review rot, ohne `claude`. `yellow`: wie in Personal nur ein Hinweis |
+
+Mit `server = "team"` steht die Ausgabe von `claude` nicht im Log.
+
 Die Daten liegen in `<Konfigurationsordner>/reviewer` (Windows
 `%APPDATA%\Conclave\reviewer`, nur für den Benutzer lesbar):
 

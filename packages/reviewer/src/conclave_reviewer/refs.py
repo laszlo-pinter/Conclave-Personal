@@ -29,7 +29,7 @@ def git(repo: str, *args: str) -> str:
 
 
 def fetch(repo: str) -> None:
-    """Neuen Stand aus dem Git-Server holen (Team-Server, TR2); der Zugang ist dort nur lesend."""
+    """Neuen Stand aus dem Git-Server holen (entfernter Server, TR2); der Zugang ist dort nur lesend."""
     git(repo, "fetch", "--all", "--prune", "--quiet")
 
 
@@ -107,7 +107,7 @@ def is_ancestor(repo: str, commit: str, head: str) -> bool:
 
 
 def branch_head(repo: str, branch: str, remote_first: bool = False) -> str | None:
-    """Kopf des Branches: lokal, sonst der von origin. ``remote_first`` (Team-Server mit fetch, TR2): erst
+    """Kopf des Branches: lokal, sonst der von origin. ``remote_first`` (entfernter Server mit fetch, TR2): erst
     origin, denn dort zaehlt der Stand im Git-Server; die lokalen Branches des Checkouts bleiben alt."""
     refs = [f"refs/heads/{branch}", f"refs/remotes/origin/{branch}"]
     for ref in (refs[::-1] if remote_first else refs):

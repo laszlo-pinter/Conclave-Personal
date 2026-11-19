@@ -5,7 +5,7 @@
     conclave-reviewer status [--settings <datei>] [--json]
 
 ``--settings``: ``[reviewer]`` aus dieser Datei statt aus Conclaves ``config.toml``, z. B. die eigene
-Datei auf dem Team-Server (TR2). Der Datenordner kommt dann aus ``data_dir`` darin, sofern nicht
+Datei auf einem entfernten Board-Server (TR2). Der Datenordner kommt dann aus ``data_dir`` darin, sofern nicht
 ``--data-dir`` angegeben ist.
 
 ``conclave desktop`` startet ``run`` als Kindprozess mit ``--parent-pid``: Der Reviewer endet, sobald
@@ -37,7 +37,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--config", type=Path, default=None,
                      help="alte Form: config.toml des alten Watchers (ohne: [reviewer] in Conclaves config.toml)")
     run.add_argument("--settings", type=Path, default=None,
-                     help="[reviewer] aus dieser Datei (z. B. reviewer.toml auf dem Team-Server)")
+                     help="[reviewer] aus dieser Datei (z. B. reviewer.toml auf einem entfernten Server)")
     run.add_argument("--data-dir", type=Path, default=None,
                      help="Ordner fuer Log, Zustand, Sperre und Worktrees (Standard: data_dir bzw. "
                           "<Konfiguration>/reviewer)")
@@ -58,7 +58,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _data_dir(args, cfg: dict) -> Path:
-    """--data-dir, sonst data_dir aus der Konfiguration (Team-Server), sonst der Standard."""
+    """--data-dir, sonst data_dir aus der Konfiguration (entfernter Server), sonst der Standard."""
     return Path(args.data_dir or cfg.get("data_dir") or default_data_dir()).resolve()
 
 

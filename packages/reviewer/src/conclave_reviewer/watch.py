@@ -13,7 +13,7 @@ Ein Projekt kann mehrere Checkouts haben (P7, ``projects.conclave = ['...', '...
 Commits werden in jedem gesucht; jedes Repo mit Treffer bekommt einen eigenen Worktree und einen
 eigenen git-Server. Das Verhalten entspricht dem alten Watcher (``kanzo-reviewer/watcher.py``).
 
-Am Team-Server (TR2, ``server = "team"``): https mit dem CA-Buendel aus der Konfiguration, ohne Proxy
+An einem entfernten Board-Server (TR2, ``server = "team"``): https mit dem CA-Buendel aus der Konfiguration, ohne Proxy
 und ohne Umleitungen (``transport``); das Token aus der Anmeldeinformationsverwaltung oder einer Datei;
 vor jedem Review ``git fetch`` in den Checkouts; genannte Commits, die es dort nicht gibt, ergeben ein
 rotes Review ohne claude ("Commits nicht im Git-Server").
@@ -252,7 +252,7 @@ class Reviewer:
         detail = self.get_json(self.task_url(key))
         hashes, branches = refs.named_refs(detail, self.cfg["author"])
         if self.cfg.get("fetch") and (hashes or branches):
-            for r in repos:                             # Team-Server: nur der Stand im Git-Server zaehlt (TR2)
+            for r in repos:                             # entfernter Server: nur der Stand im Git-Server zaehlt (TR2)
                 refs.fetch(r)
         if hashes and self.cfg.get("missing_commits") == "red":
             # Rot nur, wenn keiner der genannten Commits da ist oder ein zu pruefender (`branch` @ `hash`)
@@ -489,7 +489,7 @@ class Reviewer:
             time.sleep(self.cfg["poll_seconds"])
 
 
-# Eigenes Wheel (Team-Server) zuerst, dann Personal, das den Reviewer buendelt (TR1); gleiche Version
+# Eigenes Wheel (entfernter Server) zuerst, dann Personal, das den Reviewer buendelt (TR1); gleiche Version
 VERSION_SOURCES = ("conclave-reviewer", "conclave-personal")
 
 

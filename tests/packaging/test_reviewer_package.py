@@ -40,7 +40,7 @@ def test_reviewer_and_personal_have_the_same_version():
 
 def test_reviewer_needs_only_the_board_core_and_keeps_its_command():
     project = _project(REVIEWER / "pyproject.toml")
-    assert project["dependencies"] == ["conclave-board>=0.8,<0.9"]
+    assert project["dependencies"] == ["conclave-board>=0.9,<0.10"]
     assert project["scripts"] == {"conclave-reviewer": "conclave_reviewer.cli:main"}
     assert project["license"] == "LicenseRef-PolyForm-Noncommercial-1.0.0"
     assert (REVIEWER / "LICENSE").read_text(encoding="utf-8") == (ROOT / "LICENSE").read_text(encoding="utf-8")
@@ -117,7 +117,7 @@ check_reviewer_wheel = _load("check_reviewer_wheel")
 
 
 def _wheel(tmp_path, version="1.2.3", extra=None, drop=(), license_text="PolyForm Noncommercial License 1.0.0",
-           requires=("conclave-board<0.9,>=0.8",), entry="conclave-reviewer = conclave_reviewer.cli:main"):
+           requires=("conclave-board<0.10,>=0.9",), entry="conclave-reviewer = conclave_reviewer.cli:main"):
     dist = tmp_path / "dist"
     dist.mkdir()
     info = f"conclave_reviewer-{version}.dist-info/"
@@ -151,8 +151,8 @@ def test_reviewer_wheel_with_foreign_files_fails(tmp_path, bad):
 
 @pytest.mark.parametrize("variant", [
     {"license_text": "Apache License"},
-    {"requires": ("conclave-board<0.9,>=0.8", "httpx>=0.27")},
-    {"requires": ("conclave-board<0.9,>=0.8", "conclave-personal")},
+    {"requires": ("conclave-board<0.10,>=0.9", "httpx>=0.27")},
+    {"requires": ("conclave-board<0.10,>=0.9", "conclave-personal")},
     {"entry": "conclave-reviewer = conclave.reviewer.cli:main"},
     {"drop": ("conclave_reviewer/reviewer-prompt-conclave.md",)},
     {"version": "0.0.1"},
