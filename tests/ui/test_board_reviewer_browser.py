@@ -4,6 +4,7 @@ der Desktop-Hinweis genau einmal (je Ausfall), auch nach dem Neuladen nicht erne
 
 import pytest
 
+from tests.ui.conftest import goto_board, reload_board  # noqa: F401
 from tests.ui.test_board_notify_browser import _enable, _notes, _open, _tick  # noqa: F401
 from tests.ui.test_board_review_browser import _ticket_in_review, board_server  # noqa: F401
 
@@ -21,8 +22,7 @@ def test_badge_shows_active_or_off_with_text(chromium, board_server, scheme):
         badge = _badge(page)
         assert badge.get_attribute("data-state") == "off" and badge.inner_text().strip().endswith("Reviewer aus")
         board_server.reviewer.post("/board/v1/reviewer/heartbeat", json={"version": "test"})
-        page.reload()
-        page.click("[data-action='switch-tab'][data-tab='board']")
+        reload_board(page, board_server)
         badge = _badge(page)
         page.wait_for_function("() => document.getElementById('boardReviewer').dataset.state === 'active'",
                                timeout=10000)
@@ -42,8 +42,7 @@ def test_off_reviewer_with_tickets_in_review_is_notified_once(chromium, board_se
         assert len(notes) == 1 and "1 Ticket" in notes[0]["body"]
         _tick(page)
         assert len(_notes(page, reviewer_off=True)) == 1      # nicht bei jedem Abruf
-        page.reload()
-        page.click("[data-action='switch-tab'][data-tab='board']")
+        reload_board(page, board_server)
         page.locator("#boardColumns .board-col").first.wait_for(timeout=10000)
         _tick(page)
         assert _notes(page, reviewer_off=True) == []          # auch nach dem Neuladen nicht

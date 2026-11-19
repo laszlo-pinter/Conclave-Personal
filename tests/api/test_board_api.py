@@ -233,3 +233,21 @@ def test_spec_lists_the_patch_route():
     spec = json.loads((Path(__file__).resolve().parents[2] / "static" / "openapi.json").read_text(encoding="utf-8"))
     op = spec["paths"]["/board/projects/{slug}/tasks/{number}"]["patch"]
     assert "requestBody" in op and op["operationId"] == "board_update_task"
+
+
+def test_project_management_for_the_board_page(client):
+    """U4: anlegen, umbenennen, nur leere loeschen (only_empty); der Agent bekommt ueberall 403."""
+    for method, url, body in (("POST", "/board/v1/projects", {"slug": "neu", "name": "Neu"}),
+                              ("PUT", "/board/v1/projects/api", {"name": "x"}),
+                              ("DELETE", "/board/v1/projects/api?only_empty=true", None)):
+        assert client.open(url, method=method, json=body, headers=_bearer(AGENT)).status_code == 403, url
+    assert client.post("/board/v1/projects", json={"slug": "neu", "name": "Neu"},
+                       headers=_bearer(HUMAN)).status_code == 201
+    renamed = client.put("/board/v1/projects/neu", json={"name": "Neuer Titel"}, headers=_bearer(HUMAN))
+    assert renamed.status_code == 200 and renamed.get_json()["name"] == "Neuer Titel"
+    _task(client, AGENT)
+    resp = client.delete("/board/v1/projects/api?only_empty=true", headers=_bearer(HUMAN))
+    assert resp.status_code == 409 and resp.get_json()["type"] == "ProjectNotEmpty"
+    assert client.get("/board/v1/projects/api/tasks/1", headers=_bearer(HUMAN)).status_code == 200
+    assert client.delete("/board/v1/projects/neu?only_empty=true", headers=_bearer(HUMAN)).status_code == 204
+    assert [p["slug"] for p in client.get("/board/v1", headers=_bearer(HUMAN)).get_json()["projects"]] == ["api"]

@@ -77,7 +77,8 @@ gilt auch hier: Ein Agent, der `api.token` lesen kann, hat den Mensch-Zugang.
    statuses = ["todo", "doing", "review", "done"]
    ```
 
-3. **Projekt anlegen** (Mensch-Token), z. B.:
+3. **Projekt anlegen:** in der Board-Ansicht über „Projekte“ (nur mit dem
+   Mensch-Token; dort auch umbenennen und leere Projekte löschen) oder per API, z. B.:
 
    ```bash
    curl -X POST http://localhost:8000/board/v1/projects \
@@ -156,6 +157,14 @@ Die Ticket-Ansicht nennt dazu die Zahl der blockierenden Punkte und Vorschläge.
 `review`); ein Klick zeigt nur diese, ein zweiter wieder alle. Karten
 verschieben lässt sich nur mit dem Mensch-Zugang, weil das Spalte und
 Priorität ändert.
+
+Dieselbe Ansicht gibt es als eigene Seite ohne Studio unter `/ui/board`, zum
+Beispiel `http://127.0.0.1:8000/ui/board`. Sie meldet sich mit dem Token des
+Tabs an; ohne Token fragt ein Dialog danach. Mit `[ui] mode = "board"` in
+`config.toml` zeigt Conclave nur noch diese Seite: `/` leitet dorthin weiter,
+das Studio ist abgeschaltet, und `conclave desktop` öffnet direkt das Board.
+Agenten und der Reviewer arbeiten unverändert weiter (siehe
+[Konfiguration](referenz/konfiguration.md#oberfläche)).
 
 ## Ein Ablauf als Beispiel
 

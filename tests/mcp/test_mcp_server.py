@@ -48,18 +48,19 @@ def fresh_role_check(monkeypatch):
     monkeypatch.delenv("CONCLAVE_MCP_ALLOW_HUMAN", raising=False)
 
 
-@pytest.fixture
-def conclave_api(tmp_path, monkeypatch):
-    """Echter Conclave-Server (Tokens aus den Token-Dateien) auf einem freien Port.
+@pytest.fixture(params=["studio", "board"])
+def conclave_api(tmp_path, monkeypatch, request):
+    """Echter Conclave-Server (Tokens aus den Token-Dateien) auf einem freien Port, im Studio- und
+    im Board-Modus (U2: die API und damit conclave-mcp bleiben gleich).
 
     Liefert (url, Mensch-Token, Agent-Token)."""
     from werkzeug.serving import make_server
 
     from conclave.api.server import _build_app
-    from conclave.cli.config import ConclaveConfig
+    from conclave.cli.config import ConclaveConfig, UiSettings
 
     monkeypatch.delenv("CONCLAVE_API_KEY", raising=False)
-    app, config = _build_app(ConclaveConfig(db_path=tmp_path / "c.db", api_key=""))
+    app, config = _build_app(ConclaveConfig(db_path=tmp_path / "c.db", api_key="", ui=UiSettings(request.param)))
     srv = make_server("127.0.0.1", 0, app, threaded=True)
     thread = threading.Thread(target=srv.serve_forever, daemon=True)
     thread.start()
@@ -406,18 +407,19 @@ def test_board_get_does_not_repeat_long_descriptions_and_list_filters_search(con
 
 # ── B6: Consultations gegen das eigene Board ─────────────────────────────
 
-def test_consult_on_human_only_board_ticket_is_rejected_for_the_agent(tmp_path, monkeypatch):
+@pytest.mark.parametrize("ui_mode", ["studio", "board"])
+def test_consult_on_human_only_board_ticket_is_rejected_for_the_agent(tmp_path, monkeypatch, ui_mode):
     """Abnahme B6: Ticket "nur fuer Menschen" im eigenen Board, Anfrage ueber MCP (Agent-Token) -> 403;
     mit dem Mensch-Token ueber REST angenommen."""
     import httpx
     from werkzeug.serving import make_server
 
     from conclave.api.server import _build_app
-    from conclave.cli.config import ConclaveConfig, KanzoSettings
+    from conclave.cli.config import ConclaveConfig, KanzoSettings, UiSettings
 
     monkeypatch.delenv("CONCLAVE_API_KEY", raising=False)
     app, config = _build_app(ConclaveConfig(db_path=tmp_path / "c.db", api_key="",
-                                            kanzo=KanzoSettings(reviewers=("gpt",))))
+                                            kanzo=KanzoSettings(reviewers=("gpt",)), ui=UiSettings(ui_mode)))
     assert config.board.source == "internal"
     srv = make_server("127.0.0.1", 0, app, threaded=True)
     thread = threading.Thread(target=srv.serve_forever, daemon=True)

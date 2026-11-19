@@ -5,6 +5,7 @@
 - unter ``/board/v1``: mit dem Mensch-Token laesst sich ein Projekt anlegen, ohne Token nicht;
   ein Agent-Token sieht die Uebersicht nicht (403), legt ein Ticket an und holt es
 - der Alias ``/board`` antwortet mit ``Deprecation`` und ``Sunset``
+- die Board-Seite (U1) liegt im installierten Paket, der Server liefert sie aber nicht aus (404)
 
 Aufruf mit dem Python der frischen Umgebung: python scripts/release/smoke_board.py
 """
@@ -58,6 +59,13 @@ def _alias_ok(answer) -> bool:
     return status == 200 and bool(body and body.get("tasks")) and "Deprecation" in headers and "Sunset" in headers
 
 
+def _board_page_installed() -> bool:
+    """Die Ressourcen der Board-Seite liegen im installierten Wheel (Host-Apps binden sie ein)."""
+    from conclave_board.ui import STATIC_ROOT, UI_ROOT
+    return all(path.is_file() for path in (UI_ROOT / "board.html", STATIC_ROOT / "board.js",
+                                           STATIC_ROOT / "vendor" / "purify.min.js"))
+
+
 def main() -> int:
     present = [name for name in ("conclave", "anthropic", "openai", "httpx", "mcp")
                if importlib.util.find_spec(name) is not None]
@@ -98,6 +106,9 @@ def main() -> int:
             "Alias antwortet mit Abkuendigung": _alias_ok(_request_with_headers(f"{base}/board/tasks?project=smoke",
                                                                                 token=human)),
             "keine Personal-Route": _request(f"{base}/conversations", token=human)[0] == 404,
+            "Board-Seite im Paket": _board_page_installed(),
+            "Board-Seite nicht ausgeliefert": all(_request(f"{base}{path}", token=human)[0] == 404
+                                                   for path in ("/ui/board", "/ui/board/static/board.js", "/")),
         }
         failed = [name for name, ok in checks.items() if not ok]
         for name, ok in checks.items():

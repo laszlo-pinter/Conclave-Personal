@@ -118,7 +118,8 @@ BOARD_SCHEMAS: dict[tuple[str, str], dict] = {
     ("POST", "/projects"): {"status": 201, "request": _object({"slug": STRING, "name": STRING}),
                             "response": PROJECT},
     ("PUT", "/projects/<slug>"): {"request": _object({"name": STRING}), "response": PROJECT},
-    ("DELETE", "/projects/<slug>"): {"status": 204},
+    ("DELETE", "/projects/<slug>"): {"status": 204, "query": [
+        _q("only_empty", BOOL_QUERY, "nur loeschen, wenn das Projekt keine Tickets und keine Vorhaben hat; sonst 409 ProjectNotEmpty")]},
     ("GET", "/tasks"): {"response": TASK_LIST,
                         "query": [_q("project", STRING), _q("status", STRING, "mehrfach moeglich"),
                                   _q("include_done", BOOL_QUERY)]},

@@ -15,13 +15,15 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+from tests.ui.conftest import goto_board, reload_board  # noqa: F401
+
 HUMAN = "cvh_p4-mensch"
 AGENT = "cva_p4-agent"
 REVIEWER = "cvr_p4-reviewer"
 
 
 @pytest.fixture
-def board_server(tmp_path, monkeypatch):
+def board_server(tmp_path, monkeypatch, board_surface):
     from werkzeug.serving import make_server
 
     from conclave.api.server import _build_app
@@ -38,7 +40,7 @@ def board_server(tmp_path, monkeypatch):
     thread.start()
     url = f"http://127.0.0.1:{server.server_port}"
     api = SimpleNamespace(
-        url=url, db=tmp_path / "conclave.db",
+        surface=board_surface, url=url, db=tmp_path / "conclave.db",
         human=httpx.Client(base_url=url, headers={"Authorization": f"Bearer {HUMAN}"}),
         agent=httpx.Client(base_url=url, headers={"Authorization": f"Bearer {AGENT}"}),
         reviewer=httpx.Client(base_url=url, headers={"Authorization": f"Bearer {REVIEWER}"}))
@@ -95,8 +97,7 @@ def _open_board(browser, server, scheme="dark", token=HUMAN):
     page = context.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
-    page.goto(f"{server.url}/#token={token}")
-    page.click("[data-action='switch-tab'][data-tab='board']")
+    goto_board(page, server, token)
     page.locator("#boardColumns .board-col").first.wait_for(timeout=10000)
     return context, page, errors
 
@@ -167,8 +168,7 @@ def test_running_review_turns_stuck_on_an_open_board_without_any_change(chromium
     page.on("pageerror", lambda e: errors.append(str(e)))
     try:
         page.clock.install()
-        page.goto(f"{board_server.url}/#token={HUMAN}")
-        page.click("[data-action='switch-tab'][data-tab='board']")
+        goto_board(page, board_server, HUMAN)
         badge = _card(page, number).locator(".board-review")
         badge.wait_for(timeout=10000)
         assert badge.get_attribute("data-state") == "running"
@@ -226,8 +226,7 @@ def test_agent_token_gets_no_board_and_no_draggable_cards(chromium, board_server
     context = chromium.new_context()
     page = context.new_page()
     try:
-        page.goto(f"{board_server.url}/#token={AGENT}")
-        page.click("[data-action='switch-tab'][data-tab='board']")
+        goto_board(page, board_server, AGENT)
         page.locator("#boardColumns .board-error").wait_for(timeout=10000)
         assert page.locator("#boardColumns .board-card").count() == 0
         assert page.locator("#boardApprovals").is_hidden()

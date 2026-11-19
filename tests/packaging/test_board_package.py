@@ -39,7 +39,7 @@ def test_board_dependencies_contain_no_provider_sdks():
 def test_personal_bundles_the_board_sources():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert '"conclave_board" = "packages/board/src/conclave_board"' in pyproject
-    assert 'where = ["src", "packages/board/src"]' in pyproject
+    assert 'where = ["src", "packages/board/src", "packages/reviewer/src"]' in pyproject
 
 
 # ── Wheel-Pruefung (scripts/release/check_board_wheel.py) ───────────────────
@@ -53,6 +53,7 @@ def _wheel(tmp_path, version="1.2.3", extra=(), drop=()):
     info = f"conclave_board-{version}.dist-info/"
     files = {
         "conclave_board/__init__.py": "", "conclave_board/server.py": "",
+        **{name: "x" for name in check_board_wheel.REQUIRED_UI},
         f"{info}licenses/LICENSE": "Apache", f"{info}licenses/NOTICE": "x",
         f"{info}entry_points.txt": "[console_scripts]\nconclave-board-server = conclave_board.server:main\n",
         f"{info}METADATA": "Name: conclave-board\nLicense-Expression: Apache-2.0\nRequires-Dist: flask>=3.1\n",
@@ -76,6 +77,25 @@ def test_clean_board_wheel_passes(tmp_path):
                                  "conclave_board/providers/openai.py", "conclave_board/__pycache__/a.pyc"])
 def test_board_wheel_with_foreign_files_fails(tmp_path, bad):
     assert check_board_wheel.main([str(p) for p in _wheel(tmp_path, extra=[bad])]) == 1
+
+
+def test_board_wheel_with_the_board_page_passes(tmp_path):
+    """U1: Seite und statische Dateien unter ui/ gehoeren ins Wheel."""
+    extra = ["conclave_board/ui/static/board.css", "conclave_board/ui/static/vendor/fonts/fonts.css",
+             "conclave_board/ui/static/vendor/licenses/marked-LICENSE.txt", "conclave_board/ui/__init__.py"]
+    assert check_board_wheel.main([str(p) for p in _wheel(tmp_path, extra=extra)]) == 0
+
+
+@pytest.mark.parametrize("bad", ["conclave_board/ui/other.html", "conclave_board/ui/notes.txt",
+                                 "conclave_board/api/static/app.js", "conclave_board/templates/board.html",
+                                 "conclave_board/ui/static/workspace.js"])
+def test_board_wheel_with_resources_outside_the_page_fails(tmp_path, bad):
+    assert check_board_wheel.main([str(p) for p in _wheel(tmp_path, extra=[bad])]) == 1
+
+
+@pytest.mark.parametrize("missing", ["conclave_board/ui/board.html", "conclave_board/ui/static/board.js"])
+def test_board_wheel_without_the_board_page_fails(tmp_path, missing):
+    assert check_board_wheel.main([str(p) for p in _wheel(tmp_path, drop=[missing])]) == 1
 
 
 def test_board_wheel_without_license_fails(tmp_path):

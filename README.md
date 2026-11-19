@@ -13,7 +13,7 @@ answer is correct. It gives users a structured workspace for comparing model
 outputs, tracking runs, and deliberately choosing the next step. The human
 decides. Always.
 
-> Status: v0.8.0 Alpha. The primary path is local, desktop-first, and designed
+> Status: v0.9.0 Alpha. The primary path is local, desktop-first, and designed
 > for individual users on Windows and Linux.
 
 ![Conclave Studio](https://raw.githubusercontent.com/laszlo-pinter/Conclave-Personal/main/docs/assets/screenshots/conclave-studio-desktop.png)
@@ -89,7 +89,7 @@ conclave runs --conversation-id "$CONV"
 | Studio | Conversations, messages, participants, floor control, invoke, stream, orchestration, auto-loop, context chip and preview (what each call sends) |
 | Agents | Agents, roles, providers, models, presets, per-agent message limit, connection tests |
 | Workspace | Local files, context, notes, outputs |
-| Board | Work packages for humans and agents: columns, drag and drop, comments with origin, history, live refresh |
+| Board | Work packages for humans and agents: columns, drag and drop, comments with origin, history, live refresh. Also a page of its own at `/ui/board`; with `[ui] mode = "board"` in `config.toml` Conclave shows only the board (no Studio), the API stays the same |
 | Runs | Invoke, auto-loop, orchestration history, usage, and errors |
 | Settings | Runtime info, workspace path, API access token, provider key status, backup creation (restore via CLI/API), rate limit, server log. The language switch is in the sidebar footer. |
 
@@ -369,6 +369,12 @@ packages/board/src/conclave_board/
                    file permissions, log); runs on its own as
                    `conclave-board serve`
 
+packages/reviewer/src/conclave_reviewer/
+                   automatic reviewer (PolyForm like Personal, bundled):
+                   `conclave-reviewer`, started by `conclave desktop`;
+                   imports nothing from Personal, own wheel for a team
+                   server (`conclave.reviewer` remains an alias)
+
 src/conclave/assets/
   conclave-ui.html installed UI resource
   static/js/       api, i18n, state, utils, main, swagger-init
@@ -438,6 +444,7 @@ Important documents:
 - [Example workflows](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/beispiel-workflows.md)
 - [Security](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/sicherheit.md)
 - [Configuration](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/referenz/konfiguration.md)
+- [Release Notes v0.9.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.9.0.md)
 - [Release Notes v0.8.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.8.0.md)
 - [Release Notes v0.4.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.4.0.md)
 - [Release Notes v0.5.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.5.0.md)
@@ -465,7 +472,7 @@ Important documents:
 
 ## Known Limitations
 
-v0.8.0 remains alpha. Known limitations:
+v0.9.0 remains alpha. Known limitations:
 
 - Provider compatibility varies by API, model, account, and region.
 - Remote providers receive the data required for the model call.
@@ -481,16 +488,18 @@ v0.8.0 remains alpha. Known limitations:
 
 CI runs the jobs `test` (Ubuntu and Windows, Python 3.11 and 3.12),
 `ui-browser` (Playwright browser tests in Chromium), `security` (`pip-audit`,
-`bandit`), `postgres` (PostgreSQL 16 tests) and `build` (sdist and wheel,
-artifact inspection).
+`bandit`, `import-linter`), `postgres` (PostgreSQL 16 tests), `build` (sdist and
+wheel, artifact inspection) and `board-package` and `reviewer-package` (their
+wheels in a fresh environment without Conclave Personal).
 
-The v0.8.0 surface was verified with these checks:
+The v0.9.0 surface was verified with these checks:
 
-- Upgrade of a copy of a real v0.7.0 database, going back to v0.7.0 and forward
-  again, the same upgrade on PostgreSQL; fresh installation from wheel and sdist
-  with `[mcp]`, `[mcp,reviewer]` and `[postgres]` and a smoke test (`conclave
-  desktop`, UI login, `conclave-mcp`, `conclave-reviewer status`, `conclave board
-  wait`); `pip-audit` against these environments (v0.8.0)
+- Upgrade of a copy of a real v0.8.0 database (no migration), going back to
+  v0.8.0 and forward again; fresh installation from wheel and sdist with
+  `[mcp]`, `[mcp,reviewer]` and `[postgres]` and a smoke test (`conclave
+  desktop` with Studio, board page and board mode, projects, `conclave-mcp`,
+  `conclave board wait`, `conclave-reviewer`); the reviewer wheel alone;
+  `only_empty` on PostgreSQL; `pip-audit` against these environments (v0.9.0)
 - `python -m pytest` (the Playwright browser tests for XSS protection, CSP,
   token login, the settings page, the context chip, the preview, the file viewer and the board only run
   with the browser test setup below; the PostgreSQL tests only run with
@@ -545,3 +554,7 @@ Free for noncommercial use.
 The bundled board package (`conclave_board`, in `packages/board`) is licensed
 under the Apache License 2.0; see `packages/board/LICENSE` and
 `packages/board/NOTICE`.
+
+The bundled reviewer package (`conclave_reviewer`, in `packages/reviewer`) is
+licensed like Personal under PolyForm Noncommercial 1.0.0; see
+`packages/reviewer/README.md`.

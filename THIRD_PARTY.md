@@ -3,6 +3,10 @@
 Komponenten, die als Dateien mit Conclave ausgeliefert werden. Zur Laufzeit wird
 nichts von fremden Servern geladen. Alle Dateien liegen unter
 `src/conclave/assets/static/vendor/`, die Lizenztexte unter `vendor/licenses/`.
+Die Board-Seite im Board-Kern bringt DOMPurify, marked und die drei Schriften in denselben Versionen
+mit, unter
+`packages/board/src/conclave_board/ui/static/vendor/` (mit Lizenztexten); `scripts/check_vendor.py`
+prüft beide Orte.
 
 | Komponente | Version | Dateien | Lizenz | Quelle (npm) |
 |---|---|---|---|---|

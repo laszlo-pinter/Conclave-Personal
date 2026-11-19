@@ -94,6 +94,8 @@ PUBLIC = frozenset({
     ("GET", "/api-docs"),
     ("GET", "/openapi.json"),
     ("GET", "/static/<path:filename>"),
+    ("GET", "/ui/board"),                              # Board-Seite aus dem Kern (U1), ohne Daten
+    ("GET", "/ui/board/static/<path:filename>"),
 }) | BOARD_PUBLIC
 
 # Nur der Reviewer-Zugang (P3); Agent und Mensch lehnt der BoardService ab

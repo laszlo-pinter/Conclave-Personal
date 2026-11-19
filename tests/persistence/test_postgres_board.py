@@ -434,3 +434,15 @@ def test_renumber_bumps_versions_on_postgres(repo):
         renumber()
         stale.description = "veraltet"
         assert repo.update_task(stale) is False
+
+
+def test_delete_project_only_empty(repo):
+    """U4: only_empty laesst ein Projekt mit Tickets stehen, ein leeres verschwindet (auch auf PostgreSQL)."""
+    p = Project.create("api", "API")
+    repo.create_project(p)
+    repo.create_task(Task.create(p, "a", "done"))
+    repo.create_project(Project.create("leer", "Leer"))
+    assert not repo.delete_project("api", only_empty=True)
+    assert repo.get_project("api") is not None
+    assert repo.delete_project("leer", only_empty=True)
+    assert [x.slug for x in repo.list_projects()] == ["api"]

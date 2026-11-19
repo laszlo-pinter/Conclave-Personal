@@ -3,12 +3,12 @@
 # sie zusaetzlich zur Konfiguration in pyproject.toml auf. Den allgemeinen Test fuer jedes Paket
 # conclave_board_* enthaelt tests/board_package/test_boundary.py.
 [tool.importlinter]
-root_packages = ["conclave_board", "conclave"]
+root_packages = ["conclave_board", "conclave_reviewer", "conclave"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "Kern und Personal importieren keine Erweiterung des Boards (Plan 2.3)"
+name = "Kern, Reviewer und Personal importieren keine Erweiterung des Boards (Plan 2.3, TR1)"
 type = "forbidden"
-source_modules = ["conclave_board", "conclave"]
+source_modules = ["conclave_board", "conclave_reviewer", "conclave"]
 forbidden_modules = ["conclave_board_team"]
 allow_indirect_imports = true

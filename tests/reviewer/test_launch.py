@@ -31,7 +31,8 @@ def env(tmp_path, monkeypatch):
     data = tmp_path / "rdata"
     monkeypatch.setenv("CONCLAVE_CONFIG_FILE", str(conf))
     monkeypatch.setenv("CONCLAVE_REVIEWER_DATA_DIR", str(data))
-    monkeypatch.setenv("PYTHONPATH", os.pathsep.join([str(ROOT / "src"), str(ROOT / "packages" / "board" / "src")]))
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join([str(ROOT / "src"), str(ROOT / "packages" / "board" / "src"),
+                                                   str(ROOT / "packages" / "reviewer" / "src")]))
     section = ("[reviewer]\nconclave_url = \"http://127.0.0.1:9\"\npoll_seconds = 1\nclaude_exe = \"claude\"\n"
                f"reviewer_token_file = {json.dumps(str(token))}\n[reviewer.projects]\napi = {json.dumps(str(tmp_path))}\n")
     return {"conf": conf, "token": token, "data": data, "section": section}
@@ -162,6 +163,18 @@ def test_status_when_stopped(env, capsys, monkeypatch):
     assert "Reviewer laeuft: nein" in out and "Laufendes Ticket" not in out        # gestoppt: kein laufendes Ticket
     assert "Letztes Ergebnis: api#7 done" in out and "Reviews in der letzten Stunde: 1" in out
     assert "claude: 2.1.326" in out and "WARNUNG" not in out
+
+
+def test_status_shows_the_reviewer_version(env, capsys, monkeypatch):
+    """L2-Review V1: status nennt die Version des Reviewers (Wheel bzw. Personal), auch in --json."""
+    from conclave_reviewer import watch
+    env["conf"].write_text(env["section"], encoding="utf-8")
+    monkeypatch.setattr(rs, "claude_version", lambda cfg: ("2.1.326", None))
+    monkeypatch.setattr(watch, "_version", lambda: "0.9.0")
+    assert main(["status"]) == 0
+    assert "Version: 0.9.0" in capsys.readouterr().out
+    assert main(["status", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["version"] == "0.9.0"
 
 
 def test_status_while_running(env, capsys, monkeypatch):

@@ -1,7 +1,15 @@
-// static/js/features/board.js — Board: Spalten, Karten, Ticketansicht, Live-Refresh (B5)
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Laszlo Pinter
+//
+// board.js — Board: Spalten, Karten, Ticketansicht, Live-Refresh (B5)
 //
 // Werte aus der API kommen nur per textContent ins DOM; Beschreibung und Kommentare
 // laufen ueber renderMarkdown() (DOMPurify).
+//
+// Dieselbe Datei laeuft auf der Board-Seite (board.html mit board-page.js) und im Board-Reiter des
+// Studios von Conclave Personal (U1). Seite bzw. Studio stellen bereit: t(), getLanguage(), req(),
+// whoami(), toast(), renderMarkdown(), openOverlay() und closeOverlay(). Angesprochen werden nur
+// /board/v1 und (ueber whoami) /auth/whoami.
 
 let _board = {statuses: [], projects: [], tasks: [], changes: null, open: null, query: '',
               control: {pauses: [], hints: []}, role: '', approvalsOnly: false, stuck: ''};
@@ -26,6 +34,7 @@ function _taskPath(ref) {
 
 function _boardProject() { return document.getElementById('boardProject').value; }
 function _boardShowDone() { return document.getElementById('boardShowDone').checked; }
+function _noProjectsText() { return t(_board.role === 'human' ? 'board.noProjectsHuman' : 'board.noProjects'); }
 
 function originLabel(origin) {
   if (origin === 'human') return t('board.originHuman');
@@ -110,6 +119,8 @@ function _renderBoardProjects() {
     o.value = p.slug;
     return o;
   }));
+  const manage = document.getElementById('boardProjects');
+  if (manage) manage.hidden = _board.role !== 'human';
 }
 
 // ── Spalten und Karten ───────────────────────────────────────────────────
@@ -122,7 +133,7 @@ function _stuckKey() {
 function renderBoard() {
   _board.stuck = _stuckKey();
   const cols = document.getElementById('boardColumns');
-  if (!_board.projects.length) { _boardMessage(t('board.noProjects')); return; }
+  if (!_board.projects.length) { _boardMessage(_noProjectsText()); return; }
   const done = _board.statuses[_board.statuses.length - 1];
   cols.replaceChildren(..._board.statuses.map(status => {
     const col = _boardEl('div', 'board-col');
@@ -288,7 +299,7 @@ async function openBoardTask(ref) {
   document.getElementById('boardTaskRef').textContent = ref;
   ['boardTaskTitle', 'boardTaskReview', 'boardTaskTags', 'boardTaskComments', 'boardTaskHistory']
     .forEach(id => document.getElementById(id).replaceChildren());
-  document.getElementById('boardTaskDesc').replaceChildren(_boardEl('div', 'surface-empty', t('common.loading')));
+  document.getElementById('boardTaskDesc').replaceChildren(_boardEl('div', 'surface-empty', t('board.loading')));
   openOverlay('overlayBoardTask');
   await _renderOpenTask();
 }
@@ -399,7 +410,7 @@ async function addBoardComment() {
 // ── Neues Ticket ─────────────────────────────────────────────────────────
 
 function openBoardNew() {
-  if (!_board.projects.length) { toast(t('board.noProjects'), 'err'); return; }
+  if (!_board.projects.length) { toast(_noProjectsText(), 'err'); return; }
   ['boardNewTitle', 'boardNewDesc', 'boardNewTags'].forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('boardNewHuman').checked = false;
   const project = _boardProject();
@@ -424,6 +435,122 @@ async function createBoardTask() {
   }
   closeOverlay('overlayBoardNew');
   await _refreshBoard();
+}
+
+// ── Projekte verwalten (U4) ──────────────────────────────────────────────
+//
+// Nur der Mensch (die API antwortet dem Agenten 403). Loeschen bietet die Ansicht nur fuer Projekte
+// ohne Tickets und ohne Vorhaben an; der Server prueft das mit only_empty noch einmal im selben Schritt.
+
+async function openBoardProjects() {
+  if (_board.role !== 'human') return;
+  ['boardProjectSlug', 'boardProjectName'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('boardProjectsList').replaceChildren(_boardEl('div', 'surface-empty', t('board.loading')));
+  openOverlay('overlayBoardProjects');
+  await _renderBoardProjectList();
+  document.getElementById('boardProjectSlug').focus();
+}
+
+async function _renderBoardProjectList() {
+  const list = document.getElementById('boardProjectsList');
+  const counts = {};
+  try {
+    const data = await req('GET', BOARD_API + '/tasks?include_done=true');
+    (data.tasks || []).forEach(task => { counts[task.project] = (counts[task.project] || 0) + 1; });
+  } catch (e) {
+    list.replaceChildren(_boardEl('div', 'board-error', e.message));
+    return;
+  }
+  if (!_board.projects.length) {
+    list.replaceChildren(_boardEl('div', 'surface-empty', t('board.projects.none')));
+    return;
+  }
+  // Vorhaben nur fuer Projekte ohne Tickets nachsehen: Nur dort haengt "Loeschen" davon ab
+  const initiatives = {};
+  try {
+    await Promise.all(_board.projects.filter(p => !counts[p.slug]).map(async p => {
+      const data = await req('GET', BOARD_API + '/projects/' + encodeURIComponent(p.slug) + '/initiatives');
+      initiatives[p.slug] = (data.initiatives || []).length;
+    }));
+  } catch (e) {
+    list.replaceChildren(_boardEl('div', 'board-error', e.message));
+    return;
+  }
+  list.replaceChildren(..._board.projects.map(p => {
+    const row = _boardEl('div', 'board-project-row');
+    row.dataset.slug = p.slug;
+    const name = _boardEl('input', 'board-input board-project-name');
+    name.type = 'text';
+    name.value = p.name;
+    name.setAttribute('aria-label', `${t('board.projects.name')} ${p.slug}`);
+    const rename = _boardEl('button', 'btn-sm', t('board.projects.rename'));
+    rename.dataset.action = 'board-project-rename';
+    rename.dataset.slug = p.slug;
+    row.append(_boardEl('span', 'board-ref', p.slug), name, rename);
+    const n = counts[p.slug] || 0;
+    const m = initiatives[p.slug] || 0;
+    if (n || m) {
+      const count = _boardEl('span', 'board-project-count',
+                             n ? t('board.projects.tasks', {n}) : t('board.projects.initiatives', {n: m}));
+      count.title = t('board.projects.notEmpty');
+      row.appendChild(count);
+    } else {
+      const del = _boardEl('button', 'btn-sm board-project-delete', t('board.projects.delete'));
+      del.dataset.action = 'board-project-delete';
+      del.dataset.slug = p.slug;
+      row.appendChild(del);
+    }
+    return row;
+  }));
+}
+
+async function _afterProjectChange(message) {
+  toast(message, 'ok');
+  await _refreshBoard();
+  if (document.getElementById('overlayBoardProjects').classList.contains('open')) await _renderBoardProjectList();
+}
+
+async function createBoardProject() {
+  const slugInput = document.getElementById('boardProjectSlug');
+  const nameInput = document.getElementById('boardProjectName');
+  const slug = slugInput.value.trim();
+  const name = nameInput.value.trim();
+  if (!slug || !name) { toast(t('board.projects.required'), 'err'); return; }
+  try {
+    await req('POST', BOARD_API + '/projects', {slug, name});
+  } catch (e) {
+    toast(e.message, 'err');
+    return;
+  }
+  slugInput.value = '';
+  nameInput.value = '';
+  await _afterProjectChange(t('board.projects.created', {slug}));
+}
+
+async function renameBoardProject(el) {
+  const slug = el.dataset.slug;
+  const name = el.closest('.board-project-row').querySelector('.board-project-name').value.trim();
+  if (!name) { toast(t('board.projects.required'), 'err'); return; }
+  try {
+    await req('PUT', BOARD_API + '/projects/' + encodeURIComponent(slug), {name});
+  } catch (e) {
+    toast(e.message, 'err');
+    return;
+  }
+  await _afterProjectChange(t('board.projects.renamed', {slug}));
+}
+
+async function deleteBoardProject(el) {
+  const slug = el.dataset.slug;
+  if (!window.confirm(t('board.projects.confirmDelete', {slug}))) return;
+  try {
+    await req('DELETE', BOARD_API + '/projects/' + encodeURIComponent(slug) + '?only_empty=true');
+  } catch (e) {
+    toast(e.message, 'err');
+    await _renderBoardProjectList();
+    return;
+  }
+  await _afterProjectChange(t('board.projects.deleted', {slug}));
 }
 
 // ── Steuertickets: Banner und Pause (P6) ─────────────────────────────────
@@ -472,7 +599,7 @@ function renderBoardControl() {
 
 async function pauseBoardAgents() {
   const slug = _boardProject() || _board.projects[0]?.slug;
-  if (!slug) { toast(t('board.noProjects'), 'err'); return; }
+  if (!slug) { toast(_noProjectsText(), 'err'); return; }
   try {
     await req('POST', BOARD_API + '/tasks', {project: slug, title: t('board.pauseTitle'), kind: 'control',
                                        control: 'pause', scope: 'all'});
@@ -503,8 +630,14 @@ async function _refreshBoard() {
   }
 }
 
+// Auf der Board-Seite ist das Board immer sichtbar, im Studio nur im Reiter "Board"
 function _boardActive() {
+  if (document.body.classList.contains('board-standalone')) return true;
   return document.querySelector('.sb-tab.active')?.dataset.tab === 'board';
+}
+
+function _showBoard() {
+  if (typeof switchTab === 'function') switchTab('board');
 }
 
 function _startBoardPolling() {
@@ -612,7 +745,7 @@ async function checkBoardNotifications() {
     const note = new Notification(title, {body, tag: 'conclave-review-' + task.ref});
     note.onclick = () => {
       window.focus();
-      switchTab('board');
+      _showBoard();
       openBoardTask(task.ref);
       note.close();
     };
@@ -658,7 +791,7 @@ async function checkReviewerOff() {
   if (document.visibilityState === 'visible' && document.hasFocus()) return;
   const note = new Notification(t('board.notify.reviewerOffTitle'),
                                 {body: t('board.notify.reviewerOffBody', {n: waiting.length}), tag: 'conclave-reviewer-off'});
-  note.onclick = () => { window.focus(); switchTab('board'); note.close(); };
+  note.onclick = () => { window.focus(); _showBoard(); note.close(); };
 }
 
 function startBoardNotifications() {
@@ -668,4 +801,34 @@ function startBoardNotifications() {
     checkBoardNotifications().catch(() => { /* naechster Versuch */ });
     checkReviewerOff().catch(() => { /* naechster Versuch */ });
   }, NOTIFY_POLL_MS);
+}
+
+// ── Bedienung: data-action und Felder, fuer Board-Seite und Studio gleich ──
+
+const BOARD_ACTIONS = {
+  'board-new':           () => openBoardNew(),
+  'board-pause':         () => pauseBoardAgents(),
+  'board-notify':        () => toggleBoardNotify(),
+  'board-approvals':     () => toggleBoardApprovals(),
+  'board-close-control': (el) => closeBoardControl(el.dataset.ref),
+  'board-create':        () => createBoardTask(),
+  'board-open-task':     (el) => openBoardTask(el.dataset.ref),
+  'board-close-task':    () => closeBoardTask(),
+  'board-comment':       () => addBoardComment(),
+  'board-projects':      () => openBoardProjects(),
+  'board-project-create': () => createBoardProject(),
+  'board-project-rename': (el) => renameBoardProject(el),
+  'board-project-delete': (el) => deleteBoardProject(el),
+};
+
+function bindBoardEvents() {
+  const on = (id, event, handler) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(event, handler);
+  };
+  on('boardProject', 'change', onBoardFilter);
+  on('boardShowDone', 'change', onBoardFilter);
+  on('boardSearch', 'input', onBoardSearch);
+  on('boardTaskStatus', 'change', () => saveBoardTaskField('status'));
+  on('boardTaskHuman', 'change', () => saveBoardTaskField('human'));
 }

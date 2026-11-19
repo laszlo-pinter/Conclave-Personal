@@ -120,7 +120,9 @@ def test_wrong_method_on_allowed_route_is_405_or_403_never_200(app):
 
 def test_public_paths_need_no_token(app):
     c = app.test_client()
-    for _method, rule in PUBLIC - {("GET", "/static/<path:filename>")}:
+    for _method, rule in PUBLIC:
+        if "<path:" in rule:                       # statische Dateien (Studio und Board-Seite)
+            continue
         assert c.get(rule).status_code == 200, rule
 
 

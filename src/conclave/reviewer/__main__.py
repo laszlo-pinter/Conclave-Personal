@@ -1,5 +1,5 @@
-"""python -m conclave.reviewer"""
+"""python -m conclave.reviewer: wie python -m conclave_reviewer (TR1)."""
 
-from conclave.reviewer.cli import main
+from conclave_reviewer.cli import main
 
 raise SystemExit(main())

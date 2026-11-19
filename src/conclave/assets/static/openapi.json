@@ -3,7 +3,7 @@
   "info": {
     "title": "Conclave API",
     "description": "Host-gesteuertes Multi-Model-Konversationssystem",
-    "version": "0.8.0"
+    "version": "0.9.0"
   },
   "servers": [
     {
@@ -16,6 +16,20 @@
     }
   ],
   "paths": {
+    "/ui/board": {
+      "get": {
+        "summary": "Board-Seite (HTML, ohne Daten; die Daten laedt sie ueber /board/v1).",
+        "tags": [
+          "ui"
+        ],
+        "operationId": "board_page",
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "summary": "Serve Ui",
@@ -2351,7 +2365,7 @@
         }
       },
       "delete": {
-        "summary": "Projekt samt Tickets loeschen (Freigabe-Recht).",
+        "summary": "Projekt samt Tickets loeschen (Freigabe-Recht); only_empty=true nur ohne Tickets und Vorhaben, sonst 409.",
         "tags": [
           "board"
         ],
@@ -2373,6 +2387,23 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "only_empty",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false",
+                "1",
+                "0",
+                "yes",
+                "no"
+              ]
+            },
+            "description": "nur loeschen, wenn das Projekt keine Tickets und keine Vorhaben hat; sonst 409 ProjectNotEmpty"
           }
         ]
       }
@@ -7139,7 +7170,7 @@
         }
       },
       "delete": {
-        "summary": "Projekt samt Tickets loeschen (Freigabe-Recht).",
+        "summary": "Projekt samt Tickets loeschen (Freigabe-Recht); only_empty=true nur ohne Tickets und Vorhaben, sonst 409.",
         "tags": [
           "board"
         ],
@@ -7162,6 +7193,23 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "only_empty",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false",
+                "1",
+                "0",
+                "yes",
+                "no"
+              ]
+            },
+            "description": "nur loeschen, wenn das Projekt keine Tickets und keine Vorhaben hat; sonst 409 ProjectNotEmpty"
           }
         ]
       }

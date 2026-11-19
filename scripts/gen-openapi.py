@@ -340,7 +340,7 @@ def routes_from_app(app) -> list[dict]:
     from conclave_board.api.versions import ALIAS_PREFIX, V1_PREFIX
     routes = []
     for rule in app.url_map.iter_rules():
-        if rule.endpoint == "static":
+        if rule.endpoint == "static" or rule.endpoint.endswith(".static"):   # auch Board-Seite (U1)
             continue
         view = app.view_functions[rule.endpoint]
         doc = (view.__doc__ or "").strip().split("\n")[0]

@@ -1,7 +1,7 @@
 # Conclave Board
 
 Board server for teams: tickets, review state, priority, initiatives and control
-tickets, with a REST API and no user interface. Licensed under Apache-2.0.
+tickets, with a REST API. The server has no user interface. Licensed under Apache-2.0.
 
 The package is distributed internally (wheelhouse). Conclave Personal bundles it.
 
@@ -67,3 +67,12 @@ board tools of the MCP servers (list, get, next, create, update, comment, review
 MCP or an HTTP library: the caller passes the transport. Every text written by someone
 else carries `from` with origin and person ("Kommentar von: Agent von Anna"). Conclave
 Personal (`conclave-mcp`) uses this code; an extension can offer the same tools.
+
+**Board page for host apps:** `conclave_board.ui.register_board_ui(app, url_prefix="/ui/board")`
+mounts a board page (columns, drag and drop, ticket view, control tickets, approvals, review and
+reviewer state, notifications) on a host's Flask app. It only talks to `/board/v1` and
+`/auth/whoami`, keeps the token in the tab's `sessionStorage`, has no inline script or style and
+renders Markdown through DOMPurify. The core's own server never mounts it; the host sets the
+security headers and CSP. Conclave Personal mounts it and uses the same view in its Studio. It ships
+DOMPurify (Apache-2.0 or MPL-2.0), marked (MIT) and the fonts Syne, Syne Mono and DM Sans (SIL OFL 1.1)
+with their licenses under `ui/static/vendor/`.

@@ -314,8 +314,13 @@ def _finish_transactions_per_request(app, conn) -> None:
 
 
 def create_wsgi_app():
-    """WSGI-Factory fuer Gunicorn/uWSGI."""
-    app, _ = _build_app()
+    """WSGI-Factory fuer Gunicorn/uWSGI. Ein ungueltiger Wert in config.toml bricht mit einer
+    Meldung ab, die die Datei nennt (wie ``conclave`` und ``conclave-api``)."""
+    from conclave.cli.config import ConfigError, config_error_message
+    try:
+        app, _ = _build_app()
+    except ConfigError as e:
+        raise ConfigError(config_error_message(e)) from None
     return app
 
 
@@ -323,7 +328,12 @@ def main() -> None:
     from conclave.infrastructure.log import LOG_FILE_NAME, configure_logging
     from conclave.runtime.paths import get_runtime_paths
 
-    config = ConclaveConfig.from_sources()
+    from conclave.cli.config import ConfigError, config_error_message
+    try:
+        config = ConclaveConfig.from_sources()
+    except ConfigError as e:
+        print(config_error_message(e), file=sys.stderr)       # wie conclave (U2-Review V1)
+        raise SystemExit(1)
     configure_logging(config.log_level, get_runtime_paths().log_dir / LOG_FILE_NAME)
     try:
         app, config = _build_app(config)

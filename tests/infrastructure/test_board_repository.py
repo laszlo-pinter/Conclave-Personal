@@ -6,6 +6,7 @@ import threading
 import pytest
 
 from conclave.domain.board import (
+    Initiative,
     Project,
     StatusFlow,
     Task,
@@ -525,3 +526,23 @@ def test_stale_write_after_renumber_column_is_rejected(repo):
     repo.renumber_column(project.id, "todo")
     stale.title = "anders"
     assert repo.update_task(stale) is False
+
+
+def test_delete_project_only_empty_checks_in_the_same_statement(repo):
+    """U4: Die Board-Seite loescht nur Projekte ohne Tickets, auch ohne erledigte; Pruefung und Loeschen in einem."""
+    p = _project(repo)
+    repo.create_task(Task.create(p, "fertig", "done"))
+    _project(repo, "leer")
+    statements = []
+    real = repo._execute
+    repo._execute = lambda sql, params=(): (statements.append(sql), real(sql, params))[1]
+    assert not repo.delete_project("api", only_empty=True)
+    assert repo.get_project("api") is not None and len(repo.list_tasks("api")) == 1
+    assert repo.delete_project("leer", only_empty=True)
+    assert repo.get_project("leer") is None
+    deletes = [s for s in statements if s.startswith("DELETE")]
+    assert len(deletes) == 2 and all("board_initiatives" in s for s in deletes)
+    nur_vorhaben = _project(repo, "plan")
+    repo.create_initiative(Initiative.create(nur_vorhaben, "sich", "Sicherheit"))
+    assert not repo.delete_project("plan", only_empty=True)              # Vorhaben zaehlen wie Tickets (U4, V2)
+    assert repo.get_project("plan") is not None
