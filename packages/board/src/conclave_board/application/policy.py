@@ -43,6 +43,15 @@ class BoardPolicy:
         """Darf ``next_task`` dieses Ticket an diesen Zugang geben? (zusaetzlich zu den festen Regeln)"""
         return True
 
+    def next_group(self, principal: Principal, task: "Task") -> int:
+        """Gruppe fuer die Reihenfolge von ``next_task`` ohne bestimmtes Ticket (A2): kleinere Gruppe zuerst.
+
+        ``next_task`` ordnet nach Nacharbeit aus dem Review, dann nach dieser Gruppe, dann in
+        Board-Reihenfolge. Innerhalb einer Gruppe bleibt die Board-Reihenfolge, Nacharbeit geht
+        immer vor. Standard: eine Gruppe fuer alle (0).
+        """
+        return 0
+
     def assignee_for(self, principal: Principal) -> str | None:
         """Zustaendiger beim Uebernehmen (``assignee``); ``None`` = unveraendert lassen."""
         return None

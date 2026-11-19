@@ -681,8 +681,10 @@ class BoardService:
             self._raise_if_paused(ticket.project_slug, principal)
             return self._claim(task, origin, actor_id, principal)
         self._raise_if_paused(slug, principal)
-        # Nacharbeit aus dem Review zuerst, auch ueber Projekte hinweg; sonst Board-Reihenfolge
-        candidates = sorted(self.list_tasks(slug, [first]), key=lambda t: t.review_state not in REWORK_STATES)
+        # Nacharbeit aus dem Review zuerst, auch ueber Projekte hinweg; dann die Gruppe der Policy (A2);
+        # sonst Board-Reihenfolge (stabile Sortierung)
+        candidates = sorted(self.list_tasks(slug, [first]),
+                            key=lambda t: (t.review_state not in REWORK_STATES, self.policy.next_group(principal, t)))
         for candidate in candidates:
             if candidate.human or candidate.kind == "control" or not principal.sees(candidate.project_slug):
                 continue
