@@ -16,7 +16,6 @@ Aufteilung:
 
 - ``paths``: Standardorte (Konfigurationsordner von Conclave Personal), ohne Import aus Personal
 
-Eigenes Paket seit TR1 (Plan team-reviewer.md): Es nutzt nur die Standardbibliothek, HTTP und
-``conclave_board.runtime`` und importiert nichts aus Conclave Personal (``conclave``) oder dem
-einer Erweiterung des Boards (import-linter). Personal buendelt es; ``conclave.reviewer`` ist dort ein Alias.
+Eigenes Paket seit TR1: Es nutzt nur die Standardbibliothek, HTTP und ``conclave_board.runtime`` und
+importiert nichts aus Conclave Personal (``conclave``) oder einer Erweiterung des Boards (import-linter). Personal buendelt es; ``conclave.reviewer`` ist dort ein Alias.
 """
