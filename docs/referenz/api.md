@@ -155,7 +155,7 @@ parallel. Die CI vergleicht `board-v1.json` mit dem letzten Release-Stand
 (`oasdiff breaking`); eine brechende Änderung lässt sie scheitern. Die Datei
 entsteht mit `python scripts/gen-openapi.py` aus den registrierten Routen.
 
-*Stand: v0.9.0 (Board-API v1, 2026-11-19), abgeglichen mit `openapi.json` und `board-v1.json`*
+*Stand: v0.9.1 (Board-API v1, 2026-11-20), abgeglichen mit `openapi.json` und `board-v1.json`*
 
 ## Kontext-Reports
 
