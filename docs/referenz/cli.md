@@ -10,12 +10,17 @@ conclave web [--url http://127.0.0.1:8000]
 conclave desktop [--host 127.0.0.1] [--port 8000] [--debug]
 ```
 
-`desktop` startet den lokalen Server und öffnet die Web-UI im Browser.
+`desktop` startet den lokalen Server, öffnet die Web-UI im Browser und startet
+den Reviewer, wenn `[reviewer]` in der `config.toml` steht (er endet mit
+`desktop`). Im Board-Modus (`[ui] mode = "board"`) öffnen `web` und `desktop`
+direkt die Board-Seite.
 `web`, `desktop` und `conclave-watch` nutzen das Mensch-Token. `web --url`
 übergibt es nur an lokale Adressen (`127.0.0.1`, `localhost`, `::1`), nie an
 einen fremden Host.
-Wenn der bevorzugte Port belegt ist, wählt `desktop` automatisch einen freien
-Port.
+Ohne Angabe gelten Host und Port aus der Konfiguration (Standard `127.0.0.1`
+und `8000`). Wenn der Port belegt ist, wählt `desktop` automatisch einen freien,
+auch mit `--port`; ein fester Port geht nur mit `server`. Ein zweites
+`desktop` neben einem laufenden landet deshalb auf einem anderen Port.
 
 ## Conversations
 
@@ -197,7 +202,9 @@ conclave --json show <conversation_id>
 ```
 
 `auto-loop` gibt mit `--json` jedes Event als eigene JSON-Zeile aus.
-`stream`, `watch`, `server`, `desktop` und `web` ignorieren `--json`.
+`stream`, `watch`, `server`, `desktop`, `web`, `token show`, `key rotate` und
+`board initiative` ignorieren `--json`. `board wait` gibt immer eine JSON-Zeile
+aus, auch ohne `--json`.
 
 ## Weitere Programme
 
@@ -206,9 +213,14 @@ Neben `conclave` installiert das Paket diese Konsolenprogramme:
 | Programm | Zweck |
 |----------|-------|
 | `conclave-api` | Startet den API-Server direkt (ohne die Launch-Logik von `conclave server`) |
-| `conclave-mcp` | MCP-Server, der die Conclave-API über `CONCLAVE_API_URL` (Default `http://localhost:8000`) anspricht. Nutzt nur das Agent-Token (`CONCLAVE_AGENT_KEY` bzw. `agent.token`), nie `api.token` oder `CONCLAVE_API_KEY`; mit dem Mensch-Token lehnt jedes Tool ab (Ausnahme zur Fehlersuche: `CONCLAVE_MCP_ALLOW_HUMAN=1`) |
+| `conclave-mcp` | MCP-Server, der die Conclave-API über `CONCLAVE_API_URL` (Default `http://localhost:8000`) anspricht. Nutzt nur das Agent-Token (`CONCLAVE_AGENT_KEY` bzw. `agent.token`), nie `api.token` oder `CONCLAVE_API_KEY`; mit dem Mensch-Token lehnt jedes Tool ab (Ausnahme zur Fehlersuche: `CONCLAVE_MCP_ALLOW_HUMAN=1`). `conclave-mcp --reviewer` (oder `CONCLAVE_MCP_ROLE=reviewer`) startet den Reviewer-Server mit dem Reviewer-Token und nur dessen Tools |
 | `conclave-watch` | Beobachtet eine Conversation über die HTTP-API |
-| `conclave-reviewer` | Automatischer Reviewer für das Board (Extra `reviewer`); startet sonst mit `conclave desktop`. `run [--settings <Datei>] [--data-dir …] [--dry-run] [--once]`, `status [--settings <Datei>]`, `import-config <alte config.toml>`; `--settings` liest `[reviewer]` aus einer eigenen Datei (ab v0.9.0) |
+| `conclave-reviewer` | Automatischer Reviewer für das Board (Extra `reviewer`); startet sonst mit `conclave desktop`. `run [--settings <Datei>] [--data-dir …] [--dry-run] [--once]`, `status [--settings <Datei>] [--data-dir …] [--json]`, `import-config <alte config.toml> [--target <config.toml>] [--yes]`; `--settings` liest `[reviewer]` aus einer eigenen Datei (ab v0.9.0). `run --config <Datei>` ist die alte Form für die `config.toml` des früheren Watchers; `--parent-pid` setzt `conclave desktop` intern |
+
+Das Board-Paket (eigenes Wheel `conclave-board`, nicht im Paket von Conclave
+Personal) bringt den eigenständigen Board-Server mit:
+`conclave-board-server serve [--host 127.0.0.1] [--port …] [--db <SQLite-Datei>] [--dsn <PostgreSQL-DSN>] [--config-dir …]`.
+Siehe [README des Board-Pakets](../../packages/board/README.md).
 
 ```powershell
 conclave-watch <conversation_id> [--api http://localhost:8000] [--interval 5] [--since 0] [--full] [--key <token>]

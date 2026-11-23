@@ -138,4 +138,4 @@ _process_agent_directives_for_context() → Datei in workspace/output/ geschrieb
   `collect_context_files()`, `assemble_system_prompt()`
 - Tests: `tests/application/test_workspace_directives.py`, `tests/api/test_workspace_api.py`
 
-**Zuletzt verifiziert:** 2026-10-26 (v0.2.0)
+**Zuletzt verifiziert:** 2026-11-23 (v0.9.1)

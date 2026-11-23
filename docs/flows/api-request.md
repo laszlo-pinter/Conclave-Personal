@@ -7,7 +7,7 @@ Participant ist registriert, Agent hat einen passenden Adapter.
 
 **Schritte:**
 
-1. **Prüfungen** — `api/app.py:_check_host()` prüft den `Host`-Header, `_check_csrf()` verlangt bei POST JSON oder `X-Conclave-Client`, `_authenticate()` prüft Bearer-Token oder X-API-Key.
+1. **Prüfungen** (`before_request` in `api/app.py`, in dieser Reihenfolge) — `_check_host()` prüft den `Host`-Header (`421 InvalidHost`), `_check_csrf()` verlangt bei POST JSON oder `X-Conclave-Client` (`415 UnsupportedMediaType`), `_authenticate()` prüft Bearer-Token oder X-API-Key (`401`). Für Agent- und Reviewer-Token prüft `_check_agent_access()` die Allowlist der Rolle (`403 HumanOnly`), und `_check_agent_limits()` prüft bei Modellaufrufen wie `invoke` die Grenzen aus `[limits]` (`429`: `AgentBudgetExceeded`, `ConversationBudgetExceeded`, `TooManyAgentRuns`) und belegt einen Platz für den Lauf.
 
 2. **Request-Routing** — `api/app.py:invoke_participant()` liest conversation_id und participant_id aus der URL.
 
@@ -48,7 +48,11 @@ Participant ist registriert, Agent hat einen passenden Adapter.
 17. **Tool-Events speichern** — `_save_tool_events()` speichert die Tool-Events mit der `message_id` der neuen Message.
 
 **Fehlerfall:**
+- Host-Header nicht erlaubt → 421
+- POST ohne JSON und ohne `X-Conclave-Client` → 415
 - AuthenticationError → 401
+- Route für die Rolle nicht erlaubt → 403 (`HumanOnly`)
+- Grenze für Agenten erreicht → 429 (`AgentBudgetExceeded`, `ConversationBudgetExceeded`, `TooManyAgentRuns`)
 - ConversationNotFound → 404
 - ParticipantNotRegistered → 404
 - AgentNotFound (kein Agent zur Participant-ID) → 404
@@ -68,4 +72,4 @@ Participant ist registriert, Agent hat einen passenden Adapter.
 - Fehler-Mapping: `src/conclave/api/app.py` (Error-Handler), `src/conclave/infrastructure/universal/resilient.py`
 - Tests: `tests/application/test_invoke_participant.py`, `tests/application/test_personal_golden_path.py`
 
-**Zuletzt verifiziert:** 2026-10-27 (v0.3.0)
+**Zuletzt verifiziert:** 2026-11-23 (v0.9.1)

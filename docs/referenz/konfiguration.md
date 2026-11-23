@@ -23,7 +23,7 @@ wenige Werte ein Fallback (siehe [TOML-Config](#toml-config)).
 | CONCLAVE_LOG_DIR | plattformabhängig | Verzeichnis für `conclave-server.log` (z. B. getrennt für Testinstanzen) |
 | CONCLAVE_SERVER_THREADS | 16 | Threads des WSGI-Servers (waitress). Laufende Streams belegen je einen Thread |
 | CONCLAVE_ASSET_DIR | — | Alternatives Verzeichnis für die UI-Assets (`conclave-ui.html` und `static/`); ohne Wert die mitgelieferten Assets |
-| CONCLAVE_API_URL | http://localhost:8000 | Nur MCP-Server (`conclave-mcp`): URL der Conclave-API |
+| CONCLAVE_API_URL | http://localhost:8000 | URL der Conclave-API für die Programme, die mit dem Server sprechen: `conclave-mcp`, `conclave board wait` (Standard von `--url`) und der Reviewer (Standard von `conclave_url`, dort `http://127.0.0.1:8000`). Der Server selbst liest sie nicht |
 
 ## Datenbank
 
@@ -33,6 +33,12 @@ wenige Werte ein Fallback (siehe [TOML-Config](#toml-config)).
 | CONCLAVE_DB_PATH | plattformabhängig | SQLite-Dateipfad |
 | CONCLAVE_DB_DSN | — | PostgreSQL Connection String |
 | CONCLAVE_DB_POOL_SIZE | 10 | Höchstzahl gleichzeitiger PostgreSQL-Verbindungen des Servers (Anfragen und Worker). Ist keine frei, wartet eine Anfrage bis zu 30 Sekunden |
+
+Der eigenständige Board-Server aus dem Board-Paket (`conclave-board-server`) liest eigene
+Variablen mit dem Präfix `CONCLAVE_BOARD_` (`CONCLAVE_BOARD_DSN`, `CONCLAVE_BOARD_POOL_SIZE`,
+`CONCLAVE_BOARD_ALLOWED_HOSTS`, `CONCLAVE_BOARD_TRUSTED_PROXIES`); sie gelten nicht für Conclave
+Personal. Beschrieben sind sie im
+[README des Board-Pakets](../../packages/board/README.md).
 
 ## Backup
 
@@ -54,10 +60,11 @@ wenige Werte ein Fallback (siehe [TOML-Config](#toml-config)).
 | CONCLAVE_REVIEWER_KEY | — | Reviewer-Token für den automatischen Reviewer (`conclave-mcp --reviewer`). Leer: Token aus `CONCLAVE_REVIEWER_TOKEN_FILE`, beim ersten Serverstart erzeugt. Gleich einem anderen Token: kein Reviewer-Zugang |
 | CONCLAVE_REVIEWER_TOKEN_FILE | `<config_dir>/reviewer.token` | Datei für das automatisch erzeugte Reviewer-Token (nur Benutzer lesbar) |
 | CONCLAVE_MCP_ROLE | `agent` | `reviewer` startet `conclave-mcp` als Reviewer-Server (wie `--reviewer`) |
+| CONCLAVE_MCP_ALLOW_HUMAN | — | `1`: `conclave-mcp` arbeitet auch mit dem Mensch-Token, statt es abzulehnen (mit Warnung auf stderr; Agenten haben dann vollen Zugang). Nur zur Fehlersuche, siehe [Sicherheit](../sicherheit.md#mensch--und-agent-zugang) |
 | CONCLAVE_ALLOWED_HOSTS | — | Zusätzlich erlaubte `Host`-Header (kommasepariert, optional mit Port). `localhost`, `127.0.0.1`, `[::1]` sind immer erlaubt. Pflicht bei Nicht-Loopback-`CONCLAVE_HOST` |
 | CONCLAVE_ALLOWED_ORIGINS | `http://localhost,http://localhost:8000,http://127.0.0.1,http://127.0.0.1:8000` | CORS-Allowlist (kommasepariert, exakte Origins) |
 
-Neue Tokens beginnen mit `cvh_` (Mensch) bzw. `cva_` (Agent); die Rolle
+Neue Tokens beginnen mit `cvh_` (Mensch), `cva_` (Agent) bzw. `cvr_` (Reviewer); die Rolle
 ergibt sich aber allein daraus, in welcher Variable bzw. Datei das Token steht.
 Ein älteres `api.token` ohne Präfix bleibt gültig. Pfad und
 MCP-Einrichtungsbefehl zeigt `conclave token show --agent`.
@@ -164,6 +171,8 @@ Aus der TOML-Datei werden nur diese Schlüssel gelesen; alles andere ist nur
   Vorrang hat `CONCLAVE_DB_PATH`, dann `path`, dann der Plattformdefault
   (für alle Einstiegspunkte).
 - `[server]` `rate_limit`
+- `[ui]` `mode` (siehe [Oberfläche](#oberfläche))
+- `[reviewer]` und `[reviewer.projects]` (siehe [Reviewer](#reviewer))
 - `[limits]` Grenzen für Agenten (siehe unten)
 - `[board]` `statuses`, `source` (Board und Quelle der Consultations, siehe
   unten)
@@ -182,7 +191,7 @@ path = "/pfad/zur/conclave.db"
 # dsn = "host=localhost dbname=conclave user=conclave password=..."
 
 [server]
-# Anfragen je Route und Client-IP (flask-limiter-Syntax). Mehrere Grenzen mit ";"
+# Anfragen je Route, Zugang und Client-IP (flask-limiter-Syntax). Mehrere Grenzen mit ";"
 # trennen, "off" schaltet die Begrenzung ab. Wirksam nach Neustart des Servers;
 # CONCLAVE_RATE_LIMIT hat Vorrang.
 rate_limit = "120 per minute"
@@ -301,7 +310,7 @@ Die Einstellungen stehen dann meist in einer eigenen Datei, gestartet mit
 | `data_dir` | `<Konfigurationsordner>/reviewer` | Datenordner; `--data-dir` hat Vorrang |
 | `conclave_mcp_exe`, `conclave_mcp_args` | mit `team`: `conclave-board-mcp`, `["--reviewer"]` | MCP-Server des Board-Servers |
 | `fetch` | mit `team`: `true` | Vor jedem Review `git fetch` in den Checkouts; die Branches von `origin` haben Vorrang |
-| `missing_commits` | mit `team`: `red` | `red`: Liegt keiner der genannten Commits oder der zu prüfende (`branch` @ `hash`) nicht im Git-Server, ist das Review rot, ohne `claude`. `yellow`: wie in Personal nur ein Hinweis |
+| `missing_commits` | mit `team`: `red` | `red`: Ist keiner der genannten Commits im Git-Server, oder fehlt der zu prüfende (`branch` @ `hash`), ist das Review rot, ohne `claude`. `yellow`: wie in Personal nur ein Hinweis |
 
 Mit `server = "team"` steht die Ausgabe von `claude` nicht im Log.
 

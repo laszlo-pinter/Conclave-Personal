@@ -14,8 +14,9 @@ Interface.
   lesen es von dort, wenn `CONCLAVE_API_KEY` leer ist. Agenten bekommen ein
   eigenes Token, siehe [Mensch- und Agent-Zugang](#mensch--und-agent-zugang).
 - Ohne Token erreichbar sind nur `GET`/`HEAD` auf `/`, `/static/*`, `/health`,
-  `/api-docs` und `/openapi.json` sowie CORS-Preflights (`OPTIONS`, leere
-  Antwort `204`).
+  `/api-docs`, `/openapi.json`, `/board/versions` und die Board-Seite
+  (`/ui/board` samt `/ui/board/static/*`; sie meldet sich wie das Studio mit dem
+  Token des Tabs an) sowie CORS-Preflights (`OPTIONS`, leere Antwort `204`).
 - `conclave desktop` und `conclave web` öffnen den Browser mit dem Token im
   URL-Fragment (`#token=…`). Fragmente werden nicht an den Server gesendet; die
   UI übernimmt das Token und entfernt es sofort aus der Adresszeile.
@@ -73,8 +74,10 @@ Anfrage spielen dafür keine Rolle.
   werden vollständig kodiert. `conclave-mcp --reviewer` arbeitet nur mit der
   Rolle `reviewer` und bietet nur drei Tools; der normale MCP-Server lehnt das
   Reviewer-Token ab und kennt das Review-Tool nicht.
-- **Rechte des Agent-Zugangs:** nur die Routen, die die MCP-Tools brauchen
-  (Liste in `api/access.py`); alles andere ergibt `403`
+- **Rechte des Agent-Zugangs:** nur die Routen, die die MCP-Tools und
+  `conclave board wait` (`GET /board/v1/changes`) brauchen, dazu die lesenden
+  Routen im nächsten Punkt (Listen in `api/access.py` und für das Board im
+  Board-Paket, `conclave_board/api/access.py`); alles andere ergibt `403`
   `{"type": "HumanOnly"}`. Neue Routen sind für Agenten gesperrt, bis sie
   bewusst freigegeben werden. Agenten dürfen nicht löschen, keine Einstellungen,
   Agents, Backups oder Logs sehen oder ändern, keine Consultations wiederholen
@@ -127,8 +130,10 @@ Oktober 2026):
   "permissions": {
     "deny": [
       "Read(~/AppData/Roaming/Conclave/api.token)",
+      "Read(~/AppData/Roaming/Conclave/reviewer.token)",
       "Read(~/AppData/Roaming/Conclave/secret.key)",
       "Read(~/.config/conclave/api.token)",
+      "Read(~/.config/conclave/reviewer.token)",
       "Read(~/.config/conclave/secret.key)"
     ]
   }
@@ -139,9 +144,20 @@ Oktober 2026):
   (unter Windows z. B. `//c/Users/<name>/...`). Die Zeilen für Windows
   (`%APPDATA%\Conclave`) und Linux/macOS (`~/.config/conclave`) dürfen beide
   stehen bleiben. Wer `CONCLAVE_API_TOKEN_FILE`, `CONCLAVE_SECRET_KEY_FILE`
-  oder (Linux/macOS) `XDG_CONFIG_HOME` setzt, trägt die dort gesetzten Pfade ein.
+  oder (Linux/macOS) `XDG_CONFIG_HOME` setzt, trägt die dort gesetzten Pfade ein
+  (für das Reviewer-Token `CONCLAVE_REVIEWER_TOKEN_FILE`).
 - `secret.key` gehört dazu: Mit ihm und der Datenbank ließen sich die
-  gespeicherten Provider-Keys entschlüsseln.
+  gespeicherten Provider-Keys entschlüsseln. `reviewer.token` gehört dazu, damit
+  ein Agent, der Code schreibt, nicht selbst Review-Ergebnisse setzen kann.
+- `Read`-Deny-Regeln gelten für die Datei-Tools von Claude Code und für
+  Shell-Befehle, die Claude Code als Dateizugriff erkennt (`cat`, `head`,
+  `sed` …). Sie gelten **nicht** für Programme, die Dateien selbst öffnen,
+  etwa ein Python-Skript.
+- Für eine Sperre, die alle Prozesse trifft, braucht es die Sandbox von Claude
+  Code (`"sandbox": {"enabled": true}`; die `Read`-Deny-Regeln fließen dort ein,
+  zusätzlich `sandbox.filesystem.denyRead`). Die Sandbox gibt es auf macOS,
+  Linux und WSL2. **Unter nativem Windows laufen Befehle ohne Sandbox** – dort
+  bleibt die Trennung eine Absprache plus Deny-Regel, keine harte Grenze.
 
 ### Dateirechte
 
@@ -174,15 +190,6 @@ Abgelöste Schlüssel gelten weiter: zum Entschlüsseln und für die Prüfung, o
 ein Backup ein eigenes ist. Wer wechselt, weil der alte Schlüssel in fremde
 Hände gelangt sein könnte, nimmt `conclave key rotate --drop-old`. Danach
 werden alle abgelösten Schlüssel gelöscht, und ältere Backups gelten als fremd.
-- `Read`-Deny-Regeln gelten für die Datei-Tools von Claude Code und für
-  Shell-Befehle, die Claude Code als Dateizugriff erkennt (`cat`, `head`,
-  `sed` …). Sie gelten **nicht** für Programme, die Dateien selbst öffnen,
-  etwa ein Python-Skript.
-- Für eine Sperre, die alle Prozesse trifft, braucht es die Sandbox von Claude
-  Code (`"sandbox": {"enabled": true}`; die `Read`-Deny-Regeln fließen dort ein,
-  zusätzlich `sandbox.filesystem.denyRead`). Die Sandbox gibt es auf macOS,
-  Linux und WSL2. **Unter nativem Windows laufen Befehle ohne Sandbox** – dort
-  bleibt die Trennung eine Absprache plus Deny-Regel, keine harte Grenze.
 
 ## Browser-UI
 
@@ -334,7 +341,7 @@ Das Board (seit v0.6.0, siehe [Mit dem Board arbeiten](mit-dem-board-arbeiten.md
 setzt seine Regeln am Token durch, nicht an Angaben in der Anfrage:
 
 - **Herkunft:** Kommentare und Verlauf bekommen `origin` (`human`, `agent`,
-  `system` für Conclave selbst, `null` für importierte) und `actor_id` vom
+  `reviewer`, `system` für Conclave selbst, `null` für importierte) und `actor_id` vom
   Server. Felder wie `origin` oder `actor_id` im Body werden ignoriert bzw.
   bei Tickets mit `400` abgelehnt; ein `author_name` ist nur ein Anzeigename.
 - **Freigabe-Recht** (heute: der Mensch): nach und aus der letzten Spalte
@@ -366,6 +373,17 @@ setzt seine Regeln am Token durch, nicht an Angaben in der Anfrage:
 - **Grenze:** Wie überall gilt die
   [Grenze des gleichen Benutzers](#grenze-gleicher-betriebssystem-benutzer):
   Ein Agent, der `api.token` lesen kann, kann auch nach `done` schieben.
+- **Reviewer am entfernten Board-Server** (`server = "team"`, ab v0.9.0, siehe
+  [Konfiguration](referenz/konfiguration.md#reviewer)): Das Reviewer-Token geht
+  nur an den eingetragenen Server. `https` ist Pflicht (`http` nur für diesen
+  Rechner); es gilt nur die CA aus `ca_bundle`, `SSL_CERT_FILE`, `SSL_CERT_DIR`
+  und der Zertifikatsspeicher des Systems nicht. Proxy-Variablen wirken nicht,
+  Umleitungen werden nicht verfolgt, Adressen mit Anmeldedaten abgelehnt. Das
+  Token kommt aus einer Datei nur für den Benutzer oder aus der Windows-
+  Anmeldeinformationsverwaltung und steht nie in der Einstellungsdatei.
+  Ist keiner der genannten Commits im Git-Server, oder fehlt der zu prüfende
+  (`branch` @ `hash`), ist das Review rot, ohne `claude` zu starten (Standard
+  `missing_commits = "red"`); die Ausgabe von `claude` kommt nicht ins Log.
 
 Das Board ist eine eigene Umsetzung; Conclave enthält keinen Code aus Kanzo.
 

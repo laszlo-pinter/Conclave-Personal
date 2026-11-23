@@ -1,9 +1,10 @@
 # API-Referenz
 
-**73 dokumentierte Endpoints** — öffentliche Personal-API.
+Öffentliche Personal-API mit dem Board (die Tabelle unten nennt alle Routen).
 
-Alle Endpoints außer `GET /`, `/static/*`, `GET /health`, `GET /api-docs` und
-`GET /openapi.json` verlangen ein Token (`Authorization: Bearer <token>` oder
+Alle Endpoints außer `GET /`, `/static/*`, `GET /health`, `GET /api-docs`,
+`GET /openapi.json`, `GET /board/versions` und der Board-Seite (`GET /ui/board`
+samt `/ui/board/static/*`) verlangen ein Token (`Authorization: Bearer <token>` oder
 `X-API-Key`). Ohne Token funktionieren außerdem `HEAD` auf diese öffentlichen
 Pfade und `OPTIONS` (CORS-Preflight, `204`) auf allen Pfaden. POST-Anfragen
 brauchen `Content-Type: application/json` (auch ohne Inhalt: `{}`) oder den
@@ -13,12 +14,18 @@ Header `X-Conclave-Client`, sonst `415`. Anfragen mit nicht erlaubtem
 ## Mensch- und Agent-Zugang
 
 Das Token bestimmt die Rolle: Mensch-Token (`CONCLAVE_API_KEY`/`api.token`)
-oder Agent-Token (`CONCLAVE_AGENT_KEY`/`agent.token`).
-`GET /auth/whoami` liefert `{"role": "human"}` bzw. `{"role": "agent"}`.
+oder Agent-Token (`CONCLAVE_AGENT_KEY`/`agent.token`), dazu das Reviewer-Token
+(`CONCLAVE_REVIEWER_KEY`/`reviewer.token`).
+`GET /auth/whoami` liefert `{"role": "human"}`, `{"role": "agent"}` bzw.
+`{"role": "reviewer"}`.
 
-Mit dem Agent-Token sind nur die Routen erlaubt, die die MCP-Tools brauchen:
+Mit dem Agent-Token sind nur die Routen erlaubt, die die MCP-Tools und
+`conclave board wait` brauchen, dazu drei lesende Routen ohne Geheimnisse
+(dieselben Daten liefern `GET /conversations/<id>` und der Export):
 
 - `GET /auth/whoami`
+- `GET /conversations/<id>/rules`, `GET /conversations/<id>/tool-events`,
+  `GET /conversations/<id>/messages/<mid>/context`
 - `GET`/`POST /conversations`, `GET /conversations/<id>`,
   `POST /conversations/<id>/topic`, `GET /conversations/<id>/export`
 - `POST /conversations/<id>/participants` (nur `type: "model"`),
@@ -35,7 +42,8 @@ Mit dem Agent-Token sind nur die Routen erlaubt, die die MCP-Tools brauchen:
   `POST /board/v1/projects/<slug>/tasks/<n>/comments`,
   `GET /board/v1/projects/<slug>/tasks/<n>/history`,
   `GET /board/v1/projects/<slug>/initiatives`,
-  `GET /board/v1/projects/<slug>/initiatives/<vorhaben>/tasks/<n>` (die feineren
+  `GET /board/v1/projects/<slug>/initiatives/<vorhaben>/tasks/<n>`,
+  `GET /board/v1/changes` (für `conclave board wait`; die feineren
   Regeln prüft das Board selbst, siehe [Board](#board))
 
 Der Reviewer-Zugang (`reviewer.token`) hat eine engere Liste: `GET /auth/whoami`,
@@ -54,7 +62,7 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `GET` | `/api-docs` | Swagger UI — interaktive API-Dokumentation (lokal ausgeliefert, keine CDN-Ressourcen). |
 | `GET` | `/openapi.json` | OpenAPI 3.0 Spec als JSON. |
 | `GET` | `/health` | Healthcheck für lokale Runtime und Integrationen. |
-| `GET` | `/auth/whoami` | Rolle des anfragenden Tokens: `human` oder `agent`. |
+| `GET` | `/auth/whoami` | Rolle des anfragenden Tokens: `human`, `agent` oder `reviewer`. |
 | `POST` | `/conversations` | Create Conversation |
 | `GET` | `/conversations` | List Conversations |
 | `GET` | `/agents` | List Agents |
@@ -106,7 +114,7 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `POST` | `/workspace/<path:filepath>` | Schreibt eine Datei in den Workspace (`content` als Text). Agenten: nur neue Dateien oder unter `agents/`, sonst `403`. |
 | `DELETE` | `/workspace/<path:filepath>` | Löscht eine Datei aus dem Workspace. |
 | `GET` | `/board/v1` | Spalten, Projekte, Änderungszähler und `reviewer` (Zustand wie `GET /board/v1/reviewer`; nur Mensch). |
-| `GET` | `/board/v1/changes` | Änderungszähler; die UI und der Reviewer laden neu, wenn er steigt (Mensch und Reviewer-Zugang). |
+| `GET` | `/board/v1/changes` | Änderungszähler; die UI, der Reviewer und `conclave board wait` laden neu, wenn er steigt (alle drei Zugänge). |
 | `GET` | `/board/v1/reviewer` | Läuft der automatische Reviewer? `{"state": "active", "last_seen", "version", "task"}` oder `{"state": "off", "since"}` (nur Mensch). |
 | `POST` | `/board/v1/reviewer/heartbeat` | Lebenszeichen des Reviewers, etwa alle 60 s: `version` (höchstens 50 Zeichen), `task` (laufendes Ticket oder `null`). Ohne Herzschlag seit 180 s gilt er als aus. Nur im Speicher des Servers (nur Reviewer-Zugang). |
 | `POST` | `/board/v1/projects` | Projekt anlegen (nur Mensch). |
@@ -117,7 +125,9 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `GET` | `/board/v1/search` | Suche in Titel, Tags, Beschreibung und Kommentaren (`q`, `project`, `include_done`). |
 | `POST` | `/board/v1/next` | Oberstes freies Ticket der ersten Spalte übernehmen (atomar); `task` als `projekt#n` oder `projekt/vorhaben-n`. |
 | `GET` | `/board/v1/projects/<slug>/tasks/<int:number>` | Ein Ticket mit Kommentaren. |
-| `PATCH` | `/board/v1/projects/<slug>/tasks/<int:number>` | Ticket ändern: `title`, `description`, `tags`, `status`, `human`, `index`, `rank`, optional `version`; `initiative` (Kurzname oder `null`) ordnet einem Vorhaben zu (nur Mensch). |
+| `PATCH` | `/board/v1/projects/<slug>/tasks/<int:number>` | Ticket ändern: `title`, `description`, `tags`, `status`, `human`, `index`, `rank`, optional `version`; `initiative` (Kurzname oder `null`) ordnet einem Vorhaben zu (nur Mensch); `assignee` (Text oder `null`) setzt die Zuständigkeit (Recht `assign:self`/`assign:other`, in Personal nur der Mensch). |
+| `POST` | `/board/v1/projects/<slug>/tasks/<int:number>/release` | Hängendes Ticket freigeben: zurück in die erste Spalte, Zuständigkeit leer (nur Mensch). |
+| `GET` | `/board/v1/stuck` | Übernommene Tickets, die länger als `minutes` (1 bis 525600, Standard 60) in Arbeit stehen, je mit `status_since`; optional `project` (nur Mensch). |
 | `GET` | `/board/v1/projects/<slug>/initiatives` | Vorhaben des Projekts nach Rang. |
 | `POST` | `/board/v1/projects/<slug>/initiatives` | Vorhaben anlegen: `slug`, `title`, optional `rank` (nur Mensch). |
 | `PUT` | `/board/v1/projects/<slug>/initiatives/<initiative>` | Vorhaben umbenennen oder ranken: `title`, `rank` (nur Mensch). |
@@ -132,6 +142,7 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `DELETE` | `/board/v1/comments/<comment_id>` | Eigenen Kommentar löschen (nur Mensch). |
 | `POST` | `/board/v1/import` | JSON-Export eines Kanzo-Boards übernehmen (nur Mensch, idempotent). |
 | `GET` | `/board/versions` | Versionen der Board-API, ohne Token; dieselbe Angabe steht in `/health` unter `board_api`. |
+| `GET` | `/ui/board` | Board-Seite (ohne Token ausgeliefert; sie meldet sich mit dem Token des Tabs an), Skripte und Stile unter `/ui/board/static/*`. |
 
 ### Versionierung der Board-API
 
@@ -272,19 +283,29 @@ Antworten automatisch zu. Modelle werden nie automatisch erneut aufgerufen.
 
 Arbeitspakete für Menschen und Agenten (Anleitung:
 [Mit dem Board arbeiten](../mit-dem-board-arbeiten.md)). Tickets heißen
-`projekt#nummer` und liegen unter `/board/projects/<slug>/tasks/<nummer>`.
+`projekt#nummer` und liegen unter `/board/v1/projects/<slug>/tasks/<nummer>`.
 Spalten aus `[board] statuses` (siehe [Konfiguration](konfiguration.md#board)).
 
-Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
+Ticket (`GET` auf das Ticket, Antworten von `POST /board/v1/tasks` und `PATCH`):
 
 ```json
 {"ref": "api#12", "project": "api", "number": 12, "title": "Login reparieren",
+ "initiative": null, "initiative_ref": null,
  "description": "## Abnahme\n...", "tags": ["ui"], "status": "doing",
- "position": 1024.0, "human": false, "assignee": null, "version": 3,
- "origin": "agent", "created_by": "agent", "created_at": "...", "updated_at": "..."}
+ "position": 1024.0, "rank": 1024.0, "human": false, "assignee": null, "version": 3,
+ "origin": "agent", "created_by": "agent", "kind": "task", "directive": null,
+ "review": {"state": "none", "at": null, "red_count": 0, "blocking": null,
+            "suggestions": null, "checked": null},
+ "created_at": "...", "updated_at": "...", "actor_name": null}
 ```
 
-- **Anlegen** `POST /board/tasks`: `project` und `title` Pflicht, optional
+`initiative`/`initiative_ref` nennen das Vorhaben (`api/login-3`), `actor_name` den
+Anzeigenamen dessen, der angelegt hat (nur mit einer Erweiterung, die Konten kennt;
+in Personal `null`; ebenso an Kommentaren und im Verlauf). `GET` auf ein Ticket liefert
+zusätzlich `comments`, `last_review`, `status_since` (seit wann es in seiner Spalte
+steht) und `control`.
+
+- **Anlegen** `POST /board/v1/tasks`: `project` und `title` Pflicht, optional
   `description`, `tags`, `human`, `status` (Standard: erste Spalte; Agenten
   nur die erste Spalte, sonst `403`). `origin` und `created_by` setzt der
   Server aus dem Token (`created_by: "import"` für importierte Tickets, leer
@@ -296,7 +317,7 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
   Mensch-Token, sonst `403 HumanOnly`. Unbekannte Felder ergeben `400`.
   Mit `version` (aus dem zuletzt gelesenen Ticket) wird nur geschrieben, wenn
   das Ticket noch diesen Stand hat; sonst `409 Conflict`.
-- **Priorität:** Die erste Spalte und `POST /board/next` folgen `rank`, dann der
+- **Priorität:** Die erste Spalte und `POST /board/v1/next` folgen `rank`, dann der
   Nummer; neue Tickets bekommen den nächsten Rang. In den anderen Spalten zählt
   die Position (Reihenfolge des Ankommens). Neunummerieren (wenn zwischen zwei
   Karten kein Platz mehr ist) erhöht die `version` der betroffenen Tickets; ein
@@ -305,7 +326,7 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
   Rang. Positionen zählen je Spalte, daher stehen Tickets, die damals nicht in der
   ersten Spalte waren, beim Zurückschieben dort weit oben, bis der Mensch sie
   umsortiert.
-- **`POST /board/next`** (`{"project": "api"}` optional): schiebt das oberste
+- **`POST /board/v1/next`** (`{"project": "api"}` optional): schiebt das oberste
   Ticket der ersten Spalte ohne Markierung „nur für Menschen“ atomar in die
   zweite und liefert es (`{"task": ...}`, `null` wenn keines frei ist). Mit
   `{"task": "api#12"}` genau dieses Ticket; steht es nicht in der ersten Spalte
@@ -313,15 +334,16 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
   `403`; unbekannt `404`. Agenten verlassen die erste Spalte nur so: Eine
   Statusänderung per `PATCH` aus der ersten Spalte ergibt `403`.
 - **Kommentare** `POST .../comments` mit `body` (Markdown), optional
-  `author_name` (Anzeigename). `origin` (`human`/`agent`/`system`/`null`) und
+  `author_name` (Anzeigename). `origin` (`human`/`agent`/`reviewer`/`system`/`null`) und
   `actor_id` setzt der Server aus dem Token; solche Felder im Body werden
   ignoriert.
 - **Verlauf** `GET .../history`: `field`, `old`, `new` (vollständig), `origin`,
   `actor_id`, `created_at`. Felder: `created` (Anlegen, `new` = Spalte bzw.
   `import`), `status`, `title`, `description`, `human`, `rank`, `tags` (JSON-Liste),
-  `position` (Umsortieren in einer Spalte) und `comment` (Bearbeiten: alt → neu,
-  Löschen: alt → `null`). Gelöschte Kommentare verschwinden aus der Liste, ihr
-  Inhalt bleibt im Verlauf.
+  `position` (Umsortieren in einer Spalte), `comment` (Bearbeiten: alt → neu,
+  Löschen: alt → `null`), `review_state`, `review_red_count`, `control_ack`
+  (Quittung eines Hinweises), `initiative` und `assignee`. Gelöschte Kommentare
+  verschwinden aus der Liste, ihr Inhalt bleibt im Verlauf.
 - **Review** `POST .../review` (nur Reviewer-Zugang, Agent und Mensch `403`):
   `{"state": "running"|"passed"|"rework"|"failed"|"none", "comment": "...",
   "blocking": 0, "suggestions": 3, "checked": "branch @ abc..def"}`. Nur für
@@ -337,32 +359,32 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/tasks` und `PATCH`):
     Zählung neu (`review_red_count` → 0, mit Verlaufseintrag).
   - Tickets „nur für Menschen“ bewertet der Reviewer nicht (`403`); auch
     `conclave-reviewer` startet für sie kein Review.
-  - Bei `POST /board/next` ohne Projekt kommt Nacharbeit (`rework`/`failed`)
+  - Bei `POST /board/v1/next` ohne Projekt kommt Nacharbeit (`rework`/`failed`)
     aus allen Projekten zuerst, danach gilt die Board-Reihenfolge.
   - Kommt ein Ticket wieder nach `review`, steht der Status auf `none`.
 
   Tickets tragen `review` mit `state`, `at`, `red_count`, `blocking`,
-  `suggestions` und `checked`. `GET` auf ein Ticket und `POST /board/next`
+  `suggestions` und `checked`. `GET` auf ein Ticket und `POST /board/v1/next`
   liefern zusätzlich `last_review`, den jüngsten Kommentar des Reviewers.
-- **Steuertickets** (Anweisungen des Menschen an die Agenten): `POST /board/tasks`
+- **Steuertickets** (Anweisungen des Menschen an die Agenten): `POST /board/v1/tasks`
   mit `"kind": "control"`, `"control": "pause"|"hint"` und `"scope":
   "project"|"all"`, nur mit dem Mensch-Token (sonst `403`). Ändern und Schließen
-  (nach „erledigt“) darf nur der Mensch; `POST /board/next` vergibt sie nie.
-  - **Pause:** Solange offen, liefert `POST /board/next` kein Ticket, sondern
+  (nach „erledigt“) darf nur der Mensch; `POST /board/v1/next` vergibt sie nie.
+  - **Pause:** Solange offen, liefert `POST /board/v1/next` kein Ticket, sondern
     `{"task": null, "paused": true, "pause": {"task", "reason", "by", "scope", …}}`,
     auch mit `task`. Geltung: das Projekt des Steuertickets oder alle; `next`
     ohne Projekt hält jede offene Pause an.
   - **Hinweis:** bleibt offen, bis ein Agent ihn kommentiert; der erste Kommentar
     eines Agenten gilt als Quittung (`directive.ack_by`, Verlauf `control_ack`).
-  - Jede Board-Antwort (`/board`, Liste, Suche, Ticket, Anlegen, `PATCH`,
+  - Jede Board-Antwort (`/board/v1`, Liste, Suche, Ticket, Anlegen, `PATCH`,
     Kommentar, `next`) trägt `control` mit offenen Pausen (`pauses`) und
     unquittierten Hinweisen (`hints`). Nur Steuertickets mit Herkunft `human`
     zählen; ein normales Ticket mit ähnlichem Text löst nichts aus.
   - Tickets tragen `kind` (`task`/`control`) und bei Steuertickets `directive`
     (`type`, `scope`, `ack_by`, `ack_at`).
-- **Projekt-Verlauf** `GET /board/projects/<slug>/history` (nur Mensch):
-  `created`, `name` (Umbenennen) und `task_deleted` (Referenz, Titel und Spalte
-  des gelöschten Tickets). Ein gelöschtes Ticket nimmt seinen eigenen Verlauf
+- **Projekt-Verlauf** `GET /board/v1/projects/<slug>/history` (nur Mensch):
+  `created`, `name` (Umbenennen), `task_deleted` (Referenz, Titel und Spalte
+  des gelöschten Tickets) und `initiative` (Vorhaben angelegt oder geändert). Ein gelöschtes Ticket nimmt seinen eigenen Verlauf
   mit; dieser Eintrag bleibt.
 - **Spalten umbenennen:** Wird die letzte Spalte in `[board] statuses`
   umbenannt, verschiebt Conclave beim Start die Tickets der alten letzten Spalte
@@ -375,7 +397,7 @@ Markierung setzen, aber nicht entfernen. Kommentare ändern und löschen nur der
 Mensch und nur eigene. Gleichzeitige Änderungen am selben Ticket: `409
 Conflict`.
 
-**Import** `POST /board/import` (nur Mensch) nimmt die Ausgabe von
+**Import** `POST /board/v1/import` (nur Mensch) nimmt die Ausgabe von
 `kanzo export -f json` an, höchstens 50 MB (`413 ImportTooLarge`). Der Export
 wird vollständig geprüft, bevor etwas geschrieben wird (`400
 ImportFormatError`). Antwort:
@@ -468,7 +490,8 @@ einzigen Verlaufseintrag `created` mit der Herkunft dessen, der importiert hat.
 `GET /conversations/<id>/rules` liefert `{"rules": "...", "model_read": false}`.
 `POST /conversations/<id>/rules` nimmt `rules` und optional `model_read`
 (`true`/`false`): Mit `true` dürfen Modelle in dieser Conversation Dateien per
-`@read()` lesen. Beide Routen nur mit dem Mensch-Token.
+`@read()` lesen. Ändern (`POST`) nur mit dem Mensch-Token; lesen (`GET`) dürfen
+auch Agenten.
 
 ## Größengrenzen
 

@@ -19,6 +19,9 @@ Personal stellt ihn unter dem alten Namen bereit.
 | RunRepository | Personal-Runs und optionale Usage-Daten persistieren | SQLiteRunRepository, PostgresRunRepository |
 | ToolEventRepository | Tool-Events (`workspace.read`/`workspace.save`) speichern und je Conversation bzw. Message laden | SQLiteToolEventRepository, PostgresToolEventRepository |
 | ContextReportRepository | Kontext-Reports je Modellaufruf speichern, mit Message verknüpfen, je Message bzw. Conversation laden | SQLiteContextReportRepository, PostgresContextReportRepository |
+| ConsultationRepository | Consultations und ihre Zustellungen speichern; Anlegen unter der Obergrenze, Statuswechsel und Lease atomar | SQLiteConsultationRepository, PostgresConsultationRepository |
+| TaskSource | Ein Ticket samt Kommentaren für eine Consultation lesen (Inhalt ist fremd) | BoardTaskSource (eigenes Board), KanzoMcpAdapter (Kanzo) |
+| CommentSink | Das Ergebnis einer Consultation als Kommentar ans Ticket schreiben | BoardTaskSource, KanzoMcpAdapter |
 | ModelAdapter | Synchroner Provider-Aufruf | UniversalAdapter, AnthropicAdapter, OpenAIAdapter |
 | StreamingModelAdapter | Synchroner Provider-Aufruf mit Token-Streaming | UniversalAdapter, AnthropicAdapter, OpenAIAdapter |
 | AsyncModelAdapter | Async-Provider-Aufruf | AsyncAnthropicAdapter, AsyncOpenAIAdapter (derzeit nicht verdrahtet) |
@@ -114,6 +117,9 @@ Wrapper in `src/conclave/infrastructure/universal/resilient.py`:
 | Runs | SQLiteRunRepository | PostgresRunRepository |
 | Audit/Usage | SQLiteAuditRepository | PostgresAuditRepository |
 | Tool-Events | SQLiteToolEventRepository | PostgresToolEventRepository |
+| Kontext-Reports | SQLiteContextReportRepository | PostgresContextReportRepository |
+| Consultations | SQLiteConsultationRepository | PostgresConsultationRepository |
+| Board (Board-Paket) | SQLiteBoardRepository | PostgresBoardRepository |
 | Verschlüsselung | Immer aktiv über CryptoService (Key aus `CONCLAVE_SECRET_KEY`, sonst Key-Datei, sonst neu erzeugt) | Wie SQLite |
 | Schema-Migration | migrations.py im SQLite-Modus | migrations.py im Postgres-Modus |
 | Einsatz | Lokaler Personal-Default; CLI-Subkommandos nutzen immer SQLite | Fortgeschrittene/kompatible Setups (nur `conclave server`, `desktop`, `conclave-api`) |

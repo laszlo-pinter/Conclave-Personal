@@ -46,7 +46,7 @@
    - `start` — groups, total
    - `group_start` — group, participants
    - `invoke` — group, slot, participant
-   - `response` — group, slot, participant, participant_id, content, sequence, message_id, tool_events
+   - `response` — group, slot, participant, participant_id, content, sequence, message_id, context (Kontext-Report der Antwort), tool_events
    - `error` — group, slot, participant, message, type, status
    - `group_done` — group, responses (Anzahl bisher gespeicherter Antworten)
    - `stop` — reason: "error", message, type, status, responses. Ist die
@@ -81,7 +81,7 @@
 9. Events:
    - `start` — max_rounds, sequence, stop_signal, rotation
    - `invoke` — round, participant, round_sequence (vor dem Call)
-   - `response` — round, participant, round_sequence, content, message_id, tool_events (nach dem Call)
+   - `response` — round, participant, round_sequence, content, message_id, context (Kontext-Report der Antwort), tool_events (nach dem Call)
    - `stop` — reason und je nach Grund:
      - "signal": signal, participant, round
      - "max_rounds": rounds
@@ -129,4 +129,4 @@ MessageRepository + RunRepository + AuditRepository
 - `src/conclave/cli/handler.py:auto_loop()` — Generator
 - `src/conclave/api/app.py` — 4 Endpoints (orchestrate, orchestrate-parallel, orchestrate-parallel-stream, auto-loop)
 
-**Zuletzt verifiziert:** 2026-10-26 (v0.2.0)
+**Zuletzt verifiziert:** 2026-11-23 (v0.9.1)
