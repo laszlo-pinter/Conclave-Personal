@@ -260,9 +260,11 @@ Other MCP clients use a configuration like this:
 ```
 
 The MCP server talks to `CONCLAVE_API_URL` (default `http://localhost:8000`).
-`conclave desktop` picks another free port if 8000 is busy, so start the server
-with a fixed port (`conclave server --port 8000` or
-`conclave desktop --port 8000`) or set `CONCLAVE_API_URL` to the actual address.
+`conclave desktop` picks another free port if 8000 is busy, even with `--port`
+(the port is only the preferred one). For a fixed port start the server with
+`conclave server --port 8000`, or set `CONCLAVE_API_URL` to the actual address.
+A second `conclave desktop` while one is running therefore ends up on another
+port; agents and the reviewer keep talking to the first one.
 
 The local API always requires a token. There are three, each with its own rights:
 
@@ -367,7 +369,7 @@ packages/board/src/conclave_board/
                    board domain, service, storage, migrations, REST
                    blueprint, shared building blocks (tokens, crypto,
                    file permissions, log); runs on its own as
-                   `conclave-board serve`
+                   `conclave-board-server serve`
 
 packages/reviewer/src/conclave_reviewer/
                    automatic reviewer (PolyForm like Personal, bundled):
@@ -377,11 +379,11 @@ packages/reviewer/src/conclave_reviewer/
 
 src/conclave/assets/
   conclave-ui.html installed UI resource
-  static/js/       api, i18n, state, utils, main, swagger-init
+  static/js/       api, i18n, state, utils, main, theme, swagger-init
   static/js/features/
-                   agents, auth, autoloop, conversations, export, floor,
-                   messages, participants, runs, settings, speech, usage,
-                   workspace
+                   agents, auth, autoloop, context, conversations, export,
+                   floor, messages, participants, runs, settings, speech,
+                   usage, workspace
   static/css/      stylesheets
   static/vendor/   bundled libraries and fonts (no CDN at runtime)
   scripts/         Windows and Linux startup/service scripts
@@ -489,9 +491,11 @@ v0.9.1 remains alpha. Known limitations:
 
 CI runs the jobs `test` (Ubuntu and Windows, Python 3.11 and 3.12),
 `ui-browser` (Playwright browser tests in Chromium), `security` (`pip-audit`,
-`bandit`, `import-linter`), `postgres` (PostgreSQL 16 tests), `build` (sdist and
-wheel, artifact inspection) and `board-package` and `reviewer-package` (their
-wheels in a fresh environment without Conclave Personal).
+`bandit`, `import-linter`), `postgres` (PostgreSQL 16 tests), `vendor` (bundled
+vendor files against their npm packages), `build` (sdist and wheel, artifact
+inspection), `board-package` and `reviewer-package` (their wheels in a fresh
+environment without Conclave Personal) and `board-api` (no breaking changes in
+`/board/v1`, checked with oasdiff).
 
 The v0.9.1 release was verified with a fresh installation from the wheel with
 `[mcp,reviewer]` and the smoke test, an upgrade from v0.9.0 on a copy of a real

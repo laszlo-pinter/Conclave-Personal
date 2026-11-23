@@ -205,7 +205,11 @@ startet für jedes Ticket, das nach `review` kommt, ein Review mit Claude Code
 - **Geprüfter Stand:** Den Commit nimmt der Reviewer aus dem jüngsten
   Agent-Kommentar, der einen nennt (Hashes in Backticks, z. B.
   `` **Branch:** `x` · **Commit:** `abc1234` ``). Deshalb gehören nur Commits,
-  die geprüft werden sollen, in Backticks. Hat ein Projekt mehrere Checkouts, sucht er in allen und prüft
+  die geprüft werden sollen, in Backticks. Kommentare des Menschen (Herkunft
+  `human`) und die eigenen Review-Kommentare zählen dafür nicht. Liegt weder ein
+  genannter Commit noch ein genannter Branch im eingetragenen Checkout, startet
+  er kein Review; das Log nennt dann `no commit named in the ticket, not reviewed`.
+  Hat ein Projekt mehrere Checkouts, sucht er in allen und prüft
   jeden in einem eigenen Worktree. Die Worktrees entfernt er danach wieder.
 - **Zustand:** Das Board zeigt „Reviewer aktiv“ (mit dem Ticket, das er gerade
   prüft) oder „Reviewer aus“. `conclave-reviewer status` zeigt, ob er läuft,
@@ -213,6 +217,18 @@ startet für jedes Ticket, das nach `review` kommt, ein Review mit Claude Code
   die Version von `claude`.
 - **Nach einem Abbruch:** Beim nächsten Start gibt er hängende Reviews
   (`running`) frei, prüft sie neu und räumt liegen gebliebene Worktrees auf.
+- **Erster Start:** Ohne gemerkten Stand merkt er sich das Board; Tickets, die
+  da schon in `review` stehen, prüft er nicht (Log: `first run: …`). Ein solches
+  Ticket einmal zurück und wieder nach `review` schieben.
+- **Entfernter Board-Server** (ab v0.9.0): Mit `server = "team"` in einer eigenen
+  Einstellungsdatei (`conclave-reviewer run --settings <Datei>`) prüft er gegen
+  einen Board-Server mit Konten statt gegen Conclave Personal. Dann holt er vor
+  jedem Review die Branches (`git fetch`), und liegt keiner der genannten
+  Commits oder der zu prüfende (`branch` @ `hash`) nicht im Git-Server, ist das
+  Review rot, ohne `claude` zu starten. Die
+  Verbindung nutzt nur die eigene CA (siehe
+  [Sicherheit](sicherheit.md#board)); Einstellungen unter
+  [Konfiguration](referenz/konfiguration.md#reviewer).
 
 Einen anderen Reviewer kann man genauso anschließen: Er braucht das
 Reviewer-Token (`conclave token show --reviewer`), `conclave-mcp --reviewer`,
@@ -265,7 +281,8 @@ ihre Sitzung abzubrechen. Ein Banner über den Spalten zeigt sie an.
    Reviewer sucht jeden Commit in allen Repos, die `config.toml` für das Projekt
    als Liste nennt (`projects.conclave = ['…', '…']`), und legt je Repo einen
    eigenen Worktree an. Ein Commit, den er in keinem Repo findet, gilt als nicht
-   geprüft; das Urteil ist dann höchstens gelb.
+   geprüft; das Urteil ist dann höchstens gelb (am entfernten Board-Server mit
+   `missing_commits = "red"`, dort der Standard: rot).
 2. Nach „→ review“ startet der Agent `conclave board wait <ticket>` im
    Hintergrund und arbeitet weiter. Der Befehl endet mit einer JSON-Zeile, sobald das Review entschieden
    ist (`{"event": "review", "verdict": "gelb", ...}`); `conclave board wait

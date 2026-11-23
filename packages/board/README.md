@@ -42,8 +42,13 @@ changes to its rules:
 - **Rules:** `BoardService(..., policy=...)` takes a `BoardPolicy`. It decides who
   may write, comment, approve (done, rank, delete, initiatives, removing "humans
   only"), release stuck tickets and create control tickets per scope (`mine`,
-  `project`, `all`), which tickets `next` may hand out and whom it assigns, extra
-  checks on status changes under a named lock (`locked_key`), and receives
+  `project`, `all`), which tickets `next` may hand out (`claimable`) and whom it
+  assigns (`assignee_for`), the order of `next` without a given ticket
+  (`next_group(principal, task)`, smaller group first; since v0.9.1, rework from a
+  review always comes first and the board order stays within a group;
+  `next_groups(principal, tasks)` returns the groups of all candidates in one call
+  and is the method to override when the policy reads data for it), extra checks
+  on status changes under a named lock (`lock_key`), and receives
   events (approval, rank, control, release) for an audit log. `actor_name(actor_id)`
   returns a display name for an account; the API then adds `actor_name` to tickets,
   comments and history (otherwise `null`). The default

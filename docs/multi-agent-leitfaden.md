@@ -136,8 +136,9 @@ können selbst `@save(<pfad>)` verwenden, `@read(<pfad>)` nach Freigabe
 durch den Menschen je Conversation. Es gelten
 dieselben Grenzen: nur innerhalb des Workspace, keine versteckten
 Pfade, Agent-Leselimit. `context_files:`, `@read()` und `@save()`
-wertet nur der Universal-Adapter aus (Agenten mit Preset). Das ersetzt
-keinen Verifikator, verbessert aber die Faktenbasis.
+gelten für alle Agenten, mit Preset ebenso wie die nativen Anthropic- und
+OpenAI-Agenten (siehe [Workspace-Direktiven](flows/workspace-directives.md)).
+Das ersetzt keinen Verifikator, verbessert aber die Faktenbasis.
 
 ### Setup 4: Hybridmodell — Hypothesen + Verifikation
 

@@ -161,6 +161,14 @@ was ein Agent geändert oder kommentiert hat (siehe
   „über Agent“, „Zweitmeinung (Modell)“, „unbekannt“), Verlauf, Status,
   Markierung, neuer Kommentar
 - Neues Ticket, Suche, Projektauswahl, Schalter „Erledigte zeigen“
+- Review-Status an den Karten (läuft, grün, gelb, rot, Nacharbeit, „hängt“) und
+  Anzeige „Reviewer aktiv“ bzw. „Reviewer aus“
+- Steuertickets: Pause und Hinweis anlegen und schließen
+- Vorhaben eines Projekts und Dialog „Projekte“ (umbenennen; löschen nur ohne
+  Tickets und Vorhaben)
+- Schalter „Benachrichtigen“: Browser-Benachrichtigung bei neuen Review-Ergebnissen
+  und wenn der Reviewer aus ist, während Tickets warten (nur wenn die Seite nicht
+  im Vordergrund ist)
 - Live-Aktualisierung: alle 5 Sekunden `GET /board/v1/changes`, nur bei aktivem
   Bereich und sichtbarer Seite
 
@@ -217,8 +225,10 @@ Sidebar:
 - Dialog "API-Zugang" (Conclave-API-Token und Server-URL)
 - Sprachauswahl im Sidebar-Footer
 
-Theme-Auswahl und Startmodus gibt es in der UI nicht. Ein Restore ist nur
-über CLI (`conclave restore`) oder API (`POST /restore`) möglich.
+Die Darstellung (System, Hell, Dunkel) wählt man im Sidebar-Footer (siehe
+[Heller und dunkler Modus](#heller-und-dunkler-modus)). Den Startmodus (Studio
+oder nur Board) legt `[ui] mode` in der `config.toml` fest, nicht die UI. Ein
+Restore ist nur über CLI (`conclave restore`) oder API (`POST /restore`) möglich.
 
 ## Technischer Stand
 
@@ -238,6 +248,7 @@ src/conclave/assets/static/
     state.js
     utils.js
     main.js
+    theme.js
     swagger-init.js
     features/
       agents.js
@@ -282,7 +293,7 @@ Die UI ist Vanilla-JavaScript ohne Build-Schritt:
 
 ## UX-Regeln
 
-- Erste Ansicht ist Studio.
+- Erste Ansicht ist Studio (im Board-Modus, `[ui] mode = "board"`, die Board-Seite).
 - Eine primäre Aufgabe pro Screen.
 - Keine DSGVO-Begriffe in der Personal-UI.
 - Agenten sind schnell testbar.

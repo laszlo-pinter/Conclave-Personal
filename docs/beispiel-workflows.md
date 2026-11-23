@@ -3,14 +3,17 @@
 Diese Workflows zeigen typische Personal-Nutzung: ein Nutzer steuert mehrere
 Agenten, entscheidet über Kontext und prüft Ergebnisse sichtbar in Runs.
 
+Im CLI ist `--role` nur eine Bezeichnung; das Verhalten kommt aus
+`--system-prompt` (die Desktop-UI füllt den Prompt aus der gewählten Rolle).
+
 ## 1. Text Aus Mehreren Perspektiven Prüfen
 
 Ziel: Einen Text aus zwei Perspektiven prüfen. Die Modelle liefern Hinweise;
 die Entscheidung bleibt beim Nutzer.
 
 ```powershell
-conclave agent-new writer --name "Writer" --provider openai-responses --preset openai-responses --model "<openai-model>" --role Writer
-conclave agent-new critic --name "Critic" --provider anthropic --preset anthropic --model "<anthropic-model>" --role Critic
+conclave agent-new writer --name "Writer" --provider openai-responses --preset openai-responses --model "<openai-model>" --role writer --system-prompt "Du schreibst und überarbeitest Texte klar und knapp."
+conclave agent-new critic --name "Critic" --provider anthropic --preset anthropic --model "<anthropic-model>" --role critic --system-prompt "Du prüfst Texte kritisch auf Unklarheiten, Risiken und offene Annahmen."
 
 $conv = (conclave --json new | ConvertFrom-Json).conversation_id
 conclave topic $conv "Produkttext prüfen"
@@ -29,8 +32,8 @@ Die Workflows 2–4 nutzen die Agenten `planner` und `reviewer`. Einmalig
 anlegen, falls sie noch nicht existieren:
 
 ```powershell
-conclave agent-new planner --name "Planner" --provider openai-responses --preset openai-responses --model "<openai-model>" --role Planner
-conclave agent-new reviewer --name "Reviewer" --provider anthropic --preset anthropic --model "<anthropic-model>" --role Reviewer
+conclave agent-new planner --name "Planner" --provider openai-responses --preset openai-responses --model "<openai-model>" --role planner --system-prompt "Du strukturierst Entscheidungen: Optionen, Kriterien, Risiken, nächster Schritt."
+conclave agent-new reviewer --name "Reviewer" --provider anthropic --preset anthropic --model "<anthropic-model>" --role reviewer --system-prompt "Du prüfst Vorschläge auf Fehler, Lücken und Annahmen ohne Beleg."
 ```
 
 ```powershell
