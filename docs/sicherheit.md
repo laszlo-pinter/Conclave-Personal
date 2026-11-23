@@ -381,8 +381,8 @@ setzt seine Regeln am Token durch, nicht an Angaben in der Anfrage:
   Umleitungen werden nicht verfolgt, Adressen mit Anmeldedaten abgelehnt. Das
   Token kommt aus einer Datei nur für den Benutzer oder aus der Windows-
   Anmeldeinformationsverwaltung und steht nie in der Einstellungsdatei.
-  Liegt keiner der genannten Commits oder der zu prüfende (`branch` @ `hash`)
-  nicht im Git-Server, ist das Review rot, ohne `claude` zu starten (Standard
+  Ist keiner der genannten Commits im Git-Server, oder fehlt der zu prüfende
+  (`branch` @ `hash`), ist das Review rot, ohne `claude` zu starten (Standard
   `missing_commits = "red"`); die Ausgabe von `claude` kommt nicht ins Log.
 
 Das Board ist eine eigene Umsetzung; Conclave enthält keinen Code aus Kanzo.

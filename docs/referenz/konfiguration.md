@@ -310,7 +310,7 @@ Die Einstellungen stehen dann meist in einer eigenen Datei, gestartet mit
 | `data_dir` | `<Konfigurationsordner>/reviewer` | Datenordner; `--data-dir` hat Vorrang |
 | `conclave_mcp_exe`, `conclave_mcp_args` | mit `team`: `conclave-board-mcp`, `["--reviewer"]` | MCP-Server des Board-Servers |
 | `fetch` | mit `team`: `true` | Vor jedem Review `git fetch` in den Checkouts; die Branches von `origin` haben Vorrang |
-| `missing_commits` | mit `team`: `red` | `red`: Liegt keiner der genannten Commits oder der zu prüfende (`branch` @ `hash`) nicht im Git-Server, ist das Review rot, ohne `claude`. `yellow`: wie in Personal nur ein Hinweis |
+| `missing_commits` | mit `team`: `red` | `red`: Ist keiner der genannten Commits im Git-Server, oder fehlt der zu prüfende (`branch` @ `hash`), ist das Review rot, ohne `claude`. `yellow`: wie in Personal nur ein Hinweis |
 
 Mit `server = "team"` steht die Ausgabe von `claude` nicht im Log.
 

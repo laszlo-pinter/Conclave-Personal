@@ -223,9 +223,9 @@ startet für jedes Ticket, das nach `review` kommt, ein Review mit Claude Code
 - **Entfernter Board-Server** (ab v0.9.0): Mit `server = "team"` in einer eigenen
   Einstellungsdatei (`conclave-reviewer run --settings <Datei>`) prüft er gegen
   einen Board-Server mit Konten statt gegen Conclave Personal. Dann holt er vor
-  jedem Review die Branches (`git fetch`), und liegt keiner der genannten
-  Commits oder der zu prüfende (`branch` @ `hash`) nicht im Git-Server, ist das
-  Review rot, ohne `claude` zu starten. Die
+  jedem Review die Branches (`git fetch`). Ist keiner der genannten Commits im
+  Git-Server, oder fehlt der zu prüfende (`branch` @ `hash`), ist das Review rot,
+  ohne `claude` zu starten. Die
   Verbindung nutzt nur die eigene CA (siehe
   [Sicherheit](sicherheit.md#board)); Einstellungen unter
   [Konfiguration](referenz/konfiguration.md#reviewer).
