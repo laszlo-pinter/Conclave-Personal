@@ -31,6 +31,7 @@
 - [Ports & adapters](architektur/ports-adapter.md) - Interfaces, ProviderProfiles, ResilientAdapter
 
 ### Release
+- [Release Notes v0.9.2](release-notes-v0.9.2.md) - The reviewer passes no ticket text on the command line of `claude`; documentation aligned with the code
 - [Release Notes v0.9.1](release-notes-v0.9.1.md) - Extension point for the order of `next` in the board core
 - [Release Notes v0.9.0](release-notes-v0.9.0.md) - Board page `/ui/board` and board mode, projects in the UI, reviewer as its own package
 - [Release Notes v0.8.0](release-notes-v0.8.0.md) - Board core as its own package with API `/board/v1`, built-in automatic reviewer, `board wait`

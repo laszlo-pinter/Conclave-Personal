@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "conclave-board"
 # Gleicher Stand wie conclave-personal (Release im Gleichschritt, tests/packaging prueft das)
-version = "0.9.1"
+version = "0.9.2"
 description = "Board server for teams: tickets, review and priority over REST, with an optional board page for host apps."
 readme = "README.md"
 license = "Apache-2.0"
