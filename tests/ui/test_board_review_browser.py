@@ -199,6 +199,34 @@ def test_task_view_shows_the_review_with_counts(chromium, board_server):
         context.close()
 
 
+def test_human_restarts_a_review_from_the_task_view(chromium, board_server):
+    """conclave#145: Knopf "Review neu starten" nur, wo der Server es erlaubt; danach "Review angefordert"."""
+    numbers = _states(board_server)
+    context, page, errors = _open_board(chromium, board_server)
+    try:
+        button = page.locator("#boardTaskReviewRequest")
+        _card(page, numbers["laeuft"]).click()                         # laeuft gerade: kein Knopf
+        page.locator("#boardTaskReview .board-review[data-state='running']").wait_for(timeout=10000)
+        assert button.is_hidden()
+        page.click("[data-action='board-close-task']")
+        _card(page, numbers["gelb"]).click()                           # in todo: kein Knopf
+        page.locator("#boardTaskReview .board-review[data-state='rework']").wait_for(timeout=10000)
+        assert button.is_hidden()
+        page.click("[data-action='board-close-task']")
+        _card(page, numbers["gruen"]).click()
+        page.locator("#boardTaskReview .board-review[data-state='passed']").wait_for(timeout=10000)
+        assert button.is_visible() and button.inner_text() == "Review neu starten"
+        button.click()
+        page.locator("#boardTaskReview .board-review[data-state='requested']").wait_for(timeout=10000)
+        assert "Review angefordert" in page.locator("#boardTaskReview .board-review").inner_text()
+        _card(page, numbers["gruen"]).locator(".board-review[data-state='requested']").wait_for(timeout=10000)
+        task = board_server.human.get(f"/board/projects/api/tasks/{numbers['gruen']}").json()
+        assert (task["status"], task["review"]["state"]) == ("review", "requested")
+        assert errors == []
+    finally:
+        context.close()
+
+
 def test_header_counts_tickets_waiting_for_approval_and_filters(chromium, board_server):
     numbers = _states(board_server)
     second = _ticket_in_review(board_server, "auch gruen")

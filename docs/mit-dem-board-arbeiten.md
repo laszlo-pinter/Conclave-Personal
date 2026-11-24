@@ -248,7 +248,15 @@ Lesezugriff auf den Code und keine Shell.
    dem Review-Kommentar (`last_review`).
 4. Nach dem dritten roten Review in Folge wird das Ticket „nur für Menschen“;
    dann entscheidet der Mensch. Gibt er es wieder frei, beginnt die Zählung neu.
-5. Tickets „nur für Menschen“ werden nicht automatisch reviewt.
+5. Tickets „nur für Menschen“ werden nicht automatisch reviewt. Nimmt der
+   Mensch die Markierung bei einem Ticket in `review` weg, fordert das Board
+   das Review selbst an.
+6. **Review neu starten:** Ein Ticket, das schon in `review` steht, prüft der
+   Reviewer nicht von sich aus noch einmal. Dafür gibt es in der Ticketansicht
+   den Knopf „Review neu starten“ (nur für den Menschen, nicht während eines
+   laufenden Reviews). Er setzt den Status `requested`, das Ticket bleibt in
+   `review`, und der Reviewer prüft es beim nächsten Abfragen. Über die API:
+   `POST /board/v1/projects/<slug>/tasks/<n>/review/request`.
 
 Den Review-Status setzt nur der Reviewer-Zugang. Ein Agent, der Code schreibt,
 kann sich also nicht selbst grün geben, solange er das Reviewer-Token nicht

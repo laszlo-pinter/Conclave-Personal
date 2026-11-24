@@ -124,7 +124,7 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `POST` | `/board/v1/tasks` | Ticket anlegen; neue Tickets landen in der ersten Spalte. Optional `initiative`: Kurzname eines vorhandenen Vorhabens. |
 | `GET` | `/board/v1/search` | Suche in Titel, Tags, Beschreibung und Kommentaren (`q`, `project`, `include_done`). |
 | `POST` | `/board/v1/next` | Oberstes freies Ticket der ersten Spalte übernehmen (atomar); `task` als `projekt#n` oder `projekt/vorhaben-n`. |
-| `GET` | `/board/v1/projects/<slug>/tasks/<int:number>` | Ein Ticket mit Kommentaren. |
+| `GET` | `/board/v1/projects/<slug>/tasks/<int:number>` | Ein Ticket mit Kommentaren; `can_approve` sagt, ob dieser Zugang im Projekt das Freigabe-Recht hat. |
 | `PATCH` | `/board/v1/projects/<slug>/tasks/<int:number>` | Ticket ändern: `title`, `description`, `tags`, `status`, `human`, `index`, `rank`, optional `version`; `initiative` (Kurzname oder `null`) ordnet einem Vorhaben zu (nur Mensch); `assignee` (Text oder `null`) setzt die Zuständigkeit (Recht `assign:self`/`assign:other`, in Personal nur der Mensch). |
 | `POST` | `/board/v1/projects/<slug>/tasks/<int:number>/release` | Hängendes Ticket freigeben: zurück in die erste Spalte, Zuständigkeit leer (nur Mensch). |
 | `GET` | `/board/v1/stuck` | Übernommene Tickets, die länger als `minutes` (1 bis 525600, Standard 60) in Arbeit stehen, je mit `status_since`; optional `project` (nur Mensch). |
@@ -137,6 +137,7 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `POST` | `/board/v1/projects/<slug>/tasks/<int:number>/comments` | Kommentar schreiben; die Herkunft kommt aus dem Token. |
 | `GET` | `/board/v1/projects/<slug>/tasks/<int:number>/history` | Verlauf mit Herkunft: Anlegen und jede Änderung. |
 | `POST` | `/board/v1/projects/<slug>/tasks/<int:number>/review` | Review-Status setzen (nur Reviewer-Zugang). |
+| `POST` | `/board/v1/projects/<slug>/tasks/<int:number>/review/request` | Review neu anfordern: Status `requested`, das Ticket bleibt in `review` (nur Mensch, Freigabe-Recht). |
 | `GET` | `/board/v1/projects/<slug>/history` | Projekt-Verlauf: Anlegen, Umbenennen, gelöschte Tickets (nur Mensch). |
 | `PUT` | `/board/v1/comments/<comment_id>` | Eigenen Kommentar ändern (nur Mensch). |
 | `DELETE` | `/board/v1/comments/<comment_id>` | Eigenen Kommentar löschen (nur Mensch). |
@@ -303,7 +304,8 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/v1/tasks` und `PATCH`):
 Anzeigenamen dessen, der angelegt hat (nur mit einer Erweiterung, die Konten kennt;
 in Personal `null`; ebenso an Kommentaren und im Verlauf). `GET` auf ein Ticket liefert
 zusätzlich `comments`, `last_review`, `status_since` (seit wann es in seiner Spalte
-steht) und `control`.
+steht), `can_approve` (hat dieser Zugang im Projekt das Freigabe-Recht?) und
+`control`.
 
 - **Anlegen** `POST /board/v1/tasks`: `project` und `title` Pflicht, optional
   `description`, `tags`, `human`, `status` (Standard: erste Spalte; Agenten
@@ -362,8 +364,19 @@ steht) und `control`.
   - Bei `POST /board/v1/next` ohne Projekt kommt Nacharbeit (`rework`/`failed`)
     aus allen Projekten zuerst, danach gilt die Board-Reihenfolge.
   - Kommt ein Ticket wieder nach `review`, steht der Status auf `none`.
+- **Review neu anfordern** `POST .../review/request` mit leerem Body `{}`
+  (Freigabe-Recht, in Personal nur der Mensch; Agent und Reviewer `403`): setzt
+  den Status auf `requested`, `at` auf den Zeitpunkt der Anforderung und leert
+  `blocking`, `suggestions` und `checked`. Das Ticket bleibt in `review`, der
+  Zähler roter Reviews bleibt. `409` mit `NotInReview` außerhalb der
+  Review-Spalte, `HumanOnlyTicket` bei „nur für Menschen“ und `ReviewRunning`
+  während eines laufenden Reviews. `conclave-reviewer` prüft ein Ticket mit
+  `requested` wie ein neu nach `review` geschobenes, je Anforderung einmal.
+  Nimmt der Mensch einem Ticket in `review` die Markierung „nur für Menschen“
+  weg, setzt das Board `requested` selbst (Herkunft `system`).
 
-  Tickets tragen `review` mit `state`, `at`, `red_count`, `blocking`,
+  Tickets tragen `review` mit `state` (`none`, `requested`, `running`,
+  `passed`, `rework` oder `failed`), `at`, `red_count`, `blocking`,
   `suggestions` und `checked`. `GET` auf ein Ticket und `POST /board/v1/next`
   liefern zusätzlich `last_review`, den jüngsten Kommentar des Reviewers.
 - **Steuertickets** (Anweisungen des Menschen an die Agenten): `POST /board/v1/tasks`

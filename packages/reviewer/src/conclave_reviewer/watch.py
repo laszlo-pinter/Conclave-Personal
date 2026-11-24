@@ -37,6 +37,7 @@ from conclave_reviewer import command, refs, transport, worktrees
 from conclave_reviewer.command import BOARDS
 
 LOG_LIMIT = 1_000_000
+REQUESTED = "requested"                               # Review-Status: vom Menschen angefordert (conclave#145)
 # Festes Review-Format wie im Prompt (Urteil, Geprueft, Blockierend, Vorschlaege, Erledigt, Nicht geprueft)
 MISSING_ON_SERVER = (
     "Urteil: rot\nGeprüft: –\nBlockierend:\n- B1 Commits nicht im Git-Server: {hashes}. Auf dem Server prüft "
@@ -200,8 +201,15 @@ class Reviewer:
         query = urllib.parse.urlencode({"status": self.cfg["review_status"]})
         data = self.get_json(f"{self.cfg['conclave_url']}/board/v1/tasks?{query}")
         return {t["ref"]: {"project": t["project"], "title": t["title"], "status": t["status"],
-                           "human": t["human"], "review_state": (t.get("review") or {}).get("state", "none")}
+                           "human": t["human"], "review_state": (t.get("review") or {}).get("state", "none"),
+                           "review_at": (t.get("review") or {}).get("at")}
                 for t in data["tasks"]}
+
+    def requests(self, tasks: dict) -> dict:
+        """Tickets in review, fuer die der Mensch ein Review angefordert hat (conclave#145), mit dem
+        Zeitpunkt der Anforderung: Er unterscheidet eine neue Anforderung von einer schon eingeplanten."""
+        return {k: t.get("review_at") or "" for k, t in tasks.items()
+                if t["status"] == self.cfg["review_status"] and t.get("review_state") == REQUESTED}
 
     # ── Ein Review ────────────────────────────────────────────────────────
 
@@ -355,22 +363,31 @@ class Reviewer:
         naechsten echten Lauf nicht beeinflussen (gesehene Tickets, Zaehler je Stunde)."""
         save = (lambda _s: None) if dry_run else self.save_state
         statuses = {k: t["status"] for k, t in tasks.items()}
+        requests = self.requests(tasks)
         if state is None and dry_run:
             # Probelauf ohne gemerkten Stand: alles in review zeigen, als waere es neu (es wird nichts gespeichert)
             self.log(f"dry run without saved state: showing all {len(statuses)} tickets in review")
-            state = {"statuses": {}, "pending": [], "reviews": []}
+            state = {"statuses": {}, "pending": [], "reviews": [], "requested": {}}
         if state is None:
-            # Erster Lauf: das Board merken; Tickets, die schon in review stehen, werden nicht geprueft.
-            already = [k for k, s in statuses.items() if s == self.cfg["review_status"]]
+            # Erster Lauf: das Board merken; Tickets, die schon in review stehen, werden nicht geprueft,
+            # ausser der Mensch hat fuer sie ausdruecklich ein Review angefordert.
+            already = [k for k, s in statuses.items() if s == self.cfg["review_status"] and k not in requests]
             self.log(f"first run: {len(statuses)} tickets, already in review (skipped): {already or 'none'}")
-            return {"statuses": statuses, "pending": [], "reviews": []}
+            for k in requests:
+                self.log(f"{k}: review requested")
+            return {"statuses": statuses, "pending": list(requests), "reviews": [], "requested": requests}
 
         pending = [k for k in state["pending"] if k in tasks and statuses[k] == self.cfg["review_status"]]
         for k, s in statuses.items():
             if s == self.cfg["review_status"] and state["statuses"].get(k) != s and k not in pending:
                 self.log(f"{k}: moved to {s}")
                 pending.append(k)
-        state = {"statuses": statuses, "pending": pending, "reviews": state["reviews"]}
+        handled = state.get("requested") or {}
+        for k, at in requests.items():
+            if handled.get(k) != at and k not in pending:
+                self.log(f"{k}: review requested")
+                pending.append(k)
+        state = {"statuses": statuses, "pending": pending, "reviews": state["reviews"], "requested": requests}
         # Vor dem Review speichern: Ein Absturz mitten im Review verliert es, statt es doppelt zu bezahlen.
         save(state)
 
@@ -387,7 +404,7 @@ class Reviewer:
             repos = [r for r in refs.repos_for(self.cfg, task["project"]) if Path(r).is_dir()]
             if task.get("human"):
                 self.log(f"{key}: for humans only, not reviewed")
-            elif task.get("review_state", "none") != "none":
+            elif task.get("review_state", "none") not in ("none", REQUESTED):
                 self.log(f"{key}: review state is {task['review_state']!r}, not reviewed again")
             elif not repos:
                 self.log(f"{key}: no local checkout for project {task['project']!r} in config.toml, not reviewed")
@@ -404,6 +421,8 @@ class Reviewer:
     def changed(self, state: dict | None, tasks: dict) -> bool:
         if state is None or state["pending"]:
             return True
+        if self.requests(tasks) != (state.get("requested") or {}):
+            return True                                 # eine neue Anforderung (conclave#145)
         return {k: t["status"] for k, t in tasks.items()} != state["statuses"]
 
     # ── Aenderungszaehler, Herzschlag, haengende Reviews (W3) ─────────────

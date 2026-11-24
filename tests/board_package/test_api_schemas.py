@@ -101,6 +101,8 @@ def test_every_v1_route_answers_as_its_schema_says(api):
     comment = api("POST", "/projects/{slug}/tasks/{number}/comments", AGENT, body={"body": "Branch x", "author_name": "cc"})
     api("GET", "/projects/{slug}/tasks/{number}/comments")
     api("GET", "/projects/{slug}/tasks/{number}/history", AGENT)
+    requested = api("POST", "/projects/{slug}/tasks/{number}/review/request", body={})
+    assert requested["review"]["state"] == "requested"
     api("POST", "/projects/{slug}/tasks/{number}/review", REVIEWER,
         body={"state": "rework", "comment": "Urteil: gelb", "blocking": 0, "suggestions": 1, "checked": "x @ 1"})
     api("GET", "/projects/{slug}/history")

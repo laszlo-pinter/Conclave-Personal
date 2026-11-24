@@ -31,8 +31,10 @@ INITIATIVE_REF = re.compile(r"([a-z0-9][a-z0-9-]{0,39})/([a-z0-9][a-z0-9-]{0,19}
 DEFAULT_STATUSES = ("todo", "doing", "review", "done")
 ORIGINS = ("human", "agent", "reviewer", "system")
 # Review-Status (P3): none nach jedem Wechsel nach review, running waehrend des Laufs,
-# dann passed (gruen), rework (gelb) oder failed (rot)
-REVIEW_STATES = ("none", "running", "passed", "rework", "failed")
+# dann passed (gruen), rework (gelb) oder failed (rot). requested: der Mensch hat ein neues Review
+# angefordert, ohne das Ticket aus review zu nehmen (conclave#145); der Reviewer prueft es wie ein neues.
+REVIEW_REQUESTED = "requested"
+REVIEW_STATES = ("none", "running", "passed", "rework", "failed", REVIEW_REQUESTED)
 REVIEW_RESULTS = ("running", "passed", "rework", "failed")      # was der Reviewer setzen darf
 RED_LIMIT = 3                                                   # E-R3: so viele rote in Folge -> Mensch
 # Steuertickets (P6): nur der Mensch legt sie an; Pause haelt next an, Hinweis wartet auf Quittung

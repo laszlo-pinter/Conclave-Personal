@@ -254,11 +254,15 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
 
     @bp.get("/projects/<slug>/tasks/<int:number>")
     def board_get_task(slug: str, number: int):
-        """Ein Ticket mit Kommentaren."""
+        """Ein Ticket mit Kommentaren und ``can_approve``.
+
+        ``can_approve``: Hat dieser Zugang im Projekt das Freigabe-Recht? Die Oberflaeche zeigt danach,
+        was nur damit geht (z. B. "Review neu starten", conclave#145)."""
         b = _board()
         task = b.get_task(_ref(slug, number))
         return jsonify({**task_to_dict(task, _names()), "comments": [comment_to_dict(c, _names()) for c in b.comments(task.ref)],
                         "last_review": _last_review(b, task.ref), "status_since": _iso(b.status_since(task)),
+                        "can_approve": b.can_approve(g.principal, task.project_slug),
                         "control": _control(slug)}), 200
 
     @bp.post("/projects/<slug>/tasks/<int:number>/release")
@@ -388,6 +392,15 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
                                blocking=body.get("blocking"), suggestions=body.get("suggestions"),
                                checked=body.get("checked"))
         return jsonify(task_to_dict(task, _names())), 200
+
+    @bp.post("/projects/<slug>/tasks/<int:number>/review/request")
+    def board_request_review(slug: str, number: int):
+        """Review neu anfordern: Status ``requested``, das Ticket bleibt in review (Freigabe-Recht, conclave#145)."""
+        body = _json_object()
+        if body:
+            raise BoardError(f"Unbekannte Felder: {', '.join(sorted(body))}.", 400, "ValidationError")
+        task = _board().request_review(g.principal, _ref(slug, number))
+        return jsonify({**task_to_dict(task, _names()), "control": _control(slug)}), 200
 
     @bp.get("/projects/<slug>/history")
     def board_project_history(slug: str):

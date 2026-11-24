@@ -233,6 +233,82 @@ def test_check_skips_tickets_that_already_have_a_result(rv, cfg, monkeypatch):
     assert called == []
 
 
+# ── Vom Menschen angefordert (conclave#145) ─────────────────────────────────
+
+def _requested(at="2026-11-24T10:00:00+00:00", state="requested"):
+    return {"api#1": {"project": "api", "title": "T", "status": "review", "human": False,
+                      "review_state": state, "review_at": at}}
+
+
+def _quiet(rv, monkeypatch):
+    called = []
+    monkeypatch.setattr(rv, "run_review", lambda task, key, *a: called.append(key))
+    monkeypatch.setattr(rv, "save_state", lambda *a: None)
+    return called
+
+
+def test_request_without_a_column_change_is_reviewed_once(rv, cfg, monkeypatch):
+    called = _quiet(rv, monkeypatch)
+    state = {"statuses": {"api#1": "review"}, "pending": [], "reviews": []}       # alter Zustand ohne "requested"
+    assert rv.changed(state, _requested())
+    state = rv.check(state, _requested(), dry_run=False)
+    assert called == ["api#1"] and state["requested"] == {"api#1": "2026-11-24T10:00:00+00:00"}
+    assert not rv.changed(state, _requested())                                    # dieselbe Anforderung
+    rv.check(state, _requested(), dry_run=False)
+    assert called == ["api#1"]
+    later = _requested("2026-11-24T11:00:00+00:00")                               # eine neue
+    assert rv.changed(state, later)
+    rv.check(state, later, dry_run=False)
+    assert called == ["api#1", "api#1"]
+
+
+def test_request_waits_for_the_hourly_limit(rv, cfg, monkeypatch):
+    import time
+    called = _quiet(rv, monkeypatch)
+    full = [time.time()] * cfg["max_reviews_per_hour"]
+    state = rv.check({"statuses": {"api#1": "review"}, "pending": [], "reviews": full}, _requested(), dry_run=False)
+    assert called == [] and state["pending"] == ["api#1"]
+
+
+def test_first_run_skips_old_tickets_but_not_requested_ones(rv, cfg, monkeypatch):
+    _quiet(rv, monkeypatch)
+    tasks = {**_requested(), "api#2": {"project": "api", "title": "U", "status": "review", "human": False,
+                                       "review_state": "none", "review_at": None}}
+    state = rv.check(None, tasks, dry_run=False)
+    assert state["pending"] == ["api#1"]
+
+
+def test_request_is_reviewed_end_to_end(rv, cfg, server, repo, monkeypatch):
+    path, head = repo
+    _ticket_in_review(server, head)
+    rv.save_state(rv.check(None, rv.fetch_tasks(), dry_run=False))              # erster Lauf: steht schon in review
+    ran = []
+    _claude(monkeypatch, rv, lambda *a: ran.append(_task(server)["review"]["state"]) or "done")
+    state = rv.poll_once(rv.load_state(), dry_run=False)
+    assert ran == []                                                             # ohne Anforderung nichts
+    _req(f"{server}/board/projects/api/tasks/1/review/request", HUMAN, "POST", {})
+    state = rv.poll_once(state, dry_run=False)
+    assert ran == ["running"]
+    rv.poll_once(state, dry_run=False)
+    assert ran == ["running"]                                                    # nicht doppelt
+
+
+def test_releasing_a_ticket_in_review_gets_it_reviewed(rv, cfg, server, repo, monkeypatch):
+    """Der Fall aus dem Betrieb: "nur fuer Menschen" nach review geschoben, uebersprungen, dann freigegeben."""
+    path, head = repo
+    _ticket_in_review(server, head)
+    _req(f"{server}/board/projects/api/tasks/1", HUMAN, "PATCH", {"status": "doing"})
+    state = rv.check(None, rv.fetch_tasks(), dry_run=False)
+    _req(f"{server}/board/projects/api/tasks/1", HUMAN, "PATCH", {"human": True, "status": "review"})
+    ran = []
+    _claude(monkeypatch, rv, lambda *a: ran.append(1) or "done")
+    state = rv.poll_once(state, dry_run=False)
+    assert ran == []                                                             # nur fuer Menschen
+    _req(f"{server}/board/projects/api/tasks/1", HUMAN, "PATCH", {"human": False})
+    rv.poll_once(state, dry_run=False)
+    assert ran == [1]
+
+
 def test_reviewer_never_uses_the_agent_token():
     import conclave.reviewer as package
     for path in Path(package.__file__).parent.glob("*.py"):
