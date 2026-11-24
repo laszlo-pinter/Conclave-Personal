@@ -93,7 +93,7 @@ def test_status_is_cleared_even_when_claude_does_not_start(rv, server, repo, mon
     path, head = repo
     task = _ticket_in_review(server, head)
 
-    def broken(key, cmd, cwd):
+    def broken(key, cmd, cwd, ask=None):
         raise OSError("claude fehlt")
 
     monkeypatch.setattr(rv, "run_claude", broken)

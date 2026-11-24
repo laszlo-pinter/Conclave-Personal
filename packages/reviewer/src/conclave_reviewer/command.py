@@ -9,6 +9,10 @@ Absicherung (durch Tests festgeschrieben, tests/reviewer/test_hardening.py):
 - Das Board nur ueber ``conclave-mcp --reviewer`` mit dem Reviewer-Token, nie mit dem Agent- oder
   Mensch-Token. An einem entfernten Board-Server (TR2) ueber ``conclave-board-mcp --reviewer``: dieselben drei Tools,
   derselbe Servername ``conclave`` in der MCP-Konfiguration, also dieselben erlaubten Tool-Namen.
+- Kein Ticket-Text und kein mehrzeiliger Text auf der Kommandozeile (R1, conclave#142): Den Auftrag bekommt
+  ``claude -p`` ueber stdin (ohne den Titel, er ist fremder Text; der Reviewer liest das Ticket selbst), den
+  System-Prompt ueber ``--append-system-prompt-file``. Ist ``claude`` ein ``.cmd``/``.bat`` (npm), schnitte
+  ``cmd.exe`` sonst am ersten Zeilenumbruch ab, und alle Schutzschalter dahinter fehlten.
 """
 
 from __future__ import annotations
@@ -110,11 +114,10 @@ def fill_prompt(cfg: dict, text: str) -> str:
     return text
 
 
-def review_command(cfg: dict, task: dict, key: str, *, mcp_config: Path, prompt_text: str, checked: str = "",
-                   extra=(), missing=()) -> list[str]:
-    """``extra``: weitere Repos als (Name, Verzeichnis relativ zum Arbeitsverzeichnis, git-Server)."""
-    b = BOARDS["conclave"]
-    ask = f"Reviewe das Ticket {key}: {task['title']}"
+def review_ask(key: str, *, checked: str = "", extra=(), missing=()) -> str:
+    """Der Auftrag an ``claude -p``, ueber stdin (R1). Ohne den Titel: Er ist fremder Text, kann beliebige
+    Zeichen enthalten und steht ohnehin im Ticket, das der Reviewer mit ``conclave_board_get`` liest."""
+    ask = f"Reviewe das Ticket {key}. Lies es zuerst mit {BOARDS['conclave']['get']}."
     if checked:
         ask += f"\nGepruefter Stand (dein Arbeitsverzeichnis, ein eigener Worktree): {checked}"
     for name, rel, server in extra:
@@ -122,15 +125,34 @@ def review_command(cfg: dict, task: dict, key: str, *, mcp_config: Path, prompt_
     if missing:
         ask += ("\nIn keinem lokalen Repo gefunden (dazu nicht pruefbar, Urteil hoechstens gelb): "
                 + ", ".join(f"`{h}`" for h in missing))
+    return ask + "\n"
+
+
+def review_command(cfg: dict, *, mcp_config: Path, prompt_file: Path, extra=()) -> list[str]:
+    """Die Kommandozeile von ``claude``: nur feste Schalter, Tool-Namen und Pfade, nie Text aus einem Ticket (R1).
+
+    ``extra``: weitere Repos als (Name, Verzeichnis relativ zum Arbeitsverzeichnis, git-Server). Den Auftrag
+    (``review_ask``) bekommt claude ueber stdin, den System-Prompt aus ``prompt_file``."""
+    b = BOARDS["conclave"]
     git_tools = [t.replace("mcp__git__", f"mcp__{server}__") for _n, _r, server in extra for t in GIT_TOOLS]
-    return [
-        find_claude(cfg), "-p", ask,
+    cmd = [
+        find_claude(cfg), "-p",
         "--restricted", "--tools", BUILTIN_TOOLS,
-        "--append-system-prompt", prompt_text,
+        "--append-system-prompt-file", str(prompt_file),
         "--mcp-config", str(mcp_config), "--strict-mcp-config",
         "--allowedTools", *BUILTIN_TOOLS.split(","), *GIT_TOOLS, *git_tools, *b["allowed"],
         "--disallowedTools", *DENIED_ALWAYS, *b["denied"],
     ]
+    check_command_line(cmd)
+    return cmd
+
+
+def check_command_line(cmd: list[str]) -> None:
+    """Kein Zeilenumbruch und kein Nullzeichen in einem Argument: ``cmd.exe`` (claude als ``.cmd``) schnitte dort
+    ab, und die Schutzschalter dahinter fehlten (R1)."""
+    for arg in cmd:
+        if any(ch in arg for ch in "\r\n\0"):
+            raise ValueError(f"Argument fuer claude mit Zeilenumbruch abgelehnt: {arg[:40]!r}")
 
 
 def write_mcp_config(path: Path, servers: dict) -> None:
@@ -182,9 +204,10 @@ def _windows_job():
     return _JOB
 
 
-def start_claude(cmd: list[str], cwd: str) -> subprocess.Popen:
-    """claude so starten, dass es den Reviewer nicht ueberlebt."""
-    proc = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+def start_claude(cmd: list[str], cwd: str, with_input: bool = False) -> subprocess.Popen:
+    """claude so starten, dass es den Reviewer nicht ueberlebt. ``with_input``: stdin als Pipe fuer den Auftrag."""
+    proc = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.PIPE if with_input else subprocess.DEVNULL,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             text=True, encoding="utf-8", errors="replace",
                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                             start_new_session=os.name != "nt")
@@ -218,16 +241,28 @@ def kill_claude(proc: subprocess.Popen | None) -> None:
 POLL_SECONDS = 0.2
 
 
-def _wait_for(proc: subprocess.Popen, timeout: float) -> tuple[str, str]:
+def _feed(stream, text: str) -> None:
+    """Den Auftrag schreiben und stdin schliessen; endet claude vorher, ist das kein Fehler des Reviewers."""
+    try:
+        stream.write(text)
+        stream.close()
+    except (BrokenPipeError, OSError, ValueError):
+        pass
+
+
+def _wait_for(proc: subprocess.Popen, timeout: float, input_text: str | None = None) -> tuple[str, str]:
     """Wie ``communicate(timeout=...)``, aber unterbrechbar (TR3-Review V1).
 
     ``communicate`` wartet unter Windows ununterbrechbar auf seine Lesethreads; ein Stopp-Signal
     (Strg+Untbr eines Dienst-Wrappers) kaeme erst nach dem Ende von claude an. Hier lesen zwei Threads
-    stdout und stderr, und der Hauptthread wartet in kurzen Schritten: Signale kommen sofort an."""
+    stdout und stderr, und der Hauptthread wartet in kurzen Schritten: Signale kommen sofort an.
+    ``input_text`` schreibt ein dritter Thread nach stdin (R1), damit eine volle Pipe nichts blockiert."""
     import threading
     out, err = [], []
     readers = [threading.Thread(target=lambda s=stream, sink=sink: sink.append(s.read() if s else ""), daemon=True)
                for stream, sink in ((proc.stdout, out), (proc.stderr, err))]
+    if input_text is not None and proc.stdin is not None:
+        threading.Thread(target=_feed, args=(proc.stdin, input_text), daemon=True).start()
     for reader in readers:
         reader.start()
     deadline = time.monotonic() + timeout
@@ -241,17 +276,19 @@ def _wait_for(proc: subprocess.Popen, timeout: float) -> tuple[str, str]:
 
 
 def run_claude(cmd: list[str], cwd: str, timeout_minutes: float, log, key: str, on_start=None,
-               quiet: bool = False) -> str:
+               quiet: bool = False, input_text: str | None = None) -> str:
     """Startet den Reviewer; liefert "done", "failed" oder "timeout". ``on_start(proc)`` meldet den Prozess.
 
     ``quiet`` (entfernter Server, TR3): die Ausgabe von claude nicht ins Log, sie kann Text aus dem Review und
-    damit aus Tickets enthalten; bei einem Fehler nur stderr (Meldungen von claude selbst)."""
+    damit aus Tickets enthalten; bei einem Fehler nur stderr (Meldungen von claude selbst).
+    ``input_text``: der Auftrag (``review_ask``), ueber stdin statt auf der Kommandozeile (R1)."""
     started = time.monotonic()
-    proc = start_claude(cmd, cwd)
+    # ohne Auftrag die alte Form des Aufrufs (Tests ersetzen start_claude mit genau zwei Argumenten)
+    proc = start_claude(cmd, cwd, with_input=True) if input_text is not None else start_claude(cmd, cwd)
     if on_start is not None:
         on_start(proc)
     try:
-        stdout, stderr = _wait_for(proc, timeout_minutes * 60)
+        stdout, stderr = _wait_for(proc, timeout_minutes * 60, input_text)
     except subprocess.TimeoutExpired:
         kill_claude(proc)                               # samt Kindprozessen, nicht nur der oberste Prozess
         log(f"{key}: review stopped after {timeout_minutes} minutes")

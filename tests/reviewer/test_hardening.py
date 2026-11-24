@@ -30,8 +30,7 @@ def _option(cmd, name):
 
 
 def _cmd(extra=()):
-    return command.review_command(CFG, {"title": "T"}, "api#1", mcp_config=Path("mcp.json"), prompt_text="P",
-                                  checked="main @ abc1234", extra=extra)
+    return command.review_command(CFG, mcp_config=Path("mcp.json"), prompt_file=Path("review-prompt.md"), extra=extra)
 
 
 # ── Aufruf ───────────────────────────────────────────────────────────────
@@ -51,6 +50,63 @@ def test_restricted_with_exactly_the_reviewer_tools():
     assert "mcp__conclave__conclave_board_update" in denied and "mcp__conclave__conclave_board_comment" in denied
     assert not set(allowed) & set(denied)
     assert all(t.startswith(("mcp__git__", "mcp__conclave__")) or t in ("Read", "Grep", "Glob") for t in allowed)
+
+
+def test_command_line_carries_no_ticket_text_and_no_line_break():
+    """R1 (conclave#142): Auftrag ueber stdin, System-Prompt aus einer Datei; die Kommandozeile ist fest."""
+    cmd = _cmd(extra=[("team", "_repos/team", "git_team")])
+    assert cmd[1] == "-p" and not cmd[2].startswith("Reviewe")         # kein Auftrag als Argument
+    assert _option(cmd, "--append-system-prompt-file") == ["review-prompt.md"]
+    assert "--append-system-prompt" not in cmd
+    assert not any(ch in arg for arg in cmd for ch in "\r\n\0")
+
+
+@pytest.mark.parametrize("bad", ["a\nb", "a\rb", "a\0b"])
+def test_an_argument_with_a_line_break_is_refused(bad):
+    with pytest.raises(ValueError, match="Zeilenumbruch"):
+        command.check_command_line(["claude", "-p", bad])
+
+
+TITLES = ["Login & Logout", "A | B", "Pfeil -> weiter", "50% schneller", '"Zitat" & echo x', "%PATH%",
+          "Pfad C:\\temp\\", "Umlaute äöü ß – ✓", "--help", "Zeile1\nZeile2", "Achtung!", "x" * 300]
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_the_title_changes_neither_command_line_nor_ask(title):
+    """Egal was im Titel steht: Kommandozeile und Auftrag bleiben dieselben, der Titel kommt nirgends vor."""
+    ask = command.review_ask("api#1", checked="main @ abc1234")
+    assert ask.startswith("Reviewe das Ticket api#1. Lies es zuerst mit conclave_board_get.")
+    assert "Gepruefter Stand (dein Arbeitsverzeichnis, ein eigener Worktree): main @ abc1234" in ask
+    assert title not in ask and all(title not in arg for arg in _cmd())
+
+
+@pytest.mark.skipif(os.name != "nt", reason=".cmd gibt es nur unter Windows")
+def test_a_cmd_claude_keeps_every_safety_switch(tmp_path):
+    """claude als .cmd (npm): cmd.exe bekommt keine Zeile mit Umbruch, alle Schalter kommen an."""
+    seen = tmp_path / "seen.json"
+    echo = tmp_path / "echo.py"
+    echo.write_text("import json, sys\n"
+                    f"open({str(seen)!r}, 'w', encoding='utf-8').write("
+                    "json.dumps({'argv': sys.argv[1:], 'stdin': sys.stdin.read()}))\n", encoding="utf-8")
+    shim = tmp_path / "claude.cmd"
+    shim.write_text(f'@"{sys.executable}" "{echo}" %*\r\n', encoding="utf-8")
+    cmd = command.review_command({**CFG, "claude_exe": str(shim)}, mcp_config=tmp_path / "mcp.json",
+                                 prompt_file=tmp_path / "review-prompt.md")
+    ask = command.review_ask("api#1", checked="main @ abc1234", missing=["1234567"])
+    assert command.run_claude(cmd, str(tmp_path), 1, lambda m: None, "api#1", input_text=ask) == "done"
+    got = json.loads(seen.read_text(encoding="utf-8"))
+    assert got["argv"] == cmd[1:]                                        # nichts abgeschnitten
+    assert got["stdin"].replace("\r\n", "\n") == ask
+
+
+def test_the_ask_reaches_claude_over_stdin(tmp_path):
+    echo = tmp_path / "echo.py"
+    echo.write_text("import sys; sys.stdout.write(sys.stdin.read())", encoding="utf-8")
+    ask = command.review_ask("api#1", checked="main @ abc1234", extra=[("team", "_repos/team", "git_team")])
+    lines = []
+    outcome = command.run_claude([sys.executable, str(echo)], str(tmp_path), 1, lines.append, "api#1",
+                                 input_text=ask)
+    assert outcome == "done" and "Weiteres Repo team" in lines[-1] and "Reviewe das Ticket api#1" in lines[-1]
 
 
 def test_further_repos_get_only_their_read_tools():

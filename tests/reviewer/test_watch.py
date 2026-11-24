@@ -97,8 +97,12 @@ def rv(cfg, tmp_path):
 
 
 def _claude(monkeypatch, rv, fake):
-    """Ersetzt den Aufruf von claude; ``fake`` bekommt wie frueher (cfg, key, cmd, cwd)."""
-    monkeypatch.setattr(rv, "run_claude", lambda key, cmd, cwd: fake(rv.cfg, key, cmd, cwd))
+    """Ersetzt den Aufruf von claude; ``fake`` bekommt wie frueher (cfg, key, cmd, cwd). Den Auftrag, der ueber
+    stdin ginge (R1), legt es vorher in ``rv.seen_ask`` ab."""
+    def run(key, cmd, cwd, ask=None):
+        rv.seen_ask = ask
+        return fake(rv.cfg, key, cmd, cwd)
+    monkeypatch.setattr(rv, "run_claude", run)
 
 
 def _ticket_in_review(server, head, comment=True):
@@ -120,7 +124,7 @@ def test_review_runs_in_a_worktree_of_the_named_commit_and_sets_the_result(rv, c
     seen = {}
 
     def fake_claude(cfg_, key, cmd, cwd):
-        seen["cwd"], seen["cmd"] = cwd, cmd
+        seen["cwd"], seen["cmd"], seen["ask"] = cwd, cmd, rv.seen_ask
         seen["content"] = (Path(cwd) / "datei.txt").read_text(encoding="utf-8")
         seen["state_during"] = _task(server)["review"]["state"]
         seen["mcp"] = json.loads(rv.mcp_config.read_text())
@@ -136,7 +140,7 @@ def test_review_runs_in_a_worktree_of_the_named_commit_and_sets_the_result(rv, c
     assert seen["content"] == "neu\n"                         # Stand des Commits, nicht cc's Arbeitsverzeichnis
     assert Path(seen["cwd"]).parent == rv.worktrees
     assert not Path(seen["cwd"]).exists()                     # Worktree wieder entfernt
-    assert f"sicherheit @ {head[:7]}" in seen["cmd"][2]
+    assert f"sicherheit @ {head[:7]}" in seen["ask"]
     conclave = seen["mcp"]["mcpServers"]["conclave"]
     assert conclave["args"] == ["--reviewer"]
     assert conclave["env"]["CONCLAVE_MCP_ROLE"] == "reviewer"
@@ -180,9 +184,34 @@ def test_unknown_commit_falls_back_to_the_named_branch(rv, cfg, server, repo, mo
     _req(f"{server}/board/projects/api/tasks/1/comments", AGENT, "POST",
          {"body": "**Branch:** `sicherheit` · **Commit:** `deadbee`"})
     seen = {}
-    _claude(monkeypatch, rv, lambda c, k, cmd, cwd: seen.setdefault("cmd", cmd) and "done")
+    _claude(monkeypatch, rv, lambda c, k, cmd, cwd: seen.setdefault("ask", rv.seen_ask) and "done")
     rv.run_review({"title": "T"}, "api#1", str(path), dry_run=False)
-    assert f"sicherheit @ {head[:7]}" in seen["cmd"][2]
+    assert f"sicherheit @ {head[:7]}" in seen["ask"]
+
+
+@pytest.mark.parametrize("title", ['Login & Logout | 50% "schneller" > alt', "%PATH% ^ ! --help", "Umlaute äöü ✓"])
+def test_any_title_is_reviewed_and_never_reaches_the_command_line(rv, cfg, server, repo, monkeypatch, title):
+    """R1 (conclave#142): Der Titel startet oder verhindert nichts; er steht weder im Aufruf noch im Auftrag."""
+    path, head = repo
+    _req(f"{server}/board/tasks", HUMAN, "POST", {"project": "api", "title": title})
+    _req(f"{server}/board/projects/api/tasks/1", HUMAN, "PATCH", {"status": "review"})
+    _req(f"{server}/board/projects/api/tasks/1/comments", AGENT, "POST",
+         {"body": f"**Branch:** `sicherheit` · **Commit:** `{head[:7]}`"})
+    seen = {}
+
+    def fake_claude(cfg_, key, cmd, cwd):
+        seen["cmd"], seen["ask"], seen["state"] = cmd, rv.seen_ask, _task(server)["review"]["state"]
+        seen["prompt"] = rv.prompt_file.read_text(encoding="utf-8")
+        return "done"
+
+    _claude(monkeypatch, rv, fake_claude)
+    rv.run_review({"project": "api", "title": title, "status": "review"}, "api#1", str(path), dry_run=False)
+    assert seen["state"] == "running"                                    # das Review lief
+    assert title not in seen["ask"] and all(title not in arg for arg in seen["cmd"])
+    assert not any(ch in arg for arg in seen["cmd"] for ch in "\r\n")
+    assert seen["ask"].startswith("Reviewe das Ticket api#1.") and f"sicherheit @ {head[:7]}" in seen["ask"]
+    assert seen["prompt"] == PROMPT.format(author="CD · auto-review", board="Conclave-Board",
+                                           get="conclave_board_get", comment="conclave_board_review")
 
 
 def test_reviews_of_the_reviewer_are_not_taken_as_named_commits():
@@ -235,7 +264,7 @@ def _comment(server, body):
 
 def _capture(monkeypatch, seen, rv):
     def fake_claude(cfg_, key, cmd, cwd):
-        seen["cwd"], seen["cmd"] = cwd, cmd
+        seen["cwd"], seen["cmd"], seen["ask"] = cwd, cmd, rv.seen_ask
         seen["mcp"] = json.loads(rv.mcp_config.read_text())
         seen["files"] = sorted(str(p.relative_to(cwd)).replace("\\", "/") for p in Path(cwd).rglob("*.txt"))
         return "done"
@@ -250,8 +279,8 @@ def test_commit_only_in_the_second_repo_is_reviewed_there(rv, cfg, server, repo,
     _capture(monkeypatch, seen, rv)
     rv.run_review(task, "api#1", [str(core), str(team)], dry_run=False)
     assert seen["files"] == ["team.txt"]                       # Arbeitsverzeichnis = Team-Worktree
-    assert f"team: main @ {team_head[:7]}" in seen["cmd"][2]
-    assert "repo:" not in seen["cmd"][2]                       # Kern-Repo hat den Commit nicht
+    assert f"team: main @ {team_head[:7]}" in seen["ask"]
+    assert "repo:" not in seen["ask"]                       # Kern-Repo hat den Commit nicht
     assert list(seen["mcp"]["mcpServers"]) == ["git", "conclave"]
     assert not Path(seen["cwd"]).exists()
 
@@ -265,7 +294,7 @@ def test_commits_in_both_repos_get_two_worktrees_and_two_git_servers(rv, cfg, se
     _capture(monkeypatch, seen, rv)
     rv.run_review(task, "api#1", [str(core), str(team)], dry_run=False)
     assert seen["files"] == ["_repos/team/team.txt", "datei.txt"]
-    ask = seen["cmd"][2]
+    ask = seen["ask"]
     assert f"repo: sicherheit @ {core_head[:7]}" in ask and f"team: main @ {team_head[:7]}" in ask
     assert "_repos/team" in ask and "git_team" in ask
     servers = seen["mcp"]["mcpServers"]
@@ -285,8 +314,8 @@ def test_commit_in_no_repo_is_named_as_not_checkable(rv, cfg, server, repo, tmp_
     seen = {}
     _capture(monkeypatch, seen, rv)
     rv.run_review(task, "api#1", [str(core), str(team)], dry_run=False)
-    assert "nicht pruefbar" in seen["cmd"][2] and "`abcdef1`" in seen["cmd"][2]
-    assert f"repo: detached @ {core_head[:7]}" in seen["cmd"][2]
+    assert "nicht pruefbar" in seen["ask"] and "`abcdef1`" in seen["ask"]
+    assert f"repo: detached @ {core_head[:7]}" in seen["ask"]
 
 
 def test_repos_for_accepts_one_path_or_a_list():
@@ -329,5 +358,5 @@ def test_commit_on_the_named_branch_wins_over_a_newer_one_in_the_text(rv, cfg, s
     seen = {}
     _capture(monkeypatch, seen, rv)
     rv.run_review(task, "api#1", [str(core)], dry_run=False)
-    assert f"sicherheit @ {core_head[:7]}" in seen["cmd"][2]
-    assert "nicht pruefbar" not in seen["cmd"][2]                  # beide existieren; keiner fehlt
+    assert f"sicherheit @ {core_head[:7]}" in seen["ask"]
+    assert "nicht pruefbar" not in seen["ask"]                  # beide existieren; keiner fehlt
