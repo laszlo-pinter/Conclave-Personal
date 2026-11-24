@@ -37,6 +37,7 @@ def test_release_docs_exist():
         "docs/release-notes-v0.8.0.md",
         "docs/release-notes-v0.9.0.md",
         "docs/release-notes-v0.9.2.md",
+        "docs/release-notes-v0.9.3.md",
         "docs/release-notes-v0.9.1.md",
         "docs/release-notes-v0.4.0.md",
         "docs/release-notes-v0.5.0.md",
