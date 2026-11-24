@@ -254,8 +254,10 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
 
     @bp.get("/projects/<slug>/tasks/<int:number>")
     def board_get_task(slug: str, number: int):
-        """Ein Ticket mit Kommentaren. ``can_approve``: Hat dieser Zugang im Projekt das Freigabe-Recht? Die
-        Oberflaeche zeigt danach, was nur damit geht (z. B. "Review neu starten", conclave#145)."""
+        """Ein Ticket mit Kommentaren und ``can_approve``.
+
+        ``can_approve``: Hat dieser Zugang im Projekt das Freigabe-Recht? Die Oberflaeche zeigt danach,
+        was nur damit geht (z. B. "Review neu starten", conclave#145)."""
         b = _board()
         task = b.get_task(_ref(slug, number))
         return jsonify({**task_to_dict(task, _names()), "comments": [comment_to_dict(c, _names()) for c in b.comments(task.ref)],

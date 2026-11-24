@@ -1896,7 +1896,7 @@
     },
     "/board/v1/projects/{slug}/tasks/{number}": {
       "get": {
-        "summary": "Ein Ticket mit Kommentaren. ``can_approve``: Hat dieser Zugang im Projekt das Freigabe-Recht? Die",
+        "summary": "Ein Ticket mit Kommentaren und ``can_approve``.",
         "tags": [
           "board"
         ],
