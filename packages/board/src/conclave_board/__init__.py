@@ -3,4 +3,4 @@
 
 """Conclave Board: Board-Server fuer Teams (Tickets, Review, Vorhaben), ohne Oberflaeche."""
 
-__version__ = "0.9.2"
+__version__ = "0.9.3"

@@ -13,7 +13,7 @@ answer is correct. It gives users a structured workspace for comparing model
 outputs, tracking runs, and deliberately choosing the next step. The human
 decides. Always.
 
-> Status: v0.9.2 Alpha. The primary path is local, desktop-first, and designed
+> Status: v0.9.3 Alpha. The primary path is local, desktop-first, and designed
 > for individual users on Windows and Linux.
 
 ![Conclave Studio](https://raw.githubusercontent.com/laszlo-pinter/Conclave-Personal/main/docs/assets/screenshots/conclave-studio-desktop.png)
@@ -446,6 +446,7 @@ Important documents:
 - [Example workflows](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/beispiel-workflows.md)
 - [Security](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/sicherheit.md)
 - [Configuration](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/referenz/konfiguration.md)
+- [Release Notes v0.9.3](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.9.3.md)
 - [Release Notes v0.9.2](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.9.2.md)
 - [Release Notes v0.9.1](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.9.1.md)
 - [Release Notes v0.9.0](https://github.com/laszlo-pinter/Conclave-Personal/blob/main/docs/release-notes-v0.9.0.md)
@@ -476,7 +477,7 @@ Important documents:
 
 ## Known Limitations
 
-v0.9.2 remains alpha. Known limitations:
+v0.9.3 remains alpha. Known limitations:
 
 - Provider compatibility varies by API, model, account, and region.
 - Remote providers receive the data required for the model call.
@@ -498,6 +499,18 @@ inspection), `board-package` and `reviewer-package` (their wheels in a fresh
 environment without Conclave Personal) and `board-api` (no breaking changes in
 `/board/v1`, checked with oasdiff).
 
+The v0.9.3 release was verified with a fresh installation from wheel and sdist
+with `[mcp,reviewer]` and a smoke test. The smoke test covered:
+- a review request: `can_approve` for the human and the agent, `403` for the
+  agent, and the reviewer dry run scheduling the requested ticket
+- the compact board toolbar in Personal
+- the request to `claude` over stdin
+- `conclave-mcp` and `conclave board wait`
+
+It also covered an upgrade from v0.9.2 on a copy of a real database (no
+migration), the full test suite with and without a machine's Postgres variables
+(the real database unchanged), the team package against this core and
+`pip-audit`.
 The v0.9.2 release was verified with a fresh installation from wheel and sdist
 with `[mcp,reviewer]` and a smoke test (board ticket with special characters in
 the title, reviewer dry run showing the request over stdin and no ticket text on
