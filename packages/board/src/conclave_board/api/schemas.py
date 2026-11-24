@@ -169,6 +169,8 @@ BOARD_SCHEMAS: dict[tuple[str, str], dict] = {
                             "blocking": INTEGER, "suggestions": INTEGER, "checked": STRING},
                            required=["state"], closed=True),
         "response": TASK},
+    ("POST", "/projects/<slug>/tasks/<int:number>/review/request"): {
+        "request": _object({}, required=[], closed=True), "response": TASK_WITH_CONTROL},
     ("GET", "/projects/<slug>/history"): {"response": _object({"history": {"type": "array", "items": EVENT}})},
     ("PUT", "/comments/<comment_id>"): {"request": _object({"body": STRING}), "response": COMMENT},
     ("DELETE", "/comments/<comment_id>"): {"status": 204},

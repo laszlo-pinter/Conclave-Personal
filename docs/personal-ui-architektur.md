@@ -161,8 +161,10 @@ was ein Agent geändert oder kommentiert hat (siehe
   „über Agent“, „Zweitmeinung (Modell)“, „unbekannt“), Verlauf, Status,
   Markierung, neuer Kommentar
 - Neues Ticket, Suche, Projektauswahl, Schalter „Erledigte zeigen“
-- Review-Status an den Karten (läuft, grün, gelb, rot, Nacharbeit, „hängt“) und
-  Anzeige „Reviewer aktiv“ bzw. „Reviewer aus“
+- Review-Status an den Karten (angefordert, läuft, grün, gelb, rot, Nacharbeit,
+  „hängt“) und Anzeige „Reviewer aktiv“ bzw. „Reviewer aus“
+- Knopf „Review neu starten“ in der Ticketansicht eines Tickets in `review`
+  (nur Mensch, nicht während eines laufenden Reviews)
 - Steuertickets: Pause und Hinweis anlegen und schließen
 - Vorhaben eines Projekts und Dialog „Projekte“ (umbenennen; löschen nur ohne
   Tickets und Vorhaben)

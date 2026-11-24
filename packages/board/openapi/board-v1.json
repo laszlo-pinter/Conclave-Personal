@@ -4536,6 +4536,313 @@
         }
       }
     },
+    "/board/v1/projects/{slug}/tasks/{number}/review/request": {
+      "post": {
+        "summary": "Review neu anfordern: Status ``requested``, das Ticket bleibt in review (Freigabe-Recht, conclave#145).",
+        "tags": [
+          "board"
+        ],
+        "operationId": "v1_board_request_review",
+        "responses": {
+          "200": {
+            "description": "Erfolg",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ref": {
+                      "type": "string"
+                    },
+                    "project": {
+                      "type": "string"
+                    },
+                    "number": {
+                      "type": "integer"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "initiative": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "initiative_ref": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "position": {
+                      "type": "number"
+                    },
+                    "rank": {
+                      "type": "number"
+                    },
+                    "human": {
+                      "type": "boolean"
+                    },
+                    "assignee": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "version": {
+                      "type": "integer"
+                    },
+                    "origin": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "created_by": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "directive": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string"
+                        },
+                        "scope": {
+                          "type": "string"
+                        },
+                        "ack_by": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "ack_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "ack_at",
+                        "ack_by",
+                        "scope",
+                        "type"
+                      ],
+                      "nullable": true
+                    },
+                    "review": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string"
+                        },
+                        "at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true
+                        },
+                        "red_count": {
+                          "type": "integer"
+                        },
+                        "blocking": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "suggestions": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "checked": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "at",
+                        "blocking",
+                        "checked",
+                        "red_count",
+                        "state",
+                        "suggestions"
+                      ]
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "actor_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "control": {
+                      "type": "object",
+                      "properties": {
+                        "pauses": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "task": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "scope": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "reason": {
+                                "type": "string"
+                              },
+                              "text": {
+                                "type": "string"
+                              },
+                              "by": {
+                                "type": "string"
+                              },
+                              "at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "by",
+                              "reason",
+                              "scope",
+                              "task",
+                              "text",
+                              "type"
+                            ]
+                          }
+                        },
+                        "hints": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "task": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "scope": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "reason": {
+                                "type": "string"
+                              },
+                              "text": {
+                                "type": "string"
+                              },
+                              "by": {
+                                "type": "string"
+                              },
+                              "at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "by",
+                              "reason",
+                              "scope",
+                              "task",
+                              "text",
+                              "type"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "hints",
+                        "pauses"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "actor_name",
+                    "assignee",
+                    "control",
+                    "created_at",
+                    "created_by",
+                    "description",
+                    "directive",
+                    "human",
+                    "initiative",
+                    "initiative_ref",
+                    "kind",
+                    "number",
+                    "origin",
+                    "position",
+                    "project",
+                    "rank",
+                    "ref",
+                    "review",
+                    "status",
+                    "tags",
+                    "title",
+                    "updated_at",
+                    "version"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HumanOnly: nur fuer den Menschen-Zugang"
+          }
+        },
+        "description": "Nur mit dem Mensch-Token; das Agent-Token ergibt 403 HumanOnly.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
     "/board/v1/projects/{slug}/history": {
       "get": {
         "summary": "Verlauf eines Projekts: Anlegen, Umbenennen, geloeschte Tickets (nur Mensch).",

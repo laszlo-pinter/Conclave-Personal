@@ -53,6 +53,8 @@ _BOARD_HUMAN_ONLY_RELATIVE = frozenset({
     # Laeuft der Reviewer? (W3, fuer die UI)
     ("GET", "/reviewer"),
     ("POST", "/projects/<slug>/tasks/<int:number>/release"),
+    # Review neu anfordern (conclave#145)
+    ("POST", "/projects/<slug>/tasks/<int:number>/review/request"),
 })
 
 # Nur der Reviewer-Zugang (P3, W3); Agent und Mensch lehnt der BoardService ab

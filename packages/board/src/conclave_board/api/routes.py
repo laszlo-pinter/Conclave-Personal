@@ -389,6 +389,15 @@ def create_board_blueprint(board, *, import_max_bytes: Callable[[], int] | None 
                                checked=body.get("checked"))
         return jsonify(task_to_dict(task, _names())), 200
 
+    @bp.post("/projects/<slug>/tasks/<int:number>/review/request")
+    def board_request_review(slug: str, number: int):
+        """Review neu anfordern: Status ``requested``, das Ticket bleibt in review (Freigabe-Recht, conclave#145)."""
+        body = _json_object()
+        if body:
+            raise BoardError(f"Unbekannte Felder: {', '.join(sorted(body))}.", 400, "ValidationError")
+        task = _board().request_review(g.principal, _ref(slug, number))
+        return jsonify({**task_to_dict(task, _names()), "control": _control(slug)}), 200
+
     @bp.get("/projects/<slug>/history")
     def board_project_history(slug: str):
         """Verlauf eines Projekts: Anlegen, Umbenennen, geloeschte Tickets (nur Mensch)."""

@@ -137,6 +137,7 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `POST` | `/board/v1/projects/<slug>/tasks/<int:number>/comments` | Kommentar schreiben; die Herkunft kommt aus dem Token. |
 | `GET` | `/board/v1/projects/<slug>/tasks/<int:number>/history` | Verlauf mit Herkunft: Anlegen und jede Änderung. |
 | `POST` | `/board/v1/projects/<slug>/tasks/<int:number>/review` | Review-Status setzen (nur Reviewer-Zugang). |
+| `POST` | `/board/v1/projects/<slug>/tasks/<int:number>/review/request` | Review neu anfordern: Status `requested`, das Ticket bleibt in `review` (nur Mensch, Freigabe-Recht). |
 | `GET` | `/board/v1/projects/<slug>/history` | Projekt-Verlauf: Anlegen, Umbenennen, gelöschte Tickets (nur Mensch). |
 | `PUT` | `/board/v1/comments/<comment_id>` | Eigenen Kommentar ändern (nur Mensch). |
 | `DELETE` | `/board/v1/comments/<comment_id>` | Eigenen Kommentar löschen (nur Mensch). |
@@ -362,8 +363,19 @@ steht) und `control`.
   - Bei `POST /board/v1/next` ohne Projekt kommt Nacharbeit (`rework`/`failed`)
     aus allen Projekten zuerst, danach gilt die Board-Reihenfolge.
   - Kommt ein Ticket wieder nach `review`, steht der Status auf `none`.
+- **Review neu anfordern** `POST .../review/request` mit leerem Body `{}`
+  (Freigabe-Recht, in Personal nur der Mensch; Agent und Reviewer `403`): setzt
+  den Status auf `requested`, `at` auf den Zeitpunkt der Anforderung und leert
+  `blocking`, `suggestions` und `checked`. Das Ticket bleibt in `review`, der
+  Zähler roter Reviews bleibt. `409` mit `NotInReview` außerhalb der
+  Review-Spalte, `HumanOnlyTicket` bei „nur für Menschen“ und `ReviewRunning`
+  während eines laufenden Reviews. `conclave-reviewer` prüft ein Ticket mit
+  `requested` wie ein neu nach `review` geschobenes, je Anforderung einmal.
+  Nimmt der Mensch einem Ticket in `review` die Markierung „nur für Menschen“
+  weg, setzt das Board `requested` selbst (Herkunft `system`).
 
-  Tickets tragen `review` mit `state`, `at`, `red_count`, `blocking`,
+  Tickets tragen `review` mit `state` (`none`, `requested`, `running`,
+  `passed`, `rework` oder `failed`), `at`, `red_count`, `blocking`,
   `suggestions` und `checked`. `GET` auf ein Ticket und `POST /board/v1/next`
   liefern zusätzlich `last_review`, den jüngsten Kommentar des Reviewers.
 - **Steuertickets** (Anweisungen des Menschen an die Agenten): `POST /board/v1/tasks`

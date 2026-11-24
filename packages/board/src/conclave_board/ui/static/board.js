@@ -167,7 +167,7 @@ function _waitsForApproval(task) {
   return task.status === 'review' && _reviewState(task) === 'passed';
 }
 
-const REVIEW_SYMBOLS = {running: '●', stuck: '⚠', passed: '✓', rework: '↻', failed: '✕'};
+const REVIEW_SYMBOLS = {running: '●', stuck: '⚠', passed: '✓', rework: '↻', failed: '✕', requested: '↺'};
 
 // Badge mit Symbol und Text, nie nur Farbe; long = Ticketansicht mit den Zahlen
 function _reviewBadge(task, long) {
@@ -328,6 +328,8 @@ async function _renderOpenTask() {
   status.replaceChildren(..._board.statuses.map(s => { const o = _boardEl('option', '', s); o.value = s; return o; }));
   status.value = task.status;
   document.getElementById('boardTaskHuman').checked = task.human;
+  const again = document.getElementById('boardTaskReviewRequest');
+  if (again) again.hidden = !_mayRequestReview(task);
   const tags = document.getElementById('boardTaskTags');
   tags.replaceChildren(...task.tags.map(tag => _boardEl('span', 'board-tag', tag)));
 
@@ -386,6 +388,26 @@ async function saveBoardTaskField(field) {
                                    : document.getElementById('boardTaskHuman').checked;
   try {
     await req('PATCH', _taskPath(ref), {[field]: value});
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+  await _refreshBoard();
+}
+
+// "Review neu starten" (Ticket 145): wie der Server, nur Mensch, Ticket in review, nicht "nur fuer
+// Menschen" und kein laufendes Review (ein haengendes gibt der Reviewer beim Neustart frei)
+function _mayRequestReview(task) {
+  const state = (task.review || {}).state || 'none';
+  return _board.role === 'human' && task.status === _reviewColumn(_board.statuses) && !task.human
+    && state !== 'running';
+}
+
+async function requestBoardReview() {
+  const ref = _board.open;
+  if (!ref) return;
+  try {
+    await req('POST', _taskPath(ref) + '/review/request', {});
+    toast(t('board.review.requested'), 'ok');
   } catch (e) {
     toast(e.message, 'err');
   }
@@ -815,6 +837,7 @@ const BOARD_ACTIONS = {
   'board-open-task':     (el) => openBoardTask(el.dataset.ref),
   'board-close-task':    () => closeBoardTask(),
   'board-comment':       () => addBoardComment(),
+  'board-review-request': () => requestBoardReview(),
   'board-projects':      () => openBoardProjects(),
   'board-project-create': () => createBoardProject(),
   'board-project-rename': (el) => renameBoardProject(el),

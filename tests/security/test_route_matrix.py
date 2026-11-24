@@ -115,6 +115,7 @@ EXPECTED = {
 # T5: haengende Tickets anzeigen und freigeben (nur Mensch)
 EXPECTED[("GET", "/board/stuck")] = "human"
 EXPECTED[("POST", "/board/projects/<slug>/tasks/<int:number>/release")] = "human"
+EXPECTED[("POST", "/board/projects/<slug>/tasks/<int:number>/review/request")] = "human"   # conclave#145
 
 # T3: Jede Board-Route gibt es auch unter /board/v1 mit derselben Rolle; /board bleibt als Alias.
 EXPECTED.update({(method, "/board/v1" + rule[len("/board"):]): role for (method, rule), role in list(EXPECTED.items())

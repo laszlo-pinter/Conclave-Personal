@@ -53,6 +53,7 @@ from conclave_board.domain.board import (
     Project,
     ProjectEvent,
     RED_LIMIT,
+    REVIEW_REQUESTED,
     REVIEW_RESULTS,
     StatusFlow,
     Task,
@@ -535,6 +536,7 @@ class BoardService:
         if version is not None and version != task.version:
             raise BoardError(f"Ticket '{ref}' hat inzwischen Version {task.version} (erwartet {version}); "
                              "bitte neu laden.", 409, "Conflict")
+        was_human = task.human
         self._guard_edit(principal, task)
         self._require(principal, "write", task.project_slug, task,
                       message="Nur lesen: keine Schreibrechte in diesem Projekt.")
@@ -623,6 +625,11 @@ class BoardService:
             task.rank = new_rank
         if moved_column and task.status == self.flow.review:
             self._reset_review(task, events)            # neue Runde: Ergebnis der letzten gilt nicht mehr
+        elif (was_human and not task.human and task.status == self.flow.review
+              and task.review_state not in ("running", REVIEW_REQUESTED)):
+            # Freigegeben, waehrend es in review steht: Der Reviewer hatte es als "nur fuer Menschen"
+            # uebersprungen und saehe sonst keinen Anlass mehr, es zu pruefen (conclave#145)
+            self._request_review(task, events, "system", SYSTEM_ACTOR)
         task.updated_at = self._now()
         old_status = next((e.old_value for e in events if e.field_name == "status"), None)
         key = self.policy.lock_key(principal, task, task.status) if moved_column else None
@@ -789,6 +796,43 @@ class BoardService:
         task.review_state, task.review_at = "none", None
         task.review_blocking = task.review_suggestions = None
         task.review_checked = ""
+
+    def _request_review(self, task: Task, events: list[TaskEvent], origin: str, actor_id: str | None) -> None:
+        """Status ``requested`` mit dem Zeitpunkt der Anforderung; daran erkennt der Reviewer eine neue."""
+        events.append(TaskEvent.create(task.id, "review_state", task.review_state, REVIEW_REQUESTED, origin,
+                                       actor_id=actor_id))
+        task.review_state, task.review_at = REVIEW_REQUESTED, self._now()
+        task.review_blocking = task.review_suggestions = None
+        task.review_checked = ""
+
+    def request_review(self, principal: Principal, ref: str) -> Task:
+        """Review neu anfordern, ohne das Ticket aus review zu nehmen (Freigabe-Recht, conclave#145).
+
+        Der Rot-Zaehler bleibt: Das Anfordern ist kein Ergebnis. Nicht waehrend eines laufenden Reviews,
+        nicht ausserhalb von review und nicht bei "nur fuer Menschen" (das Entfernen der Markierung
+        fordert das Review selbst an)."""
+        task = self.get_task(ref)
+        self.require_visible(principal, task.project_slug)
+        if principal.is_agent:
+            raise _forbidden("Ein Review neu anfordern darf nur der Mensch.")
+        self._require(principal, "approve", task.project_slug, task,
+                      message="Ein Review neu anfordern darf nur, wer das Freigabe-Recht hat.")
+        if task.status != self.flow.review:
+            raise BoardError(f"Ticket '{ref}' steht nicht in '{self.flow.review}' (sondern in '{task.status}').",
+                             409, "NotInReview")
+        if task.human:
+            raise BoardError(f"Ticket '{ref}' ist nur fuer Menschen; erst die Markierung entfernen, das fordert "
+                             "das Review an.", 409, "HumanOnlyTicket")
+        if task.review_state == "running":
+            raise BoardError(f"Ticket '{ref}': Das Review laeuft gerade.", 409, "ReviewRunning")
+        origin, actor_id = self.actor(principal)
+        events: list[TaskEvent] = []
+        self._request_review(task, events, origin, actor_id)
+        task.updated_at = self._now()
+        if not self._update(task, events):
+            raise BoardError(f"Ticket '{ref}' wurde inzwischen geaendert; bitte neu laden.", 409, "Conflict")
+        self.policy.record(principal, "review_request", task.project_slug, task.ref, {})
+        return task
 
     def review(self, principal: Principal, ref: str, state: str, comment: str | None = "", *,
                blocking: int | None = None, suggestions: int | None = None, checked: str | None = "") -> Task:

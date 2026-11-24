@@ -98,6 +98,31 @@ def test_review_body_is_checked(client):
     assert _review(client, REVIEWER, state="passed", comment="x", checked=5).status_code == 400
 
 
+# ── Review neu anfordern (conclave#145) ─────────────────────────────────────
+
+@pytest.mark.parametrize("prefix", ["/board", "/board/v1"])
+def test_human_requests_a_review_again(client, prefix):
+    resp = client.post(f"{prefix}/projects/api/tasks/1/review/request", json={}, headers=_bearer(HUMAN))
+    assert resp.status_code == 200, resp.get_json()
+    data = resp.get_json()
+    assert (data["status"], data["review"]["state"]) == ("review", "requested")
+    assert data["review"]["at"] and "control" in data
+
+
+@pytest.mark.parametrize("token", [AGENT, REVIEWER])
+def test_agent_and_reviewer_cannot_request_a_review(client, token):
+    resp = client.post(f"{URL}/1/review/request", json={}, headers=_bearer(token))
+    assert resp.status_code == 403
+    assert client.get(f"{URL}/1", headers=_bearer(HUMAN)).get_json()["review"]["state"] == "none"
+
+
+def test_request_body_must_be_empty_and_a_running_review_is_refused(client):
+    assert client.post(f"{URL}/1/review/request", json={"x": 1}, headers=_bearer(HUMAN)).status_code == 400
+    assert _review(client, REVIEWER, state="running").status_code == 200
+    resp = client.post(f"{URL}/1/review/request", json={}, headers=_bearer(HUMAN))
+    assert (resp.status_code, resp.get_json()["type"]) == (409, "ReviewRunning")
+
+
 # ── Token und Anmeldung ─────────────────────────────────────────────────────
 
 def test_reviewer_token_is_created_like_the_agent_token(tmp_path):

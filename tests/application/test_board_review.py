@@ -195,3 +195,78 @@ def test_setting_human_again_keeps_the_counter(board):
     _round(board, ref, "failed")
     board.update_task(HUMAN, ref, human=True)
     assert board.get_task(ref).review_red_count == 1
+
+
+# ── Review neu anfordern (conclave#145) ─────────────────────────────────────
+
+def test_human_requests_a_review_again_and_the_ticket_stays_in_review(board):
+    ref = _in_review(board)
+    board.review(REVIEWER, ref, "running")
+    board.review(REVIEWER, ref, "passed", "gruen", blocking=0, suggestions=1, checked="b @ 1")
+    task = board.request_review(HUMAN, ref)
+    assert (task.status, task.review_state) == ("review", "requested")
+    assert task.review_at is not None
+    assert (task.review_blocking, task.review_suggestions, task.review_checked) == (None, None, "")
+    assert ("review_state", "passed", "requested", "human") in [
+        (e.field_name, e.old_value, e.new_value, e.origin) for e in board.history(ref)]
+    # Der Reviewer startet wie bei einem neuen Ticket in review
+    board.review(REVIEWER, ref, "running")
+    assert board.get_task(ref).review_state == "running"
+
+
+def test_each_request_has_its_own_time(board):
+    ref = _in_review(board)
+    first = board.request_review(HUMAN, ref).review_at
+    second = board.request_review(HUMAN, ref).review_at
+    assert second >= first and board.get_task(ref).review_state == "requested"
+
+
+@pytest.mark.parametrize("principal", [AGENT, REVIEWER])
+def test_only_the_human_requests_a_review(board, principal):
+    ref = _in_review(board)
+    assert _error(board.request_review, principal, ref).status == 403
+    assert board.get_task(ref).review_state == "none"
+
+
+def test_no_request_outside_review_while_running_or_for_humans_only(board):
+    task = board.create_task(HUMAN, "api", "T")
+    assert (_error(board.request_review, HUMAN, task.ref).type) == "NotInReview"
+    ref = _in_review(board)
+    board.review(REVIEWER, ref, "running")
+    err = _error(board.request_review, HUMAN, ref)
+    assert (err.status, err.type) == (409, "ReviewRunning")
+    other = _in_review(board, "Nur Mensch")
+    board.update_task(HUMAN, other, human=True)
+    err = _error(board.request_review, HUMAN, other)
+    assert (err.status, err.type) == (409, "HumanOnlyTicket")
+
+
+def test_request_keeps_the_red_counter(board):
+    ref = _in_review(board)
+    _round(board, ref, "failed")
+    board.request_review(HUMAN, ref)
+    assert board.get_task(ref).review_red_count == 1
+
+
+def test_releasing_a_ticket_in_review_requests_the_review(board):
+    """Der Fall aus dem Betrieb: nach drei roten "nur fuer Menschen", vom Menschen nach review geschoben
+    und erst danach freigegeben. Der Reviewer hatte es uebersprungen; jetzt fordert das Board es an."""
+    ref = _in_review(board)
+    for _ in range(3):
+        _round(board, ref, "failed")
+    board.update_task(HUMAN, ref, status="review")
+    assert board.get_task(ref).review_state == "none"
+    board.update_task(HUMAN, ref, human=False)
+    task = board.get_task(ref)
+    assert (task.status, task.human, task.review_state, task.review_red_count) == ("review", False, "requested", 0)
+    assert ("review_state", "none", "requested", "system") in [
+        (e.field_name, e.old_value, e.new_value, e.origin) for e in board.history(ref)]
+
+
+def test_releasing_elsewhere_or_moving_in_the_same_step_requests_nothing(board):
+    task = board.create_task(HUMAN, "api", "T", human=True)
+    board.update_task(HUMAN, task.ref, human=False)
+    assert board.get_task(task.ref).review_state == "none"                     # nicht in review
+    other = board.create_task(HUMAN, "api", "U", human=True)
+    board.update_task(HUMAN, other.ref, human=False, status="review")
+    assert board.get_task(other.ref).review_state == "none"                    # der Wechsel genuegt dem Reviewer
