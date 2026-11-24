@@ -31,9 +31,12 @@ def test_dry_run_shows_the_command_and_changes_nothing(rv, cfg, server, repo, tm
     log = rv.log_file.read_text(encoding="utf-8")
     command_line = next(line for line in log.splitlines() if "dry run, command" in line)
     cmd = json.loads(command_line.split(": ", 2)[-1])
-    assert cmd[1:3] == ["-p", f"Reviewe das Ticket api#1: T\nGepruefter Stand (dein Arbeitsverzeichnis, ein "
-                                f"eigener Worktree): sicherheit @ {head[:7]}"]
-    assert "--restricted" in cmd and cmd[cmd.index("--append-system-prompt") + 1].startswith("<Prompt")
+    assert cmd[1:3] == ["-p", "--restricted"]                            # R1: kein Auftrag als Argument
+    assert cmd[cmd.index("--append-system-prompt-file") + 1] == str(rv.prompt_file)
+    ask = json.loads(next(line for line in log.splitlines() if "dry run, stdin" in line).split(": ", 2)[-1])
+    assert ask == ("Reviewe das Ticket api#1. Lies es zuerst mit conclave_board_get.\nGepruefter Stand "
+                   f"(dein Arbeitsverzeichnis, ein eigener Worktree): sicherheit @ {head[:7]}\n")
+    assert "dry run, system prompt file" in log and not rv.prompt_file.exists()
     mcp = json.loads(next(line for line in log.splitlines() if "dry run, mcp config" in line).split(": ", 2)[-1])
     assert mcp["mcpServers"]["conclave"]["args"] == ["--reviewer"]
     assert not rv.worktrees.exists() and _task(server)["review"]["state"] == "none"

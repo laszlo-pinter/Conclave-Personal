@@ -348,7 +348,7 @@ def test_commit_pushed_after_the_checkout_is_fetched_and_reviewed(tmp_path, tls,
     task = _ticket(tls, f"**Branch:** `feature` · **Commit:** `{head[:7]}`")
     seen = {}
 
-    def fake_claude(key, cmd, cwd):
+    def fake_claude(key, cmd, cwd, ask=None):
         seen["content"] = (Path(cwd) / "a.txt").read_text(encoding="utf-8")
         seen["mcp"] = json.loads(rv.mcp_config.read_text(encoding="utf-8"))
         tls.call("POST", "/board/v1/projects/api/tasks/1/review", REVIEWER,
@@ -386,8 +386,8 @@ def test_only_mentioned_old_commit_is_a_note_for_claude_not_red(tmp_path, tls, r
     task = _ticket(tls, f"**Repo:** `feature` @ `{head[:7]}` · vorher `1234567` (vor dem Rebase)")
     seen = {}
 
-    def fake_claude(key, cmd, cwd):
-        seen["ask"] = cmd[2]
+    def fake_claude(key, cmd, cwd, ask=None):
+        seen["ask"] = ask
         tls.call("POST", "/board/v1/projects/api/tasks/1/review", REVIEWER,
                  {"state": "passed", "comment": "Urteil: gruen", "blocking": 0, "suggestions": 0})
         return "done"
@@ -454,9 +454,9 @@ def test_personal_keeps_missing_commits_yellow_and_does_not_fetch(tmp_path, tls,
     task = _ticket(tls, f"**Branch:** `feature` · **Commit:** `{head[:7]}`")
     seen = {}
 
-    def fake_claude(key, cmd, cwd):
+    def fake_claude(key, cmd, cwd, ask=None):
         """Wie bisher in Personal: der Kopf des genannten Branches, der fehlende Commit nur als Hinweis (gelb)."""
-        seen["ask"], seen["content"] = cmd[2], (Path(cwd) / "a.txt").read_text(encoding="utf-8")
+        seen["ask"], seen["content"] = ask, (Path(cwd) / "a.txt").read_text(encoding="utf-8")
         tls.call("POST", "/board/v1/projects/api/tasks/1/review", REVIEWER,
                  {"state": "rework", "comment": "Urteil: gelb", "blocking": 0, "suggestions": 1})
         return "done"
@@ -486,7 +486,7 @@ def test_token_from_the_credential_store_reaches_the_mcp_server_only_during_a_re
     task = _ticket(tls, f"**Branch:** `feature` · **Commit:** `{head[:7]}`")
     seen = {}
 
-    def fake_claude(key, cmd, cwd):
+    def fake_claude(key, cmd, cwd, ask=None):
         env = json.loads(rv.mcp_config.read_text(encoding="utf-8"))["mcpServers"]["conclave"]["env"]
         seen["file"] = Path(env["CONCLAVE_BOARD_TOKEN_FILE"])
         seen["token"] = seen["file"].read_text(encoding="utf-8")

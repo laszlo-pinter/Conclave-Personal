@@ -72,6 +72,7 @@ class Reviewer:
         self.log_file = data_dir / "reviewer.log"
         self.lock_file = data_dir / "reviewer.lock"
         self.mcp_config = data_dir / "mcp-board.json"
+        self.prompt_file = data_dir / "review-prompt.md"  # System-Prompt fuer claude (R1)
         self.worktrees = data_dir / "worktrees"
         self.state_file = data_dir / "state.json"
         self.status_file = data_dir / "status.json"      # fuer conclave-reviewer status (W4)
@@ -206,11 +207,12 @@ class Reviewer:
 
     claude_proc = None                                # der laufende claude (W4-Review B1)
 
-    def run_claude(self, key: str, cmd: list[str], cwd: str) -> str:
+    def run_claude(self, key: str, cmd: list[str], cwd: str, ask: str | None = None) -> str:
+        """``ask``: der Auftrag, ueber stdin (R1)."""
         try:
             return command.run_claude(cmd, cwd, self.cfg["review_timeout_minutes"], self.log, key,
                                       on_start=lambda proc: setattr(self, "claude_proc", proc),
-                                      quiet=self.cfg.get("server") == "team")
+                                      quiet=self.cfg.get("server") == "team", input_text=ask)
         finally:
             self.claude_proc = None
 
@@ -235,11 +237,19 @@ class Reviewer:
         """Beim Ende mit dem Desktop: den laufenden claude samt Kindprozessen beenden."""
         command.kill_claude(self.claude_proc)
 
-    def command_for(self, task: dict, key: str, checked: str, extra, missing) -> list[str]:
-        return command.review_command(self.cfg, task, key, mcp_config=self.mcp_config,
-                                      prompt_text=(command.fill_prompt(self.cfg, self.prompt) if self.prompt is not None
-                                                   else command.prompt(self.cfg, self.base_dir)), checked=checked,
-                                      extra=extra, missing=missing)
+    def prompt_text(self) -> str:
+        return (command.fill_prompt(self.cfg, self.prompt) if self.prompt is not None
+                else command.prompt(self.cfg, self.base_dir))
+
+    def write_prompt_file(self) -> None:
+        """Der System-Prompt fuer ``--append-system-prompt-file`` (R1), nur fuer den Benutzer lesbar."""
+        from conclave_board.runtime.file_security import replace_private
+        replace_private(self.prompt_file, self.prompt_text().encode("utf-8"))
+
+    def command_for(self, task: dict, key: str, checked: str, extra, missing) -> tuple[list[str], str]:
+        """(Kommandozeile, Auftrag fuer stdin). Der Titel des Tickets kommt in keins von beiden (R1)."""
+        cmd = command.review_command(self.cfg, mcp_config=self.mcp_config, prompt_file=self.prompt_file, extra=extra)
+        return cmd, command.review_ask(key, checked=checked, extra=extra, missing=missing)
 
     def run_review(self, task: dict, key: str, repo: str | list[str], dry_run: bool) -> None:
         """running -> Worktrees der genannten Commits -> der Reviewer setzt das Ergebnis.
@@ -300,12 +310,14 @@ class Reviewer:
             from conclave_board.runtime.file_security import replace_private
             servers = command.mcp_servers(self.cfg, [str(p) for _r, p in added], self.token_file())
             replace_private(self.mcp_config, json.dumps(servers).encode("utf-8"))
+            self.write_prompt_file()
             self.write_mcp_token()
             self.log(f"{key}: review started ({checked}) in {worktree}")
             self.current_task = key
             self.write_status(current_task=key)
             outcome = "failed"
-            outcome = self.run_claude(key, self.command_for(task, key, checked, extra, missing), str(worktree))
+            cmd, ask = self.command_for(task, key, checked, extra, missing)
+            outcome = self.run_claude(key, cmd, str(worktree), ask)
         finally:
             if self.current_task is not None:           # auch wenn claude gar nicht startete (W4-Review V1)
                 self.write_status(current_task=None, last_result={
@@ -329,10 +341,10 @@ class Reviewer:
                                 for r, _c, _b in found[1:]]
         extra = [(refs.repo_name(r), f"_repos/{refs.repo_name(r)}", refs.git_server(i, r))
                  for i, (r, _c, _b) in enumerate(found[1:], start=1)]
-        cmd = self.command_for(task, key, checked, extra, missing)
-        shown = [("<Prompt, " + str(len(a)) + " Zeichen>") if i and cmd[i - 1] == "--append-system-prompt" else a
-                 for i, a in enumerate(cmd)]
-        self.log(f"{key}: dry run, command (cwd {first}): {json.dumps(shown, ensure_ascii=False)}")
+        cmd, ask = self.command_for(task, key, checked, extra, missing)
+        self.log(f"{key}: dry run, command (cwd {first}): {json.dumps(cmd, ensure_ascii=False)}")
+        self.log(f"{key}: dry run, stdin: {json.dumps(ask, ensure_ascii=False)}")
+        self.log(f"{key}: dry run, system prompt file {self.prompt_file}: {len(self.prompt_text())} Zeichen")
         self.log(f"{key}: dry run, mcp config: "
                  f"{json.dumps(command.mcp_servers(self.cfg, paths, self.token_file()), ensure_ascii=False)}")
 

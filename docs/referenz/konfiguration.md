@@ -322,6 +322,8 @@ Die Daten liegen in `<Konfigurationsordner>/reviewer` (Windows
   nachsehen, wenn das Board „Reviewer aus“ zeigt
 - `state.json`, `status.json`, `reviewer.lock`
 - `mcp-board.json`: die MCP-Konfiguration des laufenden Reviews
+- `review-prompt.md`: der System-Prompt des laufenden Reviews (`--append-system-prompt-file`). Den Auftrag
+  bekommt `claude` über stdin; auf seiner Kommandozeile steht kein Text aus dem Ticket, auch nicht der Titel
 - `worktrees/`: die Worktrees während eines Reviews
 
 `CONCLAVE_REVIEWER_DATA_DIR` legt einen anderen Ordner fest,
