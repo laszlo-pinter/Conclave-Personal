@@ -47,6 +47,7 @@
 .page-head p{font-size:13px;color:var(--text-faint);margin:0}
 .page-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .page-action{width:auto;min-width:128px}
+.board-page > .board-toolbar{padding-bottom:12px;border-bottom:1px solid var(--border)}   /* wie .page-head */
 .workbench-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(260px,.85fr);gap:14px;align-items:start}
 .workbench-section{border:1px solid var(--border);background:var(--bg-2);border-radius:var(--r);padding:14px;min-width:0}
 .workbench-title{font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px}
