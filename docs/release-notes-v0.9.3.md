@@ -79,7 +79,7 @@ The test suite is shielded from the machine. Before each test, a fixture removes
 
 - every `CONCLAVE_*` variable except `CONCLAVE_TEST_*`
 - every provider key (`*_API_KEY`)
-- `CLAUDE_CODE_OAUTH_TOKEN`
+- `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_AUTH_TOKEN`
 
 It also moves the user folders and data paths into the test directory, for
 child processes too. Before, a machine with `CONCLAVE_DB_PROVIDER=postgres` made
