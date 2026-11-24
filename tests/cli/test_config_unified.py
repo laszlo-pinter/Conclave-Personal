@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from conclave.cli.config import ConclaveConfig, load_config
+from conclave.cli.config import ConclaveConfig, default_db_path, load_config
 from conclave.runtime.paths import get_runtime_paths
 
 
@@ -15,9 +15,10 @@ class TestFromSources:
     def test_returns_defaults_without_toml_or_env(self, tmp_path):
         with patch.dict("os.environ", {}, clear=True):
             config = ConclaveConfig.from_sources(config_path=tmp_path / "nope.toml")
+            expected_db = default_db_path()                        # Default zur Aufrufzeit (T13)
 
         assert config.db_provider == "sqlite"
-        assert config.db_path == get_runtime_paths().db_path
+        assert config.db_path == expected_db
         assert config.host == "127.0.0.1"
         assert config.port == 8000
         assert config.debug is False

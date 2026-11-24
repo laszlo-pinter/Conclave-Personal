@@ -132,9 +132,12 @@ def test_starts_over_stdio_like_claude_code():
     """Wie Claude Code: Prozess starten, Handshake, Tools abfragen."""
     src = Path(server.__file__).resolve().parents[1]
     board_src = src.parent / "packages" / "board" / "src"          # Board-Paket liegt daneben (T1)
+    # Der MCP-Client gibt nur ausgewaehlte Variablen weiter (APPDATA ist in den Tests umgebogen, T13):
+    # PYTHONUSERBASE mitgeben, damit Pakete im Benutzerverzeichnis gefunden werden
+    user_base = {"PYTHONUSERBASE": os.environ["PYTHONUSERBASE"]} if os.environ.get("PYTHONUSERBASE") else {}
     params = StdioServerParameters(command=sys.executable, args=["-m", "conclave.mcp_server"],
                                    env={"PYTHONPATH": os.pathsep.join((str(src), str(board_src))),
-                                        "CONCLAVE_API_URL": "http://127.0.0.1:9"})
+                                        "CONCLAVE_API_URL": "http://127.0.0.1:9", **user_base})
 
     async def check():
         async with Client(params) as client:

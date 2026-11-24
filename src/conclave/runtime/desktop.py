@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import os
 
-from conclave.cli.config import DEFAULT_DB_PATH, ConclaveConfig
+from conclave.cli.config import ConclaveConfig, default_db_path
 from conclave.runtime.browser import server_url
 from conclave.runtime.paths import RuntimePaths, get_runtime_paths
 from conclave.runtime.process import find_free_port
@@ -33,7 +33,7 @@ def prepare_launch_config(
         config.debug = True
 
     # Nur den Default ersetzen: ein Pfad aus [database] path der config.toml bleibt erhalten.
-    if "CONCLAVE_DB_PATH" not in os.environ and config.db_path == DEFAULT_DB_PATH:
+    if "CONCLAVE_DB_PATH" not in os.environ and config.db_path == default_db_path():
         config.db_path = paths.db_path
     if "CONCLAVE_WORKSPACE" not in os.environ:
         os.environ["CONCLAVE_WORKSPACE"] = str(paths.workspace_dir)

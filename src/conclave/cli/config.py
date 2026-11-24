@@ -19,7 +19,16 @@ def default_config_path() -> Path:
     if override:
         return Path(override).expanduser()
     return get_runtime_paths().config_dir / "config.toml"
-DEFAULT_DB_PATH = _RUNTIME_PATHS.db_path
+DEFAULT_DB_PATH = _RUNTIME_PATHS.db_path          # Stand beim Import; fuer Vorgaben default_db_path()
+
+
+def default_db_path() -> Path:
+    """SQLite-Datei: CONCLAVE_DB_PATH, sonst Plattform-Default (zur Aufrufzeit ermittelt, wie die config.toml).
+    Ohne bestimmbares Benutzerverzeichnis (leere Umgebung) bleibt es beim Stand vom Import."""
+    try:
+        return get_runtime_paths().db_path
+    except RuntimeError:
+        return DEFAULT_DB_PATH
 # flask-limiter-Syntax, pro Route und Client-IP; "off" schaltet die Begrenzung ab
 DEFAULT_RATE_LIMIT = "120 per minute"
 DEFAULT_KANZO_URL = "http://localhost:4242/mcp"
@@ -190,7 +199,7 @@ class LimitSettings:
 @dataclass
 class ConclaveConfig:
     db_provider: str = "sqlite"                                  # "sqlite" | "postgres"
-    db_path: Path = field(default_factory=lambda: DEFAULT_DB_PATH)  # für sqlite
+    db_path: Path = field(default_factory=default_db_path)  # für sqlite
     db_dsn: str = ""                                             # für postgres
     participants: dict = field(default_factory=dict)
     # Server
@@ -243,7 +252,7 @@ class ConclaveConfig:
         # TOML-Werte mit Defaults
         provider = db_section.get("provider", "sqlite")
         db_path_str = db_section.get("path", db_section.get("db_path", ""))
-        db_path = Path(db_path_str) if db_path_str else DEFAULT_DB_PATH
+        db_path = Path(db_path_str) if db_path_str else default_db_path()
         db_dsn = db_section.get("dsn", "")
 
         # 2. Env-Vars überlagern
@@ -318,7 +327,7 @@ def load_config(config_path: Path | None = None) -> ConclaveConfig:
 
     provider = db_section.get("provider", "sqlite")
     db_path = Path(db_section["path"]) if "path" in db_section else (
-        Path(db_section["db_path"]) if "db_path" in db_section else DEFAULT_DB_PATH
+        Path(db_section["db_path"]) if "db_path" in db_section else default_db_path()
     )
     db_dsn = db_section.get("dsn", "")
     participants = data.get("participants", {})
