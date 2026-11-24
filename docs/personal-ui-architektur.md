@@ -160,7 +160,9 @@ was ein Agent geändert oder kommentiert hat (siehe
 - Ticketansicht: Beschreibung (Markdown), Kommentare mit Herkunft („Mensch“,
   „über Agent“, „Zweitmeinung (Modell)“, „unbekannt“), Verlauf, Status,
   Markierung, neuer Kommentar
-- Neues Ticket, Suche, Projektauswahl, Schalter „Erledigte zeigen“
+- Neues Ticket, Suche, Projektauswahl, Schalter „Erledigte zeigen“, alle in
+  einer kompakten Leiste über den Spalten, wie auf der Board-Seite des
+  Board-Servers (`board.css` des Board-Kerns gilt für beide)
 - Review-Status an den Karten (läuft, grün, gelb, rot, Nacharbeit, „hängt“) und
   Anzeige „Reviewer aktiv“ bzw. „Reviewer aus“
 - Steuertickets: Pause und Hinweis anlegen und schließen

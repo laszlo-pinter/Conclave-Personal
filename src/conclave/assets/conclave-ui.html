@@ -82,7 +82,6 @@
   <div class="sb-panel" id="panelBoard">
     <div class="surface-section">
       <div class="surface-section-title" data-i18n="board.view">Ansicht</div>
-      <label class="board-check"><input type="checkbox" id="boardShowDone"/> <span data-i18n="board.showDone">Erledigte zeigen</span></label>
       <div class="surface-info" data-i18n="board.hint">Karten per Drag &amp; Drop verschieben. Das Board aktualisiert sich selbst.</div>
     </div>
   </div>
@@ -242,14 +241,16 @@
   <!-- Board Main Panel -->
   <div class="messages" id="boardMain" style="display:none">
     <div class="workspace-page board-page">
-      <div class="page-head">
-        <div>
-          <h2>Board</h2>
-          <p data-i18n="board.subtitle">Arbeitspakete fuer Menschen und Agenten.</p>
-        </div>
-        <div class="page-actions">
+      <!-- Dieselbe kompakte Leiste wie auf der Board-Seite des Team-Servers (U3, Ticket 146); Sprache,
+           Darstellung und Zugang stehen in Personal an anderer Stelle. -->
+      <div class="board-toolbar">
+        <div class="board-toolbar-title" data-i18n-title="board.subtitle" title="Arbeitspakete fuer Menschen und Agenten.">Board</div>
+        <div class="board-toolbar-group" role="group" data-i18n-title="board.view">
           <select id="boardProject" class="board-input" data-i18n-title="board.project"></select>
           <input type="search" id="boardSearch" class="board-input" data-i18n-placeholder="board.search" placeholder="Suchen..."/>
+          <label class="board-check" data-i18n-title="board.hint"><input type="checkbox" id="boardShowDone"/> <span data-i18n="board.showDone">Erledigte zeigen</span></label>
+        </div>
+        <div class="board-toolbar-group">
           <button class="btn-full page-action" data-action="board-new" data-i18n="board.new">Neues Ticket</button>
           <button class="btn-full secondary page-action board-projects-btn" id="boardProjects" data-action="board-projects" data-i18n="board.projects.open" hidden>Projekte</button>
           <button class="btn-full secondary page-action board-approvals" id="boardApprovals" data-action="board-approvals" aria-pressed="false" hidden></button>
