@@ -128,6 +128,18 @@ def test_next_task_respects_claimable_and_sets_the_assignee(board):
     assert board.next_task(BEN_AGENT, "api").ref == "api#1"
 
 
+def test_only_an_approver_requests_a_review_again(board):
+    """conclave#145: Review neu anfordern braucht das Freigabe-Recht im Projekt, nicht nur die Rolle Mensch."""
+    board.create_task(ANNA, "api", "T")
+    board.update_task(ANNA, "api#1", status="review")
+    with pytest.raises(BoardError, match="Freigabe-Recht"):
+        board.request_review(BEN, "api#1")
+    assert board.get_task("api#1").review_state == "none"
+    assert not board.can_approve(BEN, "api") and board.can_approve(ANNA, "api")
+    assert board.request_review(ANNA, "api#1").review_state == "requested"
+    assert ("review_request", "anna", "api", "api#1") in board.policy.events
+
+
 def test_release_only_by_own_human_or_approver(board):
     board.create_task(ANNA, "api", "T")
     board.next_task(BEN_AGENT, "api")

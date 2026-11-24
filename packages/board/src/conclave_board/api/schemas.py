@@ -85,7 +85,8 @@ CONTROL = _object({"pauses": {"type": "array", "items": CONTROL_ENTRY},
 TASK_LIST = _object({"tasks": {"type": "array", "items": TASK}, "control": CONTROL})
 TASK_WITH_CONTROL = _object({**TASK_FIELDS, "control": CONTROL})
 TASK_DETAIL = _object({**TASK_FIELDS, "comments": {"type": "array", "items": COMMENT},
-                       "last_review": _nullable(COMMENT), "status_since": TIME, "control": CONTROL})
+                       "last_review": _nullable(COMMENT), "status_since": TIME, "can_approve": BOOLEAN,
+                       "control": CONTROL})
 STUCK_TASK = _object({**TASK_FIELDS, "status_since": TIME})
 
 VERSIONS = _object({

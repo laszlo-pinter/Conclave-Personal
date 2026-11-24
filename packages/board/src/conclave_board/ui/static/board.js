@@ -394,12 +394,13 @@ async function saveBoardTaskField(field) {
   await _refreshBoard();
 }
 
-// "Review neu starten" (Ticket 145): wie der Server, nur Mensch, Ticket in review, nicht "nur fuer
+// "Review neu starten" (Ticket 145): wie der Server, nur mit dem Freigabe-Recht im Projekt (can_approve
+// aus GET auf das Ticket; im Team hat es nicht jedes Mitglied), Ticket in review, nicht "nur fuer
 // Menschen" und kein laufendes Review (ein haengendes gibt der Reviewer beim Neustart frei)
 function _mayRequestReview(task) {
   const state = (task.review || {}).state || 'none';
-  return _board.role === 'human' && task.status === _reviewColumn(_board.statuses) && !task.human
-    && state !== 'running';
+  return _board.role === 'human' && task.can_approve === true && task.status === _reviewColumn(_board.statuses)
+    && !task.human && state !== 'running';
 }
 
 async function requestBoardReview() {

@@ -124,7 +124,7 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `POST` | `/board/v1/tasks` | Ticket anlegen; neue Tickets landen in der ersten Spalte. Optional `initiative`: Kurzname eines vorhandenen Vorhabens. |
 | `GET` | `/board/v1/search` | Suche in Titel, Tags, Beschreibung und Kommentaren (`q`, `project`, `include_done`). |
 | `POST` | `/board/v1/next` | Oberstes freies Ticket der ersten Spalte übernehmen (atomar); `task` als `projekt#n` oder `projekt/vorhaben-n`. |
-| `GET` | `/board/v1/projects/<slug>/tasks/<int:number>` | Ein Ticket mit Kommentaren. |
+| `GET` | `/board/v1/projects/<slug>/tasks/<int:number>` | Ein Ticket mit Kommentaren; `can_approve` sagt, ob dieser Zugang im Projekt das Freigabe-Recht hat. |
 | `PATCH` | `/board/v1/projects/<slug>/tasks/<int:number>` | Ticket ändern: `title`, `description`, `tags`, `status`, `human`, `index`, `rank`, optional `version`; `initiative` (Kurzname oder `null`) ordnet einem Vorhaben zu (nur Mensch); `assignee` (Text oder `null`) setzt die Zuständigkeit (Recht `assign:self`/`assign:other`, in Personal nur der Mensch). |
 | `POST` | `/board/v1/projects/<slug>/tasks/<int:number>/release` | Hängendes Ticket freigeben: zurück in die erste Spalte, Zuständigkeit leer (nur Mensch). |
 | `GET` | `/board/v1/stuck` | Übernommene Tickets, die länger als `minutes` (1 bis 525600, Standard 60) in Arbeit stehen, je mit `status_since`; optional `project` (nur Mensch). |
@@ -304,7 +304,8 @@ Ticket (`GET` auf das Ticket, Antworten von `POST /board/v1/tasks` und `PATCH`):
 Anzeigenamen dessen, der angelegt hat (nur mit einer Erweiterung, die Konten kennt;
 in Personal `null`; ebenso an Kommentaren und im Verlauf). `GET` auf ein Ticket liefert
 zusätzlich `comments`, `last_review`, `status_since` (seit wann es in seiner Spalte
-steht) und `control`.
+steht), `can_approve` (hat dieser Zugang im Projekt das Freigabe-Recht?) und
+`control`.
 
 - **Anlegen** `POST /board/v1/tasks`: `project` und `title` Pflicht, optional
   `description`, `tags`, `human`, `status` (Standard: erste Spalte; Agenten

@@ -109,6 +109,12 @@ def test_human_requests_a_review_again(client, prefix):
     assert data["review"]["at"] and "control" in data
 
 
+@pytest.mark.parametrize("token, expected", [(HUMAN, True), (AGENT, False), (REVIEWER, False)])
+def test_task_detail_says_whether_this_access_may_approve(client, token, expected):
+    """Die Oberflaeche zeigt "Review neu starten" nur mit dem Freigabe-Recht (Review V1)."""
+    assert client.get(f"{URL}/1", headers=_bearer(token)).get_json()["can_approve"] is expected
+
+
 @pytest.mark.parametrize("token", [AGENT, REVIEWER])
 def test_agent_and_reviewer_cannot_request_a_review(client, token):
     resp = client.post(f"{URL}/1/review/request", json={}, headers=_bearer(token))

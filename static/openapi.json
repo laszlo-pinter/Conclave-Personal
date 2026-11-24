@@ -3770,7 +3770,7 @@
     },
     "/board/v1/projects/{slug}/tasks/{number}": {
       "get": {
-        "summary": "Ein Ticket mit Kommentaren.",
+        "summary": "Ein Ticket mit Kommentaren. ``can_approve``: Hat dieser Zugang im Projekt das Freigabe-Recht? Die",
         "tags": [
           "board"
         ],
@@ -4018,6 +4018,9 @@
                       "format": "date-time",
                       "nullable": true
                     },
+                    "can_approve": {
+                      "type": "boolean"
+                    },
                     "control": {
                       "type": "object",
                       "properties": {
@@ -4113,6 +4116,7 @@
                   "required": [
                     "actor_name",
                     "assignee",
+                    "can_approve",
                     "comments",
                     "control",
                     "created_at",
@@ -5402,6 +5406,9 @@
                       "format": "date-time",
                       "nullable": true
                     },
+                    "can_approve": {
+                      "type": "boolean"
+                    },
                     "control": {
                       "type": "object",
                       "properties": {
@@ -5497,6 +5504,7 @@
                   "required": [
                     "actor_name",
                     "assignee",
+                    "can_approve",
                     "comments",
                     "control",
                     "created_at",
@@ -8891,7 +8899,7 @@
     },
     "/board/projects/{slug}/tasks/{number}": {
       "get": {
-        "summary": "Ein Ticket mit Kommentaren.",
+        "summary": "Ein Ticket mit Kommentaren. ``can_approve``: Hat dieser Zugang im Projekt das Freigabe-Recht? Die",
         "tags": [
           "board"
         ],
@@ -9139,6 +9147,9 @@
                       "format": "date-time",
                       "nullable": true
                     },
+                    "can_approve": {
+                      "type": "boolean"
+                    },
                     "control": {
                       "type": "object",
                       "properties": {
@@ -9234,6 +9245,7 @@
                   "required": [
                     "actor_name",
                     "assignee",
+                    "can_approve",
                     "comments",
                     "control",
                     "created_at",
@@ -10530,6 +10542,9 @@
                       "format": "date-time",
                       "nullable": true
                     },
+                    "can_approve": {
+                      "type": "boolean"
+                    },
                     "control": {
                       "type": "object",
                       "properties": {
@@ -10625,6 +10640,7 @@
                   "required": [
                     "actor_name",
                     "assignee",
+                    "can_approve",
                     "comments",
                     "control",
                     "created_at",
