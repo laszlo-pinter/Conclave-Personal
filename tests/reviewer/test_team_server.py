@@ -46,7 +46,16 @@ def _cert(subject, issuer_key, issuer_name, key, *, ca=False, san=None):
     builder = (x509.CertificateBuilder().subject_name(subject).issuer_name(issuer_name).public_key(key.public_key())
                .serial_number(x509.random_serial_number()).not_valid_before(now - datetime.timedelta(minutes=1))
                .not_valid_after(now + datetime.timedelta(days=1))
-               .add_extension(x509.BasicConstraints(ca=ca, path_length=None), critical=True))
+               .add_extension(x509.BasicConstraints(ca=ca, path_length=None), critical=True)
+               # ab Python 3.13 prueft ssl streng (VERIFY_X509_STRICT): Key-Identifier noetig, die CA mit Key Usage
+               .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
+               .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(issuer_key.public_key()),
+                              critical=False))
+    if ca:
+        builder = builder.add_extension(x509.KeyUsage(
+            digital_signature=False, content_commitment=False, key_encipherment=False, data_encipherment=False,
+            key_agreement=False, key_cert_sign=True, crl_sign=True, encipher_only=False, decipher_only=False),
+            critical=True)
     if san:
         builder = builder.add_extension(x509.SubjectAlternativeName(san), critical=False)
     return builder.sign(issuer_key, hashes.SHA256())
