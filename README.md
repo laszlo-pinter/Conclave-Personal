@@ -104,7 +104,8 @@ conclave runs --conversation-id "$CONV"
 ## Platform Target
 
 Conclave Personal supports Windows and Linux. The CI matrix checks Ubuntu and
-Windows with Python 3.11 and 3.12.
+Windows with Python 3.11, 3.12 and 3.14. The team server and its wheelhouse use
+Python 3.14.
 
 The application core stays platform-neutral. Only startup, installation, and
 autostart adapters are OS-specific:
@@ -492,12 +493,12 @@ v0.9.4 remains alpha. Known limitations:
 
 ## Release Verification
 
-CI runs the jobs `test` (Ubuntu and Windows, Python 3.11 and 3.12),
+CI runs the jobs `test` (Ubuntu and Windows, Python 3.11, 3.12 and 3.14),
 `ui-browser` (Playwright browser tests in Chromium), `security` (`pip-audit`,
-`bandit`, `import-linter`), `postgres` (PostgreSQL 16 tests), `vendor` (bundled
+`bandit`, `import-linter`), `postgres` (PostgreSQL 16 tests, Python 3.14), `vendor` (bundled
 vendor files against their npm packages), `build` (sdist and wheel, artifact
 inspection), `board-package` and `reviewer-package` (their wheels in a fresh
-environment without Conclave Personal) and `board-api` (no breaking changes in
+Python 3.14 environment without Conclave Personal) and `board-api` (no breaking changes in
 `/board/v1`, checked with oasdiff).
 
 The v0.9.4 release was verified with a fresh installation from wheel and sdist
