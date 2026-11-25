@@ -62,8 +62,9 @@ class Script:
         return self.now
 
 
-def _args(ref="", project="", timeout=60, interval=5):
-    return SimpleNamespace(ref=ref, project=project, timeout=timeout, interval=interval, url="", human=False)
+def _args(ref="", project="", timeout=60, interval=5, comments=False):
+    return SimpleNamespace(ref=ref, project=project, timeout=timeout, interval=interval, url="", human=False,
+                           comments=comments)
 
 
 def _run(app, script, **kw):
@@ -196,3 +197,47 @@ def test_output_is_ascii_json(app):
     board_wait.run(_args(ref="api#1"), reader=_reader(app), sleep=script.sleep, clock=script.clock, out=out)
     line = out.getvalue().strip()
     assert line.isascii() and json.loads(line)["title"] == "Prüfung – grün"
+
+
+# ── --comments (conclave#158) ───────────────────────────────────────────────
+
+def _comment(app, number, body, token):
+    resp = app.test_client().post(f"{TASKS}/{number}/comments", json={"body": body}, headers=_h(token))
+    assert resp.status_code == 201, resp.get_json()
+    return resp.get_json()["id"]
+
+
+def test_comments_end_on_a_comment_of_someone_else_without_its_text(app):
+    script = Script({1: lambda: _comment(app, 2, "eigener Text", AGENT),
+                     3: lambda: _comment(app, 2, "GEHEIME Antwort", HUMAN)})
+    code, result = _run(app, script, ref="api#2", comments=True)
+    assert code == 0 and script.calls == 3                     # der eigene Kommentar weckt nicht
+    assert {k: result[k] for k in ("event", "task", "origin", "from")} == {
+        "event": "comment", "task": "api#2", "origin": "human", "from": "Kommentar von: Mensch"}
+    assert result["comment"] and "GEHEIM" not in json.dumps(result)
+
+
+def test_comments_from_before_the_start_do_not_count(app):
+    _comment(app, 2, "alt", HUMAN)
+    code, result = _run(app, Script(), ref="api#2", comments=True, timeout=0.5)
+    assert code == 2 and result["event"] == "timeout"
+
+
+def test_comments_work_on_a_done_ticket(app):
+    client = app.test_client()
+    chat = client.post("/board/v1/tasks", json={"project": "api", "title": "Chat: Vorhaben", "status": "done",
+                                                "tags": ["chat"]}, headers=_h(HUMAN)).get_json()
+    script = Script({1: lambda: _comment(app, chat["number"], "Frage", HUMAN)})
+    code, result = _run(app, script, ref=f"api#{chat['number']}", comments=True)
+    assert code == 0 and (result["event"], result["status"]) == ("comment", "done")
+
+
+def test_comments_need_a_ticket(capsys):
+    assert board_wait.run(_args(project="api", comments=True)) == 1
+    assert "--comments" in capsys.readouterr().err
+
+
+def test_cli_offers_comments():
+    from conclave.cli.main import build_parser
+    args = build_parser().parse_args(["board", "wait", "conclave#12", "--comments"])
+    assert args.comments is True

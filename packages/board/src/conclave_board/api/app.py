@@ -237,7 +237,11 @@ def create_board_app(board, auth_service: Authenticator | None, *, allowed_hosts
 
     @app.get("/auth/whoami")
     def whoami():
-        return jsonify({"role": g.principal.role}), 200
+        # actor_id nur mit Konto (Team): Wer wartet, erkennt daran eigene Kommentare (conclave#158)
+        me = {"role": g.principal.role}
+        if g.principal.actor_id:
+            me["actor_id"] = g.principal.actor_id
+        return jsonify(me), 200
 
     register_board_api(app, board)
     for blueprint in blueprints:
