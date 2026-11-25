@@ -98,17 +98,27 @@ def default_token_file() -> Path:
     return conclave_config_dir() / "reviewer.token"
 
 
+def _openable(path: Path) -> bool:
+    """Darf dieses Konto die Datei lesen? Oeffnen und schliessen, ohne etwas zu lesen."""
+    try:
+        open(path, "rb").close()      # noqa: SIM115 - nur das Recht pruefen
+    except OSError:                   # PermissionError und andere: nicht lesbar
+        return False
+    return True
+
+
 def codex_account_warning() -> str | None:
     """Laeuft der Reviewer mit ``agent = "codex"`` unter einem Konto, das das Mensch- oder Agent-Token lesen darf
-    (also unter dem eigenen Benutzer), ein Hinweis (conclave#152, Review V3). Geprueft wird nur das Zugriffsrecht,
-    gelesen wird nichts."""
+    (also unter dem eigenen Benutzer), ein Hinweis (conclave#152, Review V3). Die Datei wird zum Lesen geoeffnet
+    und sofort geschlossen, gelesen wird nichts. ``os.access`` genuegt nicht: Unter Windows beachtet es keine
+    Rechtelisten (Review V1)."""
     from conclave_reviewer.paths import conclave_config_dir
     names = {"CONCLAVE_API_TOKEN_FILE": "api.token", "CONCLAVE_AGENT_TOKEN_FILE": "agent.token"}
     readable = []
     for variable, name in names.items():
         override = os.environ.get(variable, "").strip()
         path = Path(override).expanduser() if override else conclave_config_dir() / name
-        if path.is_file() and os.access(path, os.R_OK):
+        if path.is_file() and _openable(path):
             readable.append(name)
     if not readable:
         return None

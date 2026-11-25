@@ -165,6 +165,43 @@ def test_codex_under_the_own_user_is_warned_about(tmp_path, monkeypatch):
                                                     check_claude=False)
 
 
+def _deny_read(path: Path) -> bool:
+    """Die Datei fuer das eigene Konto unlesbar machen; False, wenn das hier nicht geht."""
+    import getpass
+    import os
+    import subprocess
+    if os.name == "nt":
+        done = subprocess.run(["icacls", str(path), "/deny", f"{getpass.getuser()}:(R)"], capture_output=True)
+        return done.returncode == 0
+    path.chmod(0)
+    return not os.access(path, os.R_OK)               # root liest trotzdem
+
+
+def _allow_read(path: Path) -> None:
+    import getpass
+    import os
+    import subprocess
+    if os.name == "nt":
+        subprocess.run(["icacls", str(path), "/remove:d", getpass.getuser()], capture_output=True)
+    else:
+        path.chmod(0o600)
+
+
+def test_an_unreadable_token_file_gives_no_warning(tmp_path, monkeypatch):
+    """Review V1: Unter Windows beachtet os.access keine Rechtelisten; die Pruefung oeffnet die Datei."""
+    agent = tmp_path / "agent.token"
+    agent.write_text("cva_x\n", encoding="utf-8")
+    monkeypatch.setenv("CONCLAVE_API_TOKEN_FILE", str(tmp_path / "fehlt.token"))
+    monkeypatch.setenv("CONCLAVE_AGENT_TOKEN_FILE", str(agent))
+    assert "agent.token" in config.codex_account_warning()
+    if not _deny_read(agent):
+        pytest.skip("Lesesperre auf dieser Plattform nicht setzbar")
+    try:
+        assert config.codex_account_warning() is None
+    finally:
+        _allow_read(agent)
+
+
 def test_codex_pass_env_must_be_a_list_of_names(tmp_path):
     with pytest.raises(config.ConfigError, match="codex_pass_env"):
         _load(tmp_path, 'codex_pass_env = "FOO"')
