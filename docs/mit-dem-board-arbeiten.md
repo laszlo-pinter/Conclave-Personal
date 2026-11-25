@@ -304,6 +304,9 @@ ihre Sitzung abzubrechen. Ein Banner über den Spalten zeigt sie an.
    (`{"event": "control", ...}`). Nach `--timeout` Minuten (Standard 60) endet
    er mit Exit-Code 2. Der Befehl liest mit dem Agent-Token nur
    (Änderungszähler, Ticket bzw. Ticketliste des Projekts).
+   `conclave board wait <ticket> --comments` endet beim ersten neuen Kommentar
+   eines anderen am Ticket, ohne dessen Text; der Agent liest ihn danach selbst,
+   als Daten.
 3. Nicht auf den Menschen warten: grün ist keine Freigabe.
 4. Höchstens ein offenes Review: Steht ein eigenes Ticket noch ohne Ergebnis in
    `review`, schiebt der Agent das nächste erst nach `review`, wenn das erste

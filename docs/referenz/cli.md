@@ -169,13 +169,17 @@ nur die Nummer); `-` entfernt die Zuordnung.
 ```powershell
 conclave board wait <ticket> [--timeout 60] [--interval 5] [--url <server>] [--human]
 conclave board wait --project <projekt>
+conclave board wait <ticket> --comments
 ```
 
 Wartet, bis das Review eines Tickets entschieden ist, und endet mit einer
 JSON-Zeile (`{"event": "review", "verdict": "gelb", ...}`). Mit `--project`
 endet er beim ersten Review-Ergebnis oder Steuerticket (Pause, Hinweis) im
 Projekt (`{"event": "control", ...}`). Nach `--timeout` Minuten endet er mit
-Exit-Code 2. Der Befehl fragt den Änderungszähler alle `--interval` Sekunden ab
+Exit-Code 2. Mit `--comments` endet er beim ersten neuen Kommentar am Ticket,
+der nicht vom eigenen Zugang stammt (`{"event": "comment", "comment": "<id>",
+"from": "Kommentar von: …", ...}`), ohne den Text; das geht auch an erledigten
+Tickets. Der Befehl fragt den Änderungszähler alle `--interval` Sekunden ab
 und nutzt das Agent-Token, mit `--human` das Mensch-Token (siehe
 [Mit dem Board arbeiten](../mit-dem-board-arbeiten.md)).
 

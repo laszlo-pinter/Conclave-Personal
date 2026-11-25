@@ -18,6 +18,8 @@ oder Agent-Token (`CONCLAVE_AGENT_KEY`/`agent.token`), dazu das Reviewer-Token
 (`CONCLAVE_REVIEWER_KEY`/`reviewer.token`).
 `GET /auth/whoami` liefert `{"role": "human"}`, `{"role": "agent"}` bzw.
 `{"role": "reviewer"}`.
+Am Board-Server mit Konten (Team) kommt `actor_id` dazu, das Konto hinter dem
+Token; daran erkennt `wait --comments` eigene Kommentare.
 
 Mit dem Agent-Token sind nur die Routen erlaubt, die die MCP-Tools und
 `conclave board wait` brauchen, dazu drei lesende Routen ohne Geheimnisse
