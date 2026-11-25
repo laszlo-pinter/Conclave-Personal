@@ -68,14 +68,23 @@ class BoardPolicy:
         Zugang zum Projekt)? Bei Verstoss ``BoardError`` werfen; ``None`` (niemand) prueft der Dienst nicht."""
 
     def lock_key(self, principal: Principal, task: "Task", new_status: str) -> str | None:
-        """Schluessel einer Sperre, unter der ``check_status_change`` und das Schreiben laufen."""
+        """Schluessel einer Sperre, unter der ``check_status_change`` bzw. ``check_create`` und das Schreiben laufen.
+
+        Beim Anlegen (``check_create``) hat ``task`` noch keine Nummer: ``task.ref`` geht dann nicht."""
         return None
 
     def check_status_change(self, service, principal: Principal, task: "Task", new_status: str) -> None:
         """Weitere Regeln beim Statuswechsel; bei Verstoss ``BoardError`` werfen."""
 
+    def check_create(self, service, principal: Principal, task: "Task") -> None:
+        """Weitere Regeln, wenn ein Mensch ein Ticket direkt in einer spaeteren Spalte als der ersten anlegt
+        (``task.status``; das Ticket ist noch nicht gespeichert). Bei Verstoss ``BoardError`` werfen.
+
+        Laeuft unter der Sperre von ``lock_key(principal, task, task.status)``. Fest im Dienst gilt schon:
+        Agenten legen nur in der ersten Spalte an, in der letzten nur mit Freigabe-Recht (conclave#159)."""
+
     def record(self, principal: Principal, event: str, project: str | None, target: str, detail: dict) -> None:
-        """Ereignis fuer ein Audit-Log (ohne Inhalte): approval, rank, control, release, ..."""
+        """Ereignis fuer ein Audit-Log (ohne Inhalte): approval, create_done, rank, control, release, ..."""
 
     def actor_name(self, actor_id: str | None) -> str | None:
         """Anzeigename eines Kontos fuer die Kennzeichnung fremder Texte (T8): ``actor_name`` an Ticket,

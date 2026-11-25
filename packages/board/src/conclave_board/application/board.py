@@ -499,6 +499,9 @@ class BoardService:
         if principal.is_agent and status != self.flow.first:
             raise _forbidden(f"Agenten legen Tickets nur in '{self.flow.first}' an; "
                              "weiter geht es ueber next_task.")
+        # Direkt in die letzte Spalte wie nach dorthin schieben: nur mit Freigabe-Recht (conclave#159)
+        if status == self.flow.last and not self.can_approve(principal, project.slug):
+            raise _forbidden("Direkt in der letzten Spalte anlegen darf nur, wer das Freigabe-Recht hat.")
         origin, actor_id = self.actor(principal)
         if not isinstance(title, str):                  # fehlt oder kein Text: 400 statt 500 (T3-Review)
             raise _invalid("title muss Text sein.")
@@ -515,8 +518,17 @@ class BoardService:
         if chosen is not None:
             task.initiative_id, task.initiative_slug, task.initiative_rank = chosen.id, chosen.slug, chosen.rank
         event = TaskEvent.create(task.id, "created", None, status, origin, actor_id=actor_id)
-        created = self._repo.create_task(task, event)
-        self._written(created, [event])
+        later = status != self.flow.first
+        key = self.policy.lock_key(principal, task, status) if later else None
+        # Weitere Regeln der Policy fuer das Anlegen nach der ersten Spalte, unter derselben Sperre wie
+        # beim Statuswechsel: "pruefen, dann schreiben" (conclave#159)
+        with self._after_commit(), (self._repo.locked_key(key) if key else nullcontext()):
+            if later:
+                self.policy.check_create(self, principal, task)
+            created = self._repo.create_task(task, event)
+            self._written(created, [event])
+        if status == self.flow.last:
+            self.policy.record(principal, "create_done", created.project_slug, created.ref, {"status": status})
         if kind == "control":
             self.policy.record(principal, "control", created.project_slug, created.ref,
                                {"type": control, "scope": scope})
