@@ -248,7 +248,10 @@ def test_codex_reviews_through_the_reviewer_mcp_server(cfg, server, repo, tmp_pa
     path, head = repo
     task = _ticket_in_review(server, head)
     codex_cfg = {**cfg, "agent": "codex", "codex_exe": str(FAKE_CODEX), "conclave_mcp_exe": sys.executable,
-                 "conclave_mcp_args": ["-m", "conclave.mcp_server", "--reviewer"]}
+                 "conclave_mcp_args": ["-m", "conclave.mcp_server", "--reviewer"],
+                 "codex_pass_env": ["FAKE_CODEX_REPORT"]}                   # sonst bereinigt (Review V2)
+    monkeypatch.setenv("CONCLAVE_SECRET_DEMO", "darf-codex-nicht-sehen")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-darf-codex-nicht-sehen")
     rv = Reviewer(codex_cfg, tmp_path / "data", base_dir=tmp_path / "base")
     real_start = command.start_claude
     monkeypatch.setattr(command, "start_claude", lambda cmd, cwd, **kw: real_start([sys.executable, *cmd], cwd, **kw))
@@ -259,6 +262,9 @@ def test_codex_reviews_through_the_reviewer_mcp_server(cfg, server, repo, tmp_pa
 
     report = json.loads((tmp_path / "fake-codex.json").read_text(encoding="utf-8"))
     assert report["key"] == "api#1" and not report["get_error"] and not report["review_error"]
+    names = {n.upper() for n in report["env_names"]}
+    assert "CONCLAVE_SECRET_DEMO" not in names and "OPENAI_API_KEY" not in names
+    assert not any(n.startswith("CONCLAVE_") for n in names) and "FAKE_CODEX_REPORT" in names
     assert report["tools"] == ["conclave_board_get", "conclave_board_list", "conclave_board_review"]
     assert report["argv"][0] == "exec" and report["argv"][-1] == "-"
     assert "--ignore-user-config" in report["seen"]["flags"] and "read-only" in report["seen"]["flags"]

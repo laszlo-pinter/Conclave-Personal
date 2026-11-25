@@ -125,6 +125,52 @@ def test_codex_from_the_newest_vscode_extension(tmp_path, monkeypatch):
     assert command.find_codex({"codex_exe": "D:/eigen/codex.exe"}) == "D:/eigen/codex.exe"
 
 
+def test_codex_gets_only_a_clean_environment():
+    """Review V2: Codex hat eine Shell; keine CONCLAVE_*-Variablen, keine Schluessel, nur Pfade und System."""
+    environ = {"PATH": "C:\\bin", "SystemRoot": "C:\\Windows", "APPDATA": "C:\\A", "CODEX_HOME": "C:\\c",
+               "CONCLAVE_DB_DSN": "host=x", "CONCLAVE_API_KEY": "cvh_x", "OPENAI_API_KEY": "sk-x",
+               "ANTHROPIC_API_KEY": "sk-ant", "CLAUDE_CODE_OAUTH_TOKEN": "t", "GITHUB_TOKEN": "g", "EIGENE": "e"}
+    env = command.codex_env({}, environ)
+    assert env == {"PATH": "C:\\bin", "SystemRoot": "C:\\Windows", "APPDATA": "C:\\A", "CODEX_HOME": "C:\\c"}
+    assert command.codex_env({"codex_pass_env": ["eigene"]}, environ)["EIGENE"] == "e"      # ausdruecklich
+
+
+def test_the_clean_environment_reaches_the_child(tmp_path, monkeypatch):
+    seen = tmp_path / "env.json"
+    echo = tmp_path / "echo.py"
+    echo.write_text(f"import json, os; open({str(seen)!r}, 'w').write(json.dumps(sorted(os.environ)))",
+                    encoding="utf-8")
+    monkeypatch.setenv("CONCLAVE_SECRET_DEMO", "x")
+    monkeypatch.setenv("OPENAI_API_KEY", "y")
+    outcome = command.run_claude([sys.executable, str(echo)], str(tmp_path), 1, lambda m: None, "api#1",
+                                 env=command.codex_env({}))
+    names = {n.upper() for n in json.loads(seen.read_text())}
+    assert outcome == "done" and "PATH" in names
+    assert "CONCLAVE_SECRET_DEMO" not in names and "OPENAI_API_KEY" not in names
+
+
+def test_codex_under_the_own_user_is_warned_about(tmp_path, monkeypatch):
+    """Review V3: Darf das Konto das Mensch- oder Agent-Token lesen, warnen Log und Status (nur Zugriffsrecht)."""
+    from conclave.reviewer import status
+    api, agent = tmp_path / "api.token", tmp_path / "agent.token"
+    monkeypatch.setenv("CONCLAVE_API_TOKEN_FILE", str(api))
+    monkeypatch.setenv("CONCLAVE_AGENT_TOKEN_FILE", str(agent))
+    assert config.codex_account_warning() is None                                   # keine Dateien
+    agent.write_text("cva_x\n", encoding="utf-8")
+    warning = config.codex_account_warning()
+    assert "agent.token" in warning and "api.token" not in warning and "eigenen Windows-Konto" in warning
+    info = status.collect({"agent": "codex", "codex_exe": sys.executable}, tmp_path)
+    assert f"WARNUNG: {warning}" in status.format_status(info)
+    assert "account_warning" not in status.collect({"agent": "claude", "claude_exe": sys.executable}, tmp_path,
+                                                    check_claude=False)
+
+
+def test_codex_pass_env_must_be_a_list_of_names(tmp_path):
+    with pytest.raises(config.ConfigError, match="codex_pass_env"):
+        _load(tmp_path, 'codex_pass_env = "FOO"')
+    assert _load(tmp_path, 'codex_pass_env = ["FOO"]')["codex_pass_env"] == ["FOO"]
+
+
 def test_status_names_codex_instead_of_claude(tmp_path):
     from conclave.reviewer import status
     # Ein beliebiges Programm mit --version genuegt fuer die Anzeige; hier das Python der Tests

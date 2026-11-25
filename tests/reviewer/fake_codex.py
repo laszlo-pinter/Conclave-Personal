@@ -62,7 +62,7 @@ def main() -> int:
     args = sys.argv[1:]
     ask = sys.stdin.read() if args and args[-1] == "-" else ""
     seen = parse(args)
-    report = {"argv": args, "seen": seen, "ask": ask, "cwd_now": os.getcwd()}
+    report = {"argv": args, "seen": seen, "ask": ask, "cwd_now": os.getcwd(), "env_names": sorted(os.environ)}
     report.update(asyncio.run(review(seen, ask)))
     with open(os.environ["FAKE_CODEX_REPORT"], "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False)

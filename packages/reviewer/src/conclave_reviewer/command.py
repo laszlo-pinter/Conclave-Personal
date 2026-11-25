@@ -205,6 +205,24 @@ def codex_command(cfg: dict, *, worktree: str, servers: dict) -> list[str]:
     return cmd
 
 
+# Was Codex und seine MCP-Server zum Laufen brauchen; keine Schluessel, keine CONCLAVE_*-Variablen (Review V2):
+# Codex hat eine Shell und koennte seine Umgebung auslesen. Mehr nur ueber ``codex_pass_env``.
+CODEX_ENV = ("PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "TEMP", "TMP", "USERPROFILE",
+             "HOMEDRIVE", "HOMEPATH", "HOME", "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "PROGRAMFILES",
+             "PROGRAMFILES(X86)", "PROGRAMW6432", "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)", "USERNAME",
+             "USERDOMAIN", "COMPUTERNAME", "OS", "PROCESSOR_ARCHITECTURE", "NUMBER_OF_PROCESSORS", "USER", "LOGNAME",
+             "LANG", "LC_ALL", "LC_CTYPE", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME",
+             "XDG_RUNTIME_DIR", "CODEX_HOME", "PYTHONUSERBASE", "PYTHONPATH", "PYTHONIOENCODING", "PYTHONUTF8",
+             "VIRTUAL_ENV")
+
+
+def codex_env(cfg: dict, environ=None) -> dict:
+    """Die Umgebung fuer ``codex exec``: nur ``CODEX_ENV`` und was ``codex_pass_env`` ausdruecklich nennt."""
+    environ = os.environ if environ is None else environ
+    keep = {name.upper() for name in (*CODEX_ENV, *(cfg.get("codex_pass_env") or ()))}
+    return {name: value for name, value in environ.items() if name.upper() in keep}
+
+
 def codex_input(prompt_text: str, ask: str) -> str:
     """System-Prompt, Hinweis zur Umgebung und Auftrag in einem Text fuer stdin (Codex hat keine Prompt-Datei)."""
     return f"{prompt_text.rstrip()}\n\n{CODEX_NOTE}\n\n---\n\n{ask}"
@@ -267,9 +285,10 @@ def _windows_job():
     return _JOB
 
 
-def start_claude(cmd: list[str], cwd: str, with_input: bool = False) -> subprocess.Popen:
-    """claude so starten, dass es den Reviewer nicht ueberlebt. ``with_input``: stdin als Pipe fuer den Auftrag."""
-    proc = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.PIPE if with_input else subprocess.DEVNULL,
+def start_claude(cmd: list[str], cwd: str, with_input: bool = False, env: dict | None = None) -> subprocess.Popen:
+    """claude so starten, dass es den Reviewer nicht ueberlebt. ``with_input``: stdin als Pipe fuer den Auftrag.
+    ``env``: eine eigene Umgebung (codex, Review V2); ``None`` erbt die des Reviewers."""
+    proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdin=subprocess.PIPE if with_input else subprocess.DEVNULL,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             text=True, encoding="utf-8", errors="replace",
                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
@@ -339,7 +358,7 @@ def _wait_for(proc: subprocess.Popen, timeout: float, input_text: str | None = N
 
 
 def run_claude(cmd: list[str], cwd: str, timeout_minutes: float, log, key: str, on_start=None,
-               quiet: bool = False, input_text: str | None = None) -> str:
+               quiet: bool = False, input_text: str | None = None, env: dict | None = None) -> str:
     """Startet den Reviewer; liefert "done", "failed" oder "timeout". ``on_start(proc)`` meldet den Prozess.
 
     ``quiet`` (entfernter Server, TR3): die Ausgabe von claude nicht ins Log, sie kann Text aus dem Review und
@@ -347,7 +366,12 @@ def run_claude(cmd: list[str], cwd: str, timeout_minutes: float, log, key: str, 
     ``input_text``: der Auftrag (``review_ask``), ueber stdin statt auf der Kommandozeile (R1)."""
     started = time.monotonic()
     # ohne Auftrag die alte Form des Aufrufs (Tests ersetzen start_claude mit genau zwei Argumenten)
-    proc = start_claude(cmd, cwd, with_input=True) if input_text is not None else start_claude(cmd, cwd)
+    if env is not None:
+        proc = start_claude(cmd, cwd, with_input=input_text is not None, env=env)
+    elif input_text is not None:
+        proc = start_claude(cmd, cwd, with_input=True)
+    else:
+        proc = start_claude(cmd, cwd)
     if on_start is not None:
         on_start(proc)
     try:

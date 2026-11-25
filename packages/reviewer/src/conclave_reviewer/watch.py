@@ -217,10 +217,12 @@ class Reviewer:
 
     def run_claude(self, key: str, cmd: list[str], cwd: str, ask: str | None = None) -> str:
         """``ask``: der Auftrag, ueber stdin (R1)."""
+        # codex hat eine Shell: nur eine bereinigte Umgebung (conclave#152, Review V2)
+        env = command.codex_env(self.cfg) if self.cfg.get("agent") == "codex" else None
         try:
             return command.run_claude(cmd, cwd, self.cfg["review_timeout_minutes"], self.log, key,
                                       on_start=lambda proc: setattr(self, "claude_proc", proc),
-                                      quiet=self.cfg.get("server") == "team", input_text=ask)
+                                      quiet=self.cfg.get("server") == "team", input_text=ask, env=env)
         finally:
             self.claude_proc = None
 
@@ -498,6 +500,11 @@ class Reviewer:
         self.log(f"watching {BOARDS['conclave']['name']} {self.cfg['conclave_url']} for tickets moved to "
                  f"{self.cfg['review_status']!r}" + (" (dry run)" if dry_run else ""))
         state, reachable = self.load_state(), True
+        if self.cfg.get("agent") == "codex":
+            from conclave_reviewer.config import codex_account_warning
+            warning = codex_account_warning()
+            if warning:
+                self.log(f"WARNUNG: {warning}")
         self.send_heartbeat()
         stop = None if once else self.start_heartbeat()
         try:

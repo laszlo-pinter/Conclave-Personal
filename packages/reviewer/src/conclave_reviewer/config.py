@@ -55,7 +55,7 @@ from pathlib import Path
 PLACEHOLDERS = ("{get}", "{comment}", "{board}")
 DEFAULTS = {"enabled": True, "poll_seconds": 30, "max_reviews_per_hour": 6, "review_timeout_minutes": 30,
             "claude_exe": "", "prompt_file": "", "author": "CD · auto-review", "review_status": "review",
-            "agent": "claude", "codex_exe": "", "codex_model": ""}
+            "agent": "claude", "codex_exe": "", "codex_model": "", "codex_pass_env": []}
 # Wer das Review schreibt (conclave#152): claude (Standard) oder codex exec. Codex hat immer eine Shell,
 # deren read-only-Sandbox alles liest, was das Konto lesen darf (conclave#150/#151): nur unter einem eigenen Konto.
 AGENTS = ("claude", "codex")
@@ -96,6 +96,24 @@ def default_token_file() -> Path:
         return Path(override).expanduser()
     from conclave_reviewer.paths import conclave_config_dir
     return conclave_config_dir() / "reviewer.token"
+
+
+def codex_account_warning() -> str | None:
+    """Laeuft der Reviewer mit ``agent = "codex"`` unter einem Konto, das das Mensch- oder Agent-Token lesen darf
+    (also unter dem eigenen Benutzer), ein Hinweis (conclave#152, Review V3). Geprueft wird nur das Zugriffsrecht,
+    gelesen wird nichts."""
+    from conclave_reviewer.paths import conclave_config_dir
+    names = {"CONCLAVE_API_TOKEN_FILE": "api.token", "CONCLAVE_AGENT_TOKEN_FILE": "agent.token"}
+    readable = []
+    for variable, name in names.items():
+        override = os.environ.get(variable, "").strip()
+        path = Path(override).expanduser() if override else conclave_config_dir() / name
+        if path.is_file() and os.access(path, os.R_OK):
+            readable.append(name)
+    if not readable:
+        return None
+    return (f"codex laeuft unter einem Konto, das {' und '.join(readable)} lesen darf. Codex hat eine Shell; "
+            "betreibe ihn unter einem eigenen Windows-Konto ohne Zugangsdaten (siehe konfiguration.md, Reviewer).")
 
 
 def default_mcp_exe(program: str = "conclave-mcp") -> str:
@@ -205,6 +223,8 @@ def load(path: Path | None = None) -> dict:
     for name in ("codex_exe", "codex_model"):
         if not isinstance(cfg[name], str):
             raise ConfigError(f"[reviewer] {name}: Text erwartet.")
+    if not isinstance(cfg["codex_pass_env"], list) or not all(isinstance(v, str) for v in cfg["codex_pass_env"]):
+        raise ConfigError("[reviewer] codex_pass_env: Liste von Variablennamen erwartet.")
     cfg["projects"] = _projects(section.get("projects"))
     cfg["board"] = "conclave"
     _server_settings(cfg, section, path)

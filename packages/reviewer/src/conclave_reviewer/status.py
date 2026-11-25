@@ -82,6 +82,9 @@ def collect(cfg: dict, data_dir: Path, *, check_claude: bool = True) -> dict:
             "current_task": status.get("current_task") if running else None,
             "last_result": status.get("last_result"),
             "reviews_last_hour": len([t for t in state.get("reviews", []) if t > hour_ago])}
+    if cfg.get("agent") == "codex":
+        from conclave_reviewer.config import codex_account_warning
+        info["account_warning"] = codex_account_warning()          # Review V3
     if check_claude and cfg.get("agent") == "codex":
         info["codex_version"], info["codex_warning"] = codex_version(cfg)
     elif check_claude:
@@ -102,6 +105,8 @@ def format_status(info: dict) -> str:
             lines.append(f"{agent}: {info[f'{agent}_version'] or '–'}")
             if info.get(f"{agent}_warning"):
                 lines.append(f"WARNUNG: {info[f'{agent}_warning']}")
+    if info.get("account_warning"):
+        lines.append(f"WARNUNG: {info['account_warning']}")
     lines.append(f"Datenordner: {info['data_dir']}")
     return "\n".join(lines)
 
