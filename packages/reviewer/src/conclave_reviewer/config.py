@@ -6,6 +6,9 @@
     max_reviews_per_hour = 6
     review_timeout_minutes = 30
     claude_exe = ""            # leer: VS-Code-Erweiterung, sonst PATH
+    agent = "claude"           # oder "codex" (codex exec; nur unter einem eigenen Konto, conclave#152)
+    codex_exe = ""             # leer: VS-Code-Erweiterung von OpenAI, sonst PATH
+    codex_model = ""           # leer: Standardmodell von Codex
     prompt_file = ""           # leer: die mitgelieferte Fassung; relativ zum Ordner dieser config.toml
     [reviewer.projects]
     conclave = ["C:\\...\\conclave", "C:\\...\\conclave-plugins"]
@@ -51,7 +54,11 @@ from pathlib import Path
 
 PLACEHOLDERS = ("{get}", "{comment}", "{board}")
 DEFAULTS = {"enabled": True, "poll_seconds": 30, "max_reviews_per_hour": 6, "review_timeout_minutes": 30,
-            "claude_exe": "", "prompt_file": "", "author": "CD · auto-review", "review_status": "review"}
+            "claude_exe": "", "prompt_file": "", "author": "CD · auto-review", "review_status": "review",
+            "agent": "claude", "codex_exe": "", "codex_model": ""}
+# Wer das Review schreibt (conclave#152): claude (Standard) oder codex exec. Codex hat immer eine Shell,
+# deren read-only-Sandbox alles liest, was das Konto lesen darf (conclave#150/#151): nur unter einem eigenen Konto.
+AGENTS = ("claude", "codex")
 NUMBERS = ("poll_seconds", "max_reviews_per_hour", "review_timeout_minutes")
 # Was import-config aus der alten config.toml uebernimmt (Projekte, Grenzwerte, claude)
 IMPORTED = ("poll_seconds", "max_reviews_per_hour", "review_timeout_minutes", "claude_exe", "author")
@@ -193,6 +200,11 @@ def load(path: Path | None = None) -> dict:
         value = cfg[name]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
             raise ConfigError(f"[reviewer] {name}: positive Zahl erwartet.")
+    if cfg["agent"] not in AGENTS:
+        raise ConfigError(f'[reviewer] agent: einer von {", ".join(AGENTS)}.')
+    for name in ("codex_exe", "codex_model"):
+        if not isinstance(cfg[name], str):
+            raise ConfigError(f"[reviewer] {name}: Text erwartet.")
     cfg["projects"] = _projects(section.get("projects"))
     cfg["board"] = "conclave"
     _server_settings(cfg, section, path)
@@ -201,6 +213,7 @@ def load(path: Path | None = None) -> dict:
     if not cfg.get("reviewer_token_credential"):
         cfg.setdefault("reviewer_token_file", str(default_token_file()))
     cfg["claude_exe"] = cfg["claude_exe"] or None
+    cfg["codex_exe"] = cfg["codex_exe"] or None
     cfg["_config_path"] = str(path)
     return cfg
 

@@ -13,6 +13,7 @@ Absicherung (durch Tests festgeschrieben, tests/reviewer/test_hardening.py):
   ``claude -p`` ueber stdin (ohne den Titel, er ist fremder Text; der Reviewer liest das Ticket selbst), den
   System-Prompt ueber ``--append-system-prompt-file``. Ist ``claude`` ein ``.cmd``/``.bat`` (npm), schnitte
   ``cmd.exe`` sonst am ersten Zeilenumbruch ab, und alle Schutzschalter dahinter fehlten.
+- Wahlweise ``codex exec`` statt claude (``agent = "codex"``, conclave#152), siehe ``codex_command``.
 """
 
 from __future__ import annotations
@@ -145,6 +146,68 @@ def review_command(cfg: dict, *, mcp_config: Path, prompt_file: Path, extra=()) 
     ]
     check_command_line(cmd)
     return cmd
+
+
+# ── codex exec als zweites Backend (conclave#152) ───────────────────────────
+#
+# Codex hat immer eine Shell. ``-s read-only`` verbietet Schreiben, nicht Lesen: Die Sandbox liest alles, was
+# das Konto lesen darf, und localhost ist erreichbar (conclave#150/#151). Conclaves eigene Token-Dateien
+# schuetzen ihre Dateirechte; alles Weitere nur ein eigenes Konto ohne Zugangsdaten. ``--ignore-user-config``:
+# keine Einstellungen und MCP-Server aus ~/.codex (die Anmeldung gilt weiter).
+
+CODEX_NOTE = ("Hinweis zu deiner Umgebung: Du laeufst als codex exec in einer schreibgeschuetzten Sandbox. "
+              "Abweichend vom Text oben hast du eine Shell; nutze sie nur zum Lesen von Dateien und fuer git im "
+              "Arbeitsverzeichnis, nichts ausserhalb davon und kein Netz. Das Ergebnis setzt du wie beschrieben ueber "
+              "das Board-Tool.")
+
+
+def find_codex(cfg: dict) -> str:
+    if cfg.get("codex_exe"):
+        return cfg["codex_exe"]
+    # Die VS-Code-Erweiterung von OpenAI bringt codex.exe mit; die neueste installierte Version nehmen.
+    ext = Path.home() / ".vscode" / "extensions"
+    found = []
+    for exe in ext.glob("openai.chatgpt-*/bin/*/codex.exe"):
+        m = re.search(r"chatgpt-(\d+)\.(\d+)\.(\d+)", str(exe))
+        if m:
+            found.append((tuple(map(int, m.groups())), exe))
+    if found:
+        return str(max(found)[1])
+    on_path = shutil.which("codex")
+    if on_path:
+        return on_path
+    raise SystemExit("codex nicht gefunden; codex_exe in config.toml setzen")
+
+
+def _toml(value) -> str:
+    """Ein Wert fuer ``-c key=value``: JSON-Strings (ASCII) sind gueltige TOML-Basic-Strings."""
+    if isinstance(value, dict):
+        return "{" + ", ".join(f"{json.dumps(k)} = {_toml(v)}" for k, v in value.items()) + "}"
+    if isinstance(value, list):
+        return "[" + ", ".join(_toml(v) for v in value) + "]"
+    return json.dumps(value)
+
+
+def codex_command(cfg: dict, *, worktree: str, servers: dict) -> list[str]:
+    """Die Kommandozeile von ``codex exec``: nur feste Schalter, Pfade und die MCP-Server, nie Text aus einem
+    Ticket (wie R1). Auftrag und System-Prompt kommen ueber stdin (``codex_input``)."""
+    cmd = [find_codex(cfg), "exec", "--ignore-user-config", "--ephemeral", "--color", "never",
+           "-s", "read-only", "-c", 'approval_policy="never"', "-C", worktree]
+    if cfg.get("codex_model"):
+        cmd += ["-m", cfg["codex_model"]]
+    for name, server in servers["mcpServers"].items():
+        cmd += ["-c", f"mcp_servers.{name}.command={_toml(server['command'])}",
+                "-c", f"mcp_servers.{name}.args={_toml(list(server.get('args', [])))}"]
+        if server.get("env"):
+            cmd += ["-c", f"mcp_servers.{name}.env={_toml(server['env'])}"]
+    cmd.append("-")                                     # Auftrag aus stdin
+    check_command_line(cmd)
+    return cmd
+
+
+def codex_input(prompt_text: str, ask: str) -> str:
+    """System-Prompt, Hinweis zur Umgebung und Auftrag in einem Text fuer stdin (Codex hat keine Prompt-Datei)."""
+    return f"{prompt_text.rstrip()}\n\n{CODEX_NOTE}\n\n---\n\n{ask}"
 
 
 def check_command_line(cmd: list[str]) -> None:
