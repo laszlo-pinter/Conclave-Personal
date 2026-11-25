@@ -121,7 +121,7 @@ Alles andere, auch jedes `DELETE` und neue Routen, ergibt `403`
 | `PUT` | `/board/v1/projects/<slug>` | Projekt umbenennen (nur Mensch). |
 | `DELETE` | `/board/v1/projects/<slug>` | Projekt samt Tickets löschen (nur Mensch). Mit `only_empty=true` nur ein Projekt ohne Tickets (auch ohne erledigte) und ohne Vorhaben, sonst `409 ProjectNotEmpty`; Prüfung und Löschen in einem Schritt. So löscht die Board-Ansicht. |
 | `GET` | `/board/v1/tasks` | Tickets in Board-Reihenfolge; Filter `project`, `status` (mehrfach), `include_done`. |
-| `POST` | `/board/v1/tasks` | Ticket anlegen; neue Tickets landen in der ersten Spalte. Optional `initiative`: Kurzname eines vorhandenen Vorhabens. |
+| `POST` | `/board/v1/tasks` | Ticket anlegen; neue Tickets landen in der ersten Spalte. Optional `initiative`: Kurzname eines vorhandenen Vorhabens. Optional `status` (nur Menschen): direkt in einer späteren Spalte, in der letzten nur mit Freigabe-Recht (`403`); eine Erweiterung kann weitere Regeln prüfen. |
 | `GET` | `/board/v1/search` | Suche in Titel, Tags, Beschreibung und Kommentaren (`q`, `project`, `include_done`). |
 | `POST` | `/board/v1/next` | Oberstes freies Ticket der ersten Spalte übernehmen (atomar); `task` als `projekt#n` oder `projekt/vorhaben-n`. |
 | `GET` | `/board/v1/projects/<slug>/tasks/<int:number>` | Ein Ticket mit Kommentaren; `can_approve` sagt, ob dieser Zugang im Projekt das Freigabe-Recht hat. |

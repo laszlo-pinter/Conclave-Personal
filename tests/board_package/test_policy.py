@@ -53,7 +53,7 @@ class RolePolicy(BoardPolicy):
         return principal.actor_id
 
     def lock_key(self, principal, task, new_status):
-        self.locks.append((task.ref, new_status))
+        self.locks.append((task.ref if task.number else None, new_status))   # beim Anlegen noch ohne Nummer
         return f"assignee:{task.assignee}"
 
     def check_status_change(self, service, principal, task, new_status):
@@ -393,3 +393,68 @@ def test_next_task_asks_for_the_groups_once_and_only_for_candidates(board):
     scoped_ben = Principal("agent", actor_id="ben", projects=frozenset({"api"}))
     assert board.next_task(scoped_ben).title == "hinten 1"
     assert board.policy.batches == [["hinten 1", "frei"]]
+
+
+# ── Anlegen direkt in einer spaeteren Spalte (conclave#159) ─────────────────
+
+class CreateRules(RolePolicy):
+    """Prueft beim Anlegen wie beim Statuswechsel und haelt fest, unter welcher Sperre."""
+
+    def __init__(self):
+        super().__init__()
+        self.created = []
+
+    def check_create(self, service, principal, task):
+        self.created.append((task.status, task.title, list(self.locks)))
+        if task.status == "review" and task.title == "verboten":
+            raise BoardError("Regel verletzt", 409, "RuleViolation")
+
+
+@pytest.mark.parametrize("status", ["todo", "doing", "review", "done"])
+def test_create_in_a_column_by_role(board, status):
+    """viewer nie, member bis review, approver ueberall, Agenten nur in der ersten Spalte."""
+    allowed = {"vera": False, "ben": status != "done", "anna": True,
+               "ben-agent": status == "todo", "anna-agent": status == "todo"}
+    who = {"vera": VERA, "ben": BEN, "anna": ANNA, "ben-agent": BEN_AGENT, "anna-agent": ANNA_AGENT}
+    for name, principal in who.items():
+        if allowed[name]:
+            assert board.create_task(principal, "api", f"{name} {status}", status=status).status == status
+        else:
+            with pytest.raises(BoardError) as err:
+                board.create_task(principal, "api", f"{name} {status}", status=status)
+            assert err.value.status == 403, name
+    assert len(board.list_tasks("api", include_done=True)) == sum(allowed.values())
+
+
+def test_create_in_done_records_its_own_audit_entry(board):
+    board.create_task(ANNA, "api", "Chat: Vorhaben", status="done", tags=["chat"])
+    board.create_task(ANNA, "api", "normal")
+    board.create_task(ANNA, "api", "in Arbeit", status="doing")
+    assert [e for e in board.policy.events if e[0] == "create_done"] == [("create_done", "anna", "api", "api#1")]
+    assert not [e for e in board.policy.events if e[0] == "approval"]       # kein Statuswechsel
+
+
+def test_check_create_runs_only_after_the_first_column_and_under_the_lock(tmp_path):
+    conn = ThreadLocalConnection(tmp_path / "board.db")
+    run_board_migrations(conn)
+    policy = CreateRules()
+    board = BoardService(SQLiteBoardRepository(conn, autocommit=True), policy=policy)
+    board.create_project(ANNA, "api", "API")
+    board.create_task(BEN, "api", "neu")
+    assert policy.created == [] and policy.locks == []
+    board.create_task(BEN, "api", "gleich im Review", status="review")
+    assert policy.created == [("review", "gleich im Review", [(None, "review")])]
+    with pytest.raises(BoardError, match="Regel verletzt"):
+        board.create_task(BEN, "api", "verboten", status="review")
+    assert [t.title for t in board.list_tasks("api")] == ["neu", "gleich im Review"]   # nichts gespeichert
+
+
+def test_personal_creates_in_any_column_as_before(tmp_path):
+    conn = ThreadLocalConnection(tmp_path / "board.db")
+    run_board_migrations(conn)
+    board = BoardService(SQLiteBoardRepository(conn, autocommit=True))
+    board.create_project(HUMAN_PRINCIPAL, "api", "API")
+    for status in ("todo", "doing", "review", "done"):
+        assert board.create_task(HUMAN_PRINCIPAL, "api", status, status=status).status == status
+    with pytest.raises(BoardError, match="nur in"):
+        board.create_task(Principal("agent"), "api", "x", status="done")

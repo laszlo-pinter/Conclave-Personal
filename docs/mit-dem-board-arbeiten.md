@@ -55,7 +55,8 @@ Wer schreibt, ergibt sich aus dem Token, nicht aus einem Feld der Anfrage:
   Herkunft gespeichert, so lässt sich etwa erkennen, ob jemand die
   Abnahmekriterien abgeschwächt hat. Bearbeitete und gelöschte Kommentare
   stehen ebenfalls im Verlauf. Jedes Ticket zeigt, wer es angelegt hat
-  (`created_by`); Agenten legen Tickets nur in der ersten Spalte an.
+  (`created_by`); Agenten legen Tickets nur in der ersten Spalte an. Direkt in
+  der letzten Spalte anlegen darf nur, wer das Freigabe-Recht hat.
 - **Projekt-Verlauf:** Anlegen, Umbenennen und gelöschte Tickets eines Projekts
   (`GET /board/v1/projects/<slug>/history`).
 - **Gleichzeitig ändern:** Wer beim Ändern die gelesene `version` mitgibt,
