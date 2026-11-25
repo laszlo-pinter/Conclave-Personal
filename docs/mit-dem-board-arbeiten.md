@@ -234,6 +234,11 @@ Einen anderen Reviewer kann man genauso anschließen: Er braucht das
 Reviewer-Token (`conclave token show --reviewer`), `conclave-mcp --reviewer`,
 Lesezugriff auf den Code und keine Shell.
 
+Statt `claude` kann der eingebaute Reviewer auch `codex exec` starten
+(`agent = "codex"`, experimentell). Codex hat immer eine Shell, die nur das
+Schreiben verbietet. Deshalb gehört er unter ein eigenes Windows-Konto ohne
+Zugangsdaten, siehe [Konfiguration](referenz/konfiguration.md#reviewer).
+
 **Review-Ablauf:**
 
 1. Kommt ein Ticket nach `review`, steht sein Review-Status auf `none`.

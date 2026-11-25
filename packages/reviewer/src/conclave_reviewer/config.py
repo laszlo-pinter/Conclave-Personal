@@ -6,6 +6,9 @@
     max_reviews_per_hour = 6
     review_timeout_minutes = 30
     claude_exe = ""            # leer: VS-Code-Erweiterung, sonst PATH
+    agent = "claude"           # oder "codex" (codex exec; nur unter einem eigenen Konto, conclave#152)
+    codex_exe = ""             # leer: VS-Code-Erweiterung von OpenAI, sonst PATH
+    codex_model = ""           # leer: Standardmodell von Codex
     prompt_file = ""           # leer: die mitgelieferte Fassung; relativ zum Ordner dieser config.toml
     [reviewer.projects]
     conclave = ["C:\\...\\conclave", "C:\\...\\conclave-plugins"]
@@ -51,7 +54,11 @@ from pathlib import Path
 
 PLACEHOLDERS = ("{get}", "{comment}", "{board}")
 DEFAULTS = {"enabled": True, "poll_seconds": 30, "max_reviews_per_hour": 6, "review_timeout_minutes": 30,
-            "claude_exe": "", "prompt_file": "", "author": "CD · auto-review", "review_status": "review"}
+            "claude_exe": "", "prompt_file": "", "author": "CD · auto-review", "review_status": "review",
+            "agent": "claude", "codex_exe": "", "codex_model": "", "codex_pass_env": []}
+# Wer das Review schreibt (conclave#152): claude (Standard) oder codex exec. Codex hat immer eine Shell,
+# deren read-only-Sandbox alles liest, was das Konto lesen darf (conclave#150/#151): nur unter einem eigenen Konto.
+AGENTS = ("claude", "codex")
 NUMBERS = ("poll_seconds", "max_reviews_per_hour", "review_timeout_minutes")
 # Was import-config aus der alten config.toml uebernimmt (Projekte, Grenzwerte, claude)
 IMPORTED = ("poll_seconds", "max_reviews_per_hour", "review_timeout_minutes", "claude_exe", "author")
@@ -89,6 +96,34 @@ def default_token_file() -> Path:
         return Path(override).expanduser()
     from conclave_reviewer.paths import conclave_config_dir
     return conclave_config_dir() / "reviewer.token"
+
+
+def _openable(path: Path) -> bool:
+    """Darf dieses Konto die Datei lesen? Oeffnen und schliessen, ohne etwas zu lesen."""
+    try:
+        open(path, "rb").close()      # noqa: SIM115 - nur das Recht pruefen
+    except OSError:                   # PermissionError und andere: nicht lesbar
+        return False
+    return True
+
+
+def codex_account_warning() -> str | None:
+    """Laeuft der Reviewer mit ``agent = "codex"`` unter einem Konto, das das Mensch- oder Agent-Token lesen darf
+    (also unter dem eigenen Benutzer), ein Hinweis (conclave#152, Review V3). Die Datei wird zum Lesen geoeffnet
+    und sofort geschlossen, gelesen wird nichts. ``os.access`` genuegt nicht: Unter Windows beachtet es keine
+    Rechtelisten (Review V1)."""
+    from conclave_reviewer.paths import conclave_config_dir
+    names = {"CONCLAVE_API_TOKEN_FILE": "api.token", "CONCLAVE_AGENT_TOKEN_FILE": "agent.token"}
+    readable = []
+    for variable, name in names.items():
+        override = os.environ.get(variable, "").strip()
+        path = Path(override).expanduser() if override else conclave_config_dir() / name
+        if path.is_file() and _openable(path):
+            readable.append(name)
+    if not readable:
+        return None
+    return (f"codex laeuft unter einem Konto, das {' und '.join(readable)} lesen darf. Codex hat eine Shell; "
+            "betreibe ihn unter einem eigenen Windows-Konto ohne Zugangsdaten (siehe konfiguration.md, Reviewer).")
 
 
 def default_mcp_exe(program: str = "conclave-mcp") -> str:
@@ -193,6 +228,13 @@ def load(path: Path | None = None) -> dict:
         value = cfg[name]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
             raise ConfigError(f"[reviewer] {name}: positive Zahl erwartet.")
+    if cfg["agent"] not in AGENTS:
+        raise ConfigError(f'[reviewer] agent: einer von {", ".join(AGENTS)}.')
+    for name in ("codex_exe", "codex_model"):
+        if not isinstance(cfg[name], str):
+            raise ConfigError(f"[reviewer] {name}: Text erwartet.")
+    if not isinstance(cfg["codex_pass_env"], list) or not all(isinstance(v, str) for v in cfg["codex_pass_env"]):
+        raise ConfigError("[reviewer] codex_pass_env: Liste von Variablennamen erwartet.")
     cfg["projects"] = _projects(section.get("projects"))
     cfg["board"] = "conclave"
     _server_settings(cfg, section, path)
@@ -201,6 +243,7 @@ def load(path: Path | None = None) -> dict:
     if not cfg.get("reviewer_token_credential"):
         cfg.setdefault("reviewer_token_file", str(default_token_file()))
     cfg["claude_exe"] = cfg["claude_exe"] or None
+    cfg["codex_exe"] = cfg["codex_exe"] or None
     cfg["_config_path"] = str(path)
     return cfg
 

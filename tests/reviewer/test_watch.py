@@ -233,6 +233,67 @@ def test_check_skips_tickets_that_already_have_a_result(rv, cfg, monkeypatch):
     assert called == []
 
 
+# ── Codex als zweites Backend (conclave#152) ────────────────────────────────
+
+FAKE_CODEX = Path(__file__).with_name("fake_codex.py")
+
+
+def test_codex_reviews_through_the_reviewer_mcp_server(cfg, server, repo, tmp_path, monkeypatch):
+    """Ende zu Ende ohne Modell: Der Reviewer startet "codex" (ein Ersatz) im Worktree; der Ersatz startet den
+    Board-Server genau nach den -c-Angaben und setzt das Ergebnis mit dem Reviewer-Token."""
+    import os
+    import sys
+
+    from conclave.reviewer import command
+    path, head = repo
+    task = _ticket_in_review(server, head)
+    codex_cfg = {**cfg, "agent": "codex", "codex_exe": str(FAKE_CODEX), "conclave_mcp_exe": sys.executable,
+                 "conclave_mcp_args": ["-m", "conclave.mcp_server", "--reviewer"],
+                 "codex_pass_env": ["FAKE_CODEX_REPORT"]}                   # sonst bereinigt (Review V2)
+    monkeypatch.setenv("CONCLAVE_SECRET_DEMO", "darf-codex-nicht-sehen")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-darf-codex-nicht-sehen")
+    rv = Reviewer(codex_cfg, tmp_path / "data", base_dir=tmp_path / "base")
+    real_start = command.start_claude
+    monkeypatch.setattr(command, "start_claude", lambda cmd, cwd, **kw: real_start([sys.executable, *cmd], cwd, **kw))
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join(p for p in sys.path if p))
+    monkeypatch.setenv("FAKE_CODEX_REPORT", str(tmp_path / "fake-codex.json"))
+
+    rv.run_review(task, "api#1", str(path), dry_run=False)
+
+    report = json.loads((tmp_path / "fake-codex.json").read_text(encoding="utf-8"))
+    assert report["key"] == "api#1" and not report["get_error"] and not report["review_error"]
+    names = {n.upper() for n in report["env_names"]}
+    assert "CONCLAVE_SECRET_DEMO" not in names and "OPENAI_API_KEY" not in names
+    assert not any(n.startswith("CONCLAVE_") for n in names) and "FAKE_CODEX_REPORT" in names
+    assert report["tools"] == ["conclave_board_get", "conclave_board_list", "conclave_board_review"]
+    assert report["argv"][0] == "exec" and report["argv"][-1] == "-"
+    assert "--ignore-user-config" in report["seen"]["flags"] and "read-only" in report["seen"]["flags"]
+    assert Path(report["seen"]["cwd"]).parent == rv.worktrees and Path(report["cwd_now"]) == Path(report["seen"]["cwd"])
+    assert report["seen"]["servers"]["conclave"]["env"]["CONCLAVE_MCP_ROLE"] == "reviewer"
+    assert report["ask"].startswith(PROMPT.format(author="CD · auto-review", board="Conclave-Board",
+                                                  get="conclave_board_get", comment="conclave_board_review")[:30])
+    assert f"Reviewe das Ticket api#1." in report["ask"] and f"sicherheit @ {head[:7]}" in report["ask"]
+    assert not any("\n" in arg or arg == "T" for arg in report["argv"])
+    after = _task(server)
+    assert (after["status"], after["review"]["state"]) == ("review", "passed")
+    assert any(c["origin"] == "reviewer" and "fake codex" in c["body"] for c in after["comments"])
+    assert not any(rv.worktrees.iterdir())
+
+
+def test_codex_dry_run_logs_the_codex_command(cfg, server, repo, tmp_path):
+    path, head = repo
+    task = _ticket_in_review(server, head)
+    rv = Reviewer({**cfg, "agent": "codex", "codex_exe": "codex.exe"}, tmp_path / "data", base_dir=tmp_path / "base")
+    rv.run_review(task, "api#1", str(path), dry_run=True)
+    log = (rv.data_dir / "reviewer.log").read_text(encoding="utf-8")
+    line = next(l for l in log.splitlines() if "dry run, command" in l)
+    cmd = json.loads(line.split(": ", 2)[-1])
+    assert cmd[:2] == ["codex.exe", "exec"] and "read-only" in cmd and cmd[-1] == "-"
+    assert "dry run, stdin:" in log and "Reviewe das Ticket api#1." in log
+    assert "system prompt file" not in log                     # der Prompt steht bei Codex im stdin
+    assert _task(server)["review"]["state"] == "none"
+
+
 # ── Vom Menschen angefordert (conclave#145) ─────────────────────────────────
 
 def _requested(at="2026-11-24T10:00:00+00:00", state="requested"):

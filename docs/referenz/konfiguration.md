@@ -288,6 +288,10 @@ conclave = ["C:\\...\\conclave", "C:\\...\\conclave-plugins"]
 | `max_reviews_per_hour` | `6` | Höchstens so viele Reviews je Stunde, weitere warten |
 | `review_timeout_minutes` | `30` | Danach wird `claude` samt Kindprozessen beendet; das Review bleibt `running`, mit einem Hinweis am Ticket |
 | `claude_exe` | leer | Pfad zu `claude`; leer: die VS-Code-Erweiterung, sonst `PATH` |
+| `agent` | `claude` | Wer das Review schreibt: `claude` oder `codex` (`codex exec`, siehe unten) |
+| `codex_exe` | leer | Pfad zu `codex`; leer: die VS-Code-Erweiterung von OpenAI, sonst `PATH` |
+| `codex_model` | leer | Modell für `codex exec -m`; leer: das Standardmodell von Codex |
+| `codex_pass_env` | `[]` | Weitere Umgebungsvariablen für Codex. Ohne sie bekommt Codex nur Pfade und Systemvariablen, keine `CONCLAVE_*`-Variablen und keine Schlüssel; die Anmeldung von Codex liegt in `CODEX_HOME` |
 | `prompt_file` | leer | Eigene Fassung des Review-Auftrags, relativ zum Ordner der `config.toml`; leer: die mitgelieferte Fassung. Ohne die Platzhalter `{get}`, `{comment}` und `{board}` startet er nicht |
 | `author` | `CD · auto-review` | Name im Review-Kommentar |
 | `review_status` | `review` | Spalte, die er beobachtet |
@@ -295,6 +299,24 @@ conclave = ["C:\\...\\conclave", "C:\\...\\conclave-plugins"]
 | `conclave_mcp_exe` | `conclave-mcp` derselben Installation, sonst `PATH` | MCP-Server für das Review (mit `--reviewer`) |
 | `reviewer_token_file` | wie `CONCLAVE_REVIEWER_TOKEN_FILE` | Das Token liest nur der MCP-Server; der Start prüft nur, ob die Datei da ist |
 | `legacy_lock_file` | leer | Sperrdatei des früheren, getrennten Watchers: Hält er sie, startet der Reviewer nicht |
+
+**Codex statt Claude (`agent = "codex"`, experimentell).** Der Reviewer startet dann
+`codex exec --ignore-user-config --ephemeral -s read-only -c approval_policy="never" -C <Worktree> -`.
+Die MCP-Server (Board als Reviewer, git je Checkout) bekommt Codex über
+`-c mcp_servers.<name>.…`. System-Prompt und Auftrag kommen zusammen über stdin, und die
+Kommandozeile enthält wie bei `claude` keinen Text aus einem Ticket. Der wichtige Unterschied:
+Codex hat immer eine Shell. `-s read-only` verbietet nur das Schreiben, gelesen werden kann alles,
+was das Windows-Konto lesen darf, und localhost ist erreichbar. Conclaves eigene Token-Dateien und
+`secret.key` waren in einer Probe auch unter demselben Benutzer nicht lesbar. Das liegt aber an der
+Sandbox, die mit eingeschränkten Rechten läuft, die in deren Rechteliste fehlen. Ohne Sandbox, etwa
+bei einem Fehler oder in einer anderen Codex-Version, liegen sie für denselben Benutzer offen. Andere
+Zugangsdaten im Profil (z. B. `pgpass.conf`, `.ssh`) schützt auch die Sandbox nicht. Unter Windows
+lässt sich das Lesen mit Codex-Bordmitteln nur über das „elevated“-Backend einschränken, und das
+greift auf Systemebene ein (eigene Konten, Firewall-Regeln, Sperreinträge im Profil). Codex als
+Reviewer deshalb nur unter einem **eigenen Windows-Konto** ohne Zugangsdaten betreiben, nicht unter
+dem eigenen Benutzer. Der Reviewer gibt Codex nur eine bereinigte Umgebung (`codex_pass_env`). Sind
+für sein Konto das Mensch- oder das Agent-Token lesbar, warnen das Log beim Start und
+`conclave-reviewer status`.
 
 **Entfernter Board-Server (ab v0.9.0, optional).** Ohne diese Schlüssel ändert sich nichts. Mit
 `server = "team"` prüft der Reviewer gegen einen Board-Server mit Konten statt gegen Conclave Personal.

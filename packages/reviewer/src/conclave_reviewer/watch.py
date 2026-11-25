@@ -217,10 +217,12 @@ class Reviewer:
 
     def run_claude(self, key: str, cmd: list[str], cwd: str, ask: str | None = None) -> str:
         """``ask``: der Auftrag, ueber stdin (R1)."""
+        # codex hat eine Shell: nur eine bereinigte Umgebung (conclave#152, Review V2)
+        env = command.codex_env(self.cfg) if self.cfg.get("agent") == "codex" else None
         try:
             return command.run_claude(cmd, cwd, self.cfg["review_timeout_minutes"], self.log, key,
                                       on_start=lambda proc: setattr(self, "claude_proc", proc),
-                                      quiet=self.cfg.get("server") == "team", input_text=ask)
+                                      quiet=self.cfg.get("server") == "team", input_text=ask, env=env)
         finally:
             self.claude_proc = None
 
@@ -254,10 +256,18 @@ class Reviewer:
         from conclave_board.runtime.file_security import replace_private
         replace_private(self.prompt_file, self.prompt_text().encode("utf-8"))
 
-    def command_for(self, task: dict, key: str, checked: str, extra, missing) -> tuple[list[str], str]:
-        """(Kommandozeile, Auftrag fuer stdin). Der Titel des Tickets kommt in keins von beiden (R1)."""
+    def command_for(self, task: dict, key: str, checked: str, extra, missing, *, worktree: str | None = None,
+                    servers: dict | None = None) -> tuple[list[str], str]:
+        """(Kommandozeile, Auftrag fuer stdin). Der Titel des Tickets kommt in keins von beiden (R1).
+
+        ``agent = "codex"`` (conclave#152): ``codex exec`` im ``worktree`` mit den MCP-Server ``servers``; der
+        System-Prompt geht dann mit dem Auftrag ueber stdin."""
+        ask = command.review_ask(key, checked=checked, extra=extra, missing=missing)
+        if self.cfg.get("agent") == "codex":
+            cmd = command.codex_command(self.cfg, worktree=worktree, servers=servers)
+            return cmd, command.codex_input(self.prompt_text(), ask)
         cmd = command.review_command(self.cfg, mcp_config=self.mcp_config, prompt_file=self.prompt_file, extra=extra)
-        return cmd, command.review_ask(key, checked=checked, extra=extra, missing=missing)
+        return cmd, ask
 
     def run_review(self, task: dict, key: str, repo: str | list[str], dry_run: bool) -> None:
         """running -> Worktrees der genannten Commits -> der Reviewer setzt das Ergebnis.
@@ -324,7 +334,7 @@ class Reviewer:
             self.current_task = key
             self.write_status(current_task=key)
             outcome = "failed"
-            cmd, ask = self.command_for(task, key, checked, extra, missing)
+            cmd, ask = self.command_for(task, key, checked, extra, missing, worktree=str(worktree), servers=servers)
             outcome = self.run_claude(key, cmd, str(worktree), ask)
         finally:
             if self.current_task is not None:           # auch wenn claude gar nicht startete (W4-Review V1)
@@ -349,12 +359,16 @@ class Reviewer:
                                 for r, _c, _b in found[1:]]
         extra = [(refs.repo_name(r), f"_repos/{refs.repo_name(r)}", refs.git_server(i, r))
                  for i, (r, _c, _b) in enumerate(found[1:], start=1)]
-        cmd, ask = self.command_for(task, key, checked, extra, missing)
+        servers = command.mcp_servers(self.cfg, paths, self.token_file())
+        cmd, ask = self.command_for(task, key, checked, extra, missing, worktree=str(first), servers=servers)
         self.log(f"{key}: dry run, command (cwd {first}): {json.dumps(cmd, ensure_ascii=False)}")
-        self.log(f"{key}: dry run, stdin: {json.dumps(ask, ensure_ascii=False)}")
-        self.log(f"{key}: dry run, system prompt file {self.prompt_file}: {len(self.prompt_text())} Zeichen")
-        self.log(f"{key}: dry run, mcp config: "
-                 f"{json.dumps(command.mcp_servers(self.cfg, paths, self.token_file()), ensure_ascii=False)}")
+        if self.cfg.get("agent") == "codex":                # System-Prompt steht mit im stdin (conclave#152)
+            self.log(f"{key}: dry run, stdin: {len(ask)} Zeichen, Auftrag: "
+                     f"{json.dumps(ask.rsplit('---', 1)[-1].strip(), ensure_ascii=False)}")
+        else:
+            self.log(f"{key}: dry run, stdin: {json.dumps(ask, ensure_ascii=False)}")
+            self.log(f"{key}: dry run, system prompt file {self.prompt_file}: {len(self.prompt_text())} Zeichen")
+        self.log(f"{key}: dry run, mcp config: {json.dumps(servers, ensure_ascii=False)}")
 
     # ── Die Schleife ──────────────────────────────────────────────────────
 
@@ -486,6 +500,11 @@ class Reviewer:
         self.log(f"watching {BOARDS['conclave']['name']} {self.cfg['conclave_url']} for tickets moved to "
                  f"{self.cfg['review_status']!r}" + (" (dry run)" if dry_run else ""))
         state, reachable = self.load_state(), True
+        if self.cfg.get("agent") == "codex":
+            from conclave_reviewer.config import codex_account_warning
+            warning = codex_account_warning()
+            if warning:
+                self.log(f"WARNUNG: {warning}")
         self.send_heartbeat()
         stop = None if once else self.start_heartbeat()
         try:

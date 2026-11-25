@@ -43,6 +43,20 @@ def claude_version(cfg: dict) -> tuple[str | None, str | None]:
     return match.group(0), None
 
 
+def codex_version(cfg: dict) -> tuple[str | None, str | None]:
+    """(Version, Warnung) von ``codex --version`` (conclave#152); eine gepruefte Hauptversion gibt es noch nicht."""
+    from conclave_reviewer.command import find_codex
+    try:
+        exe = find_codex(cfg)
+        out = subprocess.run([exe, "--version"], capture_output=True, text=True, encoding="utf-8",
+                             errors="replace", timeout=60, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (SystemExit, OSError, subprocess.SubprocessError) as e:
+        return None, f"codex nicht gefunden oder nicht startbar ({e})"
+    text = (out.stdout or out.stderr).strip()
+    match = re.search(r"\d+\.\d+\.\d+\S*", text)
+    return (match.group(0), None) if match else (text or None, "Version von codex nicht erkannt")
+
+
 def is_running(lock_file: Path) -> bool:
     try:
         ProcessLock(lock_file).acquire().release()
@@ -68,7 +82,12 @@ def collect(cfg: dict, data_dir: Path, *, check_claude: bool = True) -> dict:
             "current_task": status.get("current_task") if running else None,
             "last_result": status.get("last_result"),
             "reviews_last_hour": len([t for t in state.get("reviews", []) if t > hour_ago])}
-    if check_claude:
+    if cfg.get("agent") == "codex":
+        from conclave_reviewer.config import codex_account_warning
+        info["account_warning"] = codex_account_warning()          # Review V3
+    if check_claude and cfg.get("agent") == "codex":
+        info["codex_version"], info["codex_warning"] = codex_version(cfg)
+    elif check_claude:
         info["claude_version"], info["claude_warning"] = claude_version(cfg)
     return info
 
@@ -81,10 +100,13 @@ def format_status(info: dict) -> str:
     last = info.get("last_result")
     lines.append(f"Letztes Ergebnis: {last['task']} {last['outcome']} ({last['at']})" if last else "Letztes Ergebnis: –")
     lines.append(f"Reviews in der letzten Stunde: {info['reviews_last_hour']}")
-    if "claude_version" in info:
-        lines.append(f"claude: {info['claude_version'] or '–'}")
-        if info.get("claude_warning"):
-            lines.append(f"WARNUNG: {info['claude_warning']}")
+    for agent in ("claude", "codex"):
+        if f"{agent}_version" in info:
+            lines.append(f"{agent}: {info[f'{agent}_version'] or '–'}")
+            if info.get(f"{agent}_warning"):
+                lines.append(f"WARNUNG: {info[f'{agent}_warning']}")
+    if info.get("account_warning"):
+        lines.append(f"WARNUNG: {info['account_warning']}")
     lines.append(f"Datenordner: {info['data_dir']}")
     return "\n".join(lines)
 

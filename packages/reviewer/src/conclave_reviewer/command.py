@@ -13,6 +13,7 @@ Absicherung (durch Tests festgeschrieben, tests/reviewer/test_hardening.py):
   ``claude -p`` ueber stdin (ohne den Titel, er ist fremder Text; der Reviewer liest das Ticket selbst), den
   System-Prompt ueber ``--append-system-prompt-file``. Ist ``claude`` ein ``.cmd``/``.bat`` (npm), schnitte
   ``cmd.exe`` sonst am ersten Zeilenumbruch ab, und alle Schutzschalter dahinter fehlten.
+- Wahlweise ``codex exec`` statt claude (``agent = "codex"``, conclave#152), siehe ``codex_command``.
 """
 
 from __future__ import annotations
@@ -147,6 +148,86 @@ def review_command(cfg: dict, *, mcp_config: Path, prompt_file: Path, extra=()) 
     return cmd
 
 
+# ── codex exec als zweites Backend (conclave#152) ───────────────────────────
+#
+# Codex hat immer eine Shell. ``-s read-only`` verbietet Schreiben, nicht Lesen: Die Sandbox liest alles, was
+# das Konto lesen darf, und localhost ist erreichbar (conclave#150/#151). Conclaves eigene Token-Dateien
+# schuetzen ihre Dateirechte; alles Weitere nur ein eigenes Konto ohne Zugangsdaten. ``--ignore-user-config``:
+# keine Einstellungen und MCP-Server aus ~/.codex (die Anmeldung gilt weiter).
+
+CODEX_NOTE = ("Hinweis zu deiner Umgebung: Du laeufst als codex exec in einer schreibgeschuetzten Sandbox. "
+              "Abweichend vom Text oben hast du eine Shell; nutze sie nur zum Lesen von Dateien und fuer git im "
+              "Arbeitsverzeichnis, nichts ausserhalb davon und kein Netz. Das Ergebnis setzt du wie beschrieben ueber "
+              "das Board-Tool.")
+
+
+def find_codex(cfg: dict) -> str:
+    if cfg.get("codex_exe"):
+        return cfg["codex_exe"]
+    # Die VS-Code-Erweiterung von OpenAI bringt codex.exe mit; die neueste installierte Version nehmen.
+    ext = Path.home() / ".vscode" / "extensions"
+    found = []
+    for exe in ext.glob("openai.chatgpt-*/bin/*/codex.exe"):
+        m = re.search(r"chatgpt-(\d+)\.(\d+)\.(\d+)", str(exe))
+        if m:
+            found.append((tuple(map(int, m.groups())), exe))
+    if found:
+        return str(max(found)[1])
+    on_path = shutil.which("codex")
+    if on_path:
+        return on_path
+    raise SystemExit("codex nicht gefunden; codex_exe in config.toml setzen")
+
+
+def _toml(value) -> str:
+    """Ein Wert fuer ``-c key=value``: JSON-Strings (ASCII) sind gueltige TOML-Basic-Strings."""
+    if isinstance(value, dict):
+        return "{" + ", ".join(f"{json.dumps(k)} = {_toml(v)}" for k, v in value.items()) + "}"
+    if isinstance(value, list):
+        return "[" + ", ".join(_toml(v) for v in value) + "]"
+    return json.dumps(value)
+
+
+def codex_command(cfg: dict, *, worktree: str, servers: dict) -> list[str]:
+    """Die Kommandozeile von ``codex exec``: nur feste Schalter, Pfade und die MCP-Server, nie Text aus einem
+    Ticket (wie R1). Auftrag und System-Prompt kommen ueber stdin (``codex_input``)."""
+    cmd = [find_codex(cfg), "exec", "--ignore-user-config", "--ephemeral", "--color", "never",
+           "-s", "read-only", "-c", 'approval_policy="never"', "-C", worktree]
+    if cfg.get("codex_model"):
+        cmd += ["-m", cfg["codex_model"]]
+    for name, server in servers["mcpServers"].items():
+        cmd += ["-c", f"mcp_servers.{name}.command={_toml(server['command'])}",
+                "-c", f"mcp_servers.{name}.args={_toml(list(server.get('args', [])))}"]
+        if server.get("env"):
+            cmd += ["-c", f"mcp_servers.{name}.env={_toml(server['env'])}"]
+    cmd.append("-")                                     # Auftrag aus stdin
+    check_command_line(cmd)
+    return cmd
+
+
+# Was Codex und seine MCP-Server zum Laufen brauchen; keine Schluessel, keine CONCLAVE_*-Variablen (Review V2):
+# Codex hat eine Shell und koennte seine Umgebung auslesen. Mehr nur ueber ``codex_pass_env``.
+CODEX_ENV = ("PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "TEMP", "TMP", "USERPROFILE",
+             "HOMEDRIVE", "HOMEPATH", "HOME", "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "PROGRAMFILES",
+             "PROGRAMFILES(X86)", "PROGRAMW6432", "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)", "USERNAME",
+             "USERDOMAIN", "COMPUTERNAME", "OS", "PROCESSOR_ARCHITECTURE", "NUMBER_OF_PROCESSORS", "USER", "LOGNAME",
+             "LANG", "LC_ALL", "LC_CTYPE", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME",
+             "XDG_RUNTIME_DIR", "CODEX_HOME", "PYTHONUSERBASE", "PYTHONPATH", "PYTHONIOENCODING", "PYTHONUTF8",
+             "VIRTUAL_ENV")
+
+
+def codex_env(cfg: dict, environ=None) -> dict:
+    """Die Umgebung fuer ``codex exec``: nur ``CODEX_ENV`` und was ``codex_pass_env`` ausdruecklich nennt."""
+    environ = os.environ if environ is None else environ
+    keep = {name.upper() for name in (*CODEX_ENV, *(cfg.get("codex_pass_env") or ()))}
+    return {name: value for name, value in environ.items() if name.upper() in keep}
+
+
+def codex_input(prompt_text: str, ask: str) -> str:
+    """System-Prompt, Hinweis zur Umgebung und Auftrag in einem Text fuer stdin (Codex hat keine Prompt-Datei)."""
+    return f"{prompt_text.rstrip()}\n\n{CODEX_NOTE}\n\n---\n\n{ask}"
+
+
 def check_command_line(cmd: list[str]) -> None:
     """Kein Zeilenumbruch und kein Nullzeichen in einem Argument: ``cmd.exe`` (claude als ``.cmd``) schnitte dort
     ab, und die Schutzschalter dahinter fehlten (R1)."""
@@ -204,9 +285,10 @@ def _windows_job():
     return _JOB
 
 
-def start_claude(cmd: list[str], cwd: str, with_input: bool = False) -> subprocess.Popen:
-    """claude so starten, dass es den Reviewer nicht ueberlebt. ``with_input``: stdin als Pipe fuer den Auftrag."""
-    proc = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.PIPE if with_input else subprocess.DEVNULL,
+def start_claude(cmd: list[str], cwd: str, with_input: bool = False, env: dict | None = None) -> subprocess.Popen:
+    """claude so starten, dass es den Reviewer nicht ueberlebt. ``with_input``: stdin als Pipe fuer den Auftrag.
+    ``env``: eine eigene Umgebung (codex, Review V2); ``None`` erbt die des Reviewers."""
+    proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdin=subprocess.PIPE if with_input else subprocess.DEVNULL,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             text=True, encoding="utf-8", errors="replace",
                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
@@ -276,7 +358,7 @@ def _wait_for(proc: subprocess.Popen, timeout: float, input_text: str | None = N
 
 
 def run_claude(cmd: list[str], cwd: str, timeout_minutes: float, log, key: str, on_start=None,
-               quiet: bool = False, input_text: str | None = None) -> str:
+               quiet: bool = False, input_text: str | None = None, env: dict | None = None) -> str:
     """Startet den Reviewer; liefert "done", "failed" oder "timeout". ``on_start(proc)`` meldet den Prozess.
 
     ``quiet`` (entfernter Server, TR3): die Ausgabe von claude nicht ins Log, sie kann Text aus dem Review und
@@ -284,7 +366,12 @@ def run_claude(cmd: list[str], cwd: str, timeout_minutes: float, log, key: str, 
     ``input_text``: der Auftrag (``review_ask``), ueber stdin statt auf der Kommandozeile (R1)."""
     started = time.monotonic()
     # ohne Auftrag die alte Form des Aufrufs (Tests ersetzen start_claude mit genau zwei Argumenten)
-    proc = start_claude(cmd, cwd, with_input=True) if input_text is not None else start_claude(cmd, cwd)
+    if env is not None:
+        proc = start_claude(cmd, cwd, with_input=input_text is not None, env=env)
+    elif input_text is not None:
+        proc = start_claude(cmd, cwd, with_input=True)
+    else:
+        proc = start_claude(cmd, cwd)
     if on_start is not None:
         on_start(proc)
     try:
