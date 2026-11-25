@@ -31,6 +31,7 @@
 - [Ports & adapters](architektur/ports-adapter.md) - Interfaces, ProviderProfiles, ResilientAdapter
 
 ### Release
+- [Release Notes v0.9.4](release-notes-v0.9.4.md) - Wait for a reply on a ticket (`board wait --comments`); creating past the first column checked like a move; `codex exec` as an experimental reviewer backend
 - [Release Notes v0.9.3](release-notes-v0.9.3.md) - Restart a review from the task view; compact board toolbar in Personal; tests shielded from the machine
 - [Release Notes v0.9.2](release-notes-v0.9.2.md) - The reviewer passes no ticket text on the command line of `claude`; documentation aligned with the code
 - [Release Notes v0.9.1](release-notes-v0.9.1.md) - Extension point for the order of `next` in the board core
