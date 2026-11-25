@@ -60,7 +60,8 @@ async def review(seen: dict, ask: str) -> dict:
 
 def main() -> int:
     args = sys.argv[1:]
-    ask = sys.stdin.read() if args and args[-1] == "-" else ""
+    # Der Reviewer schreibt UTF-8 (wie Codex es liest); nicht die Kodierung des Systems (cp1252 in der CI)
+    ask = sys.stdin.buffer.read().decode("utf-8").replace("\r\n", "\n") if args and args[-1] == "-" else ""
     seen = parse(args)
     report = {"argv": args, "seen": seen, "ask": ask, "cwd_now": os.getcwd(), "env_names": sorted(os.environ)}
     report.update(asyncio.run(review(seen, ask)))

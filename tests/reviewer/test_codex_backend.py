@@ -9,6 +9,7 @@
 """
 
 import json
+import os
 import sys
 import tomllib
 from pathlib import Path
@@ -19,13 +20,14 @@ from conclave.reviewer import command, config
 
 CFG = {"conclave_url": "http://127.0.0.1:8000", "conclave_mcp_exe": "C:\\Program Files\\x\\conclave-mcp.exe",
        "author": "CD · auto-review", "codex_exe": "codex", "agent": "codex"}
-WORKTREE = "C:\\Users\\x\\worktrees\\api-1"
+WORKTREE = os.path.join("work", "worktrees", "api-1")      # Trenner der Plattform (Linux in der CI)
+TEAM = os.path.join(WORKTREE, "_repos", "team")
 DANGEROUS = ("--dangerously-bypass-approvals-and-sandbox", "--full-auto", "workspace-write", "danger-full-access",
              "--add-dir", "--dangerously-bypass-hook-trust", "--trust", "--approve-for-me")
 
 
 def _servers(tmp_path):
-    return command.mcp_servers(CFG, [WORKTREE, WORKTREE + "\\_repos\\team"], tmp_path / "reviewer.token")
+    return command.mcp_servers(CFG, [WORKTREE, TEAM], tmp_path / "reviewer.token")
 
 
 def _configs(cmd):
@@ -78,9 +80,10 @@ def test_command_line_and_stdin_arrive_unchanged(tmp_path):
     """Die TOML-Werte mit Anfuehrungszeichen und Backslashes ueberstehen die Windows-Kommandozeile unveraendert."""
     seen = tmp_path / "seen.json"
     echo = tmp_path / "echo.py"
-    echo.write_text("import json, sys\n"
+    echo.write_text("import json, sys\n"                                  # UTF-8 wie Codex, nicht die Systemkodierung
                     f"open({str(seen)!r}, 'w', encoding='utf-8').write("
-                    "json.dumps({'argv': sys.argv[1:], 'stdin': sys.stdin.read()}))\n", encoding="utf-8")
+                    "json.dumps({'argv': sys.argv[1:], 'stdin': sys.stdin.buffer.read().decode('utf-8')}))\n",
+                    encoding="utf-8")
     cmd = command.codex_command(CFG, worktree=WORKTREE, servers=_servers(tmp_path))
     stdin = command.codex_input("Prompt äöü ✓", command.review_ask("api#1", checked="main @ abc1234"))
     outcome = command.run_claude([sys.executable, str(echo), *cmd[1:]], str(tmp_path), 1, lambda m: None, "api#1",
